@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useOrg } from "@/lib/org-context"
 import { Button } from "@/components/ui/button"
@@ -71,7 +71,7 @@ interface Invitation {
   expires_at: string
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { activeOrgId, activeOrg } = useOrg()
@@ -553,5 +553,13 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
   )
 }

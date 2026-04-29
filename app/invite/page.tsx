@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card"
 import { IconLoader2, IconCheck, IconX } from "@tabler/icons-react"
 
-export default function AcceptInvitePage() {
+function AcceptInviteContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const token = searchParams.get("token")
@@ -105,6 +105,7 @@ export default function AcceptInvitePage() {
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
           {status === "success" ? (
+
             <>
               <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-green-100">
                 <IconCheck className="size-6 text-green-600" />
@@ -131,5 +132,13 @@ export default function AcceptInvitePage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+export default function AcceptInvitePage() {
+  return (
+    <Suspense>
+      <AcceptInviteContent />
+    </Suspense>
   )
 }

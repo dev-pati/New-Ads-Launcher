@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
@@ -17,7 +17,7 @@ import {
 import { IconRocket } from "@tabler/icons-react"
 import Image from "next/image"
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const inviteToken = searchParams.get("invite_token")
@@ -52,8 +52,6 @@ export default function RegisterPage() {
       return
     }
 
-    // If email confirm is disabled, user is logged in immediately
-    // Try to accept invite if we have a token
     if (inviteToken) {
       try {
         await fetch(`/api/invitations/accept?token=${inviteToken}`)
@@ -171,5 +169,13 @@ export default function RegisterPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterForm />
+    </Suspense>
   )
 }
