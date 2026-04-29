@@ -1029,16 +1029,61 @@ export default function AdsManagerPage() {
     if (!file) return
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("headline", "")
-      formData.append("primary_text", "")
-      formData.append("description", "")
-      formData.append("cta", "LEARN_MORE")
-      formData.append("link_url", pageLinks[0]?.url || "")
+      // Get upload credentials
+      const credRes = await fetch("/api/facebook/upload-credentials")
+      if (!credRes.ok) throw new Error("Failed to get upload credentials")
+      const { accessToken, adAccountId } = await credRes.json()
+
+      const isVideo = file.type.startsWith("video/")
+      let fbImageHash: string | null = null
+      let fbImageUrl: string | null = null
+      let fbThumbnailUrl: string | null = null
+      let fbVideoId: string | null = null
+
+      // Upload directly to Meta API from browser (bypasses Vercel 4.5MB limit)
+      const metaForm = new FormData()
+      if (isVideo) {
+        metaForm.append("source", file)
+        metaForm.append("title", file.name)
+        const metaRes = await fetch(
+          `https://graph-video.facebook.com/v25.0/act_${adAccountId}/advideos`,
+          { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
+        )
+        const metaData = await metaRes.json()
+        if (metaData.error) throw new Error(metaData.error.message)
+        fbVideoId = metaData.id
+      } else {
+        metaForm.append("filename", file)
+        const metaRes = await fetch(
+          `https://graph.facebook.com/v25.0/act_${adAccountId}/adimages`,
+          { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
+        )
+        const metaData = await metaRes.json()
+        if (metaData.error) throw new Error(metaData.error.message)
+        const imgData = metaData.images?.[file.name]
+        fbImageHash = imgData?.hash || null
+        fbImageUrl = imgData?.url || null
+        fbThumbnailUrl = imgData?.url_128 || imgData?.url || null
+      }
+
+      // Save metadata to DB
       const res = await fetch("/api/creatives", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          file_name: file.name,
+          file_size: file.size,
+          media_type: isVideo ? "video" : "image",
+          headline: "",
+          primary_text: "",
+          description: "",
+          cta: "LEARN_MORE",
+          link_url: pageLinks[0]?.url || "",
+          fb_image_hash: fbImageHash,
+          fb_image_url: fbImageUrl,
+          fb_thumbnail_url: fbThumbnailUrl,
+          fb_video_id: fbVideoId,
+        }),
       })
       if (res.ok) {
         const data = await res.json()

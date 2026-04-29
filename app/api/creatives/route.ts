@@ -32,6 +32,42 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const contentType = request.headers.get("content-type") || ""
+
+    // New flow: client uploaded directly to Meta, just save metadata
+    if (contentType.includes("application/json")) {
+      const body = await request.json()
+      const supabase = await createClient()
+      const { data: creative, error: insertError } = await supabase
+        .from("creatives")
+        .insert({
+          org_id: ctx.orgId,
+          user_id: ctx.user.id,
+          file_name: body.file_name,
+          file_url: body.fb_thumbnail_url || body.fb_image_url || "",
+          media_type: body.media_type,
+          file_size: body.file_size || 0,
+          headline: body.headline || "",
+          primary_text: body.primary_text || "",
+          description: body.description || "",
+          cta: body.cta || "LEARN_MORE",
+          link_url: body.link_url || "",
+          fb_image_hash: body.fb_image_hash || null,
+          fb_image_url: body.fb_image_url || null,
+          fb_thumbnail_url: body.fb_thumbnail_url || null,
+          fb_video_id: body.fb_video_id || null,
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        console.error("DB insert error:", insertError)
+        return NextResponse.json({ error: "Failed to save creative" }, { status: 500 })
+      }
+      return NextResponse.json({ creative }, { status: 201 })
+    }
+
+    // Old flow: file uploaded through server (for duplicate row etc.)
     const formData = await request.formData()
     const file = formData.get("file") as File
     const headline = formData.get("headline") as string
