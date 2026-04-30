@@ -133,7 +133,7 @@ export default function UploadAdsPage() {
             return (
               <Card
                 key={c.id}
-                className={`cursor-pointer transition-all hover:shadow-md ${
+                className={`cursor-pointer transition-all hover:shadow-md pt-0 ${
                   isSelected ? "ring-2 ring-primary" : ""
                 }`}
                 onClick={() => toggleSelect(c.id)}
@@ -152,14 +152,14 @@ export default function UploadAdsPage() {
 
                   {/* Preview */}
                   {c.media_type === "video" ? (
-                    <div className="flex h-40 items-center justify-center rounded-t-lg bg-muted">
+                    <div className="flex h-40 items-center justify-center rounded-t-xl bg-muted">
                       <IconVideo className="size-8 text-muted-foreground" />
                     </div>
                   ) : (
                     <img
                       src={c.file_url}
                       alt={c.file_name}
-                      className="h-40 w-full rounded-t-lg object-cover"
+                      className="h-40 w-full rounded-t-xl object-cover object-center"
                     />
                   )}
                 </div>
