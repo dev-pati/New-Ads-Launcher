@@ -157,7 +157,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-[95vw] w-[1200px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] max-w-[95vw] h-[92vh] max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconRocket className="size-5" />
