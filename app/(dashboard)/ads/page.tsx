@@ -1040,13 +1040,16 @@ export default function AdsManagerPage() {
       let fbThumbnailUrl: string | null = null
       let fbVideoId: string | null = null
 
+      // Strip act_ prefix if already present to avoid duplication
+      const cleanAccountId = adAccountId.replace(/^act_/, "")
+
       // Upload directly to Meta API from browser (bypasses Vercel 4.5MB limit)
       const metaForm = new FormData()
       if (isVideo) {
         metaForm.append("source", file)
         metaForm.append("title", file.name)
         const metaRes = await fetch(
-          `https://graph-video.facebook.com/v25.0/act_${adAccountId}/advideos`,
+          `https://graph-video.facebook.com/v25.0/act_${cleanAccountId}/advideos`,
           { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
         )
         const metaData = await metaRes.json()
@@ -1055,7 +1058,7 @@ export default function AdsManagerPage() {
       } else {
         metaForm.append("filename", file)
         const metaRes = await fetch(
-          `https://graph.facebook.com/v25.0/act_${adAccountId}/adimages`,
+          `https://graph.facebook.com/v25.0/act_${cleanAccountId}/adimages`,
           { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
         )
         const metaData = await metaRes.json()
