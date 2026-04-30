@@ -16,7 +16,7 @@ function applyPattern(pattern: string, ctx: { filename?: string; index?: number;
 
 async function buildAdset(
   adAccountId: string, token: string, template: any,
-  campaignId: string, name: string, dailyBudget?: number
+  campaignId: string, name: string, dailyBudget?: number, startTime?: string
 ) {
   return createAdSet(adAccountId, token, {
     name,
@@ -29,20 +29,51 @@ async function buildAdset(
     daily_budget: dailyBudget ? String(dailyBudget * 100) : template.adset.daily_budget,
     lifetime_budget: dailyBudget ? undefined : template.adset.lifetime_budget,
     status: "PAUSED",
+    start_time: startTime,
   })
+}
+
+interface TextOverride {
+  headlines: string[]
+  primaryTexts: string[]
+  description: string
+  cta: string
+  websiteUrl: string
 }
 
 async function createAdsInAdset(
   adsetId: string, creatives: any[], adAccountId: string,
   token: string, pageId: string, supabase: any,
   resolveName: (baseName: string, index: number) => string = (n) => n,
-  startIndex = 1
+  startIndex = 1,
+  textOverride?: TextOverride,
+  creativeTextMap?: Map<string, any>,
+  degreesOfFreedom?: Record<string, any>,
+  adStatus = "PAUSED"
 ) {
   const results: any[] = []
   const errors: any[] = []
   for (let i = 0; i < creatives.length; i++) {
     const creative = creatives[i]
     const baseName = creative.file_name.replace(/\.[^/.]+$/, "")
+    const _pc = creativeTextMap?.get(creative.id)
+    const pcHeadlines: string[] = _pc?.headlines?.filter((h: string) => h.trim()) || []
+    const pcPrimaryTexts: string[] = _pc?.primaryTexts?.filter((p: string) => p.trim()) || []
+    const pcHasContent = pcHeadlines.length > 0 || pcPrimaryTexts.length > 0 || !!_pc?.description?.trim() || !!_pc?.websiteUrl?.trim()
+    const perCreative = pcHasContent ? _pc : undefined
+    const title = pcHeadlines.length
+      ? pcHeadlines[i % pcHeadlines.length]
+      : (textOverride?.headlines?.length
+          ? textOverride.headlines[i % textOverride.headlines.length]
+          : creative.headline || "")
+    const body = pcPrimaryTexts.length
+      ? pcPrimaryTexts[i % pcPrimaryTexts.length]
+      : (textOverride?.primaryTexts?.length
+          ? textOverride.primaryTexts[i % textOverride.primaryTexts.length]
+          : creative.primary_text || "")
+    const description = perCreative?.description?.trim() ? perCreative.description : (textOverride ? textOverride.description : creative.description || "")
+    const cta = perCreative ? perCreative.cta : (textOverride ? textOverride.cta : creative.cta || "LEARN_MORE")
+    const link_url = perCreative?.websiteUrl?.trim() ? perCreative.websiteUrl : (textOverride?.websiteUrl || creative.link_url || "")
     try {
       const ad = await createAd(adAccountId, token, {
         name: resolveName(baseName, startIndex + i),
@@ -50,12 +81,13 @@ async function createAdsInAdset(
         page_id: pageId,
         image_hash: creative.fb_image_hash || undefined,
         video_id: creative.fb_video_id || undefined,
-        title: creative.headline || "",
-        body: creative.primary_text || "",
-        description: creative.description || "",
-        cta: creative.cta || "LEARN_MORE",
-        link_url: creative.link_url || "",
-        status: "PAUSED",
+        title,
+        body,
+        description,
+        cta,
+        link_url,
+        status: adStatus,
+        degrees_of_freedom_spec: degreesOfFreedom,
       })
       await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
       results.push({ creativeId: creative.id, adId: ad.id, name: creative.file_name })
@@ -93,8 +125,52 @@ export async function POST(request: NextRequest) {
       adsetDailyBudget,
       customConfig,           // CampaignConfig[] khi adsetMode = "custom"
       useCustomAdName, adNamePattern: adNamePatternBody, filenameTransform,
+      useCommonText, commonHeadlines, commonPrimaryTexts, commonDescription, commonCta, commonWebsiteUrl,
+      useUniqueTextPerAdset, adsetTextConfigs,
+      useUniqueTextPerCreative, creativeTextConfigs,
+      useMetaDefaults, selectedEnhancements,
+      createPaused, startTime,
       pageId,
     } = body
+
+    const buildDegreesOfFreedom = (): Record<string, any> | undefined => {
+      if (useMetaDefaults) {
+        return { creative_features_spec: { standard_enhancements: { enroll_status: "OPT_IN" } } }
+      }
+      const keys: string[] = selectedEnhancements || []
+      if (!keys.length) return undefined
+      const features: Record<string, any> = {}
+      keys.forEach((k: string) => { features[k] = { enroll_status: "OPT_IN" } })
+      return { creative_features_spec: features }
+    }
+    const degreesOfFreedom = buildDegreesOfFreedom()
+
+    const creativeTextMap: Map<string, any> = new Map(
+      useUniqueTextPerCreative ? (creativeTextConfigs || []).map((c: any) => [c.creativeId, c]) : []
+    )
+
+    const textOverride: TextOverride | undefined = useCommonText ? {
+      headlines: (commonHeadlines || []).filter((h: string) => h.trim()),
+      primaryTexts: (commonPrimaryTexts || []).filter((p: string) => p.trim()),
+      description: commonDescription || "",
+      cta: commonCta || "LEARN_MORE",
+      websiteUrl: commonWebsiteUrl || "",
+    } : undefined
+
+    const getAdsetTextOverride = (adsetIndex: number): TextOverride | undefined => {
+      if (!useUniqueTextPerAdset || !adsetTextConfigs?.length) return undefined
+      const cfg = adsetTextConfigs[adsetIndex]
+      if (!cfg) return undefined
+      return {
+        headlines: (cfg.headlines || []).filter((h: string) => h.trim()),
+        primaryTexts: (cfg.primaryTexts || []).filter((p: string) => p.trim()),
+        description: cfg.description || "",
+        cta: cfg.cta || "LEARN_MORE",
+        websiteUrl: cfg.websiteUrl || "",
+      }
+    }
+
+    const adStatus = createPaused === false ? "ACTIVE" : "PAUSED"
 
     if (!templateAdId || !creativeIds?.length) {
       return NextResponse.json({ error: "templateAdId and creativeIds are required" }, { status: 400 })
@@ -134,7 +210,7 @@ export async function POST(request: NextRequest) {
     async function resolveAdset(campaignId: string, creativeSubset: any[], index = 1) {
       if (adsetMode === "existing") return existingAdsetId || template.adset.id
       if (adsetMode === "new") {
-        const s = await buildAdset(adAccountId, token, template, campaignId, newAdsetName || template.adset.name, adsetDailyBudget)
+        const s = await buildAdset(adAccountId, token, template, campaignId, newAdsetName || template.adset.name, adsetDailyBudget, startTime)
         return s.id
       }
       if (adsetMode === "per_creative") {
@@ -143,7 +219,7 @@ export async function POST(request: NextRequest) {
       }
       if (adsetMode === "auto_divide") {
         const name = applyPattern(autoDividePattern || "Ad Set {index:01}", { index, date: dateStr, shortDate: shortDateStr })
-        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget)
+        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime)
         return s.id
       }
     }
@@ -172,6 +248,7 @@ export async function POST(request: NextRequest) {
     // Custom config mode: bypass normal campaign loop entirely
     if (adsetMode === "custom" && customConfig?.length > 0) {
       let globalIdx = 1
+      let adsetCounter = 0
       for (const campConfig of customConfig) {
         const camp = await createCampaign(adAccountId, token, {
           name: campConfig.name,
@@ -181,9 +258,10 @@ export async function POST(request: NextRequest) {
         })
         for (const adsetConfig of campConfig.adsets) {
           if (!adsetConfig.creativeIds?.length) continue
-          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetDailyBudget)
+          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetDailyBudget, startTime)
           const adsetCreatives = creatives.filter((c: any) => adsetConfig.creativeIds.includes(c.id))
-          const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx)
+          const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
+          const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, degreesOfFreedom, adStatus)
           globalIdx += adsetCreatives.length
           allResults.push(...results)
           allErrors.push(...errors)
@@ -195,6 +273,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    let adsetCounter = 0
     for (let ci = 0; ci < campaignIds.length; ci++) {
       const campaignId = campaignIds[ci]
 
@@ -211,8 +290,9 @@ export async function POST(request: NextRequest) {
           const creative = campaignCreatives[i]
           const filename = creative.file_name.replace(/\.[^/.]+$/, "")
           const name = applyPattern(adsetNamePattern || "{filename}", { filename, index: i + 1, date: dateStr, shortDate: shortDateStr })
-          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget)
-          const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1)
+          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime)
+          const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
+          const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, degreesOfFreedom, adStatus)
           allResults.push(...results)
           allErrors.push(...errors)
         }
@@ -226,14 +306,16 @@ export async function POST(request: NextRequest) {
         let globalIdx = 1
         for (let i = 0; i < chunks.length; i++) {
           const adsetId = await resolveAdset(campaignId, chunks[i], i + 1)
-          const { results, errors } = await createAdsInAdset(adsetId!, chunks[i], adAccountId, token, pageId, supabase, resolveAdName, globalIdx)
+          const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
+          const { results, errors } = await createAdsInAdset(adsetId!, chunks[i], adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, degreesOfFreedom, adStatus)
           globalIdx += chunks[i].length
           allResults.push(...results)
           allErrors.push(...errors)
         }
       } else {
         const adsetId = await resolveAdset(campaignId, campaignCreatives)
-        const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1)
+        const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
+        const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1, override, creativeTextMap, degreesOfFreedom, adStatus)
         allResults.push(...results)
         allErrors.push(...errors)
       }

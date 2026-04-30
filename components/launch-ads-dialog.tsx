@@ -4,8 +4,13 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { IconLoader2, IconRocket, IconCheck, IconSearch, IconAlertTriangle, IconPlus, IconTrash } from "@tabler/icons-react"
+import { IconLoader2, IconRocket, IconCheck, IconSearch, IconAlertTriangle, IconPlus, IconTrash, IconX, IconCalendar, IconClock } from "@tabler/icons-react"
+import { Textarea } from "@/components/ui/textarea"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { CustomAdSetDialog, type CampaignConfig } from "@/components/custom-adset-dialog"
+import { AdSetTextDialog, type AdsetTextConfig } from "@/components/adset-text-dialog"
+import { AdPerCreativeTextDialog, type AdCreativeTextConfig } from "@/components/ad-per-creative-text-dialog"
 
 interface Campaign { id: string; name: string; status: string; effective_status: string }
 interface AdSet { id: string; name: string; status: string; effective_status: string }
@@ -54,17 +59,45 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   const [customConfig, setCustomConfig] = useState<CampaignConfig[]>([])
   const [customDialogOpen, setCustomDialogOpen] = useState(false)
 
+  // Ad text options
+  const [useCommonText, setUseCommonText] = useState(false)
+  const [commonHeadlines, setCommonHeadlines] = useState([""])
+  const [commonPrimaryTexts, setCommonPrimaryTexts] = useState([""])
+  const [commonDescription, setCommonDescription] = useState("")
+  const [commonCta, setCommonCta] = useState("LEARN_MORE")
+  const [commonWebsiteUrl, setCommonWebsiteUrl] = useState("")
+  const [useUniqueTextPerAdset, setUseUniqueTextPerAdset] = useState(false)
+  const [adsetTextConfigs, setAdsetTextConfigs] = useState<AdsetTextConfig[]>([])
+  const [adsetTextDialogOpen, setAdsetTextDialogOpen] = useState(false)
+  const [useUniqueTextPerCreative, setUseUniqueTextPerCreative] = useState(false)
+  const [creativeTextConfigs, setCreativeTextConfigs] = useState<AdCreativeTextConfig[]>([])
+  const [adPerCreativeDialogOpen, setAdPerCreativeDialogOpen] = useState(false)
+
   // Ad name options
   const [useCustomAdName, setUseCustomAdName] = useState(false)
   const [adNamePattern, setAdNamePattern] = useState("{filename}")
   const [filenameTransform, setFilenameTransform] = useState<"title_case" | "uppercase" | "lowercase" | "clean" | "split" | null>(null)
 
   // Creatives details for preview
-  const [creativeDetails, setCreativeDetails] = useState<{id: string; file_name: string}[]>([])
+  const [creativeDetails, setCreativeDetails] = useState<{
+    id: string; file_name: string; file_url: string; media_type: string
+    headline?: string; primary_text?: string; description?: string; cta?: string; link_url?: string
+  }[]>([])
 
   // Pages
   const [pages, setPages] = useState<PageLink[]>([])
   const [selectedPageId, setSelectedPageId] = useState("")
+
+  // Creative Enhancements
+  const [useMetaDefaults, setUseMetaDefaults] = useState(false)
+  const [selectedEnhancements, setSelectedEnhancements] = useState<Set<string>>(new Set())
+
+  // Publication Options
+  const [createPaused, setCreatePaused] = useState(true)
+  const [scheduleStart, setScheduleStart] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState<Date | undefined>(undefined)
+  const [scheduleHour, setScheduleHour] = useState("08")
+  const [scheduleMinute, setScheduleMinute] = useState("00")
 
   // Launch
   const [launching, setLaunching] = useState(false)
@@ -141,6 +174,24 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   const campaignOption = createMultipleCampaigns ? "multiple" : createNewCampaign ? "new" : "existing"
   const canLaunch = selectedAd && selectedPageId && selectedCreativeIds.length > 0
 
+  const applyPatLocal = (pat: string, idx: number, fname = "") =>
+    pat.replace(/\{filename\}/g, fname)
+       .replace(/\{index:001\}/g, String(idx).padStart(3,"0"))
+       .replace(/\{index:01\}/g, String(idx).padStart(2,"0"))
+       .replace(/\{index\}/g, String(idx))
+
+  const getAdsetNamesForTextConfig = (): string[] => {
+    if (adsetMode === "custom") return customConfig.flatMap(c => c.adsets.map(a => a.name))
+    if (adsetMode === "per_creative") return creativeDetails.map((cr, i) =>
+      applyPatLocal(adsetNamePattern || "{filename}", i + 1, cr.file_name.replace(/\.[^/.]+$/, "")))
+    if (adsetMode === "auto_divide") {
+      const count = Math.ceil(creativeDetails.length / (adsPerAdset || 5))
+      return Array.from({ length: count }, (_, i) => applyPatLocal(autoDividePattern || "Ad Set {index:01}", i + 1))
+    }
+    if (adsetMode === "new") return [newAdsetName || "New Ad Set"]
+    return [selectedAdset?.name || "Existing Ad Set"]
+  }
+
   const handleLaunch = async () => {
     if (!canLaunch) return
     setLaunching(true)
@@ -168,6 +219,20 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
           useCustomAdName,
           adNamePattern: useCustomAdName ? adNamePattern : undefined,
           filenameTransform: useCustomAdName ? filenameTransform : undefined,
+          useCommonText,
+          commonHeadlines: useCommonText ? commonHeadlines.filter(h => h.trim()) : undefined,
+          commonPrimaryTexts: useCommonText ? commonPrimaryTexts.filter(p => p.trim()) : undefined,
+          commonDescription: useCommonText ? commonDescription : undefined,
+          commonCta: useCommonText ? commonCta : undefined,
+          commonWebsiteUrl: useCommonText ? commonWebsiteUrl : undefined,
+          useUniqueTextPerAdset,
+          adsetTextConfigs: useUniqueTextPerAdset ? adsetTextConfigs : undefined,
+          useUniqueTextPerCreative,
+          creativeTextConfigs: useUniqueTextPerCreative ? creativeTextConfigs : undefined,
+          useMetaDefaults,
+          selectedEnhancements: useMetaDefaults ? undefined : Array.from(selectedEnhancements),
+          createPaused,
+          startTime: scheduleStart && scheduleDate ? (() => { const d = new Date(scheduleDate); d.setHours(Number(scheduleHour), Number(scheduleMinute), 0, 0); return d.toISOString() })() : undefined,
           pageId: selectedPageId,
         }),
       })
@@ -190,6 +255,12 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
     setAdsetNamePattern("{filename}"); setAdsPerAdset(5); setAutoDividePattern("Ad Set {index:01}")
     setCustomConfig([])
     setUseCustomAdName(false); setAdNamePattern("{filename}"); setFilenameTransform(null)
+    setUseCommonText(false); setCommonHeadlines([""]); setCommonPrimaryTexts([""])
+    setCommonDescription(""); setCommonCta("LEARN_MORE"); setCommonWebsiteUrl("")
+    setUseUniqueTextPerAdset(false); setAdsetTextConfigs([])
+    setUseUniqueTextPerCreative(false); setCreativeTextConfigs([])
+    setUseMetaDefaults(false); setSelectedEnhancements(new Set())
+    setCreatePaused(true); setScheduleStart(false); setScheduleDate(undefined); setScheduleHour("08"); setScheduleMinute("00")
     onClose()
   }
 
@@ -603,10 +674,10 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                             {rows.map((row, i) => (
                               <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
                                 <td className="px-3 py-2 text-muted-foreground font-mono">{row.campId}</td>
-                                <td className="px-3 py-2 max-w-[200px] truncate">{row.campName}</td>
+                                <td className="px-3 py-2 max-w-[200px] truncate" title={row.campName}>{row.campName}</td>
                                 <td className="px-3 py-2 text-muted-foreground font-mono">{row.adsetId}</td>
-                                <td className="px-3 py-2 max-w-[200px] truncate">{row.adsetName}</td>
-                                <td className="px-3 py-2 max-w-[200px] truncate">{row.adName}</td>
+                                <td className="px-3 py-2 max-w-[200px] truncate" title={row.adsetName}>{row.adsetName}</td>
+                                <td className="px-3 py-2 max-w-[200px] truncate" title={row.adName}>{row.adName}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -615,6 +686,292 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                     </div>
                   )
             })()}
+
+            {/* Ad Text Options */}
+            <div className="space-y-3 rounded-lg border p-4">
+              <h3 className="font-semibold">Ad Text Options</h3>
+
+              {/* Option 1 */}
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                <input type="radio" name="adTextMode" checked={!useCommonText && !useUniqueTextPerAdset && !useUniqueTextPerCreative}
+                  onChange={() => { setUseCommonText(false); setUseUniqueTextPerAdset(false); setUseUniqueTextPerCreative(false) }} className="size-4" />
+                Use text from each creative (default)
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                <input type="radio" name="adTextMode" checked={useCommonText}
+                  onChange={() => { setUseCommonText(true); setUseUniqueTextPerAdset(false); setUseUniqueTextPerCreative(false) }} className="size-4" />
+                Apply common text to all ads
+              </label>
+              {useCommonText && (
+                <div className="ml-6 space-y-4">
+                  {/* Headlines */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Headlines</p>
+                    <p className="text-xs text-muted-foreground">Multiple headlines will be cycled across ads (ad 1 → headline 1, ad 2 → headline 2, ...)</p>
+                    {commonHeadlines.map((h, i) => (
+                      <div key={i} className="flex gap-2">
+                        <Input
+                          value={h}
+                          onChange={e => { const u = [...commonHeadlines]; u[i] = e.target.value; setCommonHeadlines(u) }}
+                          placeholder={`Headline ${i + 1}`}
+                          className="flex-1"
+                          maxLength={255}
+                        />
+                        {commonHeadlines.length > 1 && (
+                          <button type="button" onClick={() => setCommonHeadlines(commonHeadlines.filter((_, j) => j !== i))}
+                            className="rounded border p-2 hover:bg-muted text-muted-foreground hover:text-foreground">
+                            <IconX className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setCommonHeadlines([...commonHeadlines, ""])}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline">
+                      <IconPlus className="size-3" /> Add headline
+                    </button>
+                  </div>
+
+                  {/* Primary Texts */}
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">Primary Texts</p>
+                    <p className="text-xs text-muted-foreground">Multiple primary texts will be cycled across ads</p>
+                    {commonPrimaryTexts.map((pt, i) => (
+                      <div key={i} className="flex gap-2 items-start">
+                        <Textarea
+                          value={pt}
+                          onChange={e => { const u = [...commonPrimaryTexts]; u[i] = e.target.value; setCommonPrimaryTexts(u) }}
+                          placeholder={`Primary text ${i + 1}`}
+                          className="flex-1 min-h-[80px] resize-y"
+                        />
+                        {commonPrimaryTexts.length > 1 && (
+                          <button type="button" onClick={() => setCommonPrimaryTexts(commonPrimaryTexts.filter((_, j) => j !== i))}
+                            className="rounded border p-2 hover:bg-muted text-muted-foreground hover:text-foreground mt-0.5">
+                            <IconX className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setCommonPrimaryTexts([...commonPrimaryTexts, ""])}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline">
+                      <IconPlus className="size-3" /> Add primary text
+                    </button>
+                  </div>
+
+                  {/* Description */}
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium">Link Description</p>
+                    <Input value={commonDescription} onChange={e => setCommonDescription(e.target.value)} placeholder="Description (optional)" />
+                  </div>
+
+                  {/* CTA */}
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium">Call to Action</p>
+                    <select value={commonCta} onChange={e => setCommonCta(e.target.value)}
+                      className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                      {[
+                        ["LEARN_MORE", "Learn More"],
+                        ["SHOP_NOW", "Shop Now"],
+                        ["SIGN_UP", "Sign Up"],
+                        ["DOWNLOAD", "Download"],
+                        ["GET_QUOTE", "Get Quote"],
+                        ["SUBSCRIBE", "Subscribe"],
+                        ["CONTACT_US", "Contact Us"],
+                        ["APPLY_NOW", "Apply Now"],
+                        ["GET_OFFER", "Get Offer"],
+                        ["BOOK_TRAVEL", "Book Travel"],
+                        ["NO_BUTTON", "No Button"],
+                      ].map(([val, label]) => (
+                        <option key={val} value={val}>{label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Website URL */}
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium">Website URL</p>
+                    <Input value={commonWebsiteUrl} onChange={e => setCommonWebsiteUrl(e.target.value)} placeholder="https://..." type="url" />
+                  </div>
+                </div>
+              )}
+
+              {/* Option 2 */}
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                <input type="radio" name="adTextMode" checked={useUniqueTextPerAdset}
+                  onChange={() => { setUseUniqueTextPerAdset(true); setUseCommonText(false); setUseUniqueTextPerCreative(false) }} className="size-4" />
+                Write unique ad text per ad set
+              </label>
+              {useUniqueTextPerAdset && (
+                <div className="ml-6">
+                  <button type="button" onClick={() => setAdsetTextDialogOpen(true)}
+                    className="rounded border border-primary text-primary px-3 py-1.5 text-sm hover:bg-primary/5">
+                    {adsetTextConfigs.length > 0 ? `Edit Text (${getAdsetNamesForTextConfig().length} ad sets configured)` : "Configure Ad Set Text"}
+                  </button>
+                  {adsetTextConfigs.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      {adsetTextConfigs.filter(c => c.headlines[0] || c.primaryTexts[0]).length} / {adsetTextConfigs.length} ad sets have text
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Option 3 */}
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                <input type="radio" name="adTextMode" checked={useUniqueTextPerCreative}
+                  onChange={() => { setUseUniqueTextPerCreative(true); setUseCommonText(false); setUseUniqueTextPerAdset(false) }} className="size-4" />
+                Write unique ad text for each ad
+              </label>
+              {useUniqueTextPerCreative && (
+                <div className="ml-6">
+                  <button type="button" onClick={() => setAdPerCreativeDialogOpen(true)}
+                    className="rounded border border-primary text-primary px-3 py-1.5 text-sm hover:bg-primary/5">
+                    {creativeTextConfigs.length > 0 ? `Edit Text (${creativeDetails.length} ads configured)` : "Configure Ad Text"}
+                  </button>
+                  {creativeTextConfigs.length > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      {creativeTextConfigs.filter(c => c.headlines?.[0] || c.primaryTexts?.[0]).length} / {creativeTextConfigs.length} ads have text
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Creative Enhancements */}
+            {(() => {
+              const IMAGE_OPTIONS = [
+                { key: "add_music", label: "Add music" },
+                { key: "image_brightness_and_contrast", label: "Adjust brightness and contrast" },
+                { key: "cta_enhancements", label: "Enhance CTA" },
+                { key: "relevant_comments", label: "Relevant comments" },
+                { key: "image_animation", label: "Reveal details over time" },
+                { key: "text_optimizations", label: "Text improvements" },
+                { key: "translate_text", label: "Translate text" },
+                { key: "image_touch_ups", label: "Visual touch-ups" },
+              ]
+              const VIDEO_OPTIONS = [
+                { key: "add_music", label: "Add music" },
+                { key: "video_effects", label: "Add video effects" },
+                { key: "cta_enhancements", label: "Enhance CTA" },
+                { key: "relevant_comments", label: "Relevant comments" },
+                { key: "image_animation", label: "Reveal details over time" },
+                { key: "text_optimizations", label: "Text improvements" },
+                { key: "translate_text", label: "Translate text" },
+                { key: "visual_touch_ups", label: "Visual touch-ups" },
+              ]
+              const allKeys = [...new Set([...IMAGE_OPTIONS, ...VIDEO_OPTIONS].map(o => o.key))]
+              const allSelected = allKeys.every(k => selectedEnhancements.has(k))
+              const toggleEnhancement = (key: string) => {
+                const next = new Set(selectedEnhancements)
+                next.has(key) ? next.delete(key) : next.add(key)
+                setSelectedEnhancements(next)
+              }
+              const selectAll = () => setSelectedEnhancements(allSelected ? new Set() : new Set(allKeys))
+              return (
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div>
+                    <h3 className="font-semibold">Creative Enhancements</h3>
+                    <p className="text-sm text-muted-foreground">Select Advantage+ enhancements to enable.</p>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input type="checkbox" checked={useMetaDefaults} onChange={e => { setUseMetaDefaults(e.target.checked); if (e.target.checked) setSelectedEnhancements(new Set()) }} className="size-4" />
+                      Use Meta Defaults
+                    </label>
+                    {!useMetaDefaults && (
+                      <label className="flex items-center gap-2 cursor-pointer text-sm">
+                        <input type="checkbox" checked={allSelected} onChange={selectAll} className="size-4" />
+                        Select All
+                      </label>
+                    )}
+                  </div>
+                  {!useMetaDefaults && (
+                    <div className="grid grid-cols-2 gap-4">
+                      {[{ label: "Images", options: IMAGE_OPTIONS }, { label: "Videos", options: VIDEO_OPTIONS }].map(group => (
+                        <div key={group.label}>
+                          <p className="text-sm font-medium mb-2">{group.label}</p>
+                          <div className="space-y-1.5">
+                            {group.options.map(opt => (
+                              <label key={opt.key} className="flex items-center gap-2 cursor-pointer text-sm">
+                                <input type="checkbox" checked={selectedEnhancements.has(opt.key)} onChange={() => toggleEnhancement(opt.key)} className="size-4 accent-primary" />
+                                {opt.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Publication Options */}
+            <div className="space-y-3 rounded-lg border p-4">
+              <h3 className="font-semibold">Publication Options</h3>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={createPaused} onChange={e => setCreatePaused(e.target.checked)} className="size-4 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium">Create ads in paused status</p>
+                  <p className="text-xs text-muted-foreground">Ads will be created but won't run until you manually activate them in Meta Ads Manager.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={scheduleStart} onChange={e => { setScheduleStart(e.target.checked); if (!e.target.checked) { setScheduleDate(undefined); setScheduleHour("08"); setScheduleMinute("00") } }} className="size-4 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Schedule these ads to start at a specific time</p>
+                  <p className="text-xs text-muted-foreground">Ads will remain paused until the scheduled time.</p>
+                  {scheduleStart && (
+                    <div className="mt-3 flex items-center gap-2 flex-wrap">
+                      {/* Date picker */}
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button type="button" className={`flex items-center gap-2 h-9 px-3 rounded-md border text-sm transition-colors hover:bg-muted ${scheduleDate ? "text-foreground" : "text-muted-foreground"}`}>
+                            <IconCalendar className="size-4 shrink-0" />
+                            {scheduleDate
+                              ? scheduleDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                              : "Pick a date"}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={scheduleDate}
+                            onSelect={setScheduleDate}
+                            disabled={(d) => d < new Date(new Date().setHours(0,0,0,0))}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+
+                      {/* Time picker */}
+                      <div className="flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm">
+                        <IconClock className="size-4 text-muted-foreground shrink-0" />
+                        <select value={scheduleHour} onChange={e => setScheduleHour(e.target.value)}
+                          className="bg-transparent border-none outline-none cursor-pointer text-sm w-10 text-center">
+                          {Array.from({length: 24}, (_, i) => String(i).padStart(2,"0")).map(h => (
+                            <option key={h} value={h}>{h}</option>
+                          ))}
+                        </select>
+                        <span className="text-muted-foreground">:</span>
+                        <select value={scheduleMinute} onChange={e => setScheduleMinute(e.target.value)}
+                          className="bg-transparent border-none outline-none cursor-pointer text-sm w-10 text-center">
+                          {["00","05","10","15","20","25","30","35","40","45","50","55"].map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Preview */}
+                      {scheduleDate && (
+                        <span className="text-xs text-muted-foreground">
+                          Starts {scheduleDate.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at {scheduleHour}:{scheduleMinute}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
 
             {/* Page + Launch */}
             {selectedAd && (
@@ -654,6 +1011,20 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
         [selectedCampaign?.name || "Campaign 1"]
       }
       onApply={(cfg) => { setCustomConfig(cfg) }}
+    />
+    <AdSetTextDialog
+      open={adsetTextDialogOpen}
+      onClose={() => setAdsetTextDialogOpen(false)}
+      adsetNames={getAdsetNamesForTextConfig()}
+      initial={adsetTextConfigs}
+      onApply={setAdsetTextConfigs}
+    />
+    <AdPerCreativeTextDialog
+      open={adPerCreativeDialogOpen}
+      onClose={() => setAdPerCreativeDialogOpen(false)}
+      creatives={creativeDetails as any}
+      initial={creativeTextConfigs}
+      onApply={setCreativeTextConfigs}
     />
     </>
   )

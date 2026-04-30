@@ -471,6 +471,7 @@ export async function createAdSet(
     daily_budget?: string
     lifetime_budget?: string
     status?: string
+    start_time?: string
   }
 ): Promise<{ id: string }> {
   const body: Record<string, string> = {
@@ -486,6 +487,7 @@ export async function createAdSet(
   if (params.bid_strategy) body.bid_strategy = params.bid_strategy
   if (params.daily_budget) body.daily_budget = params.daily_budget
   if (params.lifetime_budget) body.lifetime_budget = params.lifetime_budget
+  if (params.start_time) body.start_time = params.start_time
 
   const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/adsets`, {
     method: "POST",
@@ -514,6 +516,7 @@ export async function createAd(
     cta: string
     link_url: string
     status?: string
+    degrees_of_freedom_spec?: Record<string, any>
   }
 ): Promise<{ id: string }> {
   const creativeSpec: any = {
@@ -537,10 +540,15 @@ export async function createAd(
     delete creativeSpec.link_data
   }
 
+  const creativeJson: any = { object_story_spec: creativeSpec }
+  if (params.degrees_of_freedom_spec) {
+    creativeJson.degrees_of_freedom_spec = params.degrees_of_freedom_spec
+  }
+
   const body = new URLSearchParams({
     name: params.name,
     adset_id: params.adset_id,
-    creative: JSON.stringify({ object_story_spec: creativeSpec }),
+    creative: JSON.stringify(creativeJson),
     status: params.status || "PAUSED",
     access_token: accessToken,
   })
