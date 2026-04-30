@@ -396,6 +396,162 @@ export async function uploadVideoToMeta(
   return { videoId: data.id }
 }
 
+// Get full details of an ad including adset & campaign settings (for template copy)
+export interface AdDetails {
+  id: string
+  name: string
+  status: string
+  adset: {
+    id: string
+    name: string
+    campaign_id: string
+    targeting: any
+    optimization_goal: string
+    billing_event: string
+    bid_amount?: string
+    bid_strategy?: string
+    daily_budget?: string
+    lifetime_budget?: string
+  }
+  campaign: {
+    id: string
+    name: string
+    objective: string
+    special_ad_categories: string[]
+  }
+}
+
+export async function getAdDetails(adId: string, accessToken: string): Promise<AdDetails> {
+  const fields = [
+    "id", "name", "status",
+    "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget}",
+    "campaign{id,name,objective,special_ad_categories}",
+  ].join(",")
+  const res = await fetch(`${GRAPH_API_BASE}/${adId}?fields=${fields}&access_token=${accessToken}`)
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error?.message || "Failed to get ad details")
+  }
+  return res.json()
+}
+
+// Create a new campaign
+export async function createCampaign(
+  adAccountId: string,
+  accessToken: string,
+  params: { name: string; objective: string; special_ad_categories?: string[]; status?: string }
+): Promise<{ id: string }> {
+  const body = new URLSearchParams({
+    name: params.name,
+    objective: params.objective,
+    special_ad_categories: JSON.stringify(params.special_ad_categories || []),
+    status: params.status || "PAUSED",
+    access_token: accessToken,
+  })
+  const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/campaigns`, { method: "POST", body })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error?.message || "Failed to create campaign")
+  }
+  return res.json()
+}
+
+// Create a new ad set (copy settings from template)
+export async function createAdSet(
+  adAccountId: string,
+  accessToken: string,
+  params: {
+    name: string
+    campaign_id: string
+    targeting: any
+    optimization_goal: string
+    billing_event: string
+    bid_amount?: string
+    bid_strategy?: string
+    daily_budget?: string
+    lifetime_budget?: string
+    status?: string
+  }
+): Promise<{ id: string }> {
+  const body: Record<string, string> = {
+    name: params.name,
+    campaign_id: params.campaign_id,
+    targeting: JSON.stringify(params.targeting || {}),
+    optimization_goal: params.optimization_goal,
+    billing_event: params.billing_event,
+    status: params.status || "PAUSED",
+    access_token: accessToken,
+  }
+  if (params.bid_amount) body.bid_amount = params.bid_amount
+  if (params.bid_strategy) body.bid_strategy = params.bid_strategy
+  if (params.daily_budget) body.daily_budget = params.daily_budget
+  if (params.lifetime_budget) body.lifetime_budget = params.lifetime_budget
+
+  const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/adsets`, {
+    method: "POST",
+    body: new URLSearchParams(body),
+  })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error?.message || "Failed to create ad set")
+  }
+  return res.json()
+}
+
+// Create a new ad with a creative
+export async function createAd(
+  adAccountId: string,
+  accessToken: string,
+  params: {
+    name: string
+    adset_id: string
+    page_id: string
+    image_hash?: string
+    video_id?: string
+    title: string
+    body: string
+    description?: string
+    cta: string
+    link_url: string
+    status?: string
+  }
+): Promise<{ id: string }> {
+  const creativeSpec: any = {
+    page_id: params.page_id,
+    link_data: {
+      link: params.link_url,
+      message: params.body,
+      name: params.title,
+      description: params.description || "",
+      call_to_action: { type: params.cta, value: { link: params.link_url } },
+    },
+  }
+  if (params.image_hash) creativeSpec.link_data.image_hash = params.image_hash
+  if (params.video_id) {
+    creativeSpec.video_data = {
+      video_id: params.video_id,
+      title: params.title,
+      message: params.body,
+      call_to_action: { type: params.cta, value: { link: params.link_url } },
+    }
+    delete creativeSpec.link_data
+  }
+
+  const body = new URLSearchParams({
+    name: params.name,
+    adset_id: params.adset_id,
+    creative: JSON.stringify({ object_story_spec: creativeSpec }),
+    status: params.status || "PAUSED",
+    access_token: accessToken,
+  })
+  const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/ads`, { method: "POST", body })
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error?.message || "Failed to create ad")
+  }
+  return res.json()
+}
+
 // Campaign insights
 export async function getCampaignInsights(
   campaignId: string,

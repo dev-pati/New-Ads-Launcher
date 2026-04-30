@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { LaunchAdsDialog } from "@/components/launch-ads-dialog"
 import {
   Card,
   CardContent,
@@ -36,6 +37,15 @@ export default function UploadAdsPage() {
   const [creatives, setCreatives] = useState<Creative[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [launchOpen, setLaunchOpen] = useState(false)
+  const [adAccountId, setAdAccountId] = useState("")
+
+  useEffect(() => {
+    fetch("/api/facebook/upload-credentials")
+      .then((r) => r.json())
+      .then((d) => { if (d.adAccountId) setAdAccountId(d.adAccountId) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     async function fetch_() {
@@ -85,7 +95,7 @@ export default function UploadAdsPage() {
               {selected.size} selected
             </span>
           )}
-          <Button size="sm" disabled={selected.size === 0}>
+          <Button size="sm" disabled={selected.size === 0} onClick={() => setLaunchOpen(true)}>
             <IconRocket className="size-4" />
             Launch Ads ({selected.size})
           </Button>
@@ -178,6 +188,13 @@ export default function UploadAdsPage() {
           })}
         </div>
       )}
+
+      <LaunchAdsDialog
+        open={launchOpen}
+        onClose={() => setLaunchOpen(false)}
+        selectedCreativeIds={Array.from(selected)}
+        adAccountId={adAccountId}
+      />
     </div>
   )
 }
