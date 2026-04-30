@@ -157,7 +157,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] w-[1200px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconRocket className="size-5" />
@@ -208,14 +208,14 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                       <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                       <Input placeholder="Search..." value={searchCampaign} onChange={(e) => setSearchCampaign(e.target.value)} className="h-7 pl-6 text-xs" />
                     </div>
-                    <div className="max-h-48 overflow-y-auto space-y-0.5">
+                    <div className="max-h-80 overflow-y-auto space-y-0.5">
                       {loadingCampaigns ? (
                         <div className="flex justify-center py-4"><IconLoader2 className="size-4 animate-spin" /></div>
                       ) : filteredCampaigns.map((c) => (
                         <button
                           key={c.id}
                           onClick={() => setSelectedCampaign(c)}
-                          className={`w-full text-left px-2 py-1.5 rounded text-xs truncate hover:bg-muted ${selectedCampaign?.id === c.id ? "bg-primary/10 text-primary font-medium" : ""}`}
+                          className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedCampaign?.id === c.id ? "bg-primary/10 text-primary font-medium" : ""}`}
                         >
                           {selectedCampaign?.id === c.id && <IconCheck className="inline size-3 mr-1" />}
                           {c.name}
@@ -233,7 +233,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                       <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                       <Input placeholder="Search..." value={searchAdset} onChange={(e) => setSearchAdset(e.target.value)} className="h-7 pl-6 text-xs" />
                     </div>
-                    <div className="max-h-48 overflow-y-auto space-y-0.5">
+                    <div className="max-h-80 overflow-y-auto space-y-0.5">
                       {!selectedCampaign ? (
                         <p className="text-center text-xs text-muted-foreground py-4">Select a campaign first</p>
                       ) : loadingAdsets ? (
@@ -242,7 +242,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                         <button
                           key={a.id}
                           onClick={() => setSelectedAdset(a)}
-                          className={`w-full text-left px-2 py-1.5 rounded text-xs truncate hover:bg-muted ${selectedAdset?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}
+                          className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedAdset?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}
                         >
                           {selectedAdset?.id === a.id && <IconCheck className="inline size-3 mr-1" />}
                           {a.name}
@@ -260,7 +260,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                       <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
                       <Input placeholder="Search..." value={searchAd} onChange={(e) => setSearchAd(e.target.value)} className="h-7 pl-6 text-xs" />
                     </div>
-                    <div className="max-h-48 overflow-y-auto space-y-0.5">
+                    <div className="max-h-80 overflow-y-auto space-y-0.5">
                       {!selectedAdset ? (
                         <p className="text-center text-xs text-muted-foreground py-4">Select an ad set first</p>
                       ) : loadingAds ? (
@@ -269,7 +269,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                         <button
                           key={a.id}
                           onClick={() => setSelectedAd(a)}
-                          className={`w-full text-left px-2 py-1.5 rounded text-xs truncate hover:bg-muted ${selectedAd?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}
+                          className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedAd?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}
                         >
                           {selectedAd?.id === a.id && <IconCheck className="inline size-3 mr-1" />}
                           {a.name}
