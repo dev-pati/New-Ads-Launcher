@@ -116,7 +116,7 @@ export function CustomAdSetDialog({ open, onClose, creativeIds, campaignNames, o
   const autoGroup = () => {
     const slots = config.flatMap((c, ci) => c.adsets.map((_, ai) => ({ ci, ai })))
     if (!slots.length) return
-    const next = config.map(c => ({ ...c, adsets: c.adsets.map(a => ({ ...a, creativeIds: [] })) }))
+    const next = config.map(c => ({ ...c, adsets: c.adsets.map(a => ({ ...a, creativeIds: [] as string[] })) }))
     creatives.forEach((creative, i) => {
       const slot = slots[i % slots.length]
       next[slot.ci].adsets[slot.ai].creativeIds.push(creative.id)
