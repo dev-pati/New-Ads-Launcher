@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -944,22 +944,50 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                       </Popover>
 
                       {/* Time picker */}
-                      <div className="flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm">
-                        <IconClock className="size-4 text-muted-foreground shrink-0" />
-                        <select value={scheduleHour} onChange={e => setScheduleHour(e.target.value)}
-                          className="bg-transparent border-none outline-none cursor-pointer text-sm w-10 text-center">
-                          {Array.from({length: 24}, (_, i) => String(i).padStart(2,"0")).map(h => (
-                            <option key={h} value={h}>{h}</option>
-                          ))}
-                        </select>
-                        <span className="text-muted-foreground">:</span>
-                        <select value={scheduleMinute} onChange={e => setScheduleMinute(e.target.value)}
-                          className="bg-transparent border-none outline-none cursor-pointer text-sm w-10 text-center">
-                          {["00","05","10","15","20","25","30","35","40","45","50","55"].map(m => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                      </div>
+                      {(() => {
+                        const hours = Array.from({length: 24}, (_, i) => String(i).padStart(2,"0"))
+                        const minutes = ["00","05","10","15","20","25","30","35","40","45","50","55"]
+                        return (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button type="button" className="flex items-center gap-2 h-9 px-3 rounded-md border text-sm hover:bg-muted transition-colors">
+                                <IconClock className="size-4 text-muted-foreground shrink-0" />
+                                <span className="font-mono">{scheduleHour}:{scheduleMinute}</span>
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-3" align="start">
+                              <p className="text-xs font-medium text-muted-foreground mb-2">Select time</p>
+                              <div className="flex gap-2">
+                                {/* Hours column */}
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">HH</span>
+                                  <div className="h-48 overflow-y-auto scrollbar-thin flex flex-col gap-0.5 pr-1">
+                                    {hours.map(h => (
+                                      <button key={h} type="button" onClick={() => setScheduleHour(h)}
+                                        className={`w-10 h-8 rounded text-sm font-mono transition-colors ${scheduleHour === h ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                                        {h}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="flex items-center pb-1 text-muted-foreground text-lg font-light">:</div>
+                                {/* Minutes column */}
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">MM</span>
+                                  <div className="h-48 overflow-y-auto scrollbar-thin flex flex-col gap-0.5 pr-1">
+                                    {minutes.map(m => (
+                                      <button key={m} type="button" onClick={() => setScheduleMinute(m)}
+                                        className={`w-10 h-8 rounded text-sm font-mono transition-colors ${scheduleMinute === m ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>
+                                        {m}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+                        )
+                      })()}
 
                       {/* Preview */}
                       {scheduleDate && (
