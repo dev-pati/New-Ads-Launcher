@@ -24,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { useTheme } from "next-themes"
+import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
 
 interface Creative {
   id: string
@@ -465,6 +466,9 @@ export default function AdsManagerPage() {
   const [pageLinks, setPageLinks] = useState<PageLink[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [bulkFiles, setBulkFiles] = useState<File[]>([])
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
   const [userId, setUserId] = useState("")
   const [userName, setUserName] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -1019,86 +1023,76 @@ export default function AdsManagerPage() {
     [creatives]
   )
 
-  // File upload
+  // File upload — open bulk dialog
   const handleNewUpload = () => {
     fileInputRef.current?.click()
   }
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    try {
-      // Get upload credentials
-      const credRes = await fetch("/api/facebook/upload-credentials")
-      if (!credRes.ok) throw new Error("Failed to get upload credentials")
-      const { accessToken, adAccountId } = await credRes.json()
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    setBulkFiles(files)
+    setBulkOpen(true)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
 
-      const isVideo = file.type.startsWith("video/")
-      let fbImageHash: string | null = null
-      let fbImageUrl: string | null = null
-      let fbThumbnailUrl: string | null = null
-      let fbVideoId: string | null = null
-
-      // Strip act_ prefix if already present to avoid duplication
-      const cleanAccountId = adAccountId.replace(/^act_/, "")
-
-      // Upload directly to Meta API from browser (bypasses Vercel 4.5MB limit)
-      const metaForm = new FormData()
-      if (isVideo) {
-        metaForm.append("source", file)
-        metaForm.append("title", file.name)
-        const metaRes = await fetch(
-          `https://graph-video.facebook.com/v25.0/act_${cleanAccountId}/advideos`,
-          { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
-        )
-        const metaData = await metaRes.json()
-        if (metaData.error) throw new Error(metaData.error.message)
-        fbVideoId = metaData.id
-      } else {
-        metaForm.append("filename", file)
-        const metaRes = await fetch(
-          `https://graph.facebook.com/v25.0/act_${cleanAccountId}/adimages`,
-          { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
-        )
-        const metaData = await metaRes.json()
-        if (metaData.error) throw new Error(metaData.error.message)
-        const imgData = metaData.images?.[file.name]
-        fbImageHash = imgData?.hash || null
-        fbImageUrl = imgData?.url || null
-        fbThumbnailUrl = imgData?.url_128 || imgData?.url || null
-      }
-
-      // Save metadata to DB
-      const res = await fetch("/api/creatives", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          file_name: file.name,
-          file_size: file.size,
-          media_type: isVideo ? "video" : "image",
-          headline: "",
-          primary_text: "",
-          description: "",
-          cta: "LEARN_MORE",
-          link_url: pageLinks[0]?.url || "",
-          fb_image_hash: fbImageHash,
-          fb_image_url: fbImageUrl,
-          fb_thumbnail_url: fbThumbnailUrl,
-          fb_video_id: fbVideoId,
-        }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        pendingEditsRef.current.add(`insert:${data.creative.id}`)
-        setCreatives((prev) => [...prev, data.creative])
-      }
-    } catch {
-      /* ignore */
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ""
+  const handleBulkComplete = (newCreatives: any[]) => {
+    for (const c of newCreatives) {
+      pendingEditsRef.current.add(`insert:${c.id}`)
     }
+    setCreatives(prev => {
+      const existingIds = new Set(prev.map(c => c.id))
+      return [...prev, ...newCreatives.filter(c => !existingIds.has(c.id))]
+    })
+  }
+
+  // Click row number (th) to toggle selection
+  useEffect(() => {
+    const container = spreadsheetContainerRef.current
+    if (!container) return
+    const handler = (e: MouseEvent) => {
+      const th = (e.target as HTMLElement).closest("th.Spreadsheet__header")
+      if (!th) return
+      const tr = th.closest("tr")
+      if (!tr) return
+      const rowAttr = tr.getAttribute("row")
+      if (rowAttr === null) return
+      const idx = parseInt(rowAttr)
+      if (isNaN(idx) || idx < 0) return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+      setSelectedRows(prev => {
+        const next = new Set(prev)
+        if (next.has(idx)) next.delete(idx)
+        else next.add(idx)
+        return next
+      })
+    }
+    container.addEventListener("click", handler, true)
+    return () => container.removeEventListener("click", handler, true)
+  }, [])
+
+  // Sync selected row CSS classes
+  useEffect(() => {
+    const container = spreadsheetContainerRef.current
+    if (!container) return
+    container.querySelectorAll<HTMLTableRowElement>("tr[row]").forEach(tr => {
+      const idx = parseInt(tr.getAttribute("row") || "-1")
+      tr.classList.toggle("row-selected", selectedRows.has(idx))
+    })
+  }, [selectedRows, filteredCreatives])
+
+  const handleDeleteSelected = async () => {
+    const toDelete = Array.from(selectedRows)
+      .map(idx => filteredCreatives[idx])
+      .filter(Boolean)
+    if (!toDelete.length) return
+    for (const creative of toDelete) {
+      pendingEditsRef.current.add(`delete:${creative.id}`)
+      setCreatives(prev => prev.filter(c => c.id !== creative.id))
+      fetch(`/api/creatives/${creative.id}`, { method: "DELETE" }).catch(() => {})
+    }
+    setSelectedRows(new Set())
   }
 
   // Spreadsheet data (uses filteredCreatives)
@@ -1239,8 +1233,19 @@ export default function AdsManagerPage() {
         ref={fileInputRef}
         type="file"
         accept="image/*,video/*"
+        multiple
         className="hidden"
         onChange={handleFileChange}
+      />
+
+      <BulkUploadDialog
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        files={bulkFiles}
+        ctaOptions={ctaOptions}
+        pageLinks={pageLinks}
+        defaultPageUrl={pageLinks[0]?.url || ""}
+        onComplete={handleBulkComplete}
       />
 
       {/* Filter bar */}
@@ -1294,6 +1299,18 @@ export default function AdsManagerPage() {
           <span className="text-xs text-muted-foreground">
             {filteredCreatives.length} of {creatives.length}
           </span>
+        )}
+
+        {selectedRows.size > 0 && (
+          <div className="ml-auto flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-1">
+            <span className="text-xs font-medium text-destructive">{selectedRows.size} selected</span>
+            <button onClick={handleDeleteSelected} className="text-xs font-medium text-destructive hover:underline">
+              Delete
+            </button>
+            <button onClick={() => setSelectedRows(new Set())} className="text-xs text-muted-foreground hover:underline">
+              Clear
+            </button>
+          </div>
         )}
       </div>
 
@@ -1360,6 +1377,10 @@ export default function AdsManagerPage() {
               background: var(--primary) !important;
               color: var(--primary-foreground) !important;
             }
+            .Spreadsheet th.Spreadsheet__header { cursor: pointer; user-select: none; }
+            .Spreadsheet th.Spreadsheet__header:hover { background: color-mix(in srgb, var(--primary) 12%, var(--muted)) !important; }
+            .Spreadsheet tr.row-selected > th.Spreadsheet__header { background: color-mix(in srgb, var(--primary) 20%, transparent) !important; color: var(--primary) !important; font-weight: 600; }
+            .Spreadsheet tr.row-selected > td { background: color-mix(in srgb, var(--primary) 6%, transparent) !important; }
           `}</style>
           <Spreadsheet
             data={data}
