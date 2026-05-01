@@ -90,7 +90,8 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
   // Creative Enhancements
   const [useMetaDefaults, setUseMetaDefaults] = useState(false)
-  const [selectedEnhancements, setSelectedEnhancements] = useState<Set<string>>(new Set())
+  const [imageEnhancements, setImageEnhancements] = useState<Set<string>>(new Set())
+  const [videoEnhancements, setVideoEnhancements] = useState<Set<string>>(new Set())
 
   // Publication Options
   const [createPaused, setCreatePaused] = useState(true)
@@ -230,7 +231,8 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
           useUniqueTextPerCreative,
           creativeTextConfigs: useUniqueTextPerCreative ? creativeTextConfigs : undefined,
           useMetaDefaults,
-          selectedEnhancements: useMetaDefaults ? undefined : Array.from(selectedEnhancements),
+          imageEnhancements: useMetaDefaults ? undefined : Array.from(imageEnhancements),
+          videoEnhancements: useMetaDefaults ? undefined : Array.from(videoEnhancements),
           createPaused,
           startTime: scheduleStart && scheduleDate ? (() => { const d = new Date(scheduleDate); d.setHours(Number(scheduleHour), Number(scheduleMinute), 0, 0); return d.toISOString() })() : undefined,
           pageId: selectedPageId,
@@ -259,7 +261,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
     setCommonDescription(""); setCommonCta("LEARN_MORE"); setCommonWebsiteUrl("")
     setUseUniqueTextPerAdset(false); setAdsetTextConfigs([])
     setUseUniqueTextPerCreative(false); setCreativeTextConfigs([])
-    setUseMetaDefaults(false); setSelectedEnhancements(new Set())
+    setUseMetaDefaults(false); setImageEnhancements(new Set()); setVideoEnhancements(new Set())
     setCreatePaused(true); setScheduleStart(false); setScheduleDate(undefined); setScheduleHour("08"); setScheduleMinute("00")
     onClose()
   }
@@ -858,14 +860,15 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                 { key: "translate_text", label: "Translate text" },
                 { key: "visual_touch_ups", label: "Visual touch-ups" },
               ]
-              const allKeys = [...new Set([...IMAGE_OPTIONS, ...VIDEO_OPTIONS].map(o => o.key))]
-              const allSelected = allKeys.every(k => selectedEnhancements.has(k))
-              const toggleEnhancement = (key: string) => {
-                const next = new Set(selectedEnhancements)
-                next.has(key) ? next.delete(key) : next.add(key)
-                setSelectedEnhancements(next)
+              const allImgSelected = IMAGE_OPTIONS.every(o => imageEnhancements.has(o.key))
+              const allVidSelected = VIDEO_OPTIONS.every(o => videoEnhancements.has(o.key))
+              const allSelected = allImgSelected && allVidSelected
+              const toggleImg = (key: string) => { const n = new Set(imageEnhancements); n.has(key) ? n.delete(key) : n.add(key); setImageEnhancements(n) }
+              const toggleVid = (key: string) => { const n = new Set(videoEnhancements); n.has(key) ? n.delete(key) : n.add(key); setVideoEnhancements(n) }
+              const selectAll = () => {
+                if (allSelected) { setImageEnhancements(new Set()); setVideoEnhancements(new Set()) }
+                else { setImageEnhancements(new Set(IMAGE_OPTIONS.map(o => o.key))); setVideoEnhancements(new Set(VIDEO_OPTIONS.map(o => o.key))) }
               }
-              const selectAll = () => setSelectedEnhancements(allSelected ? new Set() : new Set(allKeys))
               return (
                 <div className="space-y-3 rounded-lg border p-4">
                   <div>
@@ -874,7 +877,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                   </div>
                   <div className="flex items-center gap-6">
                     <label className="flex items-center gap-2 cursor-pointer text-sm">
-                      <input type="checkbox" checked={useMetaDefaults} onChange={e => { setUseMetaDefaults(e.target.checked); if (e.target.checked) setSelectedEnhancements(new Set()) }} className="size-4" />
+                      <input type="checkbox" checked={useMetaDefaults} onChange={e => { setUseMetaDefaults(e.target.checked); if (e.target.checked) { setImageEnhancements(new Set()); setVideoEnhancements(new Set()) } }} className="size-4" />
                       Use Meta Defaults
                     </label>
                     {!useMetaDefaults && (
@@ -886,19 +889,40 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                   </div>
                   {!useMetaDefaults && (
                     <div className="grid grid-cols-2 gap-4">
-                      {[{ label: "Images", options: IMAGE_OPTIONS }, { label: "Videos", options: VIDEO_OPTIONS }].map(group => (
-                        <div key={group.label}>
-                          <p className="text-sm font-medium mb-2">{group.label}</p>
-                          <div className="space-y-1.5">
-                            {group.options.map(opt => (
-                              <label key={opt.key} className="flex items-center gap-2 cursor-pointer text-sm">
-                                <input type="checkbox" checked={selectedEnhancements.has(opt.key)} onChange={() => toggleEnhancement(opt.key)} className="size-4 accent-primary" />
-                                {opt.label}
-                              </label>
-                            ))}
-                          </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="text-sm font-medium">Images</p>
+                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground">
+                            <input type="checkbox" checked={allImgSelected} onChange={() => setImageEnhancements(allImgSelected ? new Set() : new Set(IMAGE_OPTIONS.map(o => o.key)))} className="size-3.5" />
+                            All
+                          </label>
                         </div>
-                      ))}
+                        <div className="space-y-1.5">
+                          {IMAGE_OPTIONS.map(opt => (
+                            <label key={opt.key} className="flex items-center gap-2 cursor-pointer text-sm">
+                              <input type="checkbox" checked={imageEnhancements.has(opt.key)} onChange={() => toggleImg(opt.key)} className="size-4 accent-primary" />
+                              {opt.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <p className="text-sm font-medium">Videos</p>
+                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground">
+                            <input type="checkbox" checked={allVidSelected} onChange={() => setVideoEnhancements(allVidSelected ? new Set() : new Set(VIDEO_OPTIONS.map(o => o.key)))} className="size-3.5" />
+                            All
+                          </label>
+                        </div>
+                        <div className="space-y-1.5">
+                          {VIDEO_OPTIONS.map(opt => (
+                            <label key={opt.key} className="flex items-center gap-2 cursor-pointer text-sm">
+                              <input type="checkbox" checked={videoEnhancements.has(opt.key)} onChange={() => toggleVid(opt.key)} className="size-4 accent-primary" />
+                              {opt.label}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

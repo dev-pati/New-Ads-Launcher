@@ -48,7 +48,8 @@ async function createAdsInAdset(
   startIndex = 1,
   textOverride?: TextOverride,
   creativeTextMap?: Map<string, any>,
-  degreesOfFreedom?: Record<string, any>,
+  imgDof?: Record<string, any>,
+  vidDof?: Record<string, any>,
   adStatus = "PAUSED"
 ) {
   const results: any[] = []
@@ -87,7 +88,7 @@ async function createAdsInAdset(
         cta,
         link_url,
         status: adStatus,
-        degrees_of_freedom_spec: degreesOfFreedom,
+        degrees_of_freedom_spec: creative.fb_video_id ? vidDof : imgDof,
       })
       await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
       results.push({ creativeId: creative.id, adId: ad.id, name: creative.file_name })
@@ -128,22 +129,22 @@ export async function POST(request: NextRequest) {
       useCommonText, commonHeadlines, commonPrimaryTexts, commonDescription, commonCta, commonWebsiteUrl,
       useUniqueTextPerAdset, adsetTextConfigs,
       useUniqueTextPerCreative, creativeTextConfigs,
-      useMetaDefaults, selectedEnhancements,
+      useMetaDefaults, imageEnhancements, videoEnhancements,
       createPaused, startTime,
       pageId,
     } = body
 
-    const buildDegreesOfFreedom = (): Record<string, any> | undefined => {
+    const buildDegreesOfFreedom = (keys: string[]): Record<string, any> | undefined => {
       if (useMetaDefaults) {
         return { creative_features_spec: { standard_enhancements: { enroll_status: "OPT_IN" } } }
       }
-      const keys: string[] = selectedEnhancements || []
       if (!keys.length) return undefined
       const features: Record<string, any> = {}
       keys.forEach((k: string) => { features[k] = { enroll_status: "OPT_IN" } })
       return { creative_features_spec: features }
     }
-    const degreesOfFreedom = buildDegreesOfFreedom()
+    const imgDof = buildDegreesOfFreedom(imageEnhancements || [])
+    const vidDof = buildDegreesOfFreedom(videoEnhancements || [])
 
     const creativeTextMap: Map<string, any> = new Map(
       useUniqueTextPerCreative ? (creativeTextConfigs || []).map((c: any) => [c.creativeId, c]) : []
@@ -261,7 +262,7 @@ export async function POST(request: NextRequest) {
           const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetDailyBudget, startTime)
           const adsetCreatives = creatives.filter((c: any) => adsetConfig.creativeIds.includes(c.id))
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, degreesOfFreedom, adStatus)
+          const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus)
           globalIdx += adsetCreatives.length
           allResults.push(...results)
           allErrors.push(...errors)
@@ -292,7 +293,7 @@ export async function POST(request: NextRequest) {
           const name = applyPattern(adsetNamePattern || "{filename}", { filename, index: i + 1, date: dateStr, shortDate: shortDateStr })
           const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, degreesOfFreedom, adStatus)
+          const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, imgDof, vidDof, adStatus)
           allResults.push(...results)
           allErrors.push(...errors)
         }
@@ -307,7 +308,7 @@ export async function POST(request: NextRequest) {
         for (let i = 0; i < chunks.length; i++) {
           const adsetId = await resolveAdset(campaignId, chunks[i], i + 1)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adsetId!, chunks[i], adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, degreesOfFreedom, adStatus)
+          const { results, errors } = await createAdsInAdset(adsetId!, chunks[i], adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus)
           globalIdx += chunks[i].length
           allResults.push(...results)
           allErrors.push(...errors)
@@ -315,7 +316,7 @@ export async function POST(request: NextRequest) {
       } else {
         const adsetId = await resolveAdset(campaignId, campaignCreatives)
         const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-        const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1, override, creativeTextMap, degreesOfFreedom, adStatus)
+        const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1, override, creativeTextMap, imgDof, vidDof, adStatus)
         allResults.push(...results)
         allErrors.push(...errors)
       }
