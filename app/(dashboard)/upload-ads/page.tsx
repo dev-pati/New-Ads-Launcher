@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useAdAccount } from "@/lib/ad-account-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LaunchAdsDialog } from "@/components/launch-ads-dialog"
@@ -34,18 +35,11 @@ interface Creative {
 }
 
 export default function UploadAdsPage() {
+  const { selectedAccountId: adAccountId } = useAdAccount()
   const [creatives, setCreatives] = useState<Creative[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [launchOpen, setLaunchOpen] = useState(false)
-  const [adAccountId, setAdAccountId] = useState("")
-
-  useEffect(() => {
-    fetch("/api/facebook/upload-credentials")
-      .then((r) => r.json())
-      .then((d) => { if (d.adAccountId) setAdAccountId(d.adAccountId) })
-      .catch(() => {})
-  }, [])
 
   useEffect(() => {
     async function fetch_() {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useAdAccount } from "@/lib/ad-account-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -92,37 +93,15 @@ function formatDate(dateStr: string) {
 }
 
 export default function CampaignsPage() {
-  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([])
-  const [selectedAccount, setSelectedAccount] = useState<string>("")
+  const { adAccounts, selectedAccountId: selectedAccount, setSelectedAccountId: setSelectedAccount, loading: loadingAccounts } = useAdAccount()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [adSets, setAdSets] = useState<Record<string, AdSet[]>>({})
   const [ads, setAds] = useState<Record<string, Ad[]>>({})
-  const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [loadingCampaigns, setLoadingCampaigns] = useState(false)
   const [loadingAdSets, setLoadingAdSets] = useState<string | null>(null)
   const [loadingAds, setLoadingAds] = useState<string | null>(null)
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set())
   const [expandedAdSets, setExpandedAdSets] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    async function fetchAccounts() {
-      try {
-        const res = await fetch("/api/facebook/ad-accounts")
-        const data = await res.json()
-        if (data.adAccounts) {
-          setAdAccounts(data.adAccounts)
-          if (data.adAccounts.length > 0) {
-            setSelectedAccount(data.adAccounts[0].id)
-          }
-        }
-      } catch {
-        // ignore
-      } finally {
-        setLoadingAccounts(false)
-      }
-    }
-    fetchAccounts()
-  }, [])
 
   useEffect(() => {
     if (!selectedAccount) return

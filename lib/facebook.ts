@@ -359,7 +359,6 @@ export async function uploadImageToMeta(
     throw new Error(error.error?.message || "Failed to upload image to Meta")
   }
   const data = await res.json()
-  console.log("Meta adimages response:", JSON.stringify(data, null, 2))
   const images = data.images
   const firstKey = Object.keys(images)[0]
   const img = images[firstKey]
@@ -439,7 +438,7 @@ export async function getAdDetails(adId: string, accessToken: string): Promise<A
 export async function createCampaign(
   adAccountId: string,
   accessToken: string,
-  params: { name: string; objective: string; special_ad_categories?: string[]; status?: string }
+  params: { name: string; objective: string; special_ad_categories?: string[]; status?: string; daily_budget?: number; bid_strategy?: string; promoted_object?: Record<string, any> }
 ): Promise<{ id: string }> {
   const body = new URLSearchParams({
     name: params.name,
@@ -448,10 +447,21 @@ export async function createCampaign(
     status: params.status || "PAUSED",
     access_token: accessToken,
   })
+  if (params.daily_budget) {
+    // CBO mode: budget at campaign level
+    body.set("daily_budget", String(Math.round(params.daily_budget * 100)))
+    if (params.bid_strategy) body.set("bid_strategy", params.bid_strategy)
+  } else {
+    // Adset-level budgets: required by v25 when not using CBO
+    body.set("is_adset_budget_sharing_enabled", "false")
+  }
+  if (params.promoted_object) body.set("promoted_object", JSON.stringify(params.promoted_object))
   const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/campaigns`, { method: "POST", body })
   if (!res.ok) {
     const error = await res.json()
-    throw new Error(error.error?.message || "Failed to create campaign")
+    const fb = error.error
+    const detail = fb?.error_user_msg || fb?.error_user_title || ""
+    throw new Error([fb?.message || "Failed to create campaign", detail].filter(Boolean).join(" — "))
   }
   return res.json()
 }
@@ -472,6 +482,8 @@ export async function createAdSet(
     lifetime_budget?: string
     status?: string
     start_time?: string
+    destination_type?: string
+    promoted_object?: Record<string, any>
   }
 ): Promise<{ id: string }> {
   const body: Record<string, string> = {
@@ -488,6 +500,8 @@ export async function createAdSet(
   if (params.daily_budget) body.daily_budget = params.daily_budget
   if (params.lifetime_budget) body.lifetime_budget = params.lifetime_budget
   if (params.start_time) body.start_time = params.start_time
+  if (params.destination_type) body.destination_type = params.destination_type
+  if (params.promoted_object) body.promoted_object = JSON.stringify(params.promoted_object)
 
   const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/adsets`, {
     method: "POST",
@@ -495,7 +509,9 @@ export async function createAdSet(
   })
   if (!res.ok) {
     const error = await res.json()
-    throw new Error(error.error?.message || "Failed to create ad set")
+    const fb = error.error
+    const detail = fb?.error_user_msg || fb?.error_user_title || ""
+    throw new Error([fb?.message || "Failed to create ad set", detail].filter(Boolean).join(" — "))
   }
   return res.json()
 }
@@ -515,6 +531,7 @@ export async function createAd(
     description?: string
     cta: string
     link_url: string
+    display_url?: string
     status?: string
     degrees_of_freedom_spec?: Record<string, any>
   }
@@ -529,6 +546,7 @@ export async function createAd(
       call_to_action: { type: params.cta, value: { link: params.link_url } },
     },
   }
+  if (params.display_url) creativeSpec.link_data.display_url = params.display_url
   if (params.image_hash) creativeSpec.link_data.image_hash = params.image_hash
   if (params.video_id) {
     creativeSpec.video_data = {
@@ -555,7 +573,10 @@ export async function createAd(
   const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/ads`, { method: "POST", body })
   if (!res.ok) {
     const error = await res.json()
-    throw new Error(error.error?.message || "Failed to create ad")
+    const fb = error.error
+    const detail = fb?.error_user_msg || fb?.error_user_title || ""
+    const msg = [fb?.message || "Failed to create ad", detail].filter(Boolean).join(" — ")
+    throw new Error(msg)
   }
   return res.json()
 }

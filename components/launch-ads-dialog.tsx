@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { IconLoader2, IconRocket, IconCheck, IconSearch, IconAlertTriangle, IconPlus, IconTrash, IconX, IconCalendar, IconClock } from "@tabler/icons-react"
+import { IconLoader2, IconRocket, IconCheck, IconSearch, IconAlertTriangle, IconPlus, IconTrash, IconX, IconCalendar, IconClock, IconExternalLink, IconDownload } from "@tabler/icons-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -15,7 +15,8 @@ import { AdPerCreativeTextDialog, type AdCreativeTextConfig } from "@/components
 interface Campaign { id: string; name: string; status: string; effective_status: string }
 interface AdSet { id: string; name: string; status: string; effective_status: string }
 interface Ad { id: string; name: string; status: string; effective_status: string; creative?: { image_url?: string; thumbnail_url?: string } }
-interface PageLink { id: string; name: string; url: string; fb_page_id?: string }
+interface FacebookPage { id: string; name: string; category?: string; picture?: { data: { url: string } } }
+interface Preset { id: string; name: string; objective: string; targeting: any; optimization_goal: string; bid_strategy?: string; adset_name?: string; campaign_name?: string }
 
 type AdsetMode = "existing" | "new" | "per_creative" | "auto_divide" | "custom"
 
@@ -27,6 +28,12 @@ interface Props {
 }
 
 export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountId }: Props) {
+  // Presets
+  const [configSource, setConfigSource] = useState<"preset" | "ad">("ad")
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [selectedPresetId, setSelectedPresetId] = useState("")
+  const [loadingPresets, setLoadingPresets] = useState(false)
+
   // Template picker
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [adsets, setAdsets] = useState<AdSet[]>([])
@@ -66,6 +73,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   const [commonDescription, setCommonDescription] = useState("")
   const [commonCta, setCommonCta] = useState("LEARN_MORE")
   const [commonWebsiteUrl, setCommonWebsiteUrl] = useState("")
+  const [commonDisplayUrl, setCommonDisplayUrl] = useState("")
   const [useUniqueTextPerAdset, setUseUniqueTextPerAdset] = useState(false)
   const [adsetTextConfigs, setAdsetTextConfigs] = useState<AdsetTextConfig[]>([])
   const [adsetTextDialogOpen, setAdsetTextDialogOpen] = useState(false)
@@ -85,13 +93,21 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   }[]>([])
 
   // Pages
-  const [pages, setPages] = useState<PageLink[]>([])
+  const [pages, setPages] = useState<FacebookPage[]>([])
   const [selectedPageId, setSelectedPageId] = useState("")
 
   // Creative Enhancements
   const [useMetaDefaults, setUseMetaDefaults] = useState(false)
   const [imageEnhancements, setImageEnhancements] = useState<Set<string>>(new Set())
   const [videoEnhancements, setVideoEnhancements] = useState<Set<string>>(new Set())
+
+  // UTM Parameters
+  const [useUtm, setUseUtm] = useState(false)
+  const [utmSource, setUtmSource] = useState("facebook")
+  const [utmMedium, setUtmMedium] = useState("paid")
+  const [utmCampaign, setUtmCampaign] = useState("")
+  const [utmContent, setUtmContent] = useState("")
+  const [utmTerm, setUtmTerm] = useState("")
 
   // Publication Options
   const [createPaused, setCreatePaused] = useState(true)
@@ -117,13 +133,30 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
       .then(r => r.json())
       .then(d => setCreativeDetails((d.creatives || []).filter((c: any) => selectedCreativeIds.includes(c.id))))
 
-    fetch("/api/page-links")
+    fetch("/api/facebook/pages")
       .then((r) => r.json())
       .then((d) => {
-        const pl = d.pageLinks || []
+        const pl = d.pages || []
         setPages(pl)
-        if (pl.length > 0) setSelectedPageId(pl[0].fb_page_id || pl[0].id)
+        if (pl.length > 0) setSelectedPageId(pl[0].id)
       })
+
+    setLoadingPresets(true)
+    fetch("/api/presets")
+      .then(r => r.json())
+      .then(d => {
+        const p = d.presets || []
+        setPresets(p)
+        if (p.length > 0) {
+          setConfigSource("preset")
+          setCreateNewCampaign(false)
+          setCreateMultipleCampaigns(false)
+          setAdsetMode("new")
+        } else {
+          setConfigSource("ad")
+        }
+      })
+      .finally(() => setLoadingPresets(false))
   }, [open, adAccountId])
 
   useEffect(() => {
@@ -154,6 +187,13 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
     if (selectedAdset) setNewAdsetName(selectedAdset.name)
   }, [selectedAd])
 
+  useEffect(() => {
+    if (!selectedPresetId || configSource !== "preset") return
+    const p = presets.find(x => x.id === selectedPresetId)
+    if (!p) return
+    if (!newAdsetName) setNewAdsetName(p.adset_name || "")
+  }, [selectedPresetId])
+
   const filteredCampaigns = campaigns
     .filter((c) => !onlyActive || c.effective_status === "ACTIVE")
     .filter((c) => c.name.toLowerCase().includes(searchCampaign.toLowerCase()))
@@ -173,7 +213,34 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   const ins = (val: string, set: (v: string) => void, p: string) => set(val + p)
 
   const campaignOption = createMultipleCampaigns ? "multiple" : createNewCampaign ? "new" : "existing"
-  const canLaunch = selectedAd && selectedPageId && selectedCreativeIds.length > 0
+  const canLaunch = configSource === "preset"
+    ? (!!selectedPresetId && !!selectedPageId && selectedCreativeIds.length > 0)
+    : (!!selectedAd && !!selectedPageId && selectedCreativeIds.length > 0)
+
+  const validationErrors: string[] = []
+  if (campaignOption === "new" && !newCampaignName.trim())
+    validationErrors.push("New campaign name is required")
+  if (campaignOption === "multiple" && !multipleCampaignNames.some(n => n.trim()))
+    validationErrors.push("At least one campaign name is required")
+  if (adsetMode === "new" && !newAdsetName.trim())
+    validationErrors.push("Ad set name is required")
+  if (adsetMode !== "existing" && adsetMode !== "custom") {
+    const b = Number(adsetDailyBudget)
+    if (isNaN(b) || b < 1) validationErrors.push("Daily budget must be at least $1")
+  }
+  if (adsetMode === "custom" && canLaunch && customConfig.length === 0)
+    validationErrors.push("Custom configuration is required — click 'Configure Ad Sets'")
+  if (configSource === "preset" && campaignOption === "existing" && !selectedCampaign)
+    validationErrors.push("Select a campaign — required when using a preset")
+  if (configSource === "preset" && adsetMode === "existing" && !selectedAdset)
+    validationErrors.push("Select an ad set — required when using a preset")
+  if (scheduleStart && !scheduleDate)
+    validationErrors.push("Please select a start date for scheduled launch")
+  if (commonWebsiteUrl.trim() && !/^https?:\/\//.test(commonWebsiteUrl.trim()))
+    validationErrors.push("Website URL must start with https://")
+  const creativesWithoutUrl = creativeDetails.filter(c => !c.link_url?.trim())
+  if (!commonWebsiteUrl.trim() && !useUniqueTextPerCreative && creativesWithoutUrl.length > 0)
+    validationErrors.push(`Website URL is required — ${creativesWithoutUrl.length} creative(s) have no URL stored`)
 
   const applyPatLocal = (pat: string, idx: number, fname = "") =>
     pat.replace(/\{filename\}/g, fname)
@@ -202,7 +269,9 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          templateAdId: selectedAd!.id,
+          adAccountId,
+          templateAdId: configSource === "ad" ? selectedAd?.id : undefined,
+          presetId: configSource === "preset" ? selectedPresetId : undefined,
           creativeIds: selectedCreativeIds,
           campaignOption,
           existingCampaignId: campaignOption === "existing" ? selectedCampaign?.id : undefined,
@@ -225,7 +294,13 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
           commonPrimaryTexts: useCommonText ? commonPrimaryTexts.filter(p => p.trim()) : undefined,
           commonDescription: useCommonText ? commonDescription : undefined,
           commonCta: useCommonText ? commonCta : undefined,
-          commonWebsiteUrl: useCommonText ? commonWebsiteUrl : undefined,
+          commonWebsiteUrl: commonWebsiteUrl || undefined,
+          commonDisplayUrl: commonDisplayUrl || undefined,
+          utmSource: useUtm ? utmSource : undefined,
+          utmMedium: useUtm ? utmMedium : undefined,
+          utmCampaign: useUtm ? utmCampaign : undefined,
+          utmContent: useUtm ? utmContent : undefined,
+          utmTerm: useUtm ? utmTerm : undefined,
           useUniqueTextPerAdset,
           adsetTextConfigs: useUniqueTextPerAdset ? adsetTextConfigs : undefined,
           useUniqueTextPerCreative,
@@ -250,6 +325,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
   const handleClose = () => {
     setResult(null); setError("")
+    setConfigSource("ad"); setSelectedPresetId("")
     setSelectedCampaign(null); setSelectedAdset(null); setSelectedAd(null)
     setCreateNewCampaign(false); setCreateMultipleCampaigns(false)
     setMultipleCampaignNames(["", ""]); setCreativeDistribution("split")
@@ -262,8 +338,27 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
     setUseUniqueTextPerAdset(false); setAdsetTextConfigs([])
     setUseUniqueTextPerCreative(false); setCreativeTextConfigs([])
     setUseMetaDefaults(false); setImageEnhancements(new Set()); setVideoEnhancements(new Set())
+    setUseUtm(false); setUtmSource("facebook"); setUtmMedium("paid"); setUtmCampaign(""); setUtmContent(""); setUtmTerm("")
     setCreatePaused(true); setScheduleStart(false); setScheduleDate(undefined); setScheduleHour("08"); setScheduleMinute("00")
     onClose()
+  }
+
+  const exportCsv = () => {
+    if (!result?.created?.length) return
+    const header = ["Ad Name", "Ad ID", "Creative File"]
+    const rows = result.created.map((item: any) => [item.adName || item.name || "", item.adId || "", item.fileName || ""])
+    const csv = [header, ...rows]
+      .map((row: string[]) => row.map((cell: string) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `launch-results-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   const placeholderBtns = (val: string, set: (v: string) => void, includeFilename = false) => (
@@ -329,104 +424,216 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
         {result ? (
           <div className="space-y-4">
-            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-              <div className="flex items-center gap-2 font-medium text-green-700">
+            {/* Summary banner */}
+            <div className={`rounded-lg border p-4 ${result.errors?.length === 0 ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"}`}>
+              <div className={`flex items-center gap-2 font-medium ${result.errors?.length === 0 ? "text-green-700" : "text-amber-700"}`}>
                 <IconCheck className="size-5" />
                 {result.summary}
               </div>
+              {result.adManagerUrl && (
+                <a href={result.adManagerUrl} target="_blank" rel="noopener noreferrer"
+                  className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
+                  <IconExternalLink className="size-4" />
+                  View in Meta Ads Manager
+                </a>
+              )}
             </div>
-            {result.errors?.length > 0 && (
-              <div className="space-y-1">
-                {result.errors.map((e: any, i: number) => (
-                  <div key={i} className="text-sm text-destructive">{e.error}</div>
-                ))}
+
+            {/* Created ads table */}
+            {result.created?.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-sm font-medium">Created Ads ({result.created.length})</h4>
+                  <button type="button" onClick={exportCsv}
+                    className="flex items-center gap-1 text-xs text-primary hover:underline">
+                    <IconDownload className="size-3.5" /> Export CSV
+                  </button>
+                </div>
+                <div className="rounded border overflow-auto max-h-56">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted/80 border-b">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ad Name</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground w-40">Ad ID</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.created.map((item: any, i: number) => (
+                        <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
+                          <td className="px-3 py-2 max-w-xs truncate" title={item.adName}>{item.adName || item.name}</td>
+                          <td className="px-3 py-2 font-mono text-muted-foreground">{item.adId}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
+
+            {/* Errors */}
+            {result.errors?.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-destructive mb-2">Failed ({result.errors.length})</h4>
+                <div className="space-y-1.5 max-h-40 overflow-auto">
+                  {result.errors.map((e: any, i: number) => {
+                    const cr = creativeDetails.find(c => c.id === e.creativeId)
+                    return (
+                      <div key={i} className="rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs">
+                        <span className="font-medium">{cr?.file_name || e.creativeId}:</span>
+                        <span className="text-destructive ml-1.5">{e.error}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <Button onClick={handleClose} className="w-full">Done</Button>
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Select Ad Template */}
-            <div className="space-y-3">
+            {/* Configuration Source */}
+            <div className="space-y-4 rounded-lg border p-4">
               <div>
-                <h3 className="font-semibold">Select Ad from Facebook</h3>
-                <p className="text-sm text-muted-foreground">Select an existing ad to copy its targeting and budget settings.</p>
+                <h3 className="font-semibold">Configuration Source</h3>
+                <p className="text-sm text-muted-foreground">Where to copy targeting &amp; bid settings from for your new ads.</p>
               </div>
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
-                Only active
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                {/* Campaigns */}
-                <div className="rounded-lg border">
-                  <div className="border-b p-2 font-medium text-sm">Campaigns</div>
-                  <div className="p-2">
-                    <div className="relative mb-2">
-                      <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                      <Input placeholder="Search..." value={searchCampaign} onChange={(e) => setSearchCampaign(e.target.value)} className="h-7 pl-6 text-xs" />
-                    </div>
-                    <div className="max-h-80 overflow-y-auto space-y-0.5">
-                      {loadingCampaigns ? <div className="flex justify-center py-4"><IconLoader2 className="size-4 animate-spin" /></div>
-                        : filteredCampaigns.map((c) => (
-                          <button key={c.id} onClick={() => setSelectedCampaign(selectedCampaign?.id === c.id ? null : c)}
-                            className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedCampaign?.id === c.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
-                            {selectedCampaign?.id === c.id && <IconCheck className="inline size-3 mr-1" />}{c.name}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-                {/* Ad Sets */}
-                <div className="rounded-lg border">
-                  <div className="border-b p-2 font-medium text-sm">Ad Sets</div>
-                  <div className="p-2">
-                    <div className="relative mb-2">
-                      <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                      <Input placeholder="Search..." value={searchAdset} onChange={(e) => setSearchAdset(e.target.value)} className="h-7 pl-6 text-xs" />
-                    </div>
-                    <div className="max-h-80 overflow-y-auto space-y-0.5">
-                      {!selectedCampaign ? <p className="text-center text-xs text-muted-foreground py-4">Select a campaign first</p>
-                        : loadingAdsets ? <div className="flex justify-center py-4"><IconLoader2 className="size-4 animate-spin" /></div>
-                        : filteredAdsets.map((a) => (
-                          <button key={a.id} onClick={() => setSelectedAdset(selectedAdset?.id === a.id ? null : a)}
-                            className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedAdset?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
-                            {selectedAdset?.id === a.id && <IconCheck className="inline size-3 mr-1" />}{a.name}
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-                {/* Ads */}
-                <div className="rounded-lg border">
-                  <div className="border-b p-2 font-medium text-sm">Ads</div>
-                  <div className="p-2">
-                    <div className="relative mb-2">
-                      <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                      <Input placeholder="Search..." value={searchAd} onChange={(e) => setSearchAd(e.target.value)} className="h-7 pl-6 text-xs" />
-                    </div>
-                    <div className="max-h-80 overflow-y-auto space-y-0.5">
-                      {!selectedAdset ? <p className="text-center text-xs text-muted-foreground py-4">Select an ad set first</p>
-                        : loadingAds ? <div className="flex justify-center py-4"><IconLoader2 className="size-4 animate-spin" /></div>
-                        : filteredAds.map((a) => (
-                          <button key={a.id} onClick={() => setSelectedAd(selectedAd?.id === a.id ? null : a)}
-                            className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted leading-tight flex items-center gap-2 ${selectedAd?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
-                            {(a.creative?.thumbnail_url || a.creative?.image_url)
-                              ? <img src={a.creative.thumbnail_url || a.creative.image_url} alt="" className="size-10 rounded object-cover shrink-0" />
-                              : <div className="size-10 rounded bg-muted shrink-0" />}
-                            <span className="break-words min-w-0">
-                              {selectedAd?.id === a.id && <IconCheck className="inline size-3 mr-1" />}{a.name}
-                            </span>
-                          </button>
-                        ))}
-                    </div>
-                  </div>
-                </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => {
+                  setConfigSource("preset")
+                  setCreateNewCampaign(false)
+                  setCreateMultipleCampaigns(false)
+                  if (adsetMode === "existing") setAdsetMode("new")
+                }}
+                  className={`rounded-lg border px-4 py-3 text-left transition-colors ${configSource === "preset" ? "border-primary bg-primary/5" : "hover:bg-muted"}`}>
+                  <p className={`text-sm font-medium ${configSource === "preset" ? "text-primary" : ""}`}>Saved Preset</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Use targeting saved from a previous ad set</p>
+                </button>
+                <button type="button" onClick={() => { setConfigSource("ad"); setAdsetMode("existing") }}
+                  className={`rounded-lg border px-4 py-3 text-left transition-colors ${configSource === "ad" ? "border-primary bg-primary/5" : "hover:bg-muted"}`}>
+                  <p className={`text-sm font-medium ${configSource === "ad" ? "text-primary" : ""}`}>Pick from Facebook</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Browse campaigns → ad sets → ads</p>
+                </button>
               </div>
+
+              {/* Preset mode */}
+              {configSource === "preset" && (
+                <div className="space-y-2">
+                  {loadingPresets ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <IconLoader2 className="size-4 animate-spin" /> Loading presets...
+                    </div>
+                  ) : presets.length === 0 ? (
+                    <div className="rounded-md border border-dashed p-4 text-center space-y-1">
+                      <p className="text-sm text-muted-foreground">No presets saved yet.</p>
+                      <a href="/presets" target="_blank" className="text-xs text-primary hover:underline">Go to Presets page to import one →</a>
+                    </div>
+                  ) : (
+                    <select value={selectedPresetId} onChange={e => setSelectedPresetId(e.target.value)}
+                      className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                      <option value="">— Select a preset —</option>
+                      {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  )}
+                  {selectedPresetId && (() => {
+                    const p = presets.find(x => x.id === selectedPresetId)
+                    if (!p) return null
+                    const parts: string[] = []
+                    const countries = p.targeting?.geo_locations?.countries
+                    if (countries?.length) parts.push(countries.join(", "))
+                    if (p.targeting?.age_min || p.targeting?.age_max) parts.push(`Age ${p.targeting.age_min || ""}–${p.targeting.age_max || ""}`)
+                    if (p.bid_strategy) parts.push(p.bid_strategy.replace(/_/g, " "))
+                    return (
+                      <div className="rounded-md bg-primary/5 border border-primary/20 px-3 py-2 text-xs space-y-0.5">
+                        <p className="font-medium text-primary">{p.name}</p>
+                        <p className="text-muted-foreground">{p.objective?.replace(/_/g, " ")}{parts.length ? " · " + parts.join(" · ") : ""}</p>
+                        {p.adset_name && <p className="text-muted-foreground">From: {p.campaign_name} → {p.adset_name}</p>}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* Ad picker mode */}
+              {configSource === "ad" && (
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={onlyActive} onChange={(e) => setOnlyActive(e.target.checked)} />
+                    Only active
+                  </label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {/* Campaigns */}
+                    <div className="rounded-lg border">
+                      <div className="border-b p-2 font-medium text-sm">Campaigns</div>
+                      <div className="p-2">
+                        <div className="relative mb-2">
+                          <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                          <Input placeholder="Search..." value={searchCampaign} onChange={(e) => setSearchCampaign(e.target.value)} className="h-7 pl-6 text-xs" />
+                        </div>
+                        <div className="max-h-80 overflow-y-auto space-y-0.5">
+                          {loadingCampaigns ? <div className="flex justify-center py-4"><IconLoader2 className="size-4 animate-spin" /></div>
+                            : filteredCampaigns.map((c) => (
+                              <button key={c.id} onClick={() => setSelectedCampaign(selectedCampaign?.id === c.id ? null : c)}
+                                className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedCampaign?.id === c.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
+                                {selectedCampaign?.id === c.id && <IconCheck className="inline size-3 mr-1" />}{c.name}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Ad Sets */}
+                    <div className="rounded-lg border">
+                      <div className="border-b p-2 font-medium text-sm">Ad Sets</div>
+                      <div className="p-2">
+                        <div className="relative mb-2">
+                          <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                          <Input placeholder="Search..." value={searchAdset} onChange={(e) => setSearchAdset(e.target.value)} className="h-7 pl-6 text-xs" />
+                        </div>
+                        <div className="max-h-80 overflow-y-auto space-y-0.5">
+                          {!selectedCampaign ? <p className="text-center text-xs text-muted-foreground py-4">Select a campaign first</p>
+                            : loadingAdsets ? <div className="flex justify-center py-4"><IconLoader2 className="size-4 animate-spin" /></div>
+                            : filteredAdsets.map((a) => (
+                              <button key={a.id} onClick={() => setSelectedAdset(selectedAdset?.id === a.id ? null : a)}
+                                className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedAdset?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
+                                {selectedAdset?.id === a.id && <IconCheck className="inline size-3 mr-1" />}{a.name}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Ads */}
+                    <div className="rounded-lg border">
+                      <div className="border-b p-2 font-medium text-sm">Ads</div>
+                      <div className="p-2">
+                        <div className="relative mb-2">
+                          <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                          <Input placeholder="Search..." value={searchAd} onChange={(e) => setSearchAd(e.target.value)} className="h-7 pl-6 text-xs" />
+                        </div>
+                        <div className="max-h-80 overflow-y-auto space-y-0.5">
+                          {!selectedAdset ? <p className="text-center text-xs text-muted-foreground py-4">Select an ad set first</p>
+                            : loadingAds ? <div className="flex justify-center py-4"><IconLoader2 className="size-4 animate-spin" /></div>
+                            : filteredAds.map((a) => (
+                              <button key={a.id} onClick={() => setSelectedAd(selectedAd?.id === a.id ? null : a)}
+                                className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted leading-tight flex items-center gap-2 ${selectedAd?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
+                                {(a.creative?.thumbnail_url || a.creative?.image_url)
+                                  ? <img src={a.creative.thumbnail_url || a.creative.image_url} alt="" className="size-10 rounded object-cover shrink-0" />
+                                  : <div className="size-10 rounded bg-muted shrink-0" />}
+                                <span className="break-words min-w-0">
+                                  {selectedAd?.id === a.id && <IconCheck className="inline size-3 mr-1" />}{a.name}
+                                </span>
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Campaign Options */}
-            {selectedCampaign && (
-              <div className="space-y-3 rounded-lg border p-4">
+            <div className="space-y-3 rounded-lg border p-4">
                 <h3 className="font-semibold">Campaign Options</h3>
 
                 <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
@@ -476,15 +683,31 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                   </div>
                 )}
 
-                {!createNewCampaign && !createMultipleCampaigns && (
+                {!createNewCampaign && !createMultipleCampaigns && configSource === "preset" && (
+                  <div className="ml-6 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Select existing campaign:</p>
+                    <div className="relative">
+                      <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                      <Input placeholder="Search..." value={searchCampaign} onChange={e => setSearchCampaign(e.target.value)} className="h-7 pl-6 text-xs" />
+                    </div>
+                    <div className="max-h-40 overflow-y-auto rounded border space-y-0.5 p-1">
+                      {loadingCampaigns ? <div className="flex justify-center py-3"><IconLoader2 className="size-4 animate-spin" /></div>
+                        : filteredCampaigns.map(c => (
+                          <button key={c.id} type="button" onClick={() => setSelectedCampaign(selectedCampaign?.id === c.id ? null : c)}
+                            className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedCampaign?.id === c.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
+                            {selectedCampaign?.id === c.id && <IconCheck className="inline size-3 mr-1" />}{c.name}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+                {!createNewCampaign && !createMultipleCampaigns && configSource === "ad" && selectedCampaign && (
                   <p className="ml-6 text-xs text-muted-foreground">Using existing: <span className="font-medium text-foreground">{selectedCampaign.name}</span></p>
                 )}
-              </div>
-            )}
+            </div>
 
             {/* Ad Set Options */}
-            {(selectedAdset || createNewCampaign || createMultipleCampaigns) && (
-              <div className="space-y-3 rounded-lg border p-4">
+            <div className="space-y-3 rounded-lg border p-4">
                 <h3 className="font-semibold">Ad Set Options</h3>
 
                 {/* Option 1: Create new ad set */}
@@ -553,11 +776,30 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                   </div>
                 )}
 
-                {adsetMode === "existing" && selectedAdset && (
+                {adsetMode === "existing" && configSource === "preset" && (
+                  <div className="ml-6 space-y-1.5">
+                    <p className="text-xs text-muted-foreground">Select existing ad set:</p>
+                    <div className="relative">
+                      <IconSearch className="absolute left-2 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                      <Input placeholder="Search..." value={searchAdset} onChange={e => setSearchAdset(e.target.value)} className="h-7 pl-6 text-xs" />
+                    </div>
+                    <div className="max-h-40 overflow-y-auto rounded border space-y-0.5 p-1">
+                      {!selectedCampaign
+                        ? <p className="text-center text-xs text-muted-foreground py-3">Select a campaign first (in Campaign Options above)</p>
+                        : loadingAdsets ? <div className="flex justify-center py-3"><IconLoader2 className="size-4 animate-spin" /></div>
+                        : filteredAdsets.map(a => (
+                          <button key={a.id} type="button" onClick={() => setSelectedAdset(selectedAdset?.id === a.id ? null : a)}
+                            className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedAdset?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
+                            {selectedAdset?.id === a.id && <IconCheck className="inline size-3 mr-1" />}{a.name}
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+                )}
+                {adsetMode === "existing" && configSource === "ad" && selectedAdset && (
                   <p className="ml-6 text-xs text-muted-foreground">Using existing: <span className="font-medium text-foreground">{selectedAdset.name}</span></p>
                 )}
-              </div>
-            )}
+            </div>
 
             {/* Ad Name Options */}
             <div className="space-y-3 rounded-lg border p-4">
@@ -623,8 +865,8 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                   const rows: Row[] = []
                   let gIdx = 1
 
-                  const campId = createNewCampaign ? "-" : createMultipleCampaigns ? "-" : selectedCampaign?.id || "-"
-                  const campName = createNewCampaign ? newCampaignName : createMultipleCampaigns ? "(multiple)" : selectedCampaign?.name || "-"
+                  const campId = createNewCampaign ? "(new)" : createMultipleCampaigns ? "(new each)" : selectedCampaign?.id || "—"
+                  const campName = createNewCampaign ? newCampaignName : createMultipleCampaigns ? "(multiple)" : selectedCampaign?.name || "—"
 
                   if (adsetMode === "custom" && customConfig.length > 0) {
                     customConfig.forEach(camp => {
@@ -632,24 +874,24 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                         adset.creativeIds.forEach(cid => {
                           const cr = creativeDetails.find(c => c.id === cid)
                           const fname = cr?.file_name.replace(/\.[^/.]+$/, "") || cid
-                          rows.push({ campId: "-", campName: camp.name, adsetId: "-", adsetName: adset.name, adName: resolveAdName(fname, gIdx++) })
+                          rows.push({ campId: "(new)", campName: camp.name, adsetId: "(new)", adsetName: adset.name, adName: resolveAdName(fname, gIdx++) })
                         })
                       })
                     })
                   } else if (adsetMode === "per_creative") {
                     creativeDetails.forEach((cr, i) => {
                       const fname = cr.file_name.replace(/\.[^/.]+$/, "")
-                      rows.push({ campId, campName, adsetId: "-", adsetName: applyPat(adsetNamePattern || "{filename}", i+1, fname), adName: resolveAdName(fname, gIdx++) })
+                      rows.push({ campId, campName, adsetId: "(new)", adsetName: applyPat(adsetNamePattern || "{filename}", i+1, fname), adName: resolveAdName(fname, gIdx++) })
                     })
                   } else if (adsetMode === "auto_divide") {
                     const chunkSize = adsPerAdset || 5
                     creativeDetails.forEach((cr, i) => {
                       const groupIdx = Math.floor(i / chunkSize) + 1
-                      rows.push({ campId, campName, adsetId: "-", adsetName: applyPat(autoDividePattern || "Ad Set {index:01}", groupIdx), adName: resolveAdName(cr.file_name.replace(/\.[^/.]+$/, ""), gIdx++) })
+                      rows.push({ campId, campName, adsetId: "(new)", adsetName: applyPat(autoDividePattern || "Ad Set {index:01}", groupIdx), adName: resolveAdName(cr.file_name.replace(/\.[^/.]+$/, ""), gIdx++) })
                     })
                   } else {
-                    const adsetId = adsetMode === "existing" ? (selectedAdset?.id || "-") : "-"
-                    const adsetName = adsetMode === "existing" ? (selectedAdset?.name || "-") : newAdsetName
+                    const adsetId = adsetMode === "existing" ? (selectedAdset?.id || "—") : "(new)"
+                    const adsetName = adsetMode === "existing" ? (selectedAdset?.name || "—") : newAdsetName
                     creativeDetails.forEach(cr => {
                       rows.push({ campId, campName, adsetId, adsetName, adName: resolveAdName(cr.file_name.replace(/\.[^/.]+$/, ""), gIdx++) })
                     })
@@ -673,15 +915,24 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                             </tr>
                           </thead>
                           <tbody>
-                            {rows.map((row, i) => (
-                              <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
-                                <td className="px-3 py-2 text-muted-foreground font-mono">{row.campId}</td>
-                                <td className="px-3 py-2 max-w-[200px] truncate" title={row.campName}>{row.campName}</td>
-                                <td className="px-3 py-2 text-muted-foreground font-mono">{row.adsetId}</td>
-                                <td className="px-3 py-2 max-w-[200px] truncate" title={row.adsetName}>{row.adsetName}</td>
-                                <td className="px-3 py-2 max-w-[200px] truncate" title={row.adName}>{row.adName}</td>
-                              </tr>
-                            ))}
+                            {rows.map((row, i) => {
+                              const idCell = (val: string) => {
+                                if (val === "(new)" || val === "(new each)")
+                                  return <td className="px-3 py-2 text-xs italic text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{val}</td>
+                                if (val === "—")
+                                  return <td className="px-3 py-2 text-muted-foreground">—</td>
+                                return <td className="px-3 py-2 font-mono text-muted-foreground text-[10px] whitespace-nowrap">{val}</td>
+                              }
+                              return (
+                                <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
+                                  {idCell(row.campId)}
+                                  <td className="px-3 py-2 max-w-[180px] truncate" title={row.campName}>{row.campName}</td>
+                                  {idCell(row.adsetId)}
+                                  <td className="px-3 py-2 max-w-[180px] truncate" title={row.adsetName}>{row.adsetName}</td>
+                                  <td className="px-3 py-2 max-w-[180px] truncate" title={row.adName}>{row.adName}</td>
+                                </tr>
+                              )
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -791,9 +1042,17 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
                   {/* Website URL */}
                   <div className="space-y-1.5">
-                    <p className="text-sm font-medium">Website URL</p>
+                    <p className="text-sm font-medium">Website URL <span className="text-xs font-normal text-muted-foreground">(optional — overrides per-creative URL)</span></p>
                     <Input value={commonWebsiteUrl} onChange={e => setCommonWebsiteUrl(e.target.value)} placeholder="https://..." type="url" />
                   </div>
+
+                  {/* Display URL */}
+                  <div className="space-y-1.5">
+                    <p className="text-sm font-medium">Display URL <span className="text-xs font-normal text-muted-foreground">(optional)</span></p>
+                    <p className="text-xs text-muted-foreground">Short URL shown in the ad (e.g. example.com/sale)</p>
+                    <Input value={commonDisplayUrl} onChange={e => setCommonDisplayUrl(e.target.value)} placeholder="example.com/sale" />
+                  </div>
+
                 </div>
               )}
 
@@ -1025,28 +1284,95 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
               </label>
             </div>
 
-            {/* Page + Launch */}
-            {selectedAd && (
-              <>
-                {pages.length > 0 && (
-                  <div className="space-y-2 rounded-lg border p-4">
-                    <h3 className="font-semibold">Facebook Page</h3>
-                    <select value={selectedPageId} onChange={(e) => setSelectedPageId(e.target.value)} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
-                      {pages.map((p) => <option key={p.id} value={p.fb_page_id || p.id}>{p.name}</option>)}
-                    </select>
+            {/* UTM Parameters */}
+            {(() => {
+              const utmPreview = [
+                utmSource && `utm_source=${utmSource}`,
+                utmMedium && `utm_medium=${utmMedium}`,
+                utmCampaign && `utm_campaign=${utmCampaign}`,
+                utmContent && `utm_content=${utmContent}`,
+                utmTerm && `utm_term=${utmTerm}`,
+              ].filter(Boolean).join("&")
+              return (
+                <div className="space-y-3 rounded-lg border p-4">
+                  <div>
+                    <h3 className="font-semibold">URL Tracking (UTM)</h3>
+                    <p className="text-sm text-muted-foreground">Appended to all destination URLs for analytics tracking.</p>
                   </div>
-                )}
+                  <label className="flex items-center gap-2 cursor-pointer text-sm font-medium">
+                    <input type="checkbox" checked={useUtm} onChange={e => setUseUtm(e.target.checked)} className="size-4" />
+                    Add UTM parameters to all URLs
+                  </label>
+                  {useUtm && (
+                    <div className="ml-6 space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        {([
+                          ["utm_source", "Source", utmSource, setUtmSource, "facebook"],
+                          ["utm_medium", "Medium", utmMedium, setUtmMedium, "paid"],
+                          ["utm_campaign", "Campaign", utmCampaign, setUtmCampaign, "campaign_name"],
+                          ["utm_content", "Content", utmContent, setUtmContent, "ad_name (optional)"],
+                          ["utm_term", "Term", utmTerm, setUtmTerm, "keyword (optional)"],
+                        ] as [string, string, string, (v: string) => void, string][]).map(([key, label, val, set, ph]) => (
+                          <div key={key} className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">{label} <span className="font-mono text-[10px]">{key}</span></p>
+                            <Input value={val} onChange={e => set(e.target.value)} placeholder={ph} className="h-8 text-xs" />
+                          </div>
+                        ))}
+                      </div>
+                      {utmPreview && (
+                        <div className="rounded-md bg-muted px-3 py-2">
+                          <p className="text-[10px] text-muted-foreground mb-1">Preview</p>
+                          <p className="text-xs font-mono break-all text-foreground">?{utmPreview}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
-                {error && (
-                  <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                    <IconAlertTriangle className="size-4 shrink-0" />{error}
+            {/* Facebook Page */}
+            <div className="space-y-2 rounded-lg border p-4">
+              <h3 className="font-semibold">Facebook Page</h3>
+              <p className="text-xs text-muted-foreground">Page that will appear as the author of these ads.</p>
+              {pages.length > 0 ? (
+                <select value={selectedPageId} onChange={(e) => setSelectedPageId(e.target.value)} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                  {pages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              ) : (
+                <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <IconAlertTriangle className="size-3.5 shrink-0" />
+                  No Facebook Pages found. Make sure your Facebook account is connected and has at least one Page.
+                </div>
+              )}
+            </div>
+
+            {/* Launch — luôn hiện, disable khi chưa đủ điều kiện */}
+            {error && (
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                <IconAlertTriangle className="size-4 shrink-0" />{error}
+              </div>
+            )}
+
+            {canLaunch && validationErrors.length > 0 && (
+              <div className="space-y-1.5">
+                {validationErrors.map((e, i) => (
+                  <div key={i} className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <IconAlertTriangle className="size-3.5 shrink-0" />{e}
                   </div>
-                )}
+                ))}
+              </div>
+            )}
 
-                <Button onClick={handleLaunch} disabled={launching || !canLaunch} className="w-full">
-                  {launching ? <><IconLoader2 className="size-4 animate-spin" /> Launching...</> : <><IconRocket className="size-4" /> Launch {selectedCreativeIds.length} Ads</>}
-                </Button>
-              </>
+            <Button onClick={handleLaunch} disabled={launching || !canLaunch || validationErrors.length > 0} className="w-full">
+              {launching
+                ? <><IconLoader2 className="size-4 animate-spin" /> Launching {selectedCreativeIds.length} ads...</>
+                : <><IconRocket className="size-4" /> Launch {selectedCreativeIds.length} Ads</>}
+            </Button>
+            {launching && (
+              <p className="text-center text-xs text-muted-foreground animate-pulse">
+                Creating ads — this may take a moment for large batches
+              </p>
             )}
           </div>
         )}

@@ -29,6 +29,7 @@ import {
   IconExternalLink,
   IconSun,
   IconMoon,
+  IconLayoutGrid,
 } from "@tabler/icons-react"
 import { createClient } from "@/lib/supabase/client"
 import { useOrg } from "@/lib/org-context"
@@ -40,6 +41,7 @@ const navItems = [
   { title: "Campaigns", href: "/campaigns", icon: IconTargetArrow },
   { title: "Ads Manager", href: "/ads", icon: IconAd2 },
   { title: "Upload Ads", href: "/upload-ads", icon: IconUpload },
+  { title: "Presets", href: "/presets", icon: IconLayoutGrid },
   { title: "Pages", href: "/pages", icon: IconExternalLink },
   { title: "Settings", href: "/settings", icon: IconSettings, adminOnly: true },
 ] as const

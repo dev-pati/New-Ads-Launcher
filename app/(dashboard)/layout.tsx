@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { createClient } from "@/lib/supabase/client"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { OrgProvider, useOrg } from "@/lib/org-context"
+import { AdAccountProvider } from "@/lib/ad-account-context"
 import { IconLoader2 } from "@tabler/icons-react"
 
 function DashboardContent({ children, userName, userEmail }: {
@@ -69,11 +70,13 @@ export default function DashboardLayout({
 
   return (
     <OrgProvider>
-      <TooltipProvider>
-        <DashboardContent userName={user?.name} userEmail={user?.email}>
-          {children}
-        </DashboardContent>
-      </TooltipProvider>
+      <AdAccountProvider>
+        <TooltipProvider>
+          <DashboardContent userName={user?.name} userEmail={user?.email}>
+            {children}
+          </DashboardContent>
+        </TooltipProvider>
+      </AdAccountProvider>
     </OrgProvider>
   )
 }
