@@ -170,7 +170,10 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
     setUploading(true)
     let credRes: Response
     try {
-      credRes = await fetch("/api/facebook/upload-credentials")
+      // Find the adAccountId from localStorage since we don't have it in props
+      const selectedId = localStorage.getItem("selected_ad_account_id") || ""
+      const url = selectedId ? `/api/facebook/upload-credentials?adAccountId=${selectedId}` : "/api/facebook/upload-credentials"
+      credRes = await fetch(url)
       if (!credRes.ok) throw new Error("Cannot get credentials")
     } catch (err: any) {
       setUploading(false)
@@ -206,7 +209,8 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
           )
           const d = await res.json()
           if (d.error) throw new Error(d.error.message)
-          const img = d.images?.[row.file.name]
+          const imgVals = d.images ? Object.values(d.images) : []
+          const img: any = imgVals.length > 0 ? imgVals[0] : null
           fbImageHash = img?.hash || null
           fbImageUrl = img?.url || null
           fbThumbnailUrl = img?.url_128 || img?.url || null

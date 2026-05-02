@@ -376,27 +376,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Resolve campaign(s)
-    const campaignIds: string[] = []
-    if (campaignOption === "multiple") {
-      for (const name of (multipleCampaignNames || []).filter((n: string) => n.trim())) {
-        const c = await createCampaign(adAccountId, token, {
-          name, objective: resolvedObjective,
-          special_ad_categories: template.campaign.special_ad_categories || [], status: "PAUSED",
-        })
-        campaignIds.push(c.id)
-      }
-    } else if (campaignOption === "new") {
-      const c = await createCampaign(adAccountId, token, {
-        name: newCampaignName || template.campaign.name,
-        objective: resolvedObjective,
-        special_ad_categories: template.campaign.special_ad_categories || [], status: "PAUSED",
-      })
-      campaignIds.push(c.id)
-    } else {
-      campaignIds.push(existingCampaignId || template.adset.campaign_id)
-    }
-
     // Custom config mode: bypass normal campaign loop entirely
     if (adsetMode === "custom" && customConfig?.length > 0) {
       let globalIdx = 1
@@ -424,6 +403,27 @@ export async function POST(request: NextRequest) {
         summary: `${allResults.length} ads created, ${allErrors.length} failed`,
         adManagerUrl: `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId.replace("act_", "")}`,
       })
+    }
+
+    // Resolve campaign(s)
+    const campaignIds: string[] = []
+    if (campaignOption === "multiple") {
+      for (const name of (multipleCampaignNames || []).filter((n: string) => n.trim())) {
+        const c = await createCampaign(adAccountId, token, {
+          name, objective: resolvedObjective,
+          special_ad_categories: template.campaign.special_ad_categories || [], status: "PAUSED",
+        })
+        campaignIds.push(c.id)
+      }
+    } else if (campaignOption === "new") {
+      const c = await createCampaign(adAccountId, token, {
+        name: newCampaignName || template.campaign.name,
+        objective: resolvedObjective,
+        special_ad_categories: template.campaign.special_ad_categories || [], status: "PAUSED",
+      })
+      campaignIds.push(c.id)
+    } else {
+      campaignIds.push(existingCampaignId || template.adset.campaign_id)
     }
 
     let adsetCounter = 0

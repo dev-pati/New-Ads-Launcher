@@ -85,21 +85,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
     }
 
-    const supabase = await createClient()
-    const { data: adAccounts } = await supabase
-      .from("ad_accounts")
-      .select("id, fb_ad_account_id")
-      .eq("org_id", ctx.orgId)
-      .limit(1)
+    const adAccountIdParam = formData.get("adAccountId") as string | null
 
-    if (!adAccounts || adAccounts.length === 0) {
-      return NextResponse.json({ error: "No ad account found" }, { status: 400 })
+    const supabase = await createClient()
+    let fbAdAccountId = adAccountIdParam
+
+    if (!fbAdAccountId) {
+      const { data: adAccounts } = await supabase
+        .from("ad_accounts")
+        .select("id, fb_ad_account_id")
+        .eq("org_id", ctx.orgId)
+        .limit(1)
+
+      if (!adAccounts || adAccounts.length === 0) {
+        return NextResponse.json({ error: "No ad account found" }, { status: 400 })
+      }
+      fbAdAccountId = adAccounts[0].fb_ad_account_id
     }
 
     const isVideo = file.type.startsWith("video/")
     const mediaType = isVideo ? "video" : "image"
     const fileBuffer = await file.arrayBuffer()
-    const fbAdAccountId = adAccounts[0].fb_ad_account_id
 
     let fbImageHash: string | null = null
     let fbImageUrl: string | null = null
