@@ -103,6 +103,10 @@ export async function POST(request: NextRequest) {
       fbAdAccountId = adAccounts[0].fb_ad_account_id
     }
 
+    if (!fbAdAccountId) {
+      return NextResponse.json({ error: "Facebook Ad Account ID is missing" }, { status: 400 })
+    }
+
     const isVideo = file.type.startsWith("video/")
     const mediaType = isVideo ? "video" : "image"
     const fileBuffer = await file.arrayBuffer()
