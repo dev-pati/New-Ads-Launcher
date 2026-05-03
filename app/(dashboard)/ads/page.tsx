@@ -405,7 +405,7 @@ function creativesToMatrix(
         const url =
           c.media_type === "video"
             ? "video"
-            : c.fb_thumbnail_url || c.file_url || ""
+            : c.fb_image_url || c.file_url || ""
         cell = { value: url, readOnly: true, DataViewer: ImageViewer }
       } else if (field === "cta") {
         cell = {

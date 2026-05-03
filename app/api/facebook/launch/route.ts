@@ -18,7 +18,8 @@ function applyPattern(pattern: string, ctx: { filename?: string; index?: number;
 async function buildAdset(
   adAccountId: string, token: string, template: any,
   campaignId: string, name: string, dailyBudget?: number, startTime?: string,
-  pageId?: string, resolvedObjective?: string
+  pageId?: string, resolvedObjective?: string,
+  pixelId?: string, pixelEvent?: string
 ) {
   // Safe optimization goal per objective for adset-level budget (non-CBO) campaigns.
   // ENGAGED_USERS is CBO-only; for adset budgets, OUTCOME_ENGAGEMENT requires POST_ENGAGEMENT.
@@ -58,8 +59,10 @@ async function buildAdset(
 
   // OUTCOME_ENGAGEMENT requires destination_type so Facebook knows what kind of engagement to optimize for
   const destinationType = campaignObjective === "OUTCOME_ENGAGEMENT" ? "ON_POST" : undefined
-  // promoted_object not needed — page is linked via ad creative
-  const promotedObject: Record<string, any> | undefined = undefined
+  const promotedObject = pixelId ? {
+    pixel_id: pixelId,
+    custom_event_type: pixelEvent || "PURCHASE"
+  } : undefined
   // Keep only standard targeting fields to avoid v25 conflicts
   const rawTargeting = template.adset.targeting || {}
   const safeTargeting: Record<string, any> = {}
@@ -212,6 +215,7 @@ export async function POST(request: NextRequest) {
       useMetaDefaults, imageEnhancements, videoEnhancements,
       createPaused, startTime,
       pageId,
+      pixelId, pixelEvent,
     } = body
 
     const buildDegreesOfFreedom = (keys: string[]): Record<string, any> | undefined => {
@@ -362,7 +366,7 @@ export async function POST(request: NextRequest) {
     async function resolveAdset(campaignId: string, creativeSubset: any[], index = 1) {
       if (adsetMode === "existing") return existingAdsetId || template.adset.id
       if (adsetMode === "new") {
-        const s = await buildAdset(adAccountId, token, template, campaignId, newAdsetName || template.adset.name, adsetDailyBudget, startTime, pageId, resolvedObjective)
+        const s = await buildAdset(adAccountId, token, template, campaignId, newAdsetName || template.adset.name, adsetDailyBudget, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
         return s.id
       }
       if (adsetMode === "per_creative") {
@@ -371,7 +375,7 @@ export async function POST(request: NextRequest) {
       }
       if (adsetMode === "auto_divide") {
         const name = applyPattern(autoDividePattern || "Ad Set {index:01}", { index, date: dateStr, shortDate: shortDateStr })
-        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime, pageId, resolvedObjective)
+        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
         return s.id
       }
     }
@@ -389,7 +393,7 @@ export async function POST(request: NextRequest) {
         })
         for (const adsetConfig of campConfig.adsets) {
           if (!adsetConfig.creativeIds?.length) continue
-          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetDailyBudget, startTime, pageId, resolvedObjective)
+          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetDailyBudget, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
           const adsetCreatives = creatives.filter((c: any) => adsetConfig.creativeIds.includes(c.id))
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
           const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
@@ -443,7 +447,7 @@ export async function POST(request: NextRequest) {
           const creative = campaignCreatives[i]
           const filename = creative.file_name.replace(/\.[^/.]+$/, "")
           const name = applyPattern(adsetNamePattern || "{filename}", { filename, index: i + 1, date: dateStr, shortDate: shortDateStr })
-          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime, pageId, resolvedObjective)
+          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
           const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
           allResults.push(...results)

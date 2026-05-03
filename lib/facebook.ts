@@ -118,6 +118,26 @@ export async function getAdAccounts(accessToken: string): Promise<AdAccount[]> {
   return data.data || []
 }
 
+export interface FacebookPixel {
+  id: string
+  name: string
+}
+
+export async function getPixels(
+  adAccountId: string,
+  accessToken: string
+): Promise<FacebookPixel[]> {
+  const res = await fetch(
+    `${GRAPH_API_BASE}/${adAccountId}/adpixels?fields=id,name&access_token=${accessToken}`
+  )
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error?.message || "Failed to get pixels")
+  }
+  const data = await res.json()
+  return data.data || []
+}
+
 // Campaign interfaces and functions
 export interface Campaign {
   id: string

@@ -1,4 +1,4 @@
-"use client"
+  "use client"
 
 import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
@@ -11,12 +11,20 @@ import { Calendar } from "@/components/ui/calendar"
 import { CustomAdSetDialog, type CampaignConfig } from "@/components/custom-adset-dialog"
 import { AdSetTextDialog, type AdsetTextConfig } from "@/components/adset-text-dialog"
 import { AdPerCreativeTextDialog, type AdCreativeTextConfig } from "@/components/ad-per-creative-text-dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface Campaign { id: string; name: string; status: string; effective_status: string }
 interface AdSet { id: string; name: string; status: string; effective_status: string }
 interface Ad { id: string; name: string; status: string; effective_status: string; creative?: { image_url?: string; thumbnail_url?: string } }
 interface FacebookPage { id: string; name: string; category?: string; picture?: { data: { url: string } } }
 interface Preset { id: string; name: string; objective: string; targeting: any; optimization_goal: string; bid_strategy?: string; adset_name?: string; campaign_name?: string }
+interface PageLink { id: string; name: string; url: string }
 
 type AdsetMode = "existing" | "new" | "per_creative" | "auto_divide" | "custom"
 
@@ -101,6 +109,15 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   const [imageEnhancements, setImageEnhancements] = useState<Set<string>>(new Set())
   const [videoEnhancements, setVideoEnhancements] = useState<Set<string>>(new Set())
 
+  // Pixel Tracking
+  const [pixels, setPixels] = useState<{ id: string; name: string }[]>([])
+  const [selectedPixelId, setSelectedPixelId] = useState("")
+  const [pixelEvent, setPixelEvent] = useState("PURCHASE")
+  const [loadingPixels, setLoadingPixels] = useState(false)
+
+  // Landing Pages
+  const [pageLinks, setPageLinks] = useState<PageLink[]>([])
+
   // UTM Parameters
   const [useUtm, setUseUtm] = useState(false)
   const [utmSource, setUtmSource] = useState("facebook")
@@ -140,6 +157,21 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
         setPages(pl)
         if (pl.length > 0) setSelectedPageId(pl[0].id)
       })
+
+    setLoadingPixels(true)
+    fetch(`/api/facebook/pixels?ad_account_id=${adAccountId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setPixels(d.pixels || [])
+        if (d.pixels?.length > 0) setSelectedPixelId(d.pixels[0].id)
+      })
+      .catch(() => {})
+      .finally(() => setLoadingPixels(false))
+
+    fetch("/api/page-links")
+      .then(r => r.json())
+      .then(d => setPageLinks(d.pageLinks || []))
+      .catch(() => {})
 
     setLoadingPresets(true)
     fetch("/api/presets")
@@ -311,6 +343,8 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
           createPaused,
           startTime: scheduleStart && scheduleDate ? (() => { const d = new Date(scheduleDate); d.setHours(Number(scheduleHour), Number(scheduleMinute), 0, 0); return d.toISOString() })() : undefined,
           pageId: selectedPageId,
+          pixelId: selectedPixelId === "none" ? undefined : (selectedPixelId || undefined),
+          pixelEvent: (selectedPixelId && selectedPixelId !== "none") ? pixelEvent : undefined,
         }),
       })
       const data = await res.json()
@@ -340,6 +374,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
     setUseMetaDefaults(false); setImageEnhancements(new Set()); setVideoEnhancements(new Set())
     setUseUtm(false); setUtmSource("facebook"); setUtmMedium("paid"); setUtmCampaign(""); setUtmContent(""); setUtmTerm("")
     setCreatePaused(true); setScheduleStart(false); setScheduleDate(undefined); setScheduleHour("08"); setScheduleMinute("00")
+    setSelectedPixelId(pixels.length > 0 ? pixels[0].id : ""); setPixelEvent("PURCHASE")
     onClose()
   }
 
@@ -1042,7 +1077,21 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
                   {/* Website URL */}
                   <div className="space-y-1.5">
-                    <p className="text-sm font-medium">Website URL <span className="text-xs font-normal text-muted-foreground">(optional — overrides per-creative URL)</span></p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-medium">Website URL <span className="text-xs font-normal text-muted-foreground">(optional)</span></p>
+                      {pageLinks.length > 0 && (
+                        <Select onValueChange={(val) => setCommonWebsiteUrl(val)}>
+                          <SelectTrigger className="h-7 w-fit text-[10px] bg-muted/50 border-none hover:bg-muted">
+                            <SelectValue placeholder="Quick select from Pages" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pageLinks.map(p => (
+                              <SelectItem key={p.id} value={p.url}>{p.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
                     <Input value={commonWebsiteUrl} onChange={e => setCommonWebsiteUrl(e.target.value)} placeholder="https://..." type="url" />
                   </div>
 
@@ -1187,6 +1236,53 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                 </div>
               )
             })()}
+
+            {/* Pixel Tracking */}
+            <div className="space-y-3 rounded-lg border p-4">
+              <h3 className="font-semibold">Conversion Tracking (Optional)</h3>
+              <p className="text-xs text-muted-foreground">Select a Facebook Pixel to track events like purchases or leads for Conversion objectives.</p>
+              
+              {loadingPixels ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground"><IconLoader2 className="size-4 animate-spin" /> Loading pixels...</div>
+              ) : pixels.length === 0 ? (
+                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded border border-amber-200">No pixels found in this ad account.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Select Pixel</label>
+                    <Select value={selectedPixelId} onValueChange={setSelectedPixelId}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="No pixel selected" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {pixels.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name} ({p.id})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium">Conversion Event</label>
+                    <Select value={pixelEvent} onValueChange={setPixelEvent} disabled={!selectedPixelId || selectedPixelId === "none"}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PURCHASE">Purchase</SelectItem>
+                        <SelectItem value="LEAD">Lead</SelectItem>
+                        <SelectItem value="ADD_TO_CART">Add to Cart</SelectItem>
+                        <SelectItem value="INITIATE_CHECKOUT">Initiate Checkout</SelectItem>
+                        <SelectItem value="COMPLETE_REGISTRATION">Complete Registration</SelectItem>
+                        <SelectItem value="SUBSCRIBE">Subscribe</SelectItem>
+                        <SelectItem value="CONTACT">Contact</SelectItem>
+                        <SelectItem value="VIEW_CONTENT">View Content</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Publication Options */}
             <div className="space-y-3 rounded-lg border p-4">

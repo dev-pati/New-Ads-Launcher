@@ -151,7 +151,7 @@ export default function UploadAdsPage() {
                     </div>
                   ) : (
                     <img
-                      src={c.file_url}
+                      src={c.fb_image_url || c.file_url}
                       alt={c.file_name}
                       className="h-40 w-full rounded-t-xl object-cover object-center"
                     />
@@ -159,22 +159,41 @@ export default function UploadAdsPage() {
                 </div>
 
                 <CardContent className="p-3">
-                  <p className="truncate text-sm font-medium">{c.file_name}</p>
-                  {c.headline && (
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {c.headline}
-                    </p>
-                  )}
-                  <div className="mt-2 flex items-center gap-1.5">
-                    <Badge variant="outline" className="text-[10px]">
-                      {c.cta.replace(/_/g, " ")}
-                    </Badge>
-                    {(c.fb_image_hash || c.fb_video_id) && (
-                      <Badge variant="default" className="text-[10px] gap-0.5">
-                        <IconCheck className="size-2.5" />
-                        Meta
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-semibold" title={c.file_name}>{c.file_name}</p>
+                    {(c.fb_image_hash || c.fb_video_id) ? (
+                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 shrink-0 text-[10px] gap-0.5 h-5 px-1.5 font-medium border-emerald-200 border">
+                        <IconCheck className="size-3" />
+                        Ready
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 shrink-0 text-[10px] h-5 px-1.5 font-medium">
+                        Pending
                       </Badge>
                     )}
+                  </div>
+                  
+                  <div className="space-y-1.5 h-[2.5rem] flex flex-col justify-center">
+                    {c.headline ? (
+                      <p className="truncate text-xs text-muted-foreground" title={c.headline}>
+                        <span className="font-medium text-foreground/70">Headline:</span> {c.headline}
+                      </p>
+                    ) : (
+                       <p className="text-xs text-muted-foreground/40 italic">
+                         No headline
+                       </p>
+                    )}
+                    {c.primary_text && (
+                      <p className="truncate text-xs text-muted-foreground" title={c.primary_text}>
+                        <span className="font-medium text-foreground/70">Text:</span> {c.primary_text}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t flex items-center justify-between">
+                    <Badge variant="outline" className="text-[10px] font-normal bg-muted/30">
+                      CTA: <span className="font-semibold ml-1">{c.cta ? c.cta.replace(/_/g, " ") : "LEARN MORE"}</span>
+                    </Badge>
                   </div>
                 </CardContent>
               </Card>
