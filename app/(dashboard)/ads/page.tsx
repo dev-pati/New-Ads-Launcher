@@ -37,6 +37,7 @@ interface Creative {
   description: string
   cta: string
   link_url: string
+  fb_image_url?: string
   fb_thumbnail_url?: string
   fb_image_hash?: string
   fb_video_id?: string
