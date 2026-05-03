@@ -1,6 +1,13 @@
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const getResend = () => {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) {
+    // Return a dummy object for build time or handle error gracefully in runtime
+    return null
+  }
+  return new Resend(apiKey)
+}
 
 // Send invite email (user chưa có account - cần click accept)
 export async function sendInviteEmail({
@@ -15,6 +22,12 @@ export async function sendInviteEmail({
   token: string
 }) {
   const acceptUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite?token=${token}`
+
+  const resend = getResend()
+  if (!resend) {
+    console.error("Resend API Key is missing. Email not sent.")
+    return
+  }
 
   await resend.emails.send({
     from: "AdLauncher <team@pati.tuananhdo.site>",
@@ -45,6 +58,12 @@ export async function sendAddedToOrgEmail({
   inviterName: string
 }) {
   const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL}/campaigns`
+
+  const resend = getResend()
+  if (!resend) {
+    console.error("Resend API Key is missing. Email not sent.")
+    return
+  }
 
   await resend.emails.send({
     from: "AdLauncher <team@pati.tuananhdo.site>",
