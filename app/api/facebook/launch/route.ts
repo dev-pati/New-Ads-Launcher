@@ -381,7 +381,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Custom config mode: bypass normal campaign loop entirely
-    if (adsetMode === "custom" && customConfig?.length > 0) {
+    if (adsetMode === "custom") {
+      if (!customConfig?.length) {
+        return NextResponse.json({ error: "Custom config is empty" }, { status: 400 })
+      }
       let globalIdx = 1
       let adsetCounter = 0
       for (const campConfig of customConfig) {

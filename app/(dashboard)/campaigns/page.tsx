@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -103,19 +103,15 @@ export default function CampaignsPage() {
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set())
   const [expandedAdSets, setExpandedAdSets] = useState<Set<string>>(new Set())
 
-  useEffect(() => {
+  const fetchCampaigns = useCallback(async () => {
     if (!selectedAccount) return
-    fetchCampaigns()
-  }, [selectedAccount])
-
-  const fetchCampaigns = async () => {
     setLoadingCampaigns(true)
     setExpandedCampaigns(new Set())
     setExpandedAdSets(new Set())
+    setAdSets({})
+    setAds({})
     try {
-      const res = await fetch(
-        `/api/facebook/campaigns?ad_account_id=${selectedAccount}`
-      )
+      const res = await fetch(`/api/facebook/campaigns?ad_account_id=${selectedAccount}`)
       const data = await res.json()
       setCampaigns(data.campaigns || [])
     } catch {
@@ -123,7 +119,11 @@ export default function CampaignsPage() {
     } finally {
       setLoadingCampaigns(false)
     }
-  }
+  }, [selectedAccount])
+
+  useEffect(() => {
+    fetchCampaigns()
+  }, [fetchCampaigns])
 
   const toggleCampaign = async (campaignId: string) => {
     const next = new Set(expandedCampaigns)
