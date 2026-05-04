@@ -539,6 +539,38 @@ export async function createAdSet(
   return res.json()
 }
 
+// Copy an existing ad set to a new campaign, preserving all settings (attribution model, etc.)
+export async function copyAdSet(
+  accessToken: string,
+  sourceAdsetId: string,
+  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string }
+): Promise<{ id: string }> {
+  const body = new URLSearchParams({
+    campaign_id: params.campaign_id,
+    deep_copy: "false",
+    status_option: "PAUSED",
+    name: params.name,
+    access_token: accessToken,
+  })
+  const res = await fetch(`${GRAPH_API_BASE}/${sourceAdsetId}/copies`, { method: "POST", body })
+  if (!res.ok) {
+    const error = await res.json()
+    const fb = error.error
+    const detail = fb?.error_user_msg || fb?.error_user_title || ""
+    throw new Error([fb?.message || "Failed to copy ad set", detail].filter(Boolean).join(" — "))
+  }
+  const data = await res.json()
+  const newId: string = data.copied_adset_id || data.id
+
+  // Update name and budget on the copy
+  const patch = new URLSearchParams({ name: params.name, access_token: accessToken })
+  if (params.daily_budget) patch.set("daily_budget", String(Math.round(params.daily_budget * 100)))
+  if (params.start_time) patch.set("start_time", params.start_time)
+  await fetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch })
+
+  return { id: newId }
+}
+
 // Fetch a video's thumbnail URL from Facebook (picture field)
 export async function getVideoThumbnail(videoId: string, accessToken: string): Promise<string | null> {
   try {

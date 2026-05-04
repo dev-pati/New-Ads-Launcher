@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getAdDetails, createCampaign, createAdSet, createAd, getVideoThumbnail } from "@/lib/facebook"
+import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail } from "@/lib/facebook"
 
 function applyPattern(pattern: string, ctx: { filename?: string; index?: number; date: string; shortDate: string }) {
   let r = pattern
@@ -83,6 +83,16 @@ async function buildAdset(
     budgetCents = String(Math.round(dailyBudget * 100))
   } else if (template.adset.daily_budget) {
     budgetCents = template.adset.daily_budget // already in cents from Facebook API
+  }
+
+  // If we have a real template adset ID, copy it to preserve all settings (attribution model, etc.)
+  if (template.adset.id) {
+    return copyAdSet(token, template.adset.id, {
+      campaign_id: campaignId,
+      name,
+      daily_budget: dailyBudget,
+      start_time: startTime,
+    })
   }
 
   return createAdSet(adAccountId, token, {
