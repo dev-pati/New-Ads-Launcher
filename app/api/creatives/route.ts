@@ -3,17 +3,24 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const url = new URL(request.url)
+    const adAccountId = url.searchParams.get("ad_account_id")
+
     const supabase = await createClient()
-    const { data, error } = await supabase
+    let query = supabase
       .from("creatives")
       .select("*")
       .eq("org_id", ctx.orgId)
       .order("created_at", { ascending: true })
+
+    if (adAccountId) query = query.eq("ad_account_id", adAccountId)
+
+    const { data, error } = await query
 
     if (error) {
       console.error("Failed to fetch creatives:", error)
@@ -43,6 +50,7 @@ export async function POST(request: NextRequest) {
         .insert({
           org_id: ctx.orgId,
           user_id: ctx.user.id,
+          ad_account_id: body.ad_account_id || null,
           file_name: body.file_name,
           file_url: body.fb_thumbnail_url || body.fb_image_url || "",
           media_type: body.media_type,
@@ -134,6 +142,7 @@ export async function POST(request: NextRequest) {
       .insert({
         org_id: ctx.orgId,
         user_id: ctx.user.id,
+        ad_account_id: fbAdAccountId || null,
         file_name: file.name,
         file_url: fbThumbnailUrl || fbImageUrl || "",
         media_type: mediaType,

@@ -181,7 +181,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
       .then((d) => setCampaigns(d.campaigns || []))
       .finally(() => setLoadingCampaigns(false))
 
-    fetch("/api/creatives")
+    fetch(`/api/creatives?ad_account_id=${encodeURIComponent(adAccountId)}`)
       .then(r => r.json())
       .then(d => {
         const filtered = (d.creatives || []).filter((c: any) => selectedCreativeIds.includes(c.id))

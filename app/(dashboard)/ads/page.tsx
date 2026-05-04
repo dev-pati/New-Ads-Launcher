@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { useTheme } from "next-themes"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
+import { useAdAccount } from "@/lib/ad-account-context"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface Creative {
@@ -494,6 +495,7 @@ function creativesToMatrix(
 
 export default function AdsManagerPage() {
   const { activeOrgId } = useOrg()
+  const { selectedAccountId: adAccountId } = useAdAccount()
   const { resolvedTheme } = useTheme()
   const [creatives, setCreatives] = useState<Creative[]>([])
   const [ctaOptions, setCtaOptions] = useState<CTAOption[]>([])
@@ -601,10 +603,12 @@ export default function AdsManagerPage() {
     fetchPageLinks()
   }, [])
 
-  const fetchCreatives = async () => {
+  const fetchCreatives = async (accountId?: string) => {
     setLoading(true)
     try {
-      const res = await fetch("/api/creatives")
+      const id = accountId ?? adAccountId
+      const url = id ? `/api/creatives?ad_account_id=${encodeURIComponent(id)}` : "/api/creatives"
+      const res = await fetch(url)
       const data = await res.json()
       setCreatives(data.creatives || [])
     } catch {
@@ -615,8 +619,9 @@ export default function AdsManagerPage() {
   }
 
   useEffect(() => {
-    fetchCreatives()
-  }, [])
+    setCreatives([])
+    fetchCreatives(adAccountId)
+  }, [adAccountId])
 
   // Realtime
   useRealtimeCreatives({

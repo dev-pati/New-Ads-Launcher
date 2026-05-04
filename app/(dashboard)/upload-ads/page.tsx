@@ -45,9 +45,12 @@ export default function UploadAdsPage() {
   const [launchOpen, setLaunchOpen] = useState(false)
 
   useEffect(() => {
+    if (!adAccountId) return
+    setCreatives([])
+    setSelected(new Set())
     async function fetch_() {
       try {
-        const res = await fetch("/api/creatives")
+        const res = await fetch(`/api/creatives?ad_account_id=${encodeURIComponent(adAccountId)}`)
         const data = await res.json()
         const list: Creative[] = data.creatives || []
         setCreatives(list)
@@ -86,7 +89,7 @@ export default function UploadAdsPage() {
       }
     }
     fetch_()
-  }, [])
+  }, [adAccountId])
 
   const toggleSelect = (id: string) => {
     setSelected((prev) => {

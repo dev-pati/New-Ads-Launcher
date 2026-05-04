@@ -266,6 +266,7 @@ CREATE TABLE creatives (
   storage_path TEXT,
   media_type media_type NOT NULL,
   file_size INT,
+  ad_account_id TEXT,
 
   campaign_name TEXT,
   adset_name TEXT,

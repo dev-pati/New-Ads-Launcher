@@ -291,6 +291,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            ad_account_id: adAccountId || null,
             file_name: row.file.name,
             file_size: row.file.size,
             media_type: isVideo ? "video" : "image",
