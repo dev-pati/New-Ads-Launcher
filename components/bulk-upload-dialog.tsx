@@ -22,6 +22,7 @@ interface PendingRow {
   link_url: string
   status: "pending" | "uploading" | "done" | "error"
   error?: string
+  uploadProgress?: number
 }
 
 interface Props {
@@ -231,6 +232,56 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
     URL.revokeObjectURL(url)
   }
 
+  const uploadVideoResumable = async (
+    file: File,
+    cleanId: string,
+    accessToken: string,
+    onProgress: (pct: number) => void
+  ): Promise<string> => {
+    const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB per chunk
+    const FB = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
+    const headers = { Authorization: `Bearer ${accessToken}` }
+
+    // 1. Start session
+    const startForm = new FormData()
+    startForm.append("upload_phase", "start")
+    startForm.append("file_size", String(file.size))
+    const startRes = await fetch(FB, { method: "POST", headers, body: startForm })
+    const startData = await startRes.json()
+    if (startData.error) throw new Error(startData.error.message)
+    const { upload_session_id, video_id } = startData
+    let startOffset = parseInt(startData.start_offset || "0")
+    let endOffset = parseInt(startData.end_offset || String(Math.min(CHUNK_SIZE, file.size)))
+
+    // 2. Transfer chunks
+    while (startOffset < file.size) {
+      const chunk = file.slice(startOffset, endOffset)
+      const chunkForm = new FormData()
+      chunkForm.append("upload_phase", "transfer")
+      chunkForm.append("upload_session_id", upload_session_id)
+      chunkForm.append("start_offset", String(startOffset))
+      chunkForm.append("video_file_chunk", chunk, file.name)
+      const chunkRes = await fetch(FB, { method: "POST", headers, body: chunkForm })
+      const chunkData = await chunkRes.json()
+      if (chunkData.error) throw new Error(chunkData.error.message)
+      startOffset = parseInt(chunkData.start_offset)
+      endOffset = parseInt(chunkData.end_offset)
+      onProgress(Math.round((startOffset / file.size) * 95))
+    }
+
+    // 3. Finish session
+    const finishForm = new FormData()
+    finishForm.append("upload_phase", "finish")
+    finishForm.append("upload_session_id", upload_session_id)
+    finishForm.append("title", file.name)
+    const finishRes = await fetch(FB, { method: "POST", headers, body: finishForm })
+    const finishData = await finishRes.json()
+    if (finishData.error) throw new Error(finishData.error.message)
+
+    onProgress(100)
+    return video_id
+  }
+
   const handleUploadAll = async () => {
     setUploading(true)
     setUploadError("")
@@ -261,17 +312,9 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
         const metaForm = new FormData()
 
         if (isVideo) {
-          metaForm.append("source", row.file)
-          metaForm.append("title", row.file.name)
-          const res = await fetch(
-            `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`,
-            { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
-          )
-          const d = await res.json()
-          if (d.error) throw new Error(d.error.message)
-          fbVideoId = d.id
-          // Thumbnail not available immediately — Facebook needs time to process the video.
-          // It will be fetched via polling when the user opens Upload Ads page.
+          fbVideoId = await uploadVideoResumable(row.file, cleanId, accessToken, (pct) => {
+            setRows(prev => prev.map(r => r.id === row.id ? { ...r, uploadProgress: pct } : r))
+          })
         } else {
           metaForm.append("filename", row.file)
           const res = await fetch(
@@ -472,7 +515,19 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                   </td>
                   <td className="px-2 py-2">
                     {row.status === "pending" && <span className="text-xs text-muted-foreground">Pending</span>}
-                    {row.status === "uploading" && <IconLoader2 className="size-4 animate-spin text-primary" />}
+                    {row.status === "uploading" && (
+                      <div className="flex flex-col gap-1 min-w-[60px]">
+                        <IconLoader2 className="size-4 animate-spin text-primary" />
+                        {row.uploadProgress !== undefined && row.uploadProgress > 0 && (
+                          <div className="w-full">
+                            <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                              <div className="h-full bg-primary transition-all" style={{ width: `${row.uploadProgress}%` }} />
+                            </div>
+                            <span className="text-[10px] text-primary">{row.uploadProgress}%</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {row.status === "done" && <IconCheck className="size-4 text-green-500" />}
                     {row.status === "error" && (
                       <span className="text-xs text-destructive leading-tight" title={row.error}>
