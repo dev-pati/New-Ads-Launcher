@@ -232,17 +232,31 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
     URL.revokeObjectURL(url)
   }
 
-  const uploadVideoResumable = async (
+  const uploadVideo = async (
     file: File,
     cleanId: string,
     accessToken: string,
     onProgress: (pct: number) => void
   ): Promise<string> => {
-    const CHUNK_SIZE = 10 * 1024 * 1024 // 10MB per chunk
     const FB = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
     const headers = { Authorization: `Bearer ${accessToken}` }
+    const DIRECT_LIMIT = 100 * 1024 * 1024 // dưới 100MB: direct upload
+    const CHUNK_SIZE   = 50 * 1024 * 1024  // trên 100MB: chunk 50MB
 
-    // 1. Start session
+    // --- Direct upload cho file nhỏ ---
+    if (file.size <= DIRECT_LIMIT) {
+      const form = new FormData()
+      form.append("source", file)
+      form.append("title", file.name)
+      onProgress(30)
+      const res = await fetch(FB, { method: "POST", headers, body: form })
+      const d = await res.json()
+      if (d.error) throw new Error(d.error.message)
+      onProgress(100)
+      return d.id
+    }
+
+    // --- Resumable upload cho file lớn (50MB chunk) ---
     const startForm = new FormData()
     startForm.append("upload_phase", "start")
     startForm.append("file_size", String(file.size))
@@ -253,7 +267,6 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
     let startOffset = parseInt(startData.start_offset || "0")
     let endOffset = parseInt(startData.end_offset || String(Math.min(CHUNK_SIZE, file.size)))
 
-    // 2. Transfer chunks
     while (startOffset < file.size) {
       const chunk = file.slice(startOffset, endOffset)
       const chunkForm = new FormData()
@@ -269,7 +282,6 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
       onProgress(Math.round((startOffset / file.size) * 95))
     }
 
-    // 3. Finish session
     const finishForm = new FormData()
     finishForm.append("upload_phase", "finish")
     finishForm.append("upload_session_id", upload_session_id)
@@ -312,7 +324,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
         const metaForm = new FormData()
 
         if (isVideo) {
-          fbVideoId = await uploadVideoResumable(row.file, cleanId, accessToken, (pct) => {
+          fbVideoId = await uploadVideo(row.file, cleanId, accessToken, (pct) => {
             setRows(prev => prev.map(r => r.id === row.id ? { ...r, uploadProgress: pct } : r))
           })
         } else {
