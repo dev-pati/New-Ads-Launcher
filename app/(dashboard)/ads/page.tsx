@@ -403,13 +403,6 @@ function ImageViewer({ cell }: { cell: CellBase | undefined }) {
       </div>
     )
   }
-  if (url === "video") {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <IconVideo className="size-5 text-muted-foreground" />
-      </div>
-    )
-  }
   return (
     <div className="flex h-full items-center justify-center">
       <img src={url} alt="" className="size-9 rounded object-cover" />
@@ -433,10 +426,7 @@ function creativesToMatrix(
       let cell: CellBase
 
       if (field === "file_preview") {
-        const url =
-          c.media_type === "video"
-            ? "video"
-            : c.fb_image_url || c.file_url || ""
+        const url = c.fb_thumbnail_url || c.fb_image_url || c.file_url || ""
         cell = { value: url, readOnly: true, DataViewer: ImageViewer }
       } else if (field === "campaign_name") {
         cell = { value: c.campaign_name || "", readOnly: true, DataViewer: CampaignViewer }
