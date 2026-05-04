@@ -175,6 +175,12 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
   useEffect(() => {
     if (!open) return
+    // Reset picker state mỗi lần mở dialog
+    setSelectedCampaign(null)
+    setSelectedAdset(null)
+    setSelectedAd(null)
+    setAdsets([])
+    setAds([])
     setLoadingCampaigns(true)
     fetch(`/api/facebook/campaigns?ad_account_id=${adAccountId}`)
       .then((r) => r.json())
@@ -241,16 +247,20 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   }, [open, adAccountId])
 
   useEffect(() => {
-    if (!selectedCampaign) { setAdsets([]); setSelectedAdset(null); return }
+    if (!selectedCampaign || !adAccountId) { setAdsets([]); setSelectedAdset(null); return }
     setLoadingAdsets(true)
     fetch(`/api/facebook/adsets?ad_account_id=${adAccountId}&campaign_id=${selectedCampaign.id}`)
       .then((r) => r.json())
-      .then((d) => setAdsets(d.adSets || []))
+      .then((d) => {
+        if (d.error) console.error("Adsets API error:", d.error)
+        setAdsets(d.adSets || [])
+      })
+      .catch((err) => console.error("Adsets fetch failed:", err))
       .finally(() => setLoadingAdsets(false))
     setSelectedAdset(null)
     setAds([])
     setSelectedAd(null)
-  }, [selectedCampaign])
+  }, [selectedCampaign, adAccountId])
 
   useEffect(() => {
     if (!selectedAdset) { setAds([]); setSelectedAd(null); return }
