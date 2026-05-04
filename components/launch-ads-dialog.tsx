@@ -252,10 +252,10 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
     fetch(`/api/facebook/adsets?ad_account_id=${adAccountId}&campaign_id=${selectedCampaign.id}`)
       .then((r) => r.json())
       .then((d) => {
-        if (d.error) console.error("Adsets API error:", d.error)
+        if (d.error) throw new Error(d.error)
         setAdsets(d.adSets || [])
       })
-      .catch((err) => console.error("Adsets fetch failed:", err))
+      .catch((err) => setAdsets([{ id: "__error__", name: `⚠ ${err.message}`, status: "", effective_status: "" }]))
       .finally(() => setLoadingAdsets(false))
     setSelectedAdset(null)
     setAds([])

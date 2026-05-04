@@ -16,8 +16,8 @@ export async function GET(request: NextRequest) {
 
     const adSets = await getAdSets(adAccountId, connection.access_token, campaignId || undefined)
     return NextResponse.json({ adSets })
-  } catch (err) {
+  } catch (err: any) {
     console.error("Failed to fetch ad sets:", err)
-    return NextResponse.json({ error: "Failed to fetch ad sets" }, { status: 500 })
+    return NextResponse.json({ error: err.message || "Failed to fetch ad sets" }, { status: 500 })
   }
 }
