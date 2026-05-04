@@ -428,6 +428,7 @@ export interface AdDetails {
     daily_budget?: string
     lifetime_budget?: string
     promoted_object?: Record<string, any>
+    attribution_spec?: any[]
   }
   campaign: {
     id: string
@@ -443,7 +444,7 @@ export interface AdDetails {
 export async function getAdDetails(adId: string, accessToken: string): Promise<AdDetails> {
   const fields = [
     "id", "name", "status",
-    "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget,promoted_object}",
+    "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget,promoted_object,attribution_spec}",
     "campaign{id,name,objective,special_ad_categories,daily_budget,lifetime_budget,bid_strategy}",
   ].join(",")
   const res = await fetch(`${GRAPH_API_BASE}/${adId}?fields=${fields}&access_token=${accessToken}`)
@@ -504,6 +505,7 @@ export async function createAdSet(
     start_time?: string
     destination_type?: string
     promoted_object?: Record<string, any>
+    attribution_spec?: any[]
   }
 ): Promise<{ id: string }> {
   const body: Record<string, string> = {
@@ -522,6 +524,7 @@ export async function createAdSet(
   if (params.start_time) body.start_time = params.start_time
   if (params.destination_type) body.destination_type = params.destination_type
   if (params.promoted_object) body.promoted_object = JSON.stringify(params.promoted_object)
+  if (params.attribution_spec) body.attribution_spec = JSON.stringify(params.attribution_spec)
 
   const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/adsets`, {
     method: "POST",

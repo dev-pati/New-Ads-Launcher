@@ -97,6 +97,7 @@ async function buildAdset(
     start_time: startTime,
     destination_type: destinationType,
     promoted_object: promotedObject,
+    attribution_spec: template.adset.attribution_spec || undefined,
   })
 }
 
