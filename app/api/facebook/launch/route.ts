@@ -59,8 +59,9 @@ async function buildAdset(
 
   // OUTCOME_ENGAGEMENT requires destination_type so Facebook knows what kind of engagement to optimize for
   const destinationType = campaignObjective === "OUTCOME_ENGAGEMENT" ? "ON_POST" : undefined
-  // promoted_object: use explicit pixelId if provided, otherwise inherit from template adset
-  const promotedObject = pixelId
+  // promoted_object: only attach pixel+event for objectives that support conversion tracking
+  const PIXEL_COMPATIBLE_OBJECTIVES = new Set(["OUTCOME_SALES", "OUTCOME_LEADS"])
+  const promotedObject = pixelId && PIXEL_COMPATIBLE_OBJECTIVES.has(campaignObjective)
     ? { pixel_id: pixelId, custom_event_type: pixelEvent || "PURCHASE" }
     : (template.adset.promoted_object || undefined)
   // Keep only standard targeting fields to avoid v25 conflicts
