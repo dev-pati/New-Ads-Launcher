@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hướng Dẫn Sử Dụng AdLauncher</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary: #2563eb;
+      --primary-light: #eff6ff;
+      --primary-dark: #1d4ed8;
+      --success: #16a34a;
+      --success-light: #f0fdf4;
+      --warning: #d97706;
+      --warning-light: #fffbeb;
+      --danger: #dc2626;
+      --danger-light: #fef2f2;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      --sidebar-w: 260px;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 15px;
+      line-height: 1.65;
+      color: var(--gray-800);
+      background: var(--gray-50);
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      width: var(--sidebar-w);
+      height: 100vh;
+      background: white;
+      border-right: 1px solid var(--gray-200);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      z-index: 100;
+    }
+
+    .sidebar-logo {
+      padding: 20px 20px 16px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .sidebar-logo h1 { font-size: 18px; font-weight: 700; color: var(--primary); }
+    .sidebar-logo p { font-size: 12px; color: var(--gray-500); margin-top: 2px; }
+
+    .sidebar-nav {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 0;
+    }
+
+    .nav-section {
+      padding: 6px 12px 2px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-400);
+    }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: 13.5px;
+      color: var(--gray-600);
+      text-decoration: none;
+      border-radius: 0;
+      transition: background 0.12s, color 0.12s;
+      cursor: pointer;
+    }
+    .nav-link:hover { background: var(--gray-50); color: var(--gray-900); }
+    .nav-link.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+    .nav-link .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+    .nav-link .sub { font-size: 12px; color: var(--gray-400); margin-left: auto; }
+
+    /* ── Main ── */
+    .main {
+      margin-left: var(--sidebar-w);
+      min-height: 100vh;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      background: white;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 14px 40px;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .topbar-title { font-size: 13px; color: var(--gray-500); }
+    .topbar-title strong { color: var(--gray-800); }
+
+    .content {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 40px 40px 80px;
+    }
+
+    /* ── Sections ── */
+    .section {
+      margin-bottom: 56px;
+      scroll-margin-top: 80px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid var(--primary);
+    }
+    .section-icon {
+      width: 40px; height: 40px;
+      background: var(--primary);
+      color: white;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    .section-header h2 { font-size: 22px; font-weight: 700; color: var(--gray-900); }
+    .section-header p { font-size: 13px; color: var(--gray-500); margin-top: 2px; }
+
+    h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--gray-800);
+      margin: 28px 0 10px;
+    }
+    h3:first-of-type { margin-top: 0; }
+
+    h4 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-700);
+      margin: 18px 0 8px;
+    }
+
+    p { margin-bottom: 10px; color: var(--gray-700); }
+
+    /* ── Steps ── */
+    .steps { counter-reset: step; }
+    .step {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .step-num {
+      counter-increment: step;
+      width: 30px; height: 30px;
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step-body { flex: 1; }
+    .step-body strong { display: block; font-size: 14px; margin-bottom: 4px; color: var(--gray-800); }
+    .step-body p { margin: 0; font-size: 14px; color: var(--gray-600); }
+
+    /* ── Callouts ── */
+    .callout {
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin: 16px 0;
+      display: flex;
+      gap: 12px;
+      font-size: 14px;
+    }
+    .callout-icon { font-size: 18px; flex-shrink: 0; line-height: 1.4; }
+    .callout-body { flex: 1; }
+    .callout-body strong { display: block; margin-bottom: 2px; }
+    .callout.tip { background: var(--primary-light); border-left: 3px solid var(--primary); }
+    .callout.tip .callout-icon { color: var(--primary); }
+    .callout.warning { background: var(--warning-light); border-left: 3px solid var(--warning); }
+    .callout.warning .callout-icon { color: var(--warning); }
+    .callout.success { background: var(--success-light); border-left: 3px solid var(--success); }
+    .callout.success .callout-icon { color: var(--success); }
+    .callout.danger { background: var(--danger-light); border-left: 3px solid var(--danger); }
+    .callout.danger .callout-icon { color: var(--danger); }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; margin: 16px 0; border-radius: var(--radius); border: 1px solid var(--gray-200); }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    thead { background: var(--gray-50); }
+    th { padding: 10px 14px; text-align: left; font-weight: 600; color: var(--gray-600); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 1px solid var(--gray-200); }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--gray-50); }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-blue { background: var(--primary-light); color: var(--primary); }
+    .badge-green { background: var(--success-light); color: var(--success); }
+    .badge-orange { background: var(--warning-light); color: var(--warning); }
+    .badge-gray { background: var(--gray-100); color: var(--gray-600); }
+
+    /* ── Code / Tag ── */
+    code {
+      background: var(--gray-100);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: "SF Mono", Consolas, monospace;
+      font-size: 12.5px;
+      color: var(--primary-dark);
+    }
+
+    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+    .tag {
+      background: var(--gray-100);
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 12.5px;
+      font-family: "SF Mono", Consolas, monospace;
+      color: var(--primary-dark);
+    }
+
+    /* ── Cards ── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+      margin: 16px 0;
+    }
+    .card {
+      background: white;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .card-icon { font-size: 24px; margin-bottom: 8px; }
+    .card h4 { margin: 0 0 6px; font-size: 14px; color: var(--gray-800); }
+    .card p { margin: 0; font-size: 13px; color: var(--gray-500); line-height: 1.5; }
+
+    /* ── Mode options ── */
+    .option-block {
+      background: white;
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin: 10px 0;
+    }
+    .option-block .option-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--gray-800);
+      margin-bottom: 4px;
+    }
+    .option-block .option-desc { font-size: 13.5px; color: var(--gray-600); margin: 0; }
+
+    /* ── Divider ── */
+    hr { border: none; border-top: 1px solid var(--gray-200); margin: 32px 0; }
+
+    /* ── List ── */
+    ul, ol { padding-left: 20px; margin: 8px 0 12px; }
+    li { margin-bottom: 6px; color: var(--gray-700); font-size: 14px; }
+    li::marker { color: var(--primary); }
+
+    /* ── Hero ── */
+    .hero {
+      background: linear-gradient(135deg, #1e40af 0%, #2563eb 50%, #3b82f6 100%);
+      color: white;
+      padding: 48px 40px;
+      border-radius: 16px;
+      margin-bottom: 40px;
+    }
+    .hero h1 { font-size: 32px; font-weight: 800; margin-bottom: 10px; }
+    .hero p { font-size: 16px; opacity: 0.85; max-width: 560px; margin: 0; }
+    .hero-meta { display: flex; gap: 24px; margin-top: 20px; }
+    .hero-meta span { font-size: 13px; opacity: 0.7; }
+    .hero-meta span strong { opacity: 1; }
+
+    /* ── Workflow diagram ── */
+    .workflow {
+      display: flex;
+      align-items: flex-start;
+      gap: 0;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+    .wf-step {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      min-width: 110px;
+    }
+    .wf-box {
+      background: white;
+      border: 2px solid var(--primary);
+      border-radius: 10px;
+      padding: 10px 12px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--primary);
+      width: 100%;
+    }
+    .wf-box .wf-icon { font-size: 20px; display: block; margin-bottom: 4px; }
+    .wf-arrow {
+      color: var(--gray-400);
+      font-size: 20px;
+      padding: 0 4px;
+      margin-top: 18px;
+      flex-shrink: 0;
+    }
+
+    /* ── Scrollbar ── */
+    .sidebar-nav::-webkit-scrollbar { width: 4px; }
+    .sidebar-nav::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 4px; }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { margin-left: 0; }
+      .content { padding: 24px 20px; }
+      .topbar { padding: 12px 20px; }
+      .card-grid { grid-template-columns: 1fr; }
+      .workflow { flex-direction: column; align-items: flex-start; }
+      .wf-arrow { transform: rotate(90deg); margin: -4px 0; align-self: center; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SIDEBAR
+══════════════════════════════════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <h1>AdLauncher</h1>
+    <p>Hướng dẫn sử dụng</p>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-section">Bắt đầu</div>
+    <a class="nav-link" href="#overview"><span class="icon">🏠</span> Tổng quan</a>
+    <a class="nav-link" href="#workflow"><span class="icon">🗺️</span> Quy trình làm việc</a>
+
+    <div class="nav-section">Tính năng</div>
+    <a class="nav-link" href="#upload"><span class="icon">⬆️</span> Tải lên Creative</a>
+    <a class="nav-link" href="#ads-manager"><span class="icon">📊</span> Ads Manager</a>
+    <a class="nav-link" href="#launch"><span class="icon">🚀</span> Launch Ads</a>
+    <a class="nav-link" href="#campaigns"><span class="icon">📁</span> Campaigns</a>
+
+    <div class="nav-section">Launch — Chi tiết</div>
+    <a class="nav-link" href="#step-source"><span class="icon">🔗</span> Chọn template</a>
+    <a class="nav-link" href="#step-campaign"><span class="icon">🎯</span> Campaign</a>
+    <a class="nav-link" href="#step-adset"><span class="icon">📦</span> Ad Set</a>
+    <a class="nav-link" href="#step-text"><span class="icon">✍️</span> Nội dung</a>
+    <a class="nav-link" href="#step-enhancements"><span class="icon">✨</span> Enhancements</a>
+    <a class="nav-link" href="#step-publish"><span class="icon">📅</span> Xuất bản</a>
+    <a class="nav-link" href="#step-preview"><span class="icon">👁️</span> Preview & Launch</a>
+
+    <div class="nav-section">Tham khảo</div>
+    <a class="nav-link" href="#csv-import"><span class="icon">📄</span> Nhập CSV/Excel</a>
+    <a class="nav-link" href="#placeholders"><span class="icon">🔤</span> Placeholder</a>
+    <a class="nav-link" href="#cta-list"><span class="icon">👆</span> Danh sách CTA</a>
+    <a class="nav-link" href="#faq"><span class="icon">❓</span> Câu hỏi thường gặp</a>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════════════════════
+     MAIN CONTENT
+══════════════════════════════════════════════ -->
+<main class="main">
+  <div class="topbar">
+    <span class="topbar-title">AdLauncher — <strong>Hướng dẫn sử dụng</strong></span>
+    <span style="font-size:12px;color:var(--gray-400);">Phiên bản 2025</span>
+  </div>
+
+  <div class="content">
+
+    <!-- Hero -->
+    <div class="hero">
+      <h1>🚀 AdLauncher</h1>
+      <p>Công cụ quản lý và phát hành quảng cáo Facebook hàng loạt — nhanh hơn, có hệ thống hơn, ít thao tác thủ công hơn.</p>
+      <div class="hero-meta">
+        <span>📖 Thời gian đọc: <strong>~15 phút</strong></span>
+        <span>👤 Dành cho: <strong>Người dùng mới</strong></span>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────
+         TỔNG QUAN
+    ────────────────────────────────────── -->
+    <section class="section" id="overview">
+      <div class="section-header">
+        <div class="section-icon">🏠</div>
+        <div>
+          <h2>Tổng quan</h2>
+          <p>AdLauncher là gì và tại sao dùng nó?</p>
+        </div>
+      </div>
+
+      <p>AdLauncher giúp bạn <strong>tạo và phát hành quảng cáo Facebook hàng loạt</strong> từ nhiều file ảnh/video chỉ trong vài bước. Thay vì phải vào Meta Ads Manager thủ công từng quảng cáo, bạn có thể:</p>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-icon">⬆️</div>
+          <h4>Upload hàng loạt</h4>
+          <p>Tải lên nhiều ảnh và video cùng lúc, tự động đồng bộ lên Facebook.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">✍️</div>
+          <h4>Chỉnh sửa như Excel</h4>
+          <p>Nhập headline, primary text, CTA, URL trực tiếp trong bảng tính — hỗ trợ paste từ Excel.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🚀</div>
+          <h4>Launch tự động</h4>
+          <p>Phát hành 1 đến 100+ quảng cáo cùng lúc với cấu hình linh hoạt.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">📁</div>
+          <h4>Theo dõi campaign</h4>
+          <p>Xem toàn bộ cấu trúc Campaign → Ad Set → Ad ngay trong ứng dụng.</p>
+        </div>
+      </div>
+
+      <h3>Các trang chính</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Trang</th><th>Mục đích</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>⬆️ <strong>Upload Ads</strong></td><td>Tải lên creative và chọn để launch quảng cáo</td></tr>
+            <tr><td>📊 <strong>Ads Manager</strong></td><td>Chỉnh sửa nội dung creative theo dạng bảng tính</td></tr>
+            <tr><td>📁 <strong>Campaigns</strong></td><td>Xem toàn bộ campaign, ad set, ad trên Facebook</td></tr>
+            <tr><td>💾 <strong>Presets</strong></td><td>Lưu cấu hình campaign để tái sử dụng</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         QUY TRÌNH
+    ────────────────────────────────────── -->
+    <section class="section" id="workflow">
+      <div class="section-header">
+        <div class="section-icon">🗺️</div>
+        <div>
+          <h2>Quy trình làm việc</h2>
+          <p>Từng bước để phát hành quảng cáo</p>
+        </div>
+      </div>
+
+      <div class="workflow">
+        <div class="wf-step">
+          <div class="wf-box"><span class="wf-icon">⬆️</span>Upload Creative</div>
+        </div>
+        <div class="wf-arrow">→</div>
+        <div class="wf-step">
+          <div class="wf-box"><span class="wf-icon">✍️</span>Nhập nội dung</div>
+        </div>
+        <div class="wf-arrow">→</div>
+        <div class="wf-step">
+          <div class="wf-box"><span class="wf-icon">☑️</span>Chọn creative</div>
+        </div>
+        <div class="wf-arrow">→</div>
+        <div class="wf-step">
+          <div class="wf-box"><span class="wf-icon">⚙️</span>Cấu hình launch</div>
+        </div>
+        <div class="wf-arrow">→</div>
+        <div class="wf-step">
+          <div class="wf-box"><span class="wf-icon">🚀</span>Phát hành</div>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-body">
+          <strong>Mẹo cho người mới:</strong>
+          Lần đầu dùng, hãy upload 2-3 creative, nhập nội dung, sau đó thử launch để làm quen với flow trước khi xử lý hàng loạt.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         UPLOAD
+    ────────────────────────────────────── -->
+    <section class="section" id="upload">
+      <div class="section-header">
+        <div class="section-icon">⬆️</div>
+        <div>
+          <h2>Tải lên Creative</h2>
+          <p>Upload ảnh và video quảng cáo</p>
+        </div>
+      </div>
+
+      <p>Trang <strong>Upload Ads</strong> hiển thị tất cả creative đã tải lên. Bạn chọn creative ở đây để chuẩn bị phát hành.</p>
+
+      <h3>Cách tải lên creative mới</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Nhấn nút "Upload Creative"</strong>
+            <p>Nút ở góc trên bên phải trang Upload Ads hoặc Ads Manager.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Kéo thả hoặc chọn file</strong>
+            <p>Hỗ trợ nhiều file cùng lúc — ảnh (JPG, PNG) và video (MP4, MOV). Tất cả file sẽ upload song song.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Chờ xử lý</strong>
+            <p>Ảnh xử lý nhanh (~5 giây). Video cần thêm vài giây đến vài phút tùy kích thước. Thumbnail video sẽ tự động xuất hiện sau khi Facebook xử lý xong.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout warning">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-body">
+          <strong>Lưu ý về video lớn:</strong>
+          Video trên 100MB sẽ dùng phương thức upload chia nhỏ (chunked upload). Quá trình có thể mất 1-3 phút — đừng đóng tab trong khi đang upload.
+        </div>
+      </div>
+
+      <h3>Chọn creative để launch</h3>
+      <ul>
+        <li>Nhấp vào card để <strong>chọn/bỏ chọn</strong> từng creative.</li>
+        <li>Nhấn <strong>"Select All"</strong> để chọn tất cả.</li>
+        <li>Sau khi chọn, nhấn nút <strong>"Launch X Ads"</strong> để mở dialog cấu hình.</li>
+      </ul>
+
+      <h3>Trạng thái creative</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Trạng thái</th><th>Ý nghĩa</th></tr></thead>
+          <tbody>
+            <tr><td><span class="badge badge-gray">Draft</span></td><td>Mới tải lên, chưa có nội dung</td></tr>
+            <tr><td><span class="badge badge-blue">Ready</span></td><td>Đã có đủ nội dung, sẵn sàng launch</td></tr>
+            <tr><td><span class="badge badge-green">Launched</span></td><td>Đã được phát hành lên Facebook</td></tr>
+            <tr><td><span class="badge badge-orange">Pending</span></td><td>Đang xử lý trên Facebook</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         ADS MANAGER
+    ────────────────────────────────────── -->
+    <section class="section" id="ads-manager">
+      <div class="section-header">
+        <div class="section-icon">📊</div>
+        <div>
+          <h2>Ads Manager</h2>
+          <p>Chỉnh sửa nội dung creative như bảng tính</p>
+        </div>
+      </div>
+
+      <p>Trang <strong>Ads Manager</strong> là nơi bạn nhập và chỉnh sửa nội dung quảng cáo (headline, primary text, CTA, URL) cho từng creative theo dạng bảng tính.</p>
+
+      <h3>Các cột dữ liệu</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cột</th><th>Mô tả</th><th>Có thể sửa</th></tr></thead>
+          <tbody>
+            <tr><td>🖼️ <strong>File</strong></td><td>Xem trước ảnh/video</td><td>—</td></tr>
+            <tr><td><strong>Name</strong></td><td>Tên file creative</td><td>—</td></tr>
+            <tr><td><strong>Campaign</strong></td><td>Tên campaign (từ Ads Manager)</td><td>✓</td></tr>
+            <tr><td><strong>Ad Set</strong></td><td>Tên ad set (từ Ads Manager)</td><td>✓</td></tr>
+            <tr><td><strong>Headline</strong></td><td>Tựa đề quảng cáo (max 127 ký tự)</td><td>✓</td></tr>
+            <tr><td><strong>Primary Text</strong></td><td>Nội dung chính (max 1200 ký tự)</td><td>✓</td></tr>
+            <tr><td><strong>Description</strong></td><td>Mô tả link (max 30 ký tự)</td><td>✓</td></tr>
+            <tr><td><strong>CTA</strong></td><td>Nút kêu gọi hành động</td><td>✓</td></tr>
+            <tr><td><strong>Link URL</strong></td><td>URL đích của quảng cáo</td><td>✓</td></tr>
+            <tr><td><strong>Status</strong></td><td>Trạng thái creative</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Cách chỉnh sửa</h3>
+      <ul>
+        <li><strong>Nhấp vào ô</strong> để bắt đầu chỉnh sửa.</li>
+        <li><strong>Paste từ Excel:</strong> Copy cột dữ liệu từ Excel, chọn ô đầu tiên trong bảng và nhấn <code>Ctrl+V</code> — dữ liệu sẽ tự điền xuống các hàng bên dưới.</li>
+        <li><strong>Auto-save:</strong> Dữ liệu tự lưu sau 500ms, không cần nhấn Save.</li>
+        <li><strong>Undo:</strong> Nhấn <code>Ctrl+Z</code> để hoàn tác (tối đa 50 bước).</li>
+      </ul>
+
+      <h3>Bộ lọc</h3>
+      <ul>
+        <li><strong>Tìm kiếm:</strong> Tìm theo tên file, headline, hoặc primary text.</li>
+        <li><strong>Status:</strong> All / Draft / Ready / Launched.</li>
+        <li><strong>CTA:</strong> Lọc theo loại nút CTA.</li>
+        <li><strong>Page:</strong> Lọc theo URL đích.</li>
+      </ul>
+
+      <h3>Menu chuột phải (trên một hàng)</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Hành động</th><th>Mô tả</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Copy Row</strong></td><td>Sao chép dữ liệu của hàng này vào clipboard</td></tr>
+            <tr><td><strong>Duplicate Row</strong></td><td>Tạo bản sao của creative (bao gồm nội dung)</td></tr>
+            <tr><td><strong>Clear Row</strong></td><td>Xóa tất cả text, giữ nguyên file</td></tr>
+            <tr><td><strong>Delete Row</strong></td><td>Xóa hoàn toàn creative (yêu cầu xác nhận)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-body">
+          <strong>Mẹo:</strong> Điền cột <strong>Campaign</strong> và <strong>Ad Set</strong> trong Ads Manager sẽ giúp tự động điền tên campaign/ad set khi mở Launch Dialog — tiết kiệm thời gian nhập lại.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         LAUNCH ADS
+    ────────────────────────────────────── -->
+    <section class="section" id="launch">
+      <div class="section-header">
+        <div class="section-icon">🚀</div>
+        <div>
+          <h2>Launch Ads — Tổng quan</h2>
+          <p>Phát hành quảng cáo lên Facebook</p>
+        </div>
+      </div>
+
+      <p>Sau khi chọn creative và nhấn <strong>"Launch Ads"</strong>, một dialog lớn sẽ mở ra với các bước cấu hình. Các phần tiếp theo sẽ giải thích chi tiết từng bước.</p>
+
+      <div class="callout warning">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-body">
+          <strong>Yêu cầu bắt buộc trước khi launch:</strong>
+          <ul style="margin-top:6px;">
+            <li>Đã kết nối tài khoản Facebook</li>
+            <li>Đã chọn ít nhất 1 creative</li>
+            <li>Đã chọn Facebook Page (trang sẽ đăng quảng cáo)</li>
+            <li>Có Website URL hợp lệ (bắt đầu bằng <code>https://</code>)</li>
+            <li>Budget ≥ $1 khi tạo campaign mới</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         BƯỚC 1: NGUỒN CẤU HÌNH
+    ────────────────────────────────────── -->
+    <section class="section" id="step-source">
+      <div class="section-header">
+        <div class="section-icon">🔗</div>
+        <div>
+          <h2>Bước 1: Chọn Template cấu hình</h2>
+          <p>Lấy cài đặt targeting, bid strategy từ đâu?</p>
+        </div>
+      </div>
+
+      <p>Đây là bước quan trọng nhất — bạn chọn một quảng cáo hoặc preset đã có để <strong>sao chép toàn bộ cài đặt</strong> (targeting, vị trí, attribution model, v.v.) sang các quảng cáo mới.</p>
+
+      <h3>Tùy chọn 1: Chọn từ Facebook (khuyến nghị)</h3>
+      <p>Duyệt qua cấu trúc <strong>Campaign → Ad Set → Ad</strong> từ tài khoản Facebook của bạn:</p>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Chọn Campaign</strong>
+            <p>Tìm kiếm hoặc scroll để tìm campaign cần dùng làm template.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Chọn Ad Set</strong>
+            <p>Sau khi chọn campaign, cột Ad Set sẽ hiện ra. Chọn ad set có targeting phù hợp.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Chọn Ad (tùy chọn)</strong>
+            <p>Chọn ad để sao chép nội dung mặc định (headline, CTA).</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout success">
+        <span class="callout-icon">✅</span>
+        <div class="callout-body">
+          Khi dùng "Pick from Facebook", hệ thống sẽ <strong>copy ad set gốc</strong> (bao gồm Attribution model, targeting, bid strategy) thay vì tạo mới từ đầu — đảm bảo giữ nguyên mọi cài đặt.
+        </div>
+      </div>
+
+      <h3>Tùy chọn 2: Saved Preset</h3>
+      <p>Nếu bạn đã lưu preset trước đó (trong trang Presets), chọn preset từ danh sách. Preset chứa cài đặt targeting, objective, bid strategy.</p>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-body">
+          <strong>Lọc "Only active":</strong> Bật tùy chọn này để chỉ hiện campaign/adset đang chạy, giúp tìm template nhanh hơn.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         BƯỚC 2: CAMPAIGN
+    ────────────────────────────────────── -->
+    <section class="section" id="step-campaign">
+      <div class="section-header">
+        <div class="section-icon">🎯</div>
+        <div>
+          <h2>Bước 2: Campaign Options</h2>
+          <p>Dùng campaign cũ hay tạo mới?</p>
+        </div>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">📌 Sử dụng campaign hiện tại (mặc định)</div>
+        <p class="option-desc">Ads sẽ được thêm vào campaign bạn đã chọn ở Bước 1. Không cần nhập gì thêm.</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">➕ Tạo campaign mới</div>
+        <p class="option-desc">Nhập tên campaign mới. Hỗ trợ placeholder: <code>{date}</code>, <code>{shortDate}</code>.</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">➕➕ Tạo nhiều campaign</div>
+        <p class="option-desc">Tạo nhiều campaign cùng lúc, mỗi campaign một tên riêng. Có thể chia đều hoặc nhân đôi creative cho mỗi campaign.</p>
+      </div>
+
+      <h3>Phân chia creative khi có nhiều campaign</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Chế độ</th><th>Ý nghĩa</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Split (Chia đều)</strong></td><td>Creative được phân chia đều cho các campaign. Ví dụ: 6 creative, 2 campaign → mỗi campaign 3 creative.</td></tr>
+            <tr><td><strong>Duplicate (Nhân bản)</strong></td><td>Tất cả creative xuất hiện trong mọi campaign — phù hợp khi test các campaign với cùng creative.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         BƯỚC 3: AD SET
+    ────────────────────────────────────── -->
+    <section class="section" id="step-adset">
+      <div class="section-header">
+        <div class="section-icon">📦</div>
+        <div>
+          <h2>Bước 3: Ad Set Options</h2>
+          <p>Cách tổ chức creative vào ad set</p>
+        </div>
+      </div>
+
+      <p>Đây là bước linh hoạt nhất — bạn quyết định creative được chia vào ad set như thế nào.</p>
+
+      <div class="option-block">
+        <div class="option-title">📌 Existing — Dùng ad set hiện tại</div>
+        <p class="option-desc">Thêm toàn bộ creative vào một ad set đã có. Chọn ad set từ danh sách bên dưới.</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">➕ New — Tạo 1 ad set mới</div>
+        <p class="option-desc">Tất cả creative vào 1 ad set mới. Nhập tên và budget hàng ngày (USD).</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">🎞️ Per Creative — Mỗi creative 1 ad set</div>
+        <p class="option-desc">Tạo 1 ad set riêng cho mỗi creative. Tên ad set tự động lấy từ tên file. Phù hợp khi muốn test từng creative độc lập.</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">✂️ Auto-divide — Tự động chia nhóm</div>
+        <p class="option-desc">Chia creative thành các nhóm, mỗi nhóm thành 1 ad set. Ví dụ: 10 creative, mỗi ad set 5 → tạo 2 ad set. Nhập số lượng ads/ad set.</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">⚙️ Custom — Cấu hình tùy chỉnh</div>
+        <p class="option-desc">Mở dialog riêng để kéo thả creative vào các ad set theo ý muốn. Phù hợp cho cấu trúc phức tạp.</p>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-body">
+          <strong>Budget:</strong> Khi tạo ad set mới, budget được tính bằng USD/ngày. Facebook yêu cầu tối thiểu ~$1/ngày. Budget này áp dụng cho từng ad set.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         BƯỚC 4: NỘI DUNG
+    ────────────────────────────────────── -->
+    <section class="section" id="step-text">
+      <div class="section-header">
+        <div class="section-icon">✍️</div>
+        <div>
+          <h2>Bước 4 &amp; 5: Nội dung quảng cáo</h2>
+          <p>Headline, primary text, CTA, URL</p>
+        </div>
+      </div>
+
+      <h3>Bước 4: Đặt tên quảng cáo (Ad Name)</h3>
+
+      <div class="option-block">
+        <div class="option-title">Sử dụng tên file (mặc định)</div>
+        <p class="option-desc">Tên ad = tên file creative (bỏ phần đuôi .jpg/.mp4).</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">Tùy chỉnh pattern</div>
+        <p class="option-desc">Dùng các placeholder để tạo tên tự động. Ví dụ: <code>{filename} - {date}</code> → "banner_01 - 05/04/2025"</p>
+      </div>
+
+      <h4>Chuyển đổi tên file</h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tùy chọn</th><th>Ví dụ</th></tr></thead>
+          <tbody>
+            <tr><td>Title Case</td><td>my_banner_01 → My Banner 01</td></tr>
+            <tr><td>UPPERCASE</td><td>my_banner_01 → MY_BANNER_01</td></tr>
+            <tr><td>lowercase</td><td>My_Banner_01 → my_banner_01</td></tr>
+            <tr><td>Clean</td><td>my-banner_01! → my banner 01</td></tr>
+            <tr><td>Split</td><td>my_banner_01 → my banner 01</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <hr />
+
+      <h3>Bước 5: Nội dung quảng cáo (Ad Text)</h3>
+
+      <div class="option-block">
+        <div class="option-title">📋 Lấy từ creative (mặc định)</div>
+        <p class="option-desc">Tự động dùng headline, primary text, CTA, URL đã nhập trong Ads Manager cho từng creative.</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">🌐 Common Text — Dùng chung 1 bộ nội dung</div>
+        <p class="option-desc">Nhập 1 bộ nội dung áp dụng cho tất cả quảng cáo. Hỗ trợ nhiều headline và nhiều primary text (sẽ lặp vòng tròn).</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">📦 Unique per Ad Set</div>
+        <p class="option-desc">Mỗi ad set có bộ nội dung riêng. Nhấn "Edit Text" để mở dialog cấu hình từng ad set.</p>
+      </div>
+
+      <div class="option-block">
+        <div class="option-title">🎞️ Unique per Creative</div>
+        <p class="option-desc">Mỗi creative có headline/primary text riêng. Có thể nhập thủ công hoặc <strong>import từ CSV/Excel</strong>.</p>
+      </div>
+
+      <h4>Các trường nội dung</h4>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Trường</th><th>Mô tả</th><th>Giới hạn</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Headline</strong></td><td>Tựa đề nổi bật</td><td>127 ký tự</td></tr>
+            <tr><td><strong>Primary Text</strong></td><td>Nội dung chính phía trên ảnh</td><td>1200 ký tự</td></tr>
+            <tr><td><strong>Description</strong></td><td>Mô tả phụ (thường ẩn)</td><td>30 ký tự</td></tr>
+            <tr><td><strong>CTA</strong></td><td>Nút kêu gọi hành động</td><td>Chọn từ danh sách</td></tr>
+            <tr><td><strong>Website URL</strong></td><td>URL khi người dùng click vào ad</td><td>Bắt buộc</td></tr>
+            <tr><td><strong>Display URL</strong></td><td>URL hiển thị (ẩn, tùy chọn)</td><td>Tùy chọn</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>UTM Parameters</h4>
+      <p>Bật "Add UTM parameters" để theo dõi nguồn traffic. Điền các trường:</p>
+      <ul>
+        <li><code>utm_source</code> — Nguồn (vd: facebook)</li>
+        <li><code>utm_medium</code> — Phương tiện (vd: cpc)</li>
+        <li><code>utm_campaign</code> — Tên campaign</li>
+        <li><code>utm_content</code> — Nội dung (phân biệt creative)</li>
+        <li><code>utm_term</code> — Từ khóa (ít dùng với Facebook)</li>
+      </ul>
+      <p>Hệ thống sẽ tự động gắn các tham số này vào cuối Website URL.</p>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         BƯỚC 5: ENHANCEMENTS
+    ────────────────────────────────────── -->
+    <section class="section" id="step-enhancements">
+      <div class="section-header">
+        <div class="section-icon">✨</div>
+        <div>
+          <h2>Bước 6: Creative Enhancements</h2>
+          <p>Tùy chọn Meta Advantage+</p>
+        </div>
+      </div>
+
+      <p>Facebook cung cấp các tính năng tự động cải thiện creative. Bạn có thể để <strong>Meta Defaults</strong> hoặc chọn thủ công.</p>
+
+      <h3>Các tính năng cho ảnh</h3>
+      <ul>
+        <li>🎵 Add music — Thêm nhạc nền</li>
+        <li>☀️ Brightness/contrast — Tự động điều chỉnh độ sáng</li>
+        <li>👆 CTA enhancements — Tối ưu nút CTA</li>
+        <li>💬 Comments — Hiển thị bình luận nổi bật</li>
+        <li>🎬 Animation — Thêm hiệu ứng chuyển động</li>
+        <li>📝 Text improvements — Cải thiện văn bản</li>
+        <li>🌐 Translate — Tự động dịch nội dung</li>
+        <li>🎨 Visual touch-ups — Chỉnh sửa hình ảnh nhẹ</li>
+      </ul>
+
+      <h3>Các tính năng cho video</h3>
+      <p>Tương tự như ảnh, thêm:</p>
+      <ul>
+        <li>🎥 Video effects — Thêm hiệu ứng video</li>
+      </ul>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-body">
+          Nếu chưa chắc, hãy chọn <strong>"Meta Defaults"</strong> để Facebook tự quyết định — thường cho kết quả tốt với ngân sách nhỏ.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         BƯỚC 6: XUẤT BẢN
+    ────────────────────────────────────── -->
+    <section class="section" id="step-publish">
+      <div class="section-header">
+        <div class="section-icon">📅</div>
+        <div>
+          <h2>Bước 7: Tùy chọn xuất bản</h2>
+          <p>Pixel, trạng thái, thời gian bắt đầu</p>
+        </div>
+      </div>
+
+      <h3>Conversion Tracking (Pixel)</h3>
+      <p>Nếu bạn dùng mục tiêu <strong>OUTCOME_SALES</strong> hoặc <strong>OUTCOME_LEADS</strong>:</p>
+      <ol>
+        <li>Chọn <strong>Facebook Pixel</strong> từ danh sách.</li>
+        <li>Chọn <strong>Conversion Event</strong> phù hợp:</li>
+      </ol>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Event</th><th>Dùng khi nào</th></tr></thead>
+          <tbody>
+            <tr><td>Purchase</td><td>Mục tiêu mua hàng</td></tr>
+            <tr><td>Lead</td><td>Thu thập khách hàng tiềm năng</td></tr>
+            <tr><td>Add to Cart</td><td>Thêm vào giỏ hàng</td></tr>
+            <tr><td>Initiate Checkout</td><td>Bắt đầu thanh toán</td></tr>
+            <tr><td>Complete Registration</td><td>Đăng ký thành công</td></tr>
+            <tr><td>Subscribe</td><td>Đăng ký nhận tin</td></tr>
+            <tr><td>Contact</td><td>Liên hệ</td></tr>
+            <tr><td>View Content</td><td>Xem nội dung</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout warning">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-body">
+          Pixel chỉ hoạt động với mục tiêu OUTCOME_SALES và OUTCOME_LEADS. Với các mục tiêu khác (Engagement, Traffic, Awareness), mục Pixel sẽ bị bỏ qua tự động.
+        </div>
+      </div>
+
+      <h3>Trạng thái khi tạo</h3>
+      <div class="option-block">
+        <div class="option-title">☑️ Create ads in paused status (mặc định)</div>
+        <p class="option-desc">Campaign, ad set và ads đều tạo ở trạng thái <strong>tạm dừng</strong>. Bạn tự vào Ads Manager để bật lên khi sẵn sàng — an toàn hơn.</p>
+      </div>
+      <div class="option-block">
+        <div class="option-title">▶️ Bỏ tick — Phát hành ngay</div>
+        <p class="option-desc">Tất cả campaign, ad set và ads được tạo ở trạng thái <strong>ACTIVE</strong> — chạy ngay sau khi Facebook duyệt.</p>
+      </div>
+
+      <h3>Lên lịch bắt đầu</h3>
+      <p>Bật <strong>"Schedule start time"</strong> để đặt thời gian khởi chạy cụ thể:</p>
+      <ol>
+        <li>Chọn ngày từ lịch.</li>
+        <li>Nhập giờ và phút (định dạng 24h).</li>
+        <li>Hệ thống hiển thị xác nhận: "Starts Wed, May 04 at 08:00".</li>
+      </ol>
+
+      <h3>Facebook Page</h3>
+      <p>Chọn <strong>trang Facebook</strong> sẽ là tác giả của quảng cáo. Đây là trường <strong>bắt buộc</strong> — quảng cáo sẽ xuất hiện dưới tên trang này.</p>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         BƯỚC 7: PREVIEW & LAUNCH
+    ────────────────────────────────────── -->
+    <section class="section" id="step-preview">
+      <div class="section-header">
+        <div class="section-icon">👁️</div>
+        <div>
+          <h2>Bước 8: Preview &amp; Launch</h2>
+          <p>Kiểm tra và phát hành</p>
+        </div>
+      </div>
+
+      <h3>Bảng Preview</h3>
+      <p>Trước khi launch, hệ thống hiển thị bảng tóm tắt tất cả các ad sẽ được tạo:</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cột</th><th>Mô tả</th></tr></thead>
+          <tbody>
+            <tr><td>Campaign</td><td>Tên campaign (hiện "(new)" nếu sẽ tạo mới)</td></tr>
+            <tr><td>Ad Set</td><td>Tên ad set (hiện "(new)" nếu sẽ tạo mới)</td></tr>
+            <tr><td>Ad Name</td><td>Tên quảng cáo sẽ được tạo</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Kiểm tra lỗi</h3>
+      <p>Hệ thống tự động kiểm tra trước khi cho phép launch. Các lỗi thường gặp:</p>
+      <ul>
+        <li>❌ Chưa chọn Facebook Page</li>
+        <li>❌ Thiếu Website URL</li>
+        <li>❌ URL không bắt đầu bằng <code>https://</code></li>
+        <li>❌ Budget dưới $1</li>
+        <li>❌ Tên campaign/ad set trống</li>
+      </ul>
+
+      <h3>Sau khi launch</h3>
+      <div class="callout success">
+        <span class="callout-icon">✅</span>
+        <div class="callout-body">
+          <strong>Launch thành công:</strong> Hệ thống hiển thị danh sách tất cả ads đã tạo kèm Ad ID. Bạn có thể <strong>Export CSV</strong> hoặc nhấn link để mở thẳng <strong>Meta Ads Manager</strong>.
+        </div>
+      </div>
+      <div class="callout warning">
+        <span class="callout-icon">⚠️</span>
+        <div class="callout-body">
+          <strong>Một số ad bị lỗi:</strong> Hệ thống vẫn tạo thành công các ad còn lại và hiển thị chi tiết lỗi của từng ad thất bại. Bạn có thể xử lý từng lỗi sau.
+        </div>
+      </div>
+
+      <!-- CAMPAIGNS -->
+    </section>
+
+    <section class="section" id="campaigns">
+      <div class="section-header">
+        <div class="section-icon">📁</div>
+        <div>
+          <h2>Campaigns</h2>
+          <p>Theo dõi campaign, ad set và ad</p>
+        </div>
+      </div>
+
+      <p>Trang <strong>Campaigns</strong> hiển thị toàn bộ cấu trúc quảng cáo từ tài khoản Facebook của bạn theo dạng cây phân cấp.</p>
+
+      <h3>Cấu trúc phân cấp</h3>
+      <ul>
+        <li>📁 <strong>Campaign</strong> — Mục tiêu quảng cáo, budget tổng</li>
+        <li>&nbsp;&nbsp;&nbsp;&nbsp;📦 <strong>Ad Set</strong> — Targeting, lịch chạy, budget/ngày</li>
+        <li>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;🎞️ <strong>Ad</strong> — Creative, nội dung cụ thể</li>
+      </ul>
+
+      <h3>Thao tác</h3>
+      <ul>
+        <li>Nhấn <strong>▶</strong> để mở rộng/thu gọn campaign hoặc ad set.</li>
+        <li>Bật <strong>"Only active"</strong> để chỉ hiện campaign đang chạy.</li>
+        <li>Nhấn <strong>🗑️</strong> để xóa campaign (yêu cầu xác nhận).</li>
+        <li>Nhấn <strong>"Refresh"</strong> để tải lại danh sách mới nhất.</li>
+      </ul>
+
+      <h3>Thông tin hiển thị</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cấp</th><th>Thông tin</th></tr></thead>
+          <tbody>
+            <tr><td>Campaign</td><td>Tên, status, objective, budget, ngày tạo</td></tr>
+            <tr><td>Ad Set</td><td>Tên, status, optimization goal, budget/ngày</td></tr>
+            <tr><td>Ad</td><td>Tên, status, xem trước creative</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         CSV IMPORT
+    ────────────────────────────────────── -->
+    <section class="section" id="csv-import">
+      <div class="section-header">
+        <div class="section-icon">📄</div>
+        <div>
+          <h2>Nhập dữ liệu từ CSV/Excel</h2>
+          <p>Import hàng loạt campaign, adset, nội dung</p>
+        </div>
+      </div>
+
+      <p>AdLauncher hỗ trợ import file CSV hoặc Excel (.xlsx) để tự động cấu hình toàn bộ cấu trúc campaign.</p>
+
+      <h3>Cấu trúc file CSV</h3>
+      <p>File cần có các cột (có thể theo thứ tự bất kỳ):</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cột</th><th>Mô tả</th><th>Bắt buộc</th></tr></thead>
+          <tbody>
+            <tr><td><code>1️⃣ Campaign</code> hoặc <code>Campaign</code></td><td>Tên campaign</td><td>✓</td></tr>
+            <tr><td><code>2️⃣ Adset</code> hoặc <code>Ad Set</code></td><td>Tên ad set</td><td>✓</td></tr>
+            <tr><td><code>3️⃣ Ads</code> hoặc <code>Filename</code></td><td>Tên file creative (phải khớp với file đã upload)</td><td>✓</td></tr>
+            <tr><td><code>Headline</code></td><td>Tiêu đề quảng cáo</td><td>—</td></tr>
+            <tr><td><code>Primary Text</code></td><td>Nội dung chính</td><td>—</td></tr>
+            <tr><td><code>Description</code></td><td>Mô tả</td><td>—</td></tr>
+            <tr><td><code>CTA</code></td><td>Nút kêu gọi (LEARN_MORE, SHOP_NOW, ...)</td><td>—</td></tr>
+            <tr><td><code>Website URL</code></td><td>URL đích</td><td>—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Cách import</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Trong Launch Dialog, nhấn "Import CSV/Excel"</strong>
+            <p>Nút này nằm trong phần cấu hình nội dung.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Chọn file CSV hoặc Excel</strong>
+            <p>Hỗ trợ .csv, .xlsx, .xls.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Xem tóm tắt import</strong>
+            <p>Hệ thống hiển thị số campaign, adset, creative khớp được. Kiểm tra trước khi áp dụng.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num"></div>
+          <div class="step-body">
+            <strong>Áp dụng</strong>
+            <p>Toàn bộ cấu trúc và nội dung được điền tự động.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout tip">
+        <span class="callout-icon">💡</span>
+        <div class="callout-body">
+          <strong>Mẹo:</strong> Tên file trong cột "Ads" phải khớp chính xác với tên file đã upload (bao gồm cả đuôi .jpg, .mp4). Import sẽ bỏ qua các hàng không tìm thấy creative tương ứng.
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         PLACEHOLDER
+    ────────────────────────────────────── -->
+    <section class="section" id="placeholders">
+      <div class="section-header">
+        <div class="section-icon">🔤</div>
+        <div>
+          <h2>Placeholder trong tên</h2>
+          <p>Tạo tên tự động cho campaign, ad set, ad</p>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Placeholder</th><th>Ý nghĩa</th><th>Ví dụ</th></tr></thead>
+          <tbody>
+            <tr><td><code>{filename}</code></td><td>Tên file creative (không có đuôi)</td><td>banner_01</td></tr>
+            <tr><td><code>{index}</code></td><td>Số thứ tự (1, 2, 3...)</td><td>1, 2, 3</td></tr>
+            <tr><td><code>{index:01}</code></td><td>Số thứ tự 2 chữ số</td><td>01, 02, 03</td></tr>
+            <tr><td><code>{index:001}</code></td><td>Số thứ tự 3 chữ số</td><td>001, 002, 003</td></tr>
+            <tr><td><code>{date}</code></td><td>Ngày đầy đủ</td><td>05/04/2025</td></tr>
+            <tr><td><code>{date:short}</code></td><td>Ngày rút gọn (tháng/ngày)</td><td>05/04</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Ví dụ thực tế</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Pattern</th><th>Kết quả</th></tr></thead>
+          <tbody>
+            <tr><td><code>{filename} - {date:short}</code></td><td>banner_01 - 05/04</td></tr>
+            <tr><td><code>Ad Set {index:01}</code></td><td>Ad Set 01, Ad Set 02...</td></tr>
+            <tr><td><code>TEST - {date} - {filename}</code></td><td>TEST - 05/04/2025 - video_promo</td></tr>
+            <tr><td><code>Campaign {index:001}</code></td><td>Campaign 001, Campaign 002...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         CTA LIST
+    ────────────────────────────────────── -->
+    <section class="section" id="cta-list">
+      <div class="section-header">
+        <div class="section-icon">👆</div>
+        <div>
+          <h2>Danh sách CTA</h2>
+          <p>Các nút kêu gọi hành động Facebook hỗ trợ</p>
+        </div>
+      </div>
+
+      <div class="tag-list">
+        <span class="tag">LEARN_MORE</span>
+        <span class="tag">SHOP_NOW</span>
+        <span class="tag">SIGN_UP</span>
+        <span class="tag">DOWNLOAD</span>
+        <span class="tag">GET_QUOTE</span>
+        <span class="tag">SUBSCRIBE</span>
+        <span class="tag">CONTACT_US</span>
+        <span class="tag">APPLY_NOW</span>
+        <span class="tag">GET_OFFER</span>
+        <span class="tag">BOOK_TRAVEL</span>
+        <span class="tag">NO_BUTTON</span>
+      </div>
+
+      <div class="table-wrap" style="margin-top:16px;">
+        <table>
+          <thead><tr><th>Giá trị API</th><th>Hiển thị</th><th>Dùng cho</th></tr></thead>
+          <tbody>
+            <tr><td><code>LEARN_MORE</code></td><td>Tìm hiểu thêm</td><td>Nhận thức thương hiệu, traffic</td></tr>
+            <tr><td><code>SHOP_NOW</code></td><td>Mua ngay</td><td>Thương mại điện tử</td></tr>
+            <tr><td><code>SIGN_UP</code></td><td>Đăng ký</td><td>Thu thập lead, SaaS</td></tr>
+            <tr><td><code>DOWNLOAD</code></td><td>Tải xuống</td><td>App, tài liệu</td></tr>
+            <tr><td><code>GET_QUOTE</code></td><td>Nhận báo giá</td><td>B2B, dịch vụ</td></tr>
+            <tr><td><code>SUBSCRIBE</code></td><td>Đăng ký nhận tin</td><td>Newsletter</td></tr>
+            <tr><td><code>CONTACT_US</code></td><td>Liên hệ</td><td>Dịch vụ, tư vấn</td></tr>
+            <tr><td><code>APPLY_NOW</code></td><td>Đăng ký ngay</td><td>Tuyển dụng, khóa học</td></tr>
+            <tr><td><code>GET_OFFER</code></td><td>Nhận ưu đãi</td><td>Khuyến mãi</td></tr>
+            <tr><td><code>BOOK_TRAVEL</code></td><td>Đặt chỗ</td><td>Du lịch, khách sạn</td></tr>
+            <tr><td><code>NO_BUTTON</code></td><td>(Không có nút)</td><td>Branding thuần túy</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────
+         FAQ
+    ────────────────────────────────────── -->
+    <section class="section" id="faq">
+      <div class="section-header">
+        <div class="section-icon">❓</div>
+        <div>
+          <h2>Câu hỏi thường gặp</h2>
+          <p>Các vấn đề hay gặp và cách xử lý</p>
+        </div>
+      </div>
+
+      <h3>🖼️ Video upload xong nhưng không thấy thumbnail?</h3>
+      <p>Facebook cần 30 giây đến vài phút để xử lý video. Thumbnail sẽ tự động xuất hiện sau khi Facebook xử lý xong — hệ thống tự kiểm tra mỗi 30 giây. Bạn không cần làm gì.</p>
+
+      <hr />
+
+      <h3>🚫 "User request limit reached" khi chọn campaign?</h3>
+      <p>Đây là giới hạn tốc độ của Facebook API. Nguyên nhân: click quá nhiều campaign liên tiếp trong thời gian ngắn. Cách xử lý: đợi 1-2 phút rồi thử lại. Hệ thống đã có cơ chế cache — lần sau click cùng campaign sẽ không gọi API lại.</p>
+
+      <hr />
+
+      <h3>💸 Launch xong nhưng quảng cáo không chạy?</h3>
+      <p>Kiểm tra ô "Create ads in paused status" — nếu được tick, toàn bộ campaign/ad set/ad sẽ ở trạng thái PAUSED. Bỏ tick để phát hành ngay, hoặc vào Ads Manager để bật thủ công.</p>
+
+      <hr />
+
+      <h3>❗ "This conversion event isn't available with the objective"?</h3>
+      <p>Pixel conversion event chỉ hoạt động với mục tiêu <strong>OUTCOME_SALES</strong> và <strong>OUTCOME_LEADS</strong>. Nếu bạn dùng mục tiêu Engagement, Traffic, hay Awareness, bỏ trống phần Pixel.</p>
+
+      <hr />
+
+      <h3>📂 Import CSV nhưng không khớp được creative?</h3>
+      <p>Tên file trong cột "Ads" phải khớp chính xác với tên file đã upload, <strong>bao gồm cả đuôi file</strong> (.jpg, .png, .mp4). Ví dụ: nếu file upload là <code>banner_01.jpg</code> thì trong CSV phải ghi <code>banner_01.jpg</code>.</p>
+
+      <hr />
+
+      <h3>🔄 Ad set mới không giữ nguyên Attribution Model từ template?</h3>
+      <p>Hệ thống tự động <strong>copy ad set template</strong> thay vì tạo mới — tất cả cài đặt bao gồm Attribution Model sẽ được giữ nguyên. Đây là hành vi mặc định khi chọn "Pick from Facebook".</p>
+
+      <hr />
+
+      <h3>📊 Có thể chỉnh sửa quảng cáo đã launch không?</h3>
+      <p>AdLauncher không hỗ trợ sửa quảng cáo đã phát hành. Để chỉnh sửa, vào trực tiếp Meta Ads Manager tại: <code>adsmanager.facebook.com</code></p>
+
+      <hr />
+
+      <h3>👥 Nhiều người có thể dùng cùng lúc không?</h3>
+      <p>Có. Ads Manager hỗ trợ cộng tác thời gian thực — bạn sẽ thấy avatar của người đang chỉnh sửa và ô nào đang được người khác edit (được highlight viền màu).</p>
+    </section>
+
+    <div style="text-align:center;padding:40px 0 20px;color:var(--gray-400);font-size:13px;">
+      AdLauncher · Hướng dẫn sử dụng · Phiên bản 2025
+    </div>
+
+  </div><!-- /content -->
+</main>
+
+<script>
+  // Highlight active nav link on scroll
+  const sections = document.querySelectorAll('.section[id]')
+  const navLinks = document.querySelectorAll('.nav-link[href^="#"]')
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(l => l.classList.remove('active'))
+        const active = document.querySelector(`.nav-link[href="#${entry.target.id}"]`)
+        if (active) {
+          active.classList.add('active')
+          active.scrollIntoView({ block: 'nearest' })
+        }
+      }
+    })
+  }, { rootMargin: '-20% 0px -70% 0px', threshold: 0 })
+
+  sections.forEach(s => observer.observe(s))
+
+  // Smooth scroll
+  navLinks.forEach(link => {
+    link.addEventListener('click', e => {
+      e.preventDefault()
+      const target = document.querySelector(link.getAttribute('href'))
+      if (target) target.scrollIntoView({ behavior: 'smooth' })
+    })
+  })
+</script>
+</body>
+</html>
