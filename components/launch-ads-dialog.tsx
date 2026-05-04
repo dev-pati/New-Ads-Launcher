@@ -76,6 +76,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   const [ads, setAds] = useState<Ad[]>([])
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
   const [selectedAdset, setSelectedAdset] = useState<AdSet | null>(null)
+  const adsetCache = useRef<Map<string, AdSet[]>>(new Map())
   const [selectedAd, setSelectedAd] = useState<Ad | null>(null)
   const [onlyActive, setOnlyActive] = useState(false)
   const [searchCampaign, setSearchCampaign] = useState("")
@@ -181,6 +182,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
     setSelectedAd(null)
     setAdsets([])
     setAds([])
+    adsetCache.current.clear()
     setLoadingCampaigns(true)
     fetch(`/api/facebook/campaigns?ad_account_id=${adAccountId}`)
       .then((r) => r.json())
@@ -248,18 +250,27 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
   useEffect(() => {
     if (!selectedCampaign || !adAccountId) { setAdsets([]); setSelectedAdset(null); return }
-    setLoadingAdsets(true)
-    fetch(`/api/facebook/adsets?ad_account_id=${adAccountId}&campaign_id=${selectedCampaign.id}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) throw new Error(d.error)
-        setAdsets(d.adSets || [])
-      })
-      .catch((err) => setAdsets([{ id: "__error__", name: `⚠ ${err.message}`, status: "", effective_status: "" }]))
-      .finally(() => setLoadingAdsets(false))
     setSelectedAdset(null)
     setAds([])
     setSelectedAd(null)
+    const cacheKey = `${adAccountId}:${selectedCampaign.id}`
+    if (adsetCache.current.has(cacheKey)) {
+      setAdsets(adsetCache.current.get(cacheKey)!)
+      return
+    }
+    const controller = new AbortController()
+    setLoadingAdsets(true)
+    fetch(`/api/facebook/adsets?ad_account_id=${adAccountId}&campaign_id=${selectedCampaign.id}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) throw new Error(d.error)
+        const result = d.adSets || []
+        adsetCache.current.set(cacheKey, result)
+        setAdsets(result)
+      })
+      .catch((err) => { if (err.name !== "AbortError") setAdsets([{ id: "__error__", name: `⚠ ${err.message}`, status: "", effective_status: "" }]) })
+      .finally(() => setLoadingAdsets(false))
+    return () => controller.abort()
   }, [selectedCampaign, adAccountId])
 
   useEffect(() => {
