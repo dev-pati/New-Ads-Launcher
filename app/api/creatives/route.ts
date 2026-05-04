@@ -13,7 +13,7 @@ export async function GET() {
       .from("creatives")
       .select("*")
       .eq("org_id", ctx.orgId)
-      .order("file_name", { ascending: true })
+      .order("created_at", { ascending: true })
 
     if (error) {
       console.error("Failed to fetch creatives:", error)
