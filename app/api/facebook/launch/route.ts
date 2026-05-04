@@ -354,7 +354,11 @@ export async function POST(request: NextRequest) {
     } else {
       template = await getAdDetails(templateAdId, token)
     }
-    console.log("[launch] template.adset.attribution_spec:", JSON.stringify(template?.adset?.attribution_spec))
+    console.log("[launch] template.adset full:", JSON.stringify({
+      attribution_spec: template?.adset?.attribution_spec,
+      attribution_model: (template?.adset as any)?.attribution_model,
+      optimization_sub_event: (template?.adset as any)?.optimization_sub_event,
+    }))
     const { data: creatives } = await supabase.from("creatives").select("*").in("id", creativeIds).eq("org_id", ctx.orgId)
     if (!creatives?.length) return NextResponse.json({ error: "No creatives found" }, { status: 400 })
 
