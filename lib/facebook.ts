@@ -128,7 +128,7 @@ export async function getPixels(
   accessToken: string
 ): Promise<FacebookPixel[]> {
   const res = await fetch(
-    `${GRAPH_API_BASE}/${adAccountId}/adpixels?fields=id,name&access_token=${accessToken}`
+    `${GRAPH_API_BASE}/${adAccountId}/adspixels?fields=id,name&access_token=${accessToken}`
   )
   if (!res.ok) {
     const error = await res.json()
