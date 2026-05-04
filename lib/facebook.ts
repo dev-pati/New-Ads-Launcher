@@ -543,12 +543,12 @@ export async function createAdSet(
 export async function copyAdSet(
   accessToken: string,
   sourceAdsetId: string,
-  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string }
+  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string; status?: string }
 ): Promise<{ id: string }> {
   const body = new URLSearchParams({
     campaign_id: params.campaign_id,
     deep_copy: "false",
-    status_option: "PAUSED",
+    status_option: params.status === "ACTIVE" ? "ACTIVE" : "PAUSED",
     name: params.name,
     access_token: accessToken,
   })
