@@ -129,7 +129,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                     {/* Creative thumbnail + name */}
                     <td className="px-4 py-3 border-r">
                       <div className="flex flex-col items-center gap-1.5">
-                        {cr.media_type === "image" ? (
+                        {cr.file_url ? (
                           <img src={cr.file_url} alt={cr.file_name} className="w-16 h-16 object-cover rounded border" />
                         ) : (
                           <div className="w-16 h-16 bg-muted rounded border flex items-center justify-center">

@@ -171,7 +171,7 @@ export function CustomAdSetDialog({ open, onClose, creativeIds, campaignNames, o
                         className={`relative rounded-lg overflow-hidden border-2 transition-all text-left ${
                           inActive ? "border-primary" : isUsed ? "border-muted opacity-50" : "border-transparent hover:border-muted-foreground/30"
                         }`}>
-                        {creative.media_type === "image" ? (
+                        {creative.file_url ? (
                           <img src={creative.file_url} alt={creative.file_name} className="w-full aspect-square object-cover bg-muted" />
                         ) : (
                           <div className="w-full aspect-square bg-muted flex items-center justify-center">
@@ -244,7 +244,7 @@ export function CustomAdSetDialog({ open, onClose, creativeIds, campaignNames, o
                                 if (!cr) return null
                                 return (
                                   <div key={cid} className="group relative size-14 rounded overflow-hidden border shrink-0">
-                                    {cr.media_type === "image"
+                                    {cr.file_url
                                       ? <img src={cr.file_url} alt={cr.file_name} className="w-full h-full object-cover" />
                                       : <div className="w-full h-full bg-muted flex items-center justify-center"><IconVideo className="size-4 text-muted-foreground" /></div>}
                                     <button
