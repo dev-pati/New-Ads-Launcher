@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { useTheme } from "next-themes"
 import { BulkUploadDialog } from "@/components/bulk-upload-dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface Creative {
   id: string
@@ -32,6 +33,8 @@ interface Creative {
   file_url: string
   media_type: "image" | "video"
   file_size: number
+  campaign_name?: string
+  adset_name?: string
   headline: string
   primary_text: string
   description: string
@@ -59,6 +62,8 @@ interface PageLink {
 const FIELDS = [
   "file_preview",
   "file_name",
+  "campaign_name",
+  "adset_name",
   "headline",
   "primary_text",
   "description",
@@ -69,6 +74,8 @@ const FIELDS = [
 const HEADERS = [
   "File",
   "Name",
+  "Campaign",
+  "Ad Set",
   "Headline",
   "Primary Text",
   "Description",
@@ -363,6 +370,28 @@ function toTSVWithQuotes(rows: string[][]): string {
     .join("\n")
 }
 
+// Campaign badge viewer (read-only)
+function CampaignViewer({ cell }: { cell: CellBase | undefined }) {
+  const val = String(cell?.value || "")
+  if (!val) return <span className="text-muted-foreground/40 text-xs">—</span>
+  return (
+    <span className="inline-block max-w-full truncate rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-200" title={val}>
+      {val}
+    </span>
+  )
+}
+
+// AdSet badge viewer (read-only)
+function AdSetViewer({ cell }: { cell: CellBase | undefined }) {
+  const val = String(cell?.value || "")
+  if (!val) return <span className="text-muted-foreground/40 text-xs">—</span>
+  return (
+    <span className="inline-block max-w-full truncate rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 border border-violet-200" title={val}>
+      {val}
+    </span>
+  )
+}
+
 // Image preview viewer
 function ImageViewer({ cell }: { cell: CellBase | undefined }) {
   const url = String(cell?.value || "")
@@ -408,6 +437,10 @@ function creativesToMatrix(
             ? "video"
             : c.fb_image_url || c.file_url || ""
         cell = { value: url, readOnly: true, DataViewer: ImageViewer }
+      } else if (field === "campaign_name") {
+        cell = { value: c.campaign_name || "", readOnly: true, DataViewer: CampaignViewer }
+      } else if (field === "adset_name") {
+        cell = { value: c.adset_name || "", readOnly: true, DataViewer: AdSetViewer }
       } else if (field === "cta") {
         cell = {
           value: c.cta || "LEARN_MORE",
@@ -477,6 +510,8 @@ export default function AdsManagerPage() {
   const saveTimerRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
     new Map()
   )
+  const [deleteTarget, setDeleteTarget] = useState<{ rowIdx: number; fileName: string } | null>(null)
+
   const [contextMenu, setContextMenu] = useState<{
     x: number
     y: number
@@ -921,22 +956,32 @@ export default function AdsManagerPage() {
     }
   }, [contextMenu])
 
-  // Delete row
+  // Delete row — mở confirm dialog
   const handleDeleteRow = useCallback(
-    async (rowIdx: number) => {
+    (rowIdx: number) => {
       if (rowIdx < 0 || rowIdx >= creatives.length) return
       const creative = creatives[rowIdx]
-      pendingEditsRef.current.add(`delete:${creative.id}`)
-      setCreatives((prev) => prev.filter((_, i) => i !== rowIdx))
       setContextMenu(null)
-      try {
-        await fetch(`/api/creatives/${creative.id}`, { method: "DELETE" })
-      } catch {
-        /* ignore */
-      }
+      setDeleteTarget({ rowIdx, fileName: creative.file_name })
     },
     [creatives]
   )
+
+  // Xác nhận xóa
+  const confirmDeleteRow = useCallback(async () => {
+    if (!deleteTarget) return
+    const { rowIdx } = deleteTarget
+    const creative = creatives[rowIdx]
+    if (!creative) { setDeleteTarget(null); return }
+    pendingEditsRef.current.add(`delete:${creative.id}`)
+    setCreatives((prev) => prev.filter((_, i) => i !== rowIdx))
+    setDeleteTarget(null)
+    try {
+      await fetch(`/api/creatives/${creative.id}`, { method: "DELETE" })
+    } catch {
+      /* ignore */
+    }
+  }, [deleteTarget, creatives])
 
   // Copy selected cells
   const handleCopyRow = useCallback(
@@ -1142,12 +1187,14 @@ export default function AdsManagerPage() {
   const columnWidthCSS = useMemo(() => {
     const defaultWidths: Record<string, string> = {
       file_preview: "80px",
-      file_name: "13%",
-      headline: "14%",
-      primary_text: "20%",
-      description: "13%",
-      cta: "13%",
-      link_url: "14%",
+      file_name: "11%",
+      campaign_name: "12%",
+      adset_name: "12%",
+      headline: "12%",
+      primary_text: "18%",
+      description: "11%",
+      cta: "9%",
+      link_url: "11%",
       status: "90px",
     }
     return FIELDS.map((field, i) => {
@@ -1442,6 +1489,39 @@ export default function AdsManagerPage() {
           )}
         </div>
       )}
+
+      {/* Confirm Delete Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <IconTrash className="size-5" />
+              Xác nhận xóa creative
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Bạn có chắc muốn xóa creative này không?
+          </p>
+          <p className="rounded-md bg-muted px-3 py-2 text-sm font-medium truncate" title={deleteTarget?.fileName}>
+            {deleteTarget?.fileName}
+          </p>
+          <p className="text-xs text-muted-foreground">Hành động này không thể hoàn tác.</p>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setDeleteTarget(null)}
+              className="rounded-md border px-4 py-2 text-sm hover:bg-muted transition-colors"
+            >
+              Hủy
+            </button>
+            <button
+              onClick={confirmDeleteRow}
+              className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors"
+            >
+              Xóa
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -47,6 +47,8 @@ export async function POST(request: NextRequest) {
           file_url: body.fb_thumbnail_url || body.fb_image_url || "",
           media_type: body.media_type,
           file_size: body.file_size || 0,
+          campaign_name: body.campaign_name || null,
+          adset_name: body.adset_name || null,
           headline: body.headline || "",
           primary_text: body.primary_text || "",
           description: body.description || "",
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest) {
           fb_image_url: body.fb_image_url || null,
           fb_thumbnail_url: body.fb_thumbnail_url || null,
           fb_video_id: body.fb_video_id || null,
+          status: "ready",
         })
         .select()
         .single()

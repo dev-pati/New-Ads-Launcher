@@ -1,0 +1,3 @@
+ALTER TABLE creatives
+  ADD COLUMN IF NOT EXISTS campaign_name TEXT,
+  ADD COLUMN IF NOT EXISTS adset_name TEXT;

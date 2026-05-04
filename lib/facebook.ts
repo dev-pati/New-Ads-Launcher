@@ -431,20 +431,24 @@ export interface AdDetails {
     bid_strategy?: string
     daily_budget?: string
     lifetime_budget?: string
+    promoted_object?: Record<string, any>
   }
   campaign: {
     id: string
     name: string
     objective: string
     special_ad_categories: string[]
+    daily_budget?: string
+    lifetime_budget?: string
+    bid_strategy?: string
   }
 }
 
 export async function getAdDetails(adId: string, accessToken: string): Promise<AdDetails> {
   const fields = [
     "id", "name", "status",
-    "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget}",
-    "campaign{id,name,objective,special_ad_categories}",
+    "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget,promoted_object}",
+    "campaign{id,name,objective,special_ad_categories,daily_budget,lifetime_budget,bid_strategy}",
   ].join(",")
   const res = await fetch(`${GRAPH_API_BASE}/${adId}?fields=${fields}&access_token=${accessToken}`)
   if (!res.ok) {
@@ -536,6 +540,20 @@ export async function createAdSet(
   return res.json()
 }
 
+// Fetch a video's thumbnail URL from Facebook (picture field)
+export async function getVideoThumbnail(videoId: string, accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=picture&access_token=${accessToken}`
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.picture || null
+  } catch {
+    return null
+  }
+}
+
 // Create a new ad with a creative
 export async function createAd(
   adAccountId: string,
@@ -546,6 +564,7 @@ export async function createAd(
     page_id: string
     image_hash?: string
     video_id?: string
+    thumbnail_url?: string
     title: string
     body: string
     description?: string
@@ -569,12 +588,14 @@ export async function createAd(
   if (params.display_url) creativeSpec.link_data.display_url = params.display_url
   if (params.image_hash) creativeSpec.link_data.image_hash = params.image_hash
   if (params.video_id) {
-    creativeSpec.video_data = {
+    const videoData: any = {
       video_id: params.video_id,
       title: params.title,
       message: params.body,
       call_to_action: { type: params.cta, value: { link: params.link_url } },
     }
+    if (params.thumbnail_url) videoData.image_url = params.thumbnail_url
+    creativeSpec.video_data = videoData
     delete creativeSpec.link_data
   }
 

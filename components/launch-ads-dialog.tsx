@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { IconLoader2, IconRocket, IconCheck, IconSearch, IconAlertTriangle, IconPlus, IconTrash, IconX, IconCalendar, IconClock, IconExternalLink, IconDownload } from "@tabler/icons-react"
+import { IconLoader2, IconRocket, IconCheck, IconSearch, IconAlertTriangle, IconPlus, IconTrash, IconX, IconCalendar, IconClock, IconExternalLink, IconDownload, IconUpload } from "@tabler/icons-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
@@ -20,13 +20,41 @@ import {
 } from "@/components/ui/select"
 
 interface Campaign { id: string; name: string; status: string; effective_status: string }
-interface AdSet { id: string; name: string; status: string; effective_status: string }
+interface AdSet { id: string; name: string; status: string; effective_status: string; daily_budget?: string; lifetime_budget?: string }
 interface Ad { id: string; name: string; status: string; effective_status: string; creative?: { image_url?: string; thumbnail_url?: string } }
 interface FacebookPage { id: string; name: string; category?: string; picture?: { data: { url: string } } }
 interface Preset { id: string; name: string; objective: string; targeting: any; optimization_goal: string; bid_strategy?: string; adset_name?: string; campaign_name?: string }
 interface PageLink { id: string; name: string; url: string }
 
 type AdsetMode = "existing" | "new" | "per_creative" | "auto_divide" | "custom"
+
+function parseCSV(text: string): string[][] {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1)
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++ }
+      else if (ch === '"') inQuotes = false
+      else field += ch
+    } else {
+      if (ch === '"' && field === "") inQuotes = true
+      else if (ch === ",") { row.push(field); field = "" }
+      else if (ch === "\n" || ch === "\r") {
+        row.push(field); field = ""
+        if (row.some(c => c !== "")) rows.push(row)
+        row = []
+        if (ch === "\r" && text[i + 1] === "\n") i++
+      } else field += ch
+    }
+  }
+  row.push(field)
+  if (row.some(c => c !== "")) rows.push(row)
+  return rows
+}
 
 interface Props {
   open: boolean
@@ -60,6 +88,8 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   // Campaign options
   const [createNewCampaign, setCreateNewCampaign] = useState(false)
   const [newCampaignName, setNewCampaignName] = useState("")
+  const [adsManagerCampaignName, setAdsManagerCampaignName] = useState("")
+  const [adsManagerAdsetName, setAdsManagerAdsetName] = useState("")
   const [createMultipleCampaigns, setCreateMultipleCampaigns] = useState(false)
   const [multipleCampaignNames, setMultipleCampaignNames] = useState<string[]>(["", ""])
   const [creativeDistribution, setCreativeDistribution] = useState<"split" | "duplicate">("split")
@@ -98,6 +128,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   const [creativeDetails, setCreativeDetails] = useState<{
     id: string; file_name: string; file_url: string; media_type: string
     headline?: string; primary_text?: string; description?: string; cta?: string; link_url?: string
+    campaign_name?: string; adset_name?: string
   }[]>([])
 
   // Pages
@@ -138,6 +169,10 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState("")
 
+  // CSV structure import
+  const csvImportRef = useRef<HTMLInputElement>(null)
+  const [csvImportSummary, setCsvImportSummary] = useState("")
+
   useEffect(() => {
     if (!open) return
     setLoadingCampaigns(true)
@@ -148,7 +183,21 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
     fetch("/api/creatives")
       .then(r => r.json())
-      .then(d => setCreativeDetails((d.creatives || []).filter((c: any) => selectedCreativeIds.includes(c.id))))
+      .then(d => {
+        const filtered = (d.creatives || []).filter((c: any) => selectedCreativeIds.includes(c.id))
+        setCreativeDetails(filtered)
+        // Pre-fill campaign/adset name từ creative đã lưu trong Ads Manager
+        const firstWithCamp = filtered.find((c: any) => c.campaign_name)
+        const firstWithAdset = filtered.find((c: any) => c.adset_name)
+        if (firstWithCamp) {
+          setAdsManagerCampaignName(firstWithCamp.campaign_name)
+          setNewCampaignName(firstWithCamp.campaign_name)
+        }
+        if (firstWithAdset) {
+          setAdsManagerAdsetName(firstWithAdset.adset_name)
+          setNewAdsetName(firstWithAdset.adset_name)
+        }
+      })
 
     fetch("/api/facebook/pages")
       .then((r) => r.json())
@@ -215,15 +264,22 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
 
   useEffect(() => {
     if (!selectedAd) return
-    if (selectedCampaign) setNewCampaignName(selectedCampaign.name)
-    if (selectedAdset) setNewAdsetName(selectedAdset.name)
+    if (selectedCampaign && !adsManagerCampaignName) setNewCampaignName(selectedCampaign.name)
+    if (selectedAdset) {
+      if (!adsManagerAdsetName) setNewAdsetName(selectedAdset.name)
+      if (selectedAdset.daily_budget) {
+        const dollars = Math.round(parseInt(selectedAdset.daily_budget) / 100)
+        if (dollars >= 1) setAdsetDailyBudget(String(dollars))
+      }
+    }
   }, [selectedAd])
 
   useEffect(() => {
     if (!selectedPresetId || configSource !== "preset") return
     const p = presets.find(x => x.id === selectedPresetId)
     if (!p) return
-    if (!newAdsetName) setNewAdsetName(p.adset_name || "")
+    if (!adsManagerCampaignName && p.campaign_name) setNewCampaignName(p.campaign_name)
+    if (!adsManagerAdsetName && p.adset_name) setNewAdsetName(p.adset_name)
   }, [selectedPresetId])
 
   const filteredCampaigns = campaigns
@@ -375,7 +431,181 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
     setUseUtm(false); setUtmSource("facebook"); setUtmMedium("paid"); setUtmCampaign(""); setUtmContent(""); setUtmTerm("")
     setCreatePaused(true); setScheduleStart(false); setScheduleDate(undefined); setScheduleHour("08"); setScheduleMinute("00")
     setSelectedPixelId(pixels.length > 0 ? pixels[0].id : ""); setPixelEvent("PURCHASE")
+    setCsvImportSummary("")
     onClose()
+  }
+
+  const applyParsedRows = (parsed: string[][]) => {
+    if (parsed.length < 2) { setCsvImportSummary("File không có dữ liệu."); return }
+
+    const headers = parsed[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, "_"))
+    const dataRows = parsed.slice(1).filter(r => r.some(c => String(c).trim()))
+
+    const col = (name: string) => headers.indexOf(name)
+    const findCol = (...kws: string[]) => headers.findIndex(h => kws.some(k => h.includes(k)))
+
+    const adsColIdx = headers.findIndex(h => h.includes("ads") && (h.includes("3") || h.includes("️⃣")))
+    const linkIdx = col("link")
+    if (adsColIdx === -1 && linkIdx === -1) { setCsvImportSummary("Không tìm thấy cột '3️⃣ Ads' hoặc 'link' — kiểm tra lại file."); return }
+
+    const adsetIdx   = findCol("ad_set")
+    const campIdx    = findCol("campaign")
+    const pagesIdx   = col("pages")
+    const headlineIdx = col("headline")
+    const descIdx    = col("description")
+    const ptIdx      = col("primary_text")
+    const linkUrlIdx = col("link_ad_setting")
+
+    const stripExt = (s: string) => s.replace(/\.[^/.]+$/, "")
+
+    // filename → creativeId, bỏ đuôi khi so sánh
+    const fileToId = new Map<string, string>()
+    for (const c of creativeDetails) {
+      fileToId.set(stripExt(c.file_name.toLowerCase().trim()), c.id)
+    }
+
+    const campaignMap = new Map<string, Map<string, string[]>>()
+    const pageNameList: string[] = []
+    const textConfigs: import("@/components/ad-per-creative-text-dialog").AdCreativeTextConfig[] = []
+    const seenCreatives = new Set<string>()
+
+    for (const row of dataRows) {
+      // Dùng cột 3️⃣ Ads làm primary matcher, fallback về link
+      let matchVal = ""
+      if (adsColIdx !== -1) {
+        matchVal = String(row[adsColIdx] ?? "").trim()
+      }
+      if (!matchVal && linkIdx !== -1) {
+        matchVal = String(row[linkIdx] ?? "").trim()
+      }
+      if (!matchVal) continue
+
+      // Khớp tên file: bỏ đuôi trước khi so sánh
+      const baseName = (matchVal.split(/[/\\]/).pop() || matchVal).toLowerCase().trim()
+      const creativeId = fileToId.get(stripExt(baseName))
+      if (!creativeId) continue
+
+      const campName  = (campIdx  !== -1 ? String(row[campIdx]  ?? "").trim() : "") || "Campaign 1"
+      const adsetName = (adsetIdx !== -1 ? String(row[adsetIdx] ?? "").trim() : "") || "Ad Set 1"
+
+      if (pagesIdx !== -1 && String(row[pagesIdx] ?? "").trim()) {
+        const p = String(row[pagesIdx]).trim()
+        if (!pageNameList.includes(p)) pageNameList.push(p)
+      }
+
+      // Text per-creative (mỗi video có copy khác nhau)
+      if (!seenCreatives.has(creativeId)) {
+        seenCreatives.add(creativeId)
+        const headline = headlineIdx !== -1 ? String(row[headlineIdx] ?? "").trim() : ""
+        const desc     = descIdx     !== -1 ? String(row[descIdx]     ?? "").trim() : ""
+        const pt       = ptIdx       !== -1 ? String(row[ptIdx]       ?? "").trim() : ""
+        const url      = linkUrlIdx  !== -1 ? String(row[linkUrlIdx]  ?? "").trim() : ""
+        textConfigs.push({
+          creativeId,
+          headlines:    headline ? [headline] : [],
+          primaryTexts: pt ? [pt] : [],
+          description:  desc,
+          cta:          "LEARN_MORE",
+          websiteUrl:   url,
+          displayUrl:   "",
+        })
+      }
+
+      // Cấu trúc campaign/adset
+      if (!campaignMap.has(campName)) campaignMap.set(campName, new Map())
+      const adsetMap = campaignMap.get(campName)!
+      if (!adsetMap.has(adsetName)) adsetMap.set(adsetName, [])
+      if (!adsetMap.get(adsetName)!.includes(creativeId)) adsetMap.get(adsetName)!.push(creativeId)
+    }
+
+    if (campaignMap.size === 0) {
+      setCsvImportSummary("Không khớp được creative nào — kiểm tra tên file trong cột 'link' phải trùng với file đã upload.")
+      return
+    }
+
+    // Build CampaignConfig
+    const config: CampaignConfig[] = []
+    let totalAdsets = 0, totalCreatives = 0
+    for (const [campName, adsetMap] of campaignMap.entries()) {
+      const adsets: { name: string; creativeIds: string[] }[] = []
+      for (const [adsetName, ids] of adsetMap.entries()) {
+        adsets.push({ name: adsetName, creativeIds: ids })
+        totalAdsets++; totalCreatives += ids.length
+      }
+      config.push({ name: campName, adsets })
+    }
+
+    setCustomConfig(config)
+    setAdsetMode("custom")
+    setCreateNewCampaign(false)
+    setCreateMultipleCampaigns(false)
+
+    // Pre-fill campaign/adset name từ dữ liệu Excel
+    if (config.length > 0) {
+      setNewCampaignName(config[0].name)
+      if (config.length > 1) {
+        setMultipleCampaignNames(config.map(c => c.name))
+      }
+      if (config[0].adsets.length > 0) {
+        setNewAdsetName(config[0].adsets[0].name)
+      }
+    }
+
+    // Khớp Facebook Page theo tên
+    if (pageNameList.length > 0) {
+      const searchName = pageNameList[0].toLowerCase()
+      const match = pages.find(p =>
+        p.name.toLowerCase().includes(searchName) || searchName.includes(p.name.toLowerCase())
+      )
+      if (match) setSelectedPageId(match.id)
+    }
+
+    // Dùng unique text per creative vì mỗi video có copy riêng
+    if (textConfigs.length > 0) {
+      setUseUniqueTextPerCreative(true)
+      setUseCommonText(false)
+      setCreativeTextConfigs(textConfigs)
+    }
+
+    // Pre-fill website URL từ creative đầu tiên nếu có
+    const firstUrl = textConfigs.find(t => t.websiteUrl)?.websiteUrl
+    if (firstUrl) setCommonWebsiteUrl(firstUrl)
+
+    setCsvImportSummary(
+      `✅ ${config.length} campaign, ${totalAdsets} adset, ${totalCreatives} creative khớp — text riêng cho từng creative`
+    )
+  }
+
+  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name)
+
+    if (isExcel) {
+      const reader = new FileReader()
+      reader.onload = async ev => {
+        try {
+          const XLSX = await import("xlsx")
+          const wb = XLSX.read(ev.target?.result, { type: "array" })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          const parsed = (XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "", raw: false }) as any[][])
+            .map(row => row.map(cell => String(cell ?? "").trim()))
+          applyParsedRows(parsed)
+        } catch (err: any) {
+          setCsvImportSummary(`Lỗi đọc Excel: ${err.message}`)
+        }
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      const reader = new FileReader()
+      reader.onload = ev => {
+        const parsed = parseCSV(ev.target?.result as string)
+        applyParsedRows(parsed)
+      }
+      reader.readAsText(file)
+    }
+
+    if (csvImportRef.current) csvImportRef.current.value = ""
   }
 
   const exportCsv = () => {

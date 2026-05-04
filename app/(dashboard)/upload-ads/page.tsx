@@ -18,6 +18,7 @@ import {
   IconVideo,
   IconCheck,
   IconRocket,
+  IconLoader2,
 } from "@tabler/icons-react"
 
 interface Creative {
@@ -48,7 +49,36 @@ export default function UploadAdsPage() {
       try {
         const res = await fetch("/api/creatives")
         const data = await res.json()
-        setCreatives(data.creatives || [])
+        const list: Creative[] = data.creatives || []
+        setCreatives(list)
+
+        // Poll thumbnails for videos still being processed by Facebook.
+        // Retries at 10s, 30s, 60s, 120s, 240s intervals then gives up.
+        const RETRY_DELAYS = [10_000, 30_000, 60_000, 120_000, 240_000]
+        const videosMissingThumb = list.filter(c => c.media_type === "video" && !c.fb_thumbnail_url)
+        for (const c of videosMissingThumb) {
+          let attempt = 0
+          const poll = () => {
+            if (attempt >= RETRY_DELAYS.length) return
+            setTimeout(async () => {
+              try {
+                const d = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" }).then(r => r.json())
+                if (d.thumbnail_url) {
+                  setCreatives(prev => prev.map(x =>
+                    x.id === c.id ? { ...x, fb_thumbnail_url: d.thumbnail_url } : x
+                  ))
+                } else {
+                  attempt++
+                  poll()
+                }
+              } catch {
+                attempt++
+                poll()
+              }
+            }, RETRY_DELAYS[attempt])
+          }
+          poll()
+        }
       } catch {
         // ignore
       } finally {
@@ -148,9 +178,18 @@ export default function UploadAdsPage() {
 
                   {/* Preview */}
                   {c.media_type === "video" ? (
-                    <div className="flex h-40 items-center justify-center rounded-t-xl bg-muted">
-                      <IconVideo className="size-8 text-muted-foreground" />
-                    </div>
+                    c.fb_thumbnail_url ? (
+                      <img
+                        src={c.fb_thumbnail_url}
+                        alt={c.file_name}
+                        className="h-40 w-full rounded-t-xl object-cover object-center"
+                      />
+                    ) : (
+                      <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-t-xl bg-muted">
+                        <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">Processing...</span>
+                      </div>
+                    )
                   ) : (
                     <img
                       src={c.fb_image_url || c.file_url}

@@ -13,6 +13,8 @@ interface PendingRow {
   id: string
   file: File
   previewUrl: string
+  campaign_name: string
+  adset_name: string
   headline: string
   primary_text: string
   description: string
@@ -33,6 +35,8 @@ interface Props {
 }
 
 function parseCSV(text: string): string[][] {
+  // Strip UTF-8 BOM added by Excel when saving CSV
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1)
   const rows: string[][] = []
   let row: string[] = []
   let field = ""
@@ -62,6 +66,8 @@ function parseCSV(text: string): string[][] {
 export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, defaultPageUrl, onComplete }: Props) {
   const [rows, setRows] = useState<PendingRow[]>([])
   const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState("")
+  const [importSummary, setImportSummary] = useState("")
   const csvRef = useRef<HTMLInputElement>(null)
   const dragIdx = useRef<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -72,11 +78,13 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
       id: `${i}-${file.name}-${file.size}`,
       file,
       previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : "",
+      campaign_name: "",
+      adset_name: "",
       headline: "",
       primary_text: "",
       description: "",
       cta: "LEARN_MORE",
-      link_url: defaultPageUrl,
+      link_url: "",
       status: "pending",
     }))
     setRows(next)
@@ -119,40 +127,97 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
     })
   }
 
+  const applyImportedRows = (parsed: string[][]) => {
+    if (parsed.length < 2) { setImportSummary("File không có dữ liệu."); return }
+    const headers = parsed[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, "_"))
+    const dataRows = parsed.slice(1).filter(r => r.some(c => String(c).trim()))
+    const idx = (name: string) => headers.indexOf(name)
+
+    const fileNameIdx = idx("file_name") !== -1 ? idx("file_name") : idx("filename") !== -1 ? idx("filename") : -1
+    // Cột "3️⃣ Ads" chứa tên đầy đủ của file (không đuôi)
+    const adsColIdx = headers.findIndex(h => h.includes("ads") && (h.includes("3") || h.includes("️⃣")))
+    const linkIdx = idx("link")
+
+    const stripExt = (s: string) => s.replace(/\.[^/.]+$/, "")
+
+    let matched = 0
+    const updated = (prev: PendingRow[]) => prev.map((row, i) => {
+      const normName = stripExt(row.file.name.trim().toLowerCase())
+      let cols: string[] | undefined
+      if (fileNameIdx !== -1) {
+        cols = dataRows.find(dr => stripExt(String(dr[fileNameIdx] ?? "").trim().toLowerCase()) === normName)
+      } else if (adsColIdx !== -1) {
+        // Ưu tiên khớp theo cột "3️⃣ Ads" — chứa tên file đầy đủ không có đuôi
+        cols = dataRows.find(dr => stripExt(String(dr[adsColIdx] ?? "").trim().toLowerCase()) === normName)
+      }
+      // Fallback: khớp theo cột "link"
+      if (!cols && linkIdx !== -1) {
+        cols = dataRows.find(dr => {
+          const baseName = (String(dr[linkIdx] ?? "").trim().toLowerCase().split(/[/\\]/).pop() || "")
+          return stripExt(baseName) === normName
+        })
+      }
+      if (!cols && adsColIdx === -1 && fileNameIdx === -1) {
+        cols = dataRows[i]
+      }
+      if (!cols) return row
+      matched++
+      const get = (field: string) => { const j = idx(field); return j !== -1 ? String(cols![j] ?? "").trim() : "" }
+      const linkUrl = get("link_ad_setting") || get("link_url")
+      const campIdx2 = headers.findIndex(h => h.includes("campaign") && !h.includes("ads_account"))
+      const adsetIdx2 = headers.findIndex(h => h.includes("ad_set"))
+      return {
+        ...row,
+        campaign_name: (campIdx2  !== -1 ? String(cols![campIdx2]  ?? "").trim() : "") || row.campaign_name,
+        adset_name:    (adsetIdx2 !== -1 ? String(cols![adsetIdx2] ?? "").trim() : "") || row.adset_name,
+        headline:     get("headline")     || row.headline,
+        primary_text: get("primary_text") || row.primary_text,
+        description:  get("description")  || row.description,
+        cta:          get("cta")          || row.cta,
+        link_url:     linkUrl             || row.link_url,
+      }
+    })
+    setRows(prev => {
+      const result = updated(prev)
+      const count = result.filter((r, i) => r !== prev[i]).length
+      setImportSummary(count > 0
+        ? `✅ Khớp ${count}/${prev.length} file — headline, description, primary text, link đã được điền`
+        : `⚠ Không khớp file nào — kiểm tra tên file trong cột 'link' phải trùng với file đang upload`)
+      return result
+    })
+  }
+
   const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      const parsed = parseCSV(ev.target?.result as string)
-      if (parsed.length < 2) return
-      const headers = parsed[0].map(h => h.trim().toLowerCase().replace(/\s+/g, "_"))
-      const dataRows = parsed.slice(1)
-      const idx = (name: string) => headers.indexOf(name)
-      const hasFilename = idx("file_name") !== -1 || idx("filename") !== -1
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name)
 
-      setRows(prev => prev.map((row, i) => {
-        let cols: string[] | undefined
-        if (hasFilename) {
-          const nameIdx = idx("file_name") !== -1 ? idx("file_name") : idx("filename")
-          const match = dataRows.find(dr => dr[nameIdx]?.trim() === row.file.name)
-          cols = match
-        } else {
-          cols = dataRows[i]
+    if (isExcel) {
+      const reader = new FileReader()
+      reader.onload = async ev => {
+        try {
+          const XLSX = await import("xlsx")
+          const data = ev.target?.result
+          const wb = XLSX.read(data, { type: "array" })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          // Convert all cells to string and strip leading/trailing whitespace
+          const parsed = (XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "", raw: false }) as any[][])
+            .map(row => row.map(cell => String(cell ?? "").trim()))
+          applyImportedRows(parsed)
+        } catch {
+          // ignore
         }
-        if (!cols) return row
-        const get = (field: string) => { const j = idx(field); return j !== -1 ? (cols![j] || "").trim() : "" }
-        return {
-          ...row,
-          headline: get("headline") || row.headline,
-          primary_text: get("primary_text") || row.primary_text,
-          description: get("description") || row.description,
-          cta: get("cta") || row.cta,
-          link_url: get("link_url") || row.link_url,
-        }
-      }))
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      const reader = new FileReader()
+      reader.onload = ev => {
+        const parsed = parseCSV(ev.target?.result as string)
+        applyImportedRows(parsed)
+      }
+      reader.readAsText(file)
     }
-    reader.readAsText(file)
+
     if (csvRef.current) csvRef.current.value = ""
   }
 
@@ -168,14 +233,18 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
 
   const handleUploadAll = async () => {
     setUploading(true)
+    setUploadError("")
     let credRes: Response
     try {
-      // Find the adAccountId from localStorage since we don't have it in props
       const selectedId = localStorage.getItem("selected_ad_account_id") || ""
       const url = selectedId ? `/api/facebook/upload-credentials?adAccountId=${selectedId}` : "/api/facebook/upload-credentials"
       credRes = await fetch(url)
-      if (!credRes.ok) throw new Error("Cannot get credentials")
+      if (!credRes.ok) {
+        const errData = await credRes.json().catch(() => ({}))
+        throw new Error(errData.error || `Lỗi ${credRes.status}: Không lấy được credentials`)
+      }
     } catch (err: any) {
+      setUploadError(err.message || "Không lấy được credentials — kiểm tra kết nối Facebook")
       setUploading(false)
       return
     }
@@ -195,12 +264,14 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
           metaForm.append("source", row.file)
           metaForm.append("title", row.file.name)
           const res = await fetch(
-            `https://graph-video.facebook.com/v25.0/act_${cleanId}/advideos`,
+            `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`,
             { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
           )
           const d = await res.json()
           if (d.error) throw new Error(d.error.message)
           fbVideoId = d.id
+          // Thumbnail not available immediately — Facebook needs time to process the video.
+          // It will be fetched via polling when the user opens Upload Ads page.
         } else {
           metaForm.append("filename", row.file)
           const res = await fetch(
@@ -223,6 +294,8 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
             file_name: row.file.name,
             file_size: row.file.size,
             media_type: isVideo ? "video" : "image",
+            campaign_name: row.campaign_name || null,
+            adset_name: row.adset_name || null,
             headline: row.headline,
             primary_text: row.primary_text,
             description: row.description,
@@ -279,11 +352,13 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
 
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground shrink-0">Link for all:</span>
-            <select onChange={e => applyToAll("link_url", e.target.value)} defaultValue=""
-              className="h-7 rounded border bg-background px-2 text-xs cursor-pointer">
-              <option value="" disabled>Select…</option>
-              {pageLinks.map(p => <option key={p.id} value={p.url}>{p.name}</option>)}
-            </select>
+            <input
+              type="url"
+              placeholder="https://..."
+              className="h-7 rounded border bg-background px-2 text-xs w-48"
+              onBlur={e => { if (e.target.value) applyToAll("link_url", e.target.value) }}
+              onKeyDown={e => { if (e.key === "Enter" && (e.target as HTMLInputElement).value) applyToAll("link_url", (e.target as HTMLInputElement).value) }}
+            />
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -291,11 +366,18 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
               <IconDownload className="size-3.5" /> Template CSV
             </Button>
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => csvRef.current?.click()}>
-              <IconUpload className="size-3.5" /> Import CSV
+              <IconUpload className="size-3.5" /> Import CSV/Excel
             </Button>
-            <input ref={csvRef} type="file" accept=".csv" className="hidden" onChange={handleCsvImport} />
+            <input ref={csvRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleCsvImport} />
           </div>
         </div>
+
+        {/* Import summary */}
+        {importSummary && (
+          <div className={`px-4 py-1.5 text-xs font-medium shrink-0 ${importSummary.startsWith("✅") ? "bg-green-50 text-green-700 border-b border-green-200" : "bg-amber-50 text-amber-700 border-b border-amber-200"}`}>
+            {importSummary}
+          </div>
+        )}
 
         {/* Table */}
         <div className="flex-1 overflow-auto min-h-0">
@@ -306,6 +388,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                 <th className="w-10 px-3 py-2 text-left text-xs font-medium text-muted-foreground">#</th>
                 <th className="w-16 px-2 py-2 text-left text-xs font-medium text-muted-foreground">Preview</th>
                 <th className="w-[160px] px-2 py-2 text-left text-xs font-medium text-muted-foreground">File Name</th>
+                <th className="w-[160px] px-2 py-2 text-left text-xs font-medium text-muted-foreground">Campaign / Ad Set</th>
                 <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Headline</th>
                 <th className="w-[22%] px-2 py-2 text-left text-xs font-medium text-muted-foreground">Primary Text</th>
                 <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Description</th>
@@ -337,6 +420,26 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                     <p className="text-[10px] text-muted-foreground/60">{(row.file.size / 1024).toFixed(0)} KB</p>
                   </td>
                   <td className="px-2 py-2">
+                    {row.campaign_name || row.adset_name ? (
+                      <div className="space-y-1">
+                        {row.campaign_name && (
+                          <p className="text-[10px] leading-tight bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 truncate max-w-[150px]"
+                            title={row.campaign_name}>
+                            <span className="font-semibold">C:</span> {row.campaign_name}
+                          </p>
+                        )}
+                        {row.adset_name && (
+                          <p className="text-[10px] leading-tight bg-violet-50 text-violet-700 border border-violet-200 rounded px-1.5 py-0.5 truncate max-w-[150px]"
+                            title={row.adset_name}>
+                            <span className="font-semibold">A:</span> {row.adset_name}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/40 italic">—</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2">
                     <Input value={row.headline} onChange={e => update(row.id, "headline", e.target.value)}
                       className="h-8 text-xs" placeholder="Headline…" disabled={row.status === "uploading" || row.status === "done"} />
                   </td>
@@ -357,19 +460,24 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                     </select>
                   </td>
                   <td className="px-2 py-2">
-                    <select value={row.link_url} onChange={e => update(row.id, "link_url", e.target.value)}
+                    <Input
+                      type="url"
+                      value={row.link_url}
+                      onChange={e => update(row.id, "link_url", e.target.value)}
+                      className="h-8 text-xs"
+                      placeholder="https://..."
                       disabled={row.status === "uploading" || row.status === "done"}
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs disabled:opacity-50">
-                      <option value="">— None —</option>
-                      {pageLinks.map(p => <option key={p.id} value={p.url}>{p.name}</option>)}
-                    </select>
+                    />
                   </td>
                   <td className="px-2 py-2">
                     {row.status === "pending" && <span className="text-xs text-muted-foreground">Pending</span>}
                     {row.status === "uploading" && <IconLoader2 className="size-4 animate-spin text-primary" />}
                     {row.status === "done" && <IconCheck className="size-4 text-green-500" />}
                     {row.status === "error" && (
-                      <span className="text-xs text-destructive" title={row.error}>Error</span>
+                      <span className="text-xs text-destructive leading-tight" title={row.error}>
+                        Lỗi<br/>
+                        <span className="text-[10px] opacity-70 break-all">{row.error?.slice(0, 60)}</span>
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -379,7 +487,13 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
         </div>
 
         {/* Footer */}
-        <div className="border-t px-6 py-3 flex items-center justify-between shrink-0">
+        <div className="border-t px-6 py-3 flex flex-col gap-2 shrink-0">
+          {uploadError && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive font-medium">
+              ⚠ {uploadError}
+            </div>
+          )}
+          <div className="flex items-center justify-between">
           <div className="text-sm text-muted-foreground">
             {uploading
               ? `Uploading… ${doneCount}/${rows.length}`
@@ -401,6 +515,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                 ? <><IconLoader2 className="size-4 animate-spin mr-1.5" />Uploading…</>
                 : <><IconUpload className="size-4 mr-1.5" />Upload All ({rows.length})</>}
             </Button>
+          </div>
           </div>
         </div>
       </DialogContent>

@@ -5,6 +5,14 @@ import { useAdAccount } from "@/lib/ad-account-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -21,6 +29,8 @@ import {
   IconLayoutGrid,
   IconAd2,
   IconRefresh,
+  IconTrash,
+  IconAlertTriangle,
 } from "@tabler/icons-react"
 
 interface AdAccount {
@@ -102,6 +112,9 @@ export default function CampaignsPage() {
   const [loadingAds, setLoadingAds] = useState<string | null>(null)
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<string>>(new Set())
   const [expandedAdSets, setExpandedAdSets] = useState<Set<string>>(new Set())
+  const [deletingCampaign, setDeletingCampaign] = useState<string | null>(null)
+  const [confirmTarget, setConfirmTarget] = useState<{ id: string; name: string } | null>(null)
+  const [deleteError, setDeleteError] = useState("")
 
   const fetchCampaigns = useCallback(async () => {
     if (!selectedAccount) return
@@ -124,6 +137,28 @@ export default function CampaignsPage() {
   useEffect(() => {
     fetchCampaigns()
   }, [fetchCampaigns])
+
+  const confirmDelete = (campaignId: string, campaignName: string) => {
+    setDeleteError("")
+    setConfirmTarget({ id: campaignId, name: campaignName })
+  }
+
+  const deleteCampaign = async () => {
+    if (!confirmTarget) return
+    setDeletingCampaign(confirmTarget.id)
+    setDeleteError("")
+    try {
+      const res = await fetch(`/api/facebook/campaigns/${confirmTarget.id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to delete")
+      setCampaigns(prev => prev.filter(c => c.id !== confirmTarget.id))
+      setConfirmTarget(null)
+    } catch (err: any) {
+      setDeleteError(err.message)
+    } finally {
+      setDeletingCampaign(null)
+    }
+  }
 
   const toggleCampaign = async (campaignId: string) => {
     const next = new Set(expandedCampaigns)
@@ -257,8 +292,8 @@ export default function CampaignsPage() {
 
             return (
               <div key={campaign.id} className="rounded-lg border">
-                <button
-                  className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50"
+                <div
+                  className="flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/50 cursor-pointer"
                   onClick={() => toggleCampaign(campaign.id)}
                 >
                   {isExpanded ? (
@@ -291,7 +326,17 @@ export default function CampaignsPage() {
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {formatDate(campaign.created_time)}
                   </span>
-                </button>
+                  <button
+                    className="ml-1 shrink-0 rounded p-1 text-muted-foreground/50 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    onClick={e => { e.stopPropagation(); confirmDelete(campaign.id, campaign.name) }}
+                    disabled={deletingCampaign === campaign.id}
+                    title="Delete campaign"
+                  >
+                    {deletingCampaign === campaign.id
+                      ? <IconLoader2 className="size-3.5 animate-spin" />
+                      : <IconTrash className="size-3.5" />}
+                  </button>
+                </div>
 
                 {/* Ad Sets */}
                 {isExpanded && (
@@ -407,6 +452,35 @@ export default function CampaignsPage() {
           })}
         </div>
       )}
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!confirmTarget} onOpenChange={open => { if (!open && !deletingCampaign) { setConfirmTarget(null); setDeleteError("") } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <IconAlertTriangle className="size-5" />
+              Xóa Campaign
+            </DialogTitle>
+            <DialogDescription>
+              Bạn có chắc muốn xóa campaign{" "}
+              <span className="font-semibold text-foreground">"{confirmTarget?.name}"</span>?
+              <br />
+              Hành động này không thể hoàn tác.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{deleteError}</p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setConfirmTarget(null); setDeleteError("") }} disabled={!!deletingCampaign}>
+              Hủy
+            </Button>
+            <Button variant="destructive" onClick={deleteCampaign} disabled={!!deletingCampaign}>
+              {deletingCampaign ? <IconLoader2 className="size-4 animate-spin mr-1.5" /> : <IconTrash className="size-4 mr-1.5" />}
+              Xóa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getAdDetails, createCampaign, createAdSet, createAd } from "@/lib/facebook"
+import { getAdDetails, createCampaign, createAdSet, createAd, getVideoThumbnail } from "@/lib/facebook"
 
 function applyPattern(pattern: string, ctx: { filename?: string; index?: number; date: string; shortDate: string }) {
   let r = pattern
@@ -59,10 +59,10 @@ async function buildAdset(
 
   // OUTCOME_ENGAGEMENT requires destination_type so Facebook knows what kind of engagement to optimize for
   const destinationType = campaignObjective === "OUTCOME_ENGAGEMENT" ? "ON_POST" : undefined
-  const promotedObject = pixelId ? {
-    pixel_id: pixelId,
-    custom_event_type: pixelEvent || "PURCHASE"
-  } : undefined
+  // promoted_object: use explicit pixelId if provided, otherwise inherit from template adset
+  const promotedObject = pixelId
+    ? { pixel_id: pixelId, custom_event_type: pixelEvent || "PURCHASE" }
+    : (template.adset.promoted_object || undefined)
   // Keep only standard targeting fields to avoid v25 conflicts
   const rawTargeting = template.adset.targeting || {}
   const safeTargeting: Record<string, any> = {}
@@ -76,6 +76,14 @@ async function buildAdset(
   if (rawTargeting.genders) safeTargeting.genders = rawTargeting.genders
   // flexible_spec (interest targeting) intentionally excluded — causes v25 API conflicts
 
+  // Budget priority: explicit user input → template adset budget → undefined (will fail FB validation)
+  let budgetCents: string | undefined
+  if (dailyBudget && dailyBudget > 0) {
+    budgetCents = String(Math.round(dailyBudget * 100))
+  } else if (template.adset.daily_budget) {
+    budgetCents = template.adset.daily_budget // already in cents from Facebook API
+  }
+
   return createAdSet(adAccountId, token, {
     name,
     campaign_id: campaignId,
@@ -83,7 +91,7 @@ async function buildAdset(
     optimization_goal: optimizationGoal,
     billing_event: billingEvent,
     bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-    daily_budget: dailyBudget ? String(Math.round(dailyBudget * 100)) : undefined,
+    daily_budget: budgetCents,
     status: "PAUSED",
     start_time: startTime,
     destination_type: destinationType,
@@ -154,12 +162,19 @@ async function createAdsInAdset(
       continue
     }
     try {
+      // Facebook v25 requires image_url in video_data — fetch thumbnail if not stored
+      let thumbnailUrl: string | undefined = creative.fb_thumbnail_url || undefined
+      if (creative.fb_video_id && !thumbnailUrl) {
+        thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token)) || undefined
+      }
+
       const ad = await createAd(adAccountId, token, {
         name: resolveName(baseName, startIndex + i),
         adset_id: adsetId,
         page_id: pageId,
         image_hash: creative.fb_image_hash || undefined,
         video_id: creative.fb_video_id || undefined,
+        thumbnail_url: thumbnailUrl,
         title,
         body,
         description,
@@ -362,11 +377,19 @@ export async function POST(request: NextRequest) {
     }
     const resolvedObjective = LEGACY_OBJECTIVE_MAP[template.campaign.objective] ?? template.campaign.objective
 
+    // Detect whether the template uses CBO (budget at campaign level) or non-CBO (budget at adset level)
+    const isCBO = !!template.campaign.daily_budget
+    // For CBO: budget goes to campaign; adsets have no budget
+    // For non-CBO: campaign has is_adset_budget_sharing_enabled=false; budget goes to adsets
+    const campaignDailyBudget = isCBO ? adsetDailyBudget : undefined
+    const campaignBidStrategy = isCBO ? (template.campaign.bid_strategy || "LOWEST_COST_WITHOUT_CAP") : undefined
+    const adsetBudgetAmount = isCBO ? undefined : adsetDailyBudget
+
     // Resolve adset for a given campaignId
     async function resolveAdset(campaignId: string, creativeSubset: any[], index = 1) {
       if (adsetMode === "existing") return existingAdsetId || template.adset.id
       if (adsetMode === "new") {
-        const s = await buildAdset(adAccountId, token, template, campaignId, newAdsetName || template.adset.name, adsetDailyBudget, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
+        const s = await buildAdset(adAccountId, token, template, campaignId, newAdsetName || template.adset.name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
         return s.id
       }
       if (adsetMode === "per_creative") {
@@ -375,7 +398,7 @@ export async function POST(request: NextRequest) {
       }
       if (adsetMode === "auto_divide") {
         const name = applyPattern(autoDividePattern || "Ad Set {index:01}", { index, date: dateStr, shortDate: shortDateStr })
-        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
+        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
         return s.id
       }
     }
@@ -393,10 +416,12 @@ export async function POST(request: NextRequest) {
           objective: resolvedObjective,
           special_ad_categories: template.campaign.special_ad_categories || [],
           status: "PAUSED",
+          daily_budget: campaignDailyBudget,
+          bid_strategy: campaignBidStrategy,
         })
         for (const adsetConfig of campConfig.adsets) {
           if (!adsetConfig.creativeIds?.length) continue
-          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetDailyBudget, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
+          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
           const adsetCreatives = creatives.filter((c: any) => adsetConfig.creativeIds.includes(c.id))
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
           const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
@@ -418,7 +443,10 @@ export async function POST(request: NextRequest) {
       for (const name of (multipleCampaignNames || []).filter((n: string) => n.trim())) {
         const c = await createCampaign(adAccountId, token, {
           name, objective: resolvedObjective,
-          special_ad_categories: template.campaign.special_ad_categories || [], status: "PAUSED",
+          special_ad_categories: template.campaign.special_ad_categories || [],
+          status: "PAUSED",
+          daily_budget: campaignDailyBudget,
+          bid_strategy: campaignBidStrategy,
         })
         campaignIds.push(c.id)
       }
@@ -426,7 +454,10 @@ export async function POST(request: NextRequest) {
       const c = await createCampaign(adAccountId, token, {
         name: newCampaignName || template.campaign.name,
         objective: resolvedObjective,
-        special_ad_categories: template.campaign.special_ad_categories || [], status: "PAUSED",
+        special_ad_categories: template.campaign.special_ad_categories || [],
+        status: "PAUSED",
+        daily_budget: campaignDailyBudget,
+        bid_strategy: campaignBidStrategy,
       })
       campaignIds.push(c.id)
     } else {
@@ -450,7 +481,7 @@ export async function POST(request: NextRequest) {
           const creative = campaignCreatives[i]
           const filename = creative.file_name.replace(/\.[^/.]+$/, "")
           const name = applyPattern(adsetNamePattern || "{filename}", { filename, index: i + 1, date: dateStr, shortDate: shortDateStr })
-          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetDailyBudget, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
+          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
           const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
           allResults.push(...results)
