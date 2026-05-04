@@ -315,62 +315,69 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
     const cleanId = adAccountId.replace(/^act_/, "")
     const completed: any[] = []
 
-    for (const row of rows) {
-      if (row.status === "done") continue
-      setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "uploading" } : r))
-      try {
-        const isVideo = row.file.type.startsWith("video/")
-        let fbImageHash = null, fbImageUrl = null, fbThumbnailUrl = null, fbVideoId = null
-        const metaForm = new FormData()
+    const uploadRow = async (row: PendingRow) => {
+      setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "uploading", uploadProgress: 0 } : r))
+      const isVideo = row.file.type.startsWith("video/")
+      let fbImageHash = null, fbImageUrl = null, fbThumbnailUrl = null, fbVideoId = null
 
-        if (isVideo) {
-          fbVideoId = await uploadVideo(row.file, cleanId, accessToken, (pct) => {
-            setRows(prev => prev.map(r => r.id === row.id ? { ...r, uploadProgress: pct } : r))
-          })
-        } else {
-          metaForm.append("filename", row.file)
-          const res = await fetch(
-            `https://graph.facebook.com/v25.0/act_${cleanId}/adimages`,
-            { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
-          )
-          const d = await res.json()
-          if (d.error) throw new Error(d.error.message)
-          const imgVals = d.images ? Object.values(d.images) : []
-          const img: any = imgVals.length > 0 ? imgVals[0] : null
-          fbImageHash = img?.hash || null
-          fbImageUrl = img?.url || null
-          fbThumbnailUrl = img?.url_128 || img?.url || null
-        }
-
-        const dbRes = await fetch("/api/creatives", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ad_account_id: adAccountId || null,
-            file_name: row.file.name,
-            file_size: row.file.size,
-            media_type: isVideo ? "video" : "image",
-            campaign_name: row.campaign_name || null,
-            adset_name: row.adset_name || null,
-            headline: row.headline,
-            primary_text: row.primary_text,
-            description: row.description,
-            cta: row.cta || "LEARN_MORE",
-            link_url: row.link_url || "",
-            fb_image_hash: fbImageHash,
-            fb_image_url: fbImageUrl,
-            fb_thumbnail_url: fbThumbnailUrl,
-            fb_video_id: fbVideoId,
-          }),
+      if (isVideo) {
+        fbVideoId = await uploadVideo(row.file, cleanId, accessToken, (pct) => {
+          setRows(prev => prev.map(r => r.id === row.id ? { ...r, uploadProgress: pct } : r))
         })
-        if (!dbRes.ok) throw new Error("Failed to save")
-        const data = await dbRes.json()
-        completed.push(data.creative)
-        setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "done" } : r))
-      } catch (err: any) {
-        setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "error", error: err.message } : r))
+      } else {
+        const metaForm = new FormData()
+        metaForm.append("filename", row.file)
+        const res = await fetch(
+          `https://graph.facebook.com/v25.0/act_${cleanId}/adimages`,
+          { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: metaForm }
+        )
+        const d = await res.json()
+        if (d.error) throw new Error(d.error.message)
+        const imgVals = d.images ? Object.values(d.images) : []
+        const img: any = imgVals.length > 0 ? imgVals[0] : null
+        fbImageHash = img?.hash || null
+        fbImageUrl = img?.url || null
+        fbThumbnailUrl = img?.url_128 || img?.url || null
       }
+
+      const dbRes = await fetch("/api/creatives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ad_account_id: adAccountId || null,
+          file_name: row.file.name,
+          file_size: row.file.size,
+          media_type: isVideo ? "video" : "image",
+          campaign_name: row.campaign_name || null,
+          adset_name: row.adset_name || null,
+          headline: row.headline,
+          primary_text: row.primary_text,
+          description: row.description,
+          cta: row.cta || "LEARN_MORE",
+          link_url: row.link_url || "",
+          fb_image_hash: fbImageHash,
+          fb_image_url: fbImageUrl,
+          fb_thumbnail_url: fbThumbnailUrl,
+          fb_video_id: fbVideoId,
+        }),
+      })
+      if (!dbRes.ok) throw new Error("Failed to save")
+      const data = await dbRes.json()
+      return data.creative
     }
+
+    // Upload tất cả song song
+    const pending = rows.filter(r => r.status !== "done")
+    const results = await Promise.allSettled(pending.map(row => uploadRow(row)))
+    results.forEach((result, i) => {
+      const row = pending[i]
+      if (result.status === "fulfilled") {
+        completed.push(result.value)
+        setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "done" } : r))
+      } else {
+        setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "error", error: result.reason?.message || "Upload failed" } : r))
+      }
+    })
 
     setUploading(false)
     if (completed.length > 0) onComplete(completed)
