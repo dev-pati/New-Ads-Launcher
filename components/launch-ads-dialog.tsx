@@ -858,6 +858,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                         <div className="max-h-80 overflow-y-auto space-y-0.5">
                           {!selectedCampaign ? <p className="text-center text-xs text-muted-foreground py-4">Select a campaign first</p>
                             : loadingAdsets ? <div className="flex justify-center py-4"><IconLoader2 className="size-4 animate-spin" /></div>
+                            : filteredAdsets.length === 0 ? <p className="text-center text-xs text-muted-foreground py-4">No ad sets found in this campaign</p>
                             : filteredAdsets.map((a) => (
                               <button key={a.id} onClick={() => setSelectedAdset(selectedAdset?.id === a.id ? null : a)}
                                 className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted break-words leading-tight ${selectedAdset?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
