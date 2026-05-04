@@ -227,12 +227,8 @@ export async function getAdSets(
     "campaign_id",
     "daily_budget",
     "lifetime_budget",
-    "targeting",
     "optimization_goal",
     "billing_event",
-    "bid_amount",
-    "start_time",
-    "end_time",
     "created_time",
   ].join(",")
 
