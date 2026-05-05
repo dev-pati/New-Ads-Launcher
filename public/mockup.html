@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AdLauncher — Wireframe Mockup</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f1117;color:#fff;height:100vh;display:flex;flex-direction:column}
+  header{background:#161b27;border-bottom:1px solid #2a2f3e;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+  header h1{font-size:15px;font-weight:700;color:#fff}
+  header p{font-size:12px;color:#6b7280}
+  .tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  .tab{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #2a2f3e;background:#1e2433;color:#9ca3af;transition:.15s}
+  .tab:hover{background:#2a2f3e;color:#fff}
+  .tab.active{background:#2563eb;border-color:#2563eb;color:#fff}
+  .canvas-wrap{flex:1;overflow:hidden;position:relative}
+  canvas{display:block;width:100%;height:100%}
+  .note{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.3);border-radius:8px;padding:8px 16px;font-size:12px;color:#93c5fd;pointer-events:none}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>🚀 AdLauncher — Wireframe</h1>
+    <p>Sơ đồ giao diện để duyệt trước khi xây dựng</p>
+  </div>
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-screen="onboard">1. Onboarding</div>
+    <div class="tab" data-screen="dashboard">2. Dashboard</div>
+    <div class="tab" data-screen="launch">3. Bulk Launch</div>
+    <div class="tab" data-screen="assets">4. Assets</div>
+    <div class="tab" data-screen="adsmanager">5. Ads Manager</div>
+    <div class="tab" data-screen="analytics">6. Analytics</div>
+    <div class="tab" data-screen="automation">7. Automation</div>
+    <div class="tab" data-screen="team">8. Team</div>
+  </div>
+</header>
+<div class="canvas-wrap">
+  <canvas id="c"></canvas>
+  <div class="note">Click các tab phía trên để xem từng màn hình • Đây là wireframe để duyệt concept</div>
+</div>
+
+<script>
+const canvas = document.getElementById('c')
+const ctx = canvas.getContext('2d')
+let W, H, scale
+let currentScreen = 'onboard'
+
+function resize(){
+  const wrap = canvas.parentElement
+  W = wrap.clientWidth; H = wrap.clientHeight
+  canvas.width = W * devicePixelRatio
+  canvas.height = H * devicePixelRatio
+  canvas.style.width = W + 'px'
+  canvas.style.height = H + 'px'
+  ctx.scale(devicePixelRatio, devicePixelRatio)
+  scale = Math.min(W/1280, H/780)
+  draw()
+}
+
+// ── Helpers ──────────────────────────────────
+const C = {
+  bg:     '#0f1117',
+  sidebar:'#161b27',
+  panel:  '#1a1f2e',
+  card:   '#1e2433',
+  border: '#2a2f3e',
+  blue:   '#2563eb',
+  blueL:  '#3b82f6',
+  green:  '#16a34a',
+  orange: '#d97706',
+  red:    '#dc2626',
+  text:   '#f9fafb',
+  muted:  '#6b7280',
+  dim:    '#374151',
+}
+
+function px(v){ return v * scale }
+
+function r(x,y,w,h,rad=0,fill=null,stroke=null){
+  ctx.beginPath()
+  if(rad){
+    const r2=Math.min(rad,w/2,h/2)
+    ctx.moveTo(x+r2,y); ctx.lineTo(x+w-r2,y)
+    ctx.arcTo(x+w,y,x+w,y+r2,r2)
+    ctx.lineTo(x+w,y+h-r2)
+    ctx.arcTo(x+w,y+h,x+w-r2,y+h,r2)
+    ctx.lineTo(x+r2,y+h)
+    ctx.arcTo(x,y+h,x,y+h-r2,r2)
+    ctx.lineTo(x,y+r2)
+    ctx.arcTo(x,y,x+r2,y,r2)
+  } else {
+    ctx.rect(x,y,w,h)
+  }
+  ctx.closePath()
+  if(fill){ctx.fillStyle=fill;ctx.fill()}
+  if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}
+}
+
+function t(text,x,y,size,color,align='left',bold=false){
+  ctx.font=`${bold?'700':'400'} ${px(size)}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`
+  ctx.fillStyle=color; ctx.textAlign=align
+  ctx.fillText(text,x,y)
+}
+
+function pill(x,y,w,h,fill,text,tcolor='#fff',size=11){
+  r(x,y,w,h,h/2,fill)
+  t(text,x+w/2,y+h/2+px(size)*.35,size,tcolor,'center',true)
+}
+
+function icon(emoji,x,y,size=18){
+  ctx.font=`${px(size)}px serif`
+  ctx.textAlign='center'
+  ctx.fillStyle='#fff'
+  ctx.fillText(emoji,x,y+px(size)*.35)
+}
+
+// ── SIDEBAR ──────────────────────────────────
+function drawSidebar(activeItem=''){
+  const sw=px(64), sh=H
+  r(0,0,sw,sh,0,C.sidebar)
+  r(sw-1,0,1,sh,0,C.border)
+
+  // Logo
+  r(px(12),px(12),px(40),px(40),px(8),C.blue)
+  t('A',px(32),px(38),18,'#fff','center',true)
+
+  const items=[
+    {e:'🚀',l:'Launch',y:80},
+    {e:'🖼️',l:'Assets',y:140},
+    {e:'📊',l:'Insights',y:200},
+    {e:'⚡',l:'Automate',y:260},
+    {e:'🔗',l:'Connect',y:320},
+    {e:'💡',l:'Inspo',y:380},
+  ]
+  items.forEach(it=>{
+    const active = it.l.toLowerCase()===activeItem
+    if(active) r(0,px(it.y-4),sw,px(48),0,'rgba(37,99,235,.2)')
+    r(active?0:sw,px(it.y-4),3,px(48),0,active?C.blue:null)
+    ctx.font=`${px(20)}px serif`; ctx.textAlign='center'
+    ctx.fillText(it.e,px(32),px(it.y+16))
+    t(it.l,px(32),px(it.y+34),9,active?C.blueL:C.muted,'center')
+  })
+
+  // Bottom
+  const bots=[{e:'🔍',l:'Search',y:460},{e:'🎁',l:'Rewards',y:510},{e:'⚙️',l:'Settings',y:560}]
+  bots.forEach(it=>{
+    ctx.font=`${px(16)}px serif`; ctx.textAlign='center'
+    ctx.fillText(it.e,px(32),px(it.y+10))
+    t(it.l,px(32),px(it.y+26),9,C.muted,'center')
+  })
+
+  // Avatar
+  r(px(14),H-px(50),px(36),px(36),px(18),C.blue)
+  t('T',px(32),H-px(25),14,'#fff','center',true)
+}
+
+// ── SECOND SIDEBAR ────────────────────────────
+function drawSubSidebar(items, active=''){
+  const x=px(64), sw=px(150), sh=H
+  r(x,0,sw,sh,0,C.panel)
+  r(x+sw-1,0,1,sh,0,C.border)
+  t('LAUNCH',x+px(16),px(24),9,C.muted,'left',true)
+  items.forEach((it,i)=>{
+    const y=px(36+i*36), act=it===active
+    if(act) r(x,y,sw,px(30),0,'rgba(37,99,235,.15)')
+    t((act?'▸ ':'')+it, x+px(act?20:16),y+px(20),12,act?C.blueL:C.text,'left',act)
+  })
+  // upgrade
+  r(x+px(10),H-px(60),sw-px(20),px(36),px(8),'rgba(234,179,8,.1)')
+  t('⚡ Upgrade Plan',x+px(sw/2),H-px(36),11,'#eab308','center',true)
+}
+
+// ── TOPBAR ────────────────────────────────────
+function drawTopbar(x,title,steps=[],activeStep=0){
+  r(x,0,W-x,px(52),0,C.sidebar)
+  r(x,px(51),W-x,1,0,C.border)
+  t(title,x+px(20),px(32),15,C.text,'left',true)
+
+  if(steps.length){
+    // progress steps centered
+    const cx=(x+(W-x)/2), totalW=px(steps.length*160)
+    const sx=cx-totalW/2
+    steps.forEach((s,i)=>{
+      const done=i<activeStep, active2=i===activeStep
+      const col=done?C.green:active2?C.blue:C.dim
+      // circle
+      r(sx+i*px(160),px(16),px(20),px(20),px(10),col)
+      t(`${i+1}`,sx+i*px(160)+px(10),px(31),10,'#fff','center',true)
+      t(s,sx+i*px(160)+px(10),px(50),10,active2?C.text:C.muted,'center')
+      // line
+      if(i<steps.length-1){
+        r(sx+i*px(160)+px(20),px(25),px(140),px(2),0,done?C.green:C.dim)
+      }
+    })
+  }
+}
+
+// ── SCREENS ──────────────────────────────────
+
+function screenOnboard(){
+  r(0,0,W,H,0,C.bg)
+  drawSidebar('launch')
+  drawSubSidebar(['Ad Launcher','Ads Manager','Templates'],'Ad Launcher')
+
+  const cx=px(214), cw=W-cx
+  drawTopbar(cx,'Get started',['Connect','Billing','Launch'],0)
+
+  // Step indicator
+  t('Step 1 of 3',cx+px(20),px(24),11,C.muted)
+  // progress bar
+  r(cx,px(51),cw,px(3),0,C.dim)
+  r(cx,px(51),cw*0.33,px(3),0,C.blue)
+
+  // Card
+  const cardX=cx+px(60), cardW=cw-px(120), cardY=px(70), cardH=H-px(90)
+  r(cardX,cardY,cardW,cardH,px(12),C.card,C.border)
+
+  // Title
+  icon('🔗',cardX+cardW/2,cardY+px(52),28)
+  t('Connect your ad platform',cardX+cardW/2,cardY+px(100),18,C.text,'center',true)
+  t('Connect at least one ad platform to get started. You can add more later.',cardX+cardW/2,cardY+px(124),12,C.muted,'center')
+
+  // Platform grid
+  const platforms=[
+    {name:'Meta',color:'#1877f2',e:'f'},
+    {name:'TikTok',color:'#010101',e:'♪'},
+    {name:'Google Ads',color:'#4285f4',e:'G'},
+    {name:'Snapchat',color:'#fffc00',e:'👻'},
+    {name:'Pinterest',color:'#e60023',e:'P'},
+    {name:'Taboola',color:'#1877f2',e:'T'},
+  ]
+  const cols=3, gw=px(170), gh=px(110), gx=cardX+(cardW-cols*gw-px(20)*(cols-1))/2, gy=cardY+px(148)
+  platforms.forEach((p,i)=>{
+    const col=i%cols, row=Math.floor(i/cols)
+    const bx=gx+col*(gw+px(20)), by=gy+row*(gh+px(16))
+    r(bx,by,gw,gh,px(10),C.panel,C.border)
+    // logo circle
+    r(bx+gw/2-px(22),by+px(14),px(44),px(44),px(22),p.color+'33')
+    t(p.e,bx+gw/2,by+px(46),16,p.color,'center',true)
+    t(p.name,bx+gw/2,by+px(72),11,C.text,'center',true)
+    pill(bx+(gw-px(80))/2,by+gh-px(26),px(80),px(20),C.blue,'Connect','#fff',10)
+  })
+}
+
+function screenDashboard(){
+  r(0,0,W,H,0,C.bg)
+  drawSidebar('insights')
+  drawSubSidebar(['Overview','Performance','Batches'],'Overview')
+
+  const cx=px(214), cw=W-cx
+  drawTopbar(cx,'Dashboard')
+
+  // Stats row
+  const stats=[
+    {label:'Ads Launched Today',val:'124',icon:'🚀',col:C.blue},
+    {label:'Active Campaigns',val:'38',icon:'📁',col:C.green},
+    {label:'Total Spend',val:'$12,450',icon:'💸',col:C.orange},
+    {label:'Avg ROAS',val:'3.4x',icon:'📈',col:'#8b5cf6'},
+  ]
+  const sw2=(cw-px(80))/4, sx=cx+px(20)
+  stats.forEach((s,i)=>{
+    const bx=sx+i*(sw2+px(16)), by=px(68)
+    r(bx,by,sw2,px(80),px(10),C.card,C.border)
+    r(bx+px(12),by+px(12),px(36),px(36),px(8),s.col+'22')
+    icon(s.icon,bx+px(30),by+px(36),18)
+    t(s.val,bx+sw2-px(12),by+px(36),18,C.text,'right',true)
+    t(s.label,bx+px(12),by+px(64),10,C.muted)
+  })
+
+  // Chart placeholder
+  const chartY=px(168), chartH=H-px(330)
+  r(cx+px(20),chartY,cw-px(270),chartH,px(10),C.card,C.border)
+  t('📊 Ad Performance (Spend / ROAS)',cx+px(36),chartY+px(26),12,C.text,'left',true)
+  // fake bars
+  const bars=7, bw2=px(30), bsp=px(16)
+  const btotalW=bars*(bw2+bsp), bsx=cx+px(20)+(cw-px(270)-btotalW)/2
+  const labels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const vals=[55,70,45,90,80,60,85]
+  for(let i=0;i<bars;i++){
+    const bh=vals[i]/100*(chartH-px(70))
+    const bx2=bsx+i*(bw2+bsp), by2=chartY+chartH-px(40)-bh
+    r(bx2,by2,bw2,bh,px(4),C.blue+'88')
+    t(labels[i],bx2+bw2/2,chartY+chartH-px(24),9,C.muted,'center')
+  }
+
+  // Batch history
+  const listX=cx+px(20)+(cw-px(270)), listW=px(230), listY=chartY
+  r(listX,listY,listW,chartH,px(10),C.card,C.border)
+  t('Recent Batches',listX+px(14),listY+px(26),12,C.text,'left',true)
+  const batches=['Batch #42 — 24 ads','Batch #41 — 18 ads','Batch #40 — 36 ads','Batch #39 — 12 ads']
+  batches.forEach((b,i)=>{
+    const by3=listY+px(44)+i*px(46)
+    r(listX+px(10),by3,listW-px(20),px(38),px(6),C.panel)
+    t(b,listX+px(20),by3+px(15),11,C.text)
+    pill(listX+listW-px(60),by3+px(8),px(48),px(18),C.green+'33','Done','#4ade80',9)
+  })
+
+  // Team
+  const teamY=chartY+chartH+px(16), teamH=H-teamY-px(16)
+  r(cx+px(20),teamY,cw-px(40),teamH,px(10),C.card,C.border)
+  t('👥 Team Activity',cx+px(34),teamY+px(24),12,C.text,'left',true)
+  const members=['Thuan N.','Kevin L.','Anna P.','David K.']
+  const mv=[42,38,29,17]
+  members.forEach((m,i)=>{
+    const mx2=cx+px(80)+i*((cw-px(120))/4), my=teamY+px(44)
+    r(mx2-px(18),my,px(36),px(36),px(18),['#2563eb','#7c3aed','#0891b2','#16a34a'][i])
+    t(m[0],mx2,my+px(22),14,'#fff','center',true)
+    t(m,mx2,my+px(54),10,C.muted,'center')
+    t(mv[i]+' ads',mx2,my+px(68),11,C.text,'center',true)
+  })
+}
+
+function screenLaunch(){
+  r(0,0,W,H,0,C.bg)
+  drawSidebar('launch')
+  drawSubSidebar(['Ad Launcher','Ads Manager','Templates'],'Ad Launcher')
+
+  const cx=px(214), cw=W-cx
+  drawTopbar(cx,'Bulk Ad Launcher')
+
+  // Left panel — upload
+  const lx=cx+px(16), lw=px(340), ly=px(68), lh=H-py-px(16)
+  r(lx,ly,lw,H-ly-px(16),px(10),C.card,C.border)
+  t('📁 Upload Creative',lx+px(16),ly+px(28),13,C.text,'left',true)
+
+  // drop zone
+  const dz=ly+px(44)
+  r(lx+px(12),dz,lw-px(24),px(120),px(10),C.panel)
+  ctx.setLineDash([5,4]); ctx.strokeStyle=C.border; ctx.lineWidth=1.5
+  ctx.strokeRect(lx+px(12),dz,lw-px(24),px(120))
+  ctx.setLineDash([])
+  icon('☁️',lx+lw/2,dz+px(50),28)
+  t('Drag & drop files here',lx+lw/2,dz+px(84),11,C.muted,'center')
+  t('or click to browse',lx+lw/2,dz+px(100),10,C.muted,'center')
+  pill(lx+lw/2-px(55),dz+px(108),px(110),px(22),C.blue,'Browse Files','#fff',10)
+
+  // Cloud integrations
+  t('Connect cloud storage:',lx+px(16),dz+px(148),10,C.muted)
+  const clouds=['Drive','Dropbox','Frame.io','Box']
+  clouds.forEach((c,i)=>{
+    pill(lx+px(16)+i*px(76),dz+px(158),px(68),px(22),C.dim,c,C.text,9)
+  })
+
+  // File list
+  const files=['video_01.mp4','banner_sale.jpg','story_en.mp4','carousel_1.jpg','video_02.mp4']
+  const fstatus=[C.green,C.green,C.blue,C.orange,C.dim]
+  const flabel=['Ready','Ready','Uploading','Processing','Queued']
+  files.forEach((f,i)=>{
+    const fy=dz+px(196)+i*px(38)
+    r(lx+px(10),fy,lw-px(20),px(30),px(6),C.panel)
+    const isVid=f.endsWith('.mp4')
+    icon(isVid?'🎬':'🖼️',lx+px(28),fy+px(20),12)
+    t(f,lx+px(44),fy+px(20),11,C.text)
+    pill(lx+lw-px(90),fy+px(6),px(76),px(18),fstatus[i]+'22',flabel[i],fstatus[i]==='#d97706'?'#fbbf24':fstatus[i]==='#2563eb'?'#93c5fd':fstatus[i]===C.dim?C.muted:'#4ade80',9)
+  })
+
+  // Right panel — config
+  const rx=lx+lw+px(16), rw=W-rx-px(16)
+  r(rx,ly,rw,H-ly-px(16),px(10),C.card,C.border)
+  t('⚙️ Launch Configuration',rx+px(16),ly+px(28),13,C.text,'left',true)
+
+  // Platforms
+  t('Target Platform',rx+px(16),ly+px(56),10,C.muted,'left',true)
+  const plats=['Meta','TikTok','Google','Snapchat']
+  const psel=[true,false,false,false]
+  plats.forEach((p,i)=>{
+    const px2=rx+px(16)+i*(rw/4-px(4))
+    r(px2,ly+px(64),rw/4-px(12),px(36),px(8),psel[i]?'rgba(37,99,235,.2)':C.panel,psel[i]?C.blue:C.border)
+    t(p,px2+(rw/4-px(12))/2,ly+px(88),11,psel[i]?C.blueL:C.text,'center',psel[i])
+  })
+
+  // Campaign
+  const ry2=ly+px(116)
+  t('Campaign',rx+px(16),ry2,10,C.muted,'left',true)
+  r(rx+px(16),ry2+px(8),rw-px(32),px(34),px(6),C.panel,C.border)
+  t('● Create new campaign',rx+px(28),ry2+px(30),11,C.text)
+  r(rx+rw-px(100),ry2+px(14),px(84),px(22),px(6),C.panel,C.border)
+  t('Existing ▾',rx+rw-px(58),ry2+px(30),10,C.muted,'center')
+
+  // Ad set mode
+  const ry3=ry2+px(62)
+  t('Ad Set Mode',rx+px(16),ry3,10,C.muted,'left',true)
+  const modes=['1 Ad Set','Per Creative','Auto-divide','Custom']
+  const msel=[false,false,true,false]
+  modes.forEach((m,i)=>{
+    const mx=rx+px(16)+i*(rw/4-px(4))
+    r(mx,ry3+px(8),rw/4-px(12),px(30),px(6),msel[i]?'rgba(37,99,235,.2)':C.panel,msel[i]?C.blue:C.border)
+    t(m,mx+(rw/4-px(12))/2,ry3+px(28),10,msel[i]?C.blueL:C.text,'center',msel[i])
+  })
+
+  // Text content
+  const ry4=ry3+px(56)
+  t('Ad Content',rx+px(16),ry4,10,C.muted,'left',true)
+  const fields=[{l:'Headline',v:'Get 50% Off Today Only!'},{l:'Primary Text',v:'Don\'t miss our biggest sale...'},{l:'CTA',v:'SHOP_NOW'},{l:'Website URL',v:'https://example.com/sale'}]
+  fields.forEach((f,i)=>{
+    const fy=ry4+px(8)+i*px(48), fh=i===1?px(44):px(30)
+    t(f.l,rx+px(16),fy-px(2),9,C.muted)
+    r(rx+px(16),fy+px(2),rw-px(32),fh,px(6),C.panel,C.border)
+    t(f.v,rx+px(26),fy+px(18),10,C.text)
+  })
+
+  // Launch button
+  const btnY=H-px(70)
+  r(rx+px(16),btnY,rw-px(32),px(44),px(10),C.blue)
+  t('🚀  Launch 5 Ads',rx+px(16)+(rw-px(32))/2,btnY+px(27),14,'#fff','center',true)
+}
+
+function screenAssets(){
+  r(0,0,W,H,0,C.bg)
+  drawSidebar('assets')
+  drawSubSidebar(['All Assets','Images','Videos','Top Performers'],'All Assets')
+
+  const cx=px(214), cw=W-cx
+  drawTopbar(cx,'Creative Library')
+
+  // Toolbar
+  r(cx+px(16),px(68),cw-px(32),px(44),px(8),C.panel,C.border)
+  r(cx+px(24),px(80),px(200),px(22),px(6),C.card,C.border)
+  t('🔍 Search assets...',cx+px(34),px(96),10,C.muted)
+  pill(cx+px(240),px(76),px(70),px(28),C.dim,'All ▾','#fff',10)
+  pill(cx+px(318),px(76),px(80),px(28),C.dim,'Images ▾','#fff',10)
+  pill(cx+px(406),px(76),px(70),px(28),C.dim,'Videos ▾','#fff',10)
+  pill(cw-px(80),px(76),px(80),px(28),C.blue,'Upload','#fff',10)
+
+  // Grid
+  const cols2=5, gx2=cx+px(16), gw2=(cw-px(32)-px(16)*4)/5, gh2=px(160), topY=px(128)
+  const items2=[
+    {t:'video_hero.mp4',s:'4.2MB',m:'video',c:C.blue},
+    {t:'banner_sale.jpg',s:'890KB',m:'image',c:C.green},
+    {t:'story_01.mp4',s:'12MB',m:'video',c:C.blue},
+    {t:'carousel_1.jpg',s:'1.1MB',m:'image',c:C.green},
+    {t:'ugc_testimonial.mp4',s:'8.5MB',m:'video',c:C.blue},
+    {t:'promo_banner.jpg',s:'750KB',m:'image',c:C.green},
+    {t:'reel_format.mp4',s:'22MB',m:'video',c:C.blue},
+    {t:'product_shot.jpg',s:'2.1MB',m:'image',c:C.green},
+    {t:'animation.mp4',s:'5.8MB',m:'video',c:C.blue},
+    {t:'lifestyle.jpg',s:'1.6MB',m:'image',c:C.green},
+  ]
+  items2.forEach((it,i)=>{
+    const col=i%cols2, row=Math.floor(i/cols2)
+    const ix=gx2+col*(gw2+px(16)), iy=topY+row*(gh2+px(16))
+    r(ix,iy,gw2,gh2,px(8),C.card,C.border)
+    // thumbnail area
+    r(ix,iy,gw2,gh2-px(44),px(8),it.m==='video'?'#1a1a2e':'#1a2e1a')
+    icon(it.m==='video'?'🎬':'🖼️',ix+gw2/2,iy+(gh2-px(44))/2,24)
+    // info
+    t(it.t,ix+px(8),iy+gh2-px(28),9,C.text)
+    t(it.s,ix+px(8),iy+gh2-px(12),8,C.muted)
+    pill(ix+gw2-px(50),iy+gh2-px(34),px(42),px(16),it.c+'22',it.m==='video'?'Video':'Image',it.m==='video'?'#93c5fd':'#4ade80',8)
+  })
+}
+
+function screenAdsManager(){
+  r(0,0,W,H,0,C.bg)
+  drawSidebar('launch')
+  drawSubSidebar(['Ad Launcher','Ads Manager','Templates'],'Ads Manager')
+
+  const cx=px(214), cw=W-cx
+  drawTopbar(cx,'Ads Manager')
+
+  // Table header
+  const cols3=[
+    {l:'#',w:px(32)},{l:'Preview',w:px(70)},{l:'Name',w:px(180)},
+    {l:'Campaign',w:px(150)},{l:'Ad Set',w:px(140)},{l:'Headline',w:px(160)},
+    {l:'Primary Text',w:px(180)},{l:'CTA',w:px(90)},{l:'Status',w:px(90)},
+  ]
+  let colX=cx
+  const thY=px(68), thH=px(34)
+  r(cx,thY,cw,thH,0,C.panel)
+  r(cx,thY+thH-1,cw,1,0,C.border)
+  cols3.forEach(col=>{
+    t(col.l,colX+px(8),thY+px(22),10,C.muted,'left',true)
+    r(colX+col.w-1,thY,1,thH,0,C.border)
+    colX+=col.w
+  })
+
+  // Rows
+  const rows=[
+    {name:'video_hero.mp4',camp:'TEST CBO Q1',adset:'All - Auto Bid',hl:'50% Off Today!',pt:'Shop the biggest sale...',cta:'SHOP_NOW',status:'Ready',sc:C.green},
+    {name:'banner_sale.jpg',camp:'TEST CBO Q1',adset:'All - Auto Bid',hl:'Limited Time Offer',pt:'Get yours before it\'s...',cta:'LEARN_MORE',status:'Launched',sc:C.blue},
+    {name:'story_01.mp4',camp:'SCALE CBO',adset:'US - Broad',hl:'',pt:'',cta:'SIGN_UP',status:'Draft',sc:C.muted},
+    {name:'carousel_1.jpg',camp:'SCALE CBO',adset:'US - Broad',hl:'New Collection Drop',pt:'Discover our latest...',cta:'SHOP_NOW',status:'Ready',sc:C.green},
+    {name:'ugc_test.mp4',camp:'LAB ABO',adset:'UK - Interest',hl:'Real Results',pt:'See what our customers...',cta:'LEARN_MORE',status:'Ready',sc:C.green},
+    {name:'promo_banner.jpg',camp:'LAB ABO',adset:'UK - Interest',hl:'',pt:'',cta:'',status:'Draft',sc:C.muted},
+  ]
+  rows.forEach((row,i)=>{
+    const ry=thY+thH+i*px(40)
+    r(cx,ry,cw,px(40),0,i%2===0?C.card:C.panel)
+    r(cx,ry+px(39),cw,1,0,C.border)
+    let rx2=cx
+    // #
+    t(`${i+1}`,rx2+px(16),ry+px(24),10,C.muted,'center')
+    rx2+=px(32)
+    // preview
+    r(rx2+px(5),ry+px(5),px(30),px(30),px(4),C.dim)
+    icon(row.name.endsWith('.mp4')?'🎬':'🖼️',rx2+px(20),ry+px(22),14)
+    rx2+=px(70)
+    // cells
+    const cells=[row.name,row.camp,row.adset,row.hl,row.pt,row.cta]
+    const widths=[px(180),px(150),px(140),px(160),px(180),px(90)]
+    cells.forEach((c,j)=>{
+      const maxW=widths[j]-px(20)
+      ctx.save()
+      ctx.rect(rx2,ry,widths[j],px(40))
+      ctx.clip()
+      t(c||'—',rx2+px(8),ry+px(24),10,c?C.text:C.dim)
+      ctx.restore()
+      r(rx2+widths[j]-1,ry,1,px(40),0,C.border)
+      rx2+=widths[j]
+    })
+    // status
+    pill(rx2+px(8),ry+px(11),px(70),px(18),row.sc+'22',row.status,row.sc==='#6b7280'?C.muted:row.sc,9)
+  })
+
+  // Bottom bar
+  r(cx,H-px(40),cw,px(40),0,C.panel,C.border)
+  t('6 creatives · 4 Ready · 2 Draft',cx+px(20),H-px(14),11,C.muted)
+  pill(W-px(160),H-px(32),px(130),px(24),C.blue,'Launch Selected (4)','#fff',10)
+}
+
+function screenAnalytics(){
+  r(0,0,W,H,0,C.bg)
+  drawSidebar('insights')
+  drawSubSidebar(['Overview','Creative Perf.','ROAS','Competitors'],'Creative Perf.')
+
+  const cx=px(214), cw=W-cx
+  drawTopbar(cx,'Analytics — Creative Performance')
+
+  // KPIs
+  const kpis=[
+    {l:'Impressions',v:'2.4M',d:'+12%',up:true},
+    {l:'Clicks',v:'48.2K',d:'+8%',up:true},
+    {l:'Spend',v:'$12,450',d:'-3%',up:false},
+    {l:'ROAS',v:'3.4x',d:'+22%',up:true},
+    {l:'CPM',v:'$5.18',d:'-6%',up:true},
+  ]
+  const kw=(cw-px(40)-px(16)*4)/5
+  kpis.forEach((k,i)=>{
+    const kx=cx+px(20)+i*(kw+px(16)), ky=px(68)
+    r(kx,ky,kw,px(72),px(8),C.card,C.border)
+    t(k.v,kx+px(12),ky+px(34),18,C.text,'left',true)
+    t(k.l,kx+px(12),ky+px(52),9,C.muted)
+    const dc=k.up?C.green:C.red
+    pill(kx+kw-px(46),ky+px(8),px(40),px(18),dc+'22',k.d,dc,9)
+  })
+
+  // Top creatives table
+  const tY=px(158), tH=H-tY-px(16)
+  r(cx+px(20),tY,cw-px(280),tH,px(10),C.card,C.border)
+  t('🏆 Top Performing Creatives',cx+px(36),tY+px(26),13,C.text,'left',true)
+
+  const tcols=[{l:'Creative',w:px(160)},{l:'Impressions',w:px(100)},{l:'CTR',w:px(80)},{l:'ROAS',w:px(80)},{l:'Spend',w:px(90)},{l:'Status',w:px(80)}]
+  let tcx=cx+px(20)
+  tcols.forEach(c=>{
+    t(c.l,tcx+px(8),tY+px(52),9,C.muted,'left',true)
+    tcx+=c.w
+  })
+  r(cx+px(20),tY+px(56),cw-px(280),1,0,C.border)
+
+  const trows=[
+    {n:'video_hero.mp4',imp:'480K',ctr:'4.2%',roas:'5.1x',spend:'$2,100',s:'🟢'},
+    {n:'ugc_testimonial',imp:'320K',ctr:'3.8%',roas:'4.7x',spend:'$1,800',s:'🟢'},
+    {n:'banner_sale.jpg',imp:'280K',ctr:'2.9%',roas:'3.2x',spend:'$1,400',s:'🟢'},
+    {n:'story_01.mp4',imp:'190K',ctr:'2.1%',roas:'2.8x',spend:'$900',s:'🟡'},
+    {n:'carousel_1.jpg',imp:'150K',ctr:'1.8%',roas:'1.9x',spend:'$700',s:'🔴'},
+  ]
+  trows.forEach((row,i)=>{
+    const ry=tY+px(60)+i*px(42)
+    r(cx+px(20),ry,cw-px(280),px(42),0,i%2===0?'transparent':C.panel+'66')
+    let trx=cx+px(20)
+    icon(row.n.endsWith('.mp4')?'🎬':'🖼️',trx+px(14),ry+px(22),12)
+    t(row.n.replace(/\.(mp4|jpg)/,''),trx+px(26),ry+px(24),10,C.text)
+    trx+=px(160)
+    ;[row.imp,row.ctr,row.roas,row.spend].forEach((v,j)=>{
+      const w=[px(100),px(80),px(80),px(90)][j]
+      t(v,trx+px(8),ry+px(24),11,j===2?'#4ade80':j===1?C.blueL:C.text)
+      trx+=w
+    })
+    t(row.s,trx+px(12),ry+px(24),14,C.text,'center')
+  })
+
+  // Sidebar chart
+  const scx=W-px(244), scw=px(230)
+  r(scx,tY,scw,tH,px(10),C.card,C.border)
+  t('📊 Spend by Platform',scx+px(14),tY+px(26),12,C.text,'left',true)
+  const pdata=[{n:'Meta',v:60,c:C.blue},{n:'TikTok',v:25,c:'#ff0050'},{n:'Google',v:10,c:'#4285f4'},{n:'Snap',v:5,c:'#fffc00'}]
+  const pieR=px(50), pieCX=scx+scw/2, pieCY=tY+px(130)
+  let startA=-Math.PI/2
+  pdata.forEach(p=>{
+    const angle=(p.v/100)*Math.PI*2
+    ctx.beginPath(); ctx.moveTo(pieCX,pieCY)
+    ctx.arc(pieCX,pieCY,pieR,startA,startA+angle)
+    ctx.closePath(); ctx.fillStyle=p.c; ctx.fill()
+    startA+=angle
+  })
+  r(pieCX-px(22),pieCY-px(22),px(44),px(44),px(22),C.card)
+  t('100%',pieCX,pieCY+px(6),10,C.text,'center',true)
+  pdata.forEach((p,i)=>{
+    const ly2=tY+px(200)+i*px(28)
+    r(scx+px(14),ly2,px(12),px(12),px(2),p.c)
+    t(`${p.n}  ${p.v}%`,scx+px(32),ly2+px(10),11,C.text)
+  })
+}
+
+function screenAutomation(){
+  r(0,0,W,H,0,C.bg)
+  drawSidebar('automate')
+  drawSubSidebar(['Rules','Schedules','Logs'],'Rules')
+
+  const cx=px(214), cw=W-cx
+  drawTopbar(cx,'Automation Rules')
+
+  // Header
+  r(cx+px(20),px(68),cw-px(40),px(40),px(8),C.panel,C.border)
+  t('⚡ Active Rules',cx+px(36),px(94),13,C.text,'left',true)
+  pill(W-px(160),px(76),px(130),px(24),C.blue,'+ New Rule','#fff',11)
+
+  const rules=[
+    {name:'Pause Low ROAS',cond:'ROAS < 1.5 for 3 days',action:'Pause Ad Set',status:true,runs:24},
+    {name:'Scale Winners',cond:'ROAS > 4.0 for 2 days',action:'Increase budget 20%',status:true,runs:8},
+    {name:'Daily Budget Cap',cond:'Spend > $500/day',action:'Pause Campaign',status:false,runs:0},
+    {name:'CPA Alert',cond:'CPA > $30',action:'Send Slack notification',status:true,runs:12},
+    {name:'Auto-Activate',cond:'ROAS > 2.5 after pause',action:'Resume Ad Set',status:true,runs:5},
+  ]
+
+  rules.forEach((rule,i)=>{
+    const ry=px(124)+i*px(70)
+    r(cx+px(20),ry,cw-px(40),px(60),px(10),C.card,C.border)
+
+    // toggle
+    const ton=rule.status
+    r(W-px(70),ry+px(18),px(40),px(22),px(11),ton?C.green+'44':C.dim)
+    r(W-(ton?px(38):px(64)),ry+px(20),px(18),px(18),px(9),ton?C.green:C.muted)
+
+    t(rule.name,cx+px(36),ry+px(22),13,C.text,'left',true)
+    t(`IF ${rule.cond}`,cx+px(36),ry+px(40),10,C.muted)
+    t(`→ ${rule.action}`,cx+px(220),ry+px(40),10,C.blueL)
+    t(`Triggered ${rule.runs}x`,W-px(130),ry+px(40),9,C.muted)
+    pill(cx+px(36),ry+px(8),px(50),px(16),rule.status?C.green+'22':C.dim,rule.status?'Active':'Off',rule.status?'#4ade80':C.muted,8)
+  })
+
+  // Rule builder preview
+  const bY=px(124)+rules.length*px(70)+px(16)
+  r(cx+px(20),bY,cw-px(40),H-bY-px(16),px(10),C.panel,C.border)
+  t('🔧 Rule Builder',cx+px(36),bY+px(26),12,C.text,'left',true)
+  // IF block
+  r(cx+px(36),bY+px(44),px(180),px(36),px(6),C.card,C.border)
+  t('IF',cx+px(50),bY+px(67),10,C.muted,'left',true)
+  t('ROAS < value',cx+px(74),bY+px(67),11,C.text)
+  // THEN block
+  r(cx+px(36)+px(196),bY+px(44),px(180),px(36),px(6),C.card,C.border)
+  t('THEN',cx+px(50)+px(196),bY+px(67),10,C.muted)
+  t('Pause Ad Set',cx+px(88)+px(196),bY+px(67),11,C.text)
+  t('→',cx+px(36)+px(184),bY+px(62),14,C.muted)
+  // For block
+  r(cx+px(36)+px(392),bY+px(44),px(140),px(36),px(6),C.card,C.border)
+  t('FOR',cx+px(50)+px(392),bY+px(67),10,C.muted)
+  t('3 consecutive days',cx+px(78)+px(392),bY+px(67),10,C.text)
+}
+
+function screenTeam(){
+  r(0,0,W,H,0,C.bg)
+  drawSidebar('connect')
+  drawSubSidebar(['Members','Roles','Workspaces','Activity'],'Members')
+
+  const cx=px(214), cw=W-cx
+  drawTopbar(cx,'Team Management')
+
+  // Stats
+  const tstats=[{l:'Total Members',v:'12'},{l:'Active Now',v:'4'},{l:'Ad Accounts',v:'6'},{l:'Workspaces',v:'3'}]
+  tstats.forEach((s,i)=>{
+    const sx=cx+px(20)+i*((cw-px(40)-px(48))/4+px(16)), sy=px(68)
+    r(sx,sy,（cw-px(40)-px(48))/4,px(60),px(8),C.card,C.border)
+    t(s.v,sx+px(12),sy+px(30),20,C.text,'left',true)
+    t(s.l,sx+px(12),sy+px(48),9,C.muted)
+  })
+
+  // Members table
+  r(cx+px(20),px(148),cw-px(40),H-px(164),px(10),C.card,C.border)
+  t('👥 Team Members',cx+px(36),px(174),13,C.text,'left',true)
+  pill(W-px(160),px(160),px(130),px(24),C.blue,'+ Invite Member','#fff',10)
+
+  const members2=[
+    {n:'Thuan Nguyen',e:'thuan@agency.com',r:'Full Access',last:'Now',av:'T',ac:'#2563eb'},
+    {n:'Kevin Lee',e:'kevin@agency.com',r:'Launch Only',last:'2h ago',av:'K',ac:'#7c3aed'},
+    {n:'Anna Pham',e:'anna@agency.com',r:'Analytics View',last:'1d ago',av:'A',ac:'#0891b2'},
+    {n:'David Kim',e:'david@agency.com',r:'Edit Only',last:'3d ago',av:'D',ac:'#16a34a'},
+    {n:'Sarah Chen',e:'sarah@agency.com',r:'Full Access',last:'1w ago',av:'S',ac:'#d97706'},
+  ]
+
+  const tcols2=[{l:'Member',w:px(240)},{l:'Email',w:px(220)},{l:'Role',w:px(160)},{l:'Last Active',w:px(120)},{l:'Actions',w:px(100)}]
+  let thx=cx+px(20)
+  tcols2.forEach(c=>{ t(c.l,thx+px(12),px(202),9,C.muted,'left',true); thx+=c.w })
+  r(cx+px(20),px(204),cw-px(40),1,0,C.border)
+
+  members2.forEach((m,i)=>{
+    const ry=px(208)+i*px(50)
+    r(cx+px(20),ry,cw-px(40),px(50),0,i%2===0?'transparent':C.panel+'44')
+    let mrx=cx+px(20)
+    // avatar + name
+    r(mrx+px(12),ry+px(10),px(30),px(30),px(15),m.ac)
+    t(m.av,mrx+px(27),ry+px(30),12,'#fff','center',true)
+    t(m.n,mrx+px(52),ry+px(28),11,C.text)
+    mrx+=px(240)
+    t(m.e,mrx+px(12),ry+px(28),10,C.muted)
+    mrx+=px(220)
+    const rcol={
+      'Full Access':C.blue,'Launch Only':C.green,'Analytics View':'#8b5cf6','Edit Only':C.orange
+    }[m.r]||C.muted
+    pill(mrx+px(8),ry+px(16),px(120),px(18),rcol+'22',m.r,rcol,9)
+    mrx+=px(160)
+    t(m.last,mrx+px(12),ry+px(28),10,C.muted)
+    mrx+=px(120)
+    t('⋮',mrx+px(20),ry+px(28),16,C.muted,'center')
+  })
+}
+
+// ── DRAW ─────────────────────────────────────
+const screens={
+  onboard:screenOnboard,
+  dashboard:screenDashboard,
+  launch:screenLaunch,
+  assets:screenAssets,
+  adsmanager:screenAdsManager,
+  analytics:screenAnalytics,
+  automation:screenAutomation,
+  team:screenTeam,
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H)
+  try{
+    screens[currentScreen]?.()
+  }catch(e){
+    r(0,0,W,H,0,'#111')
+    t('Rendering...',W/2,H/2,16,C.muted,'center')
+  }
+}
+
+// fix (() reference to px
+function py(v){ return px(v) }
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(t2=>t2.classList.remove('active'))
+    tab.classList.add('active')
+    currentScreen=tab.dataset.screen
+    draw()
+  })
+})
+
+window.addEventListener('resize',resize)
+resize()
+</script>
+</body>
+</html>
