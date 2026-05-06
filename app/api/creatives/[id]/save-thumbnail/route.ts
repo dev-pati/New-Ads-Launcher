@@ -56,10 +56,11 @@ export async function POST(
     const { data: urlData } = supabase.storage.from("ad-media").getPublicUrl(path)
     const publicUrl = urlData.publicUrl
 
-    // Update creative
+    // Update creative — only the thumbnail field. NEVER overwrite file_url, because for video
+    // creatives file_url must point to a video source (blob/Meta video) so the <video> tag works.
     await supabase
       .from("creatives")
-      .update({ fb_thumbnail_url: publicUrl, file_url: publicUrl })
+      .update({ fb_thumbnail_url: publicUrl })
       .eq("id", id)
 
     return NextResponse.json({ thumbnail_url: publicUrl })

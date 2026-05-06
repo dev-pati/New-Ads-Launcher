@@ -6,8 +6,11 @@ const nextConfig = {
   reactStrictMode: false,
   experimental: {
     serverActions: {
-      bodySizeLimit: "50mb",
+      bodySizeLimit: "1gb",
     },
+    // Allow large video uploads via raw binary body (POST /api/creatives/upload-binary).
+    // Default is 10MB which truncates videos → Meta receives corrupt file → no thumbnail.
+    middlewareClientMaxBodySize: "1gb",
   },
 }
 

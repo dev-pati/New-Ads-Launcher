@@ -6,29 +6,16 @@ export async function GET(request: NextRequest) {
   try {
     const adAccountId = request.nextUrl.searchParams.get("ad_account_id")
     const campaignId = request.nextUrl.searchParams.get("campaign_id")
+    const datePreset = request.nextUrl.searchParams.get("date_preset") || "last_7d"
     if (!adAccountId) return NextResponse.json({ error: "ad_account_id is required" }, { status: 400 })
 
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (process.env.MOCK_META_API === "true") {
-      return NextResponse.json({
-        adSets: Array.from({ length: 5 }, (_, i) => ({
-          id: `ads_${100000 + i}`,
-          name: `Mock Ad Set ${i + 1}`,
-          status: i % 2 === 0 ? "ACTIVE" : "PAUSED",
-          effective_status: i % 2 === 0 ? "ACTIVE" : "PAUSED",
-          campaign_id: `cmp_${200000 + Math.floor(i / 2)}`,
-          daily_budget: "10000",
-        })),
-        mock: true,
-      })
-    }
-
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection found" }, { status: 401 })
 
-    const adSets = await getAdSets(adAccountId, connection.access_token, campaignId || undefined)
+    const adSets = await getAdSets(adAccountId, connection.access_token, campaignId || undefined, datePreset)
     return NextResponse.json({ adSets })
   } catch (err: any) {
     console.error("Failed to fetch ad sets:", err)

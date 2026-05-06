@@ -24,21 +24,6 @@ export async function POST(
     const statusOption = body.statusOption || "PAUSED"
     const deepCopy = !!body.deepCopy
 
-    // Mock mode: return fake duplicate
-    if (process.env.MOCK_META_API === "true") {
-      const newId = `ads_copy_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      return NextResponse.json({
-        adSet: {
-          id: newId,
-          name: customName || `Mock Source Ad Set${renameSuffix}`,
-          status: statusOption,
-          effective_status: statusOption,
-          campaign_id: `cmp_mock`,
-        },
-        mock: true,
-      })
-    }
-
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 

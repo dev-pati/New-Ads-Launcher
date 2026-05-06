@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const adAccountId = request.nextUrl.searchParams.get("ad_account_id")
     const adSetId = request.nextUrl.searchParams.get("adset_id")
+    const datePreset = request.nextUrl.searchParams.get("date_preset") || "last_7d"
     if (!adAccountId) return NextResponse.json({ error: "ad_account_id is required" }, { status: 400 })
 
     const ctx = await getAuthContext()
@@ -14,7 +15,7 @@ export async function GET(request: NextRequest) {
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection found" }, { status: 401 })
 
-    const ads = await getAds(adAccountId, connection.access_token, adSetId || undefined)
+    const ads = await getAds(adAccountId, connection.access_token, adSetId || undefined, datePreset)
     return NextResponse.json({ ads })
   } catch (err) {
     console.error("Failed to fetch ads:", err)

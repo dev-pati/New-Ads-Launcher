@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   IconSearch, IconX, IconPlus, IconUpload, IconFolder,
   IconRefresh, IconLayoutGrid, IconTable, IconRocket,
@@ -40,6 +45,7 @@ import {
   IconVolumeOff, IconMaximize, IconPlayerPause, IconPlus as IconPlusFollow,
   IconCurrencyDollar, IconTarget, IconTrendingUp,
   IconFilter, IconWorldPin,
+  IconChevronLeft, IconChevronRight,
 } from "@tabler/icons-react"
 import { CreativeCardMedia } from "@/components/creative-card-media"
 
@@ -50,7 +56,7 @@ interface Creative { id: string; file_name: string; file_url: string; media_type
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
-interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[] }
+interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string }
 interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[] }
 interface UploadItem {
   id: string
@@ -92,15 +98,17 @@ interface AdFormatState {
 }
 interface CollectionAdsState {
   enabled: boolean
+  templateType: "storefront" | "lookbook" | "customer_acquisition"
   catalogId: string
   catalogName: string
   catalogVertical: string
   productSetId: string
   productSetName: string
+  productCount: number
   order: "dynamic" | "specific"
   productHeadlineChips: string[]
   productDescriptionChips: string[]
-  buttonLabel: string
+  ieHeadline: string
   destinationUrl: string
 }
 interface CatalogItem { id: string; name: string; product_count?: number; vertical?: string }
@@ -189,6 +197,9 @@ interface LaunchBatch {
   creative_thumbs: string[]
   primary_text: string
   headline: string
+  cta?: string
+  web_link?: string
+  page_id?: string
   status: "success" | "partial" | "failed"
   total_ads: number
   failed_ads: number
@@ -1325,20 +1336,24 @@ function MultilanguageAdsModal({
 
 // ─── Collection Ads / Instant Experience Modal ────────────────────────────────
 
+const IE_TEMPLATES: { value: CollectionAdsState["templateType"]; label: string; desc: string }[] = [
+  { value: "storefront", label: "Instant Storefront", desc: "Shows catalog products in a scrollable grid. Best for e-commerce." },
+  { value: "lookbook", label: "Instant Lookbook", desc: "Lifestyle images with product tags. Best for fashion & lifestyle brands." },
+  { value: "customer_acquisition", label: "Customer Acquisition", desc: "Highlights key features with a sign-up form or website link." },
+]
+
 function CollectionAdsModal({
-  open, onClose, value, onConfirm, baseHeadline, baseWebLink,
-  onLoadMedia, adAccountId,
+  open, onClose, value, onConfirm, baseWebLink, adAccountId,
 }: {
   open: boolean
   onClose: () => void
   value: CollectionAdsState
   onConfirm: (v: CollectionAdsState) => void
-  baseHeadline: string
   baseWebLink: string
-  onLoadMedia?: () => void
   adAccountId?: string
 }) {
   const [local, setLocal] = useState<CollectionAdsState>(value)
+  const [saveError, setSaveError] = useState<string[]>([])
   const [collapsed, setCollapsed] = useState(false)
   const [catalogs, setCatalogs] = useState<CatalogItem[]>([])
   const [catalogsLoading, setCatalogsLoading] = useState(false)
@@ -1355,7 +1370,12 @@ function CollectionAdsModal({
   const catalogRef = useRef<HTMLDivElement>(null)
   const productSetRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { if (open) setLocal(value) }, [open, value])
+  useEffect(() => {
+    if (open) {
+      setSaveError([])
+      setLocal({ ...value, destinationUrl: value.destinationUrl || baseWebLink || "" })
+    }
+  }, [open])
 
   // Load catalogs on open
   useEffect(() => {
@@ -1460,14 +1480,18 @@ function CollectionAdsModal({
   }
 
   const requiredMissing: string[] = []
-  if (!local.catalogId) requiredMissing.push("Select a catalog")
-  if (!local.productSetId) requiredMissing.push("Select a product set")
-  if (!local.buttonLabel.trim()) requiredMissing.push("Enter button label")
-  if (!local.destinationUrl.trim()) requiredMissing.push("Enter destination URL")
+  if (!local.catalogId) requiredMissing.push("Chọn một catalog")
+  if (!local.productSetId) requiredMissing.push("Chọn một product set")
+  if (!local.destinationUrl.trim()) requiredMissing.push("Nhập Destination URL")
   const isValid = requiredMissing.length === 0
 
   const handleSave = () => {
-    onConfirm(isValid ? { ...local, enabled: true } : { ...local, enabled: false })
+    if (local.enabled && !isValid) {
+      setSaveError(requiredMissing)
+      return
+    }
+    setSaveError([])
+    onConfirm({ ...local })
     onClose()
   }
 
@@ -1520,13 +1544,35 @@ function CollectionAdsModal({
 
                 {/* Body content */}
                 <div className="px-4 py-4 space-y-4 border-t">
-                  {/* Title */}
+                  {/* IE Template selector */}
                   <div>
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-semibold">Create Instant Experience</p>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <p className="text-sm font-semibold">Instant Experience Template</p>
                       <IconInfoCircle className="size-3.5 text-muted-foreground" />
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">One instant experience will be created per media item.</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {IE_TEMPLATES.map(t => (
+                        <button
+                          key={t.value}
+                          onClick={() => setLocal(s => ({ ...s, templateType: t.value }))}
+                          className={cn(
+                            "border rounded-xl p-3 text-left transition-colors",
+                            local.templateType === t.value
+                              ? "border-primary bg-primary/5 ring-1 ring-primary"
+                              : "hover:border-muted-foreground/40"
+                          )}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-semibold">{t.label}</span>
+                            {local.templateType === t.value && <IconCheck className="size-3.5 text-primary" />}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground leading-relaxed">{t.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-1.5">
+                      One instant experience will be created per media item. Cover media is taken from your selected creatives.
+                    </p>
                   </div>
 
                   {/* Catalog + Product Set grid */}
@@ -1730,30 +1776,49 @@ function CollectionAdsModal({
                     </div>
                   )}
 
-                  {/* Order + Cover media */}
+                  {/* Order + Product count + Cover media */}
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="border rounded-xl p-3">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <span className="text-sm font-semibold">Order</span>
-                        <IconInfoCircle className="size-3.5 text-muted-foreground" />
+                    <div className="border rounded-xl p-3 space-y-3">
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <span className="text-sm font-semibold">Order</span>
+                          <IconInfoCircle className="size-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          {([
+                            { value: "dynamic" as const, label: "Order dynamically" },
+                            { value: "specific" as const, label: "Choose a specific order" },
+                          ]).map(opt => (
+                            <label key={opt.value} className="flex items-center gap-2 cursor-pointer">
+                              <div className={cn(
+                                "size-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
+                                local.order === opt.value ? "border-primary" : "border-muted-foreground/30"
+                              )}>
+                                {local.order === opt.value && <div className="size-2 rounded-full bg-primary" />}
+                              </div>
+                              <span className="text-sm">{opt.label}</span>
+                              <input type="radio" className="sr-only" checked={local.order === opt.value}
+                                onChange={() => setLocal(s => ({ ...s, order: opt.value }))} />
+                            </label>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        {([
-                          { value: "dynamic" as const, label: "Order dynamically" },
-                          { value: "specific" as const, label: "Choose a specific order" },
-                        ]).map(opt => (
-                          <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer">
-                            <div className={cn(
-                              "size-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors",
-                              local.order === opt.value ? "border-primary" : "border-muted-foreground/30"
-                            )}>
-                              {local.order === opt.value && <div className="size-2 rounded-full bg-primary" />}
-                            </div>
-                            <span className="text-sm">{opt.label}</span>
-                            <input type="radio" className="sr-only" checked={local.order === opt.value}
-                              onChange={() => setLocal(s => ({ ...s, order: opt.value }))} />
-                          </label>
-                        ))}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="text-xs font-medium">Number of products to show</span>
+                          <IconInfoCircle className="size-3 text-muted-foreground" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            value={local.productCount}
+                            onChange={e => setLocal(s => ({ ...s, productCount: Math.min(50, Math.max(1, Number(e.target.value))) }))}
+                            className="w-20 px-2 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring text-center"
+                          />
+                          <span className="text-xs text-muted-foreground">Max 50, default 4</span>
+                        </div>
                       </div>
                     </div>
                     <div className="border-2 border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-3 flex items-start gap-2">
@@ -1761,7 +1826,7 @@ function CollectionAdsModal({
                       <div>
                         <p className="text-sm font-semibold">Cover media</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Automatically uses your uploaded videos and images as the instant experience cover.
+                          Automatically uses your selected creatives as the instant experience cover. One IE is created per creative.
                         </p>
                       </div>
                     </div>
@@ -1795,20 +1860,21 @@ function CollectionAdsModal({
                     </div>
                   </div>
 
-                  {/* Button label + Destination URL */}
+                  {/* IE Headline + Destination URL */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <div className="flex items-center gap-1.5 mb-1.5">
-                        <span className="text-xs font-medium">Button label</span>
-                        <span className="text-destructive text-xs">*</span>
+                        <span className="text-xs font-medium">IE Headline</span>
+                        <span className="text-muted-foreground text-[10px]">(optional)</span>
                         <IconInfoCircle className="size-3 text-muted-foreground" />
                       </div>
                       <input
-                        value={local.buttonLabel}
-                        onChange={e => setLocal(s => ({ ...s, buttonLabel: e.target.value }))}
-                        placeholder={baseHeadline || "Button label"}
+                        value={local.ieHeadline}
+                        onChange={e => setLocal(s => ({ ...s, ieHeadline: e.target.value }))}
+                        placeholder="Headline shown inside the Instant Experience"
                         className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
                       />
+                      <p className="text-[10px] text-muted-foreground mt-1">Shown at the top of the Instant Experience (separate from main ad headline)</p>
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 mb-1.5">
@@ -1819,32 +1885,15 @@ function CollectionAdsModal({
                       <input
                         value={local.destinationUrl}
                         onChange={e => setLocal(s => ({ ...s, destinationUrl: e.target.value }))}
-                        placeholder={baseWebLink || "https://..."}
-                        className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                        placeholder="https://..."
+                        className={cn(
+                          "w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring",
+                          saveError.length > 0 && !local.destinationUrl.trim() && "border-destructive"
+                        )}
                       />
+                      <p className="text-[10px] text-muted-foreground mt-1">Landing page URL when users tap the "See more" button</p>
                     </div>
                   </div>
-
-                  {/* Load Media CTA */}
-                  <Button
-                    className="w-full h-10"
-                    disabled={!isValid}
-                    onClick={() => { onLoadMedia?.(); }}
-                  >
-                    Load Media to Create Experiences
-                  </Button>
-
-                  {/* Required warning */}
-                  {requiredMissing.length > 0 && (
-                    <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2.5">
-                      <p className="text-xs text-amber-900 dark:text-amber-200">
-                        Please complete all required fields:
-                        {requiredMissing.map((r, i) => (
-                          <span key={i} className="block ml-3">• {r}</span>
-                        ))}
-                      </p>
-                    </div>
-                  )}
                 </div>
               </>
             )}
@@ -1852,9 +1901,17 @@ function CollectionAdsModal({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t bg-background shrink-0">
-          <Button variant="outline" onClick={onClose}><IconX className="size-3.5 mr-1" />Cancel</Button>
-          <Button onClick={handleSave}><IconCheck className="size-3.5 mr-1" />Save Confirm</Button>
+        <div className="flex flex-col gap-2 px-5 py-3 border-t bg-background shrink-0">
+          {saveError.length > 0 && (
+            <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+              <p className="text-xs text-destructive font-medium mb-1">Vui lòng điền đầy đủ trước khi lưu:</p>
+              {saveError.map((e, i) => <p key={i} className="text-xs text-destructive ml-2">• {e}</p>)}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={onClose}><IconX className="size-3.5 mr-1" />Cancel</Button>
+            <Button onClick={handleSave}><IconCheck className="size-3.5 mr-1" />Save Confirm</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
@@ -3349,6 +3406,7 @@ interface MockupProps {
   isVideo: boolean
   primaryText: string
   headline: string
+  description?: string
   webLink: string
   ctaLabel: string
   primaryExpanded: boolean
@@ -3362,6 +3420,7 @@ function MediaArea({ thumb, creative, isVideo, aspect = "aspect-square", roundBo
   aspect?: string
   roundBottom?: boolean
 }) {
+  const duration = (creative as any).duration as string | undefined
   return (
     <div className={cn("relative bg-black group/media overflow-hidden", aspect, roundBottom && "rounded-b-xl")}>
       {thumb && (
@@ -3375,6 +3434,12 @@ function MediaArea({ thumb, creative, isVideo, aspect = "aspect-square", roundBo
       <div className="relative w-full h-full z-10">
         <CreativeCardMedia creative={creative} className="w-full h-full object-contain bg-transparent" />
       </div>
+      {/* Duration badge top-left (matches admanage.ai reference) */}
+      {isVideo && duration && (
+        <div className="absolute top-2 left-2 z-30 px-2 py-0.5 rounded-md bg-black/70 text-white text-[11px] font-semibold tracking-wide pointer-events-none">
+          {duration}
+        </div>
+      )}
       {isVideo && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none transition-opacity group-hover/media:opacity-0 z-20">
           <div className="size-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
@@ -3401,12 +3466,57 @@ function PlatformMockup(props: MockupProps) {
 }
 
 // ── META / FACEBOOK ──
-function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, webLink, ctaLabel, primaryExpanded, setPrimaryExpanded, placement }: MockupProps) {
+function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, description, webLink, ctaLabel, primaryExpanded, setPrimaryExpanded, placement }: MockupProps) {
+  if (placement === "story") {
+    return (
+      <div className="w-full max-w-[300px] bg-black rounded-[20px] overflow-hidden shadow-xl relative" style={{ aspectRatio: "9/16" }}>
+        {/* Progress bars */}
+        <div className="absolute top-2 left-2 right-2 z-30 flex gap-1">
+          {[0.4, 0, 0].map((fill, i) => (
+            <div key={i} className="flex-1 h-[2px] bg-white/40 rounded-full overflow-hidden">
+              {fill > 0 && <div className="h-full bg-white rounded-full" style={{ width: `${fill * 100}%` }} />}
+            </div>
+          ))}
+        </div>
+        {/* Header overlay */}
+        <div className="absolute top-5 left-0 right-0 z-30 flex items-center gap-2 px-3">
+          {page?.picture?.data?.url
+            ? <img src={page.picture.data.url} className="size-8 rounded-full object-cover border-2 border-white shrink-0" alt="" />
+            : <div className="size-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 border-2 border-white"><span className="text-xs font-bold text-white">{(page?.name || "P").slice(0, 1)}</span></div>}
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-[13px] font-semibold leading-tight truncate">{page?.name || "Your Page"}</p>
+            <p className="text-white/70 text-[11px]">Sponsored</p>
+          </div>
+          <button className="text-white/90 p-1"><IconDotsVertical className="size-4" /></button>
+          <button className="text-white/90 p-1"><IconX className="size-4" /></button>
+        </div>
+        {/* Media fills full */}
+        <div className="absolute inset-0">
+          <CreativeCardMedia creative={creative} className="w-full h-full object-cover" />
+        </div>
+        {/* Bottom gradient + text + CTA */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 px-3 pb-5 pt-14 bg-gradient-to-t from-black/75 to-transparent">
+          {primaryText && (
+            <div className="mb-2.5">
+              <p className={cn("text-white text-[13px] leading-snug", primaryExpanded ? "" : "line-clamp-2")}>{primaryText}</p>
+              {primaryText.length > 80 && (
+                <button onClick={() => setPrimaryExpanded(!primaryExpanded)} className="text-white/60 text-[11px] flex items-center gap-0.5 mt-0.5">
+                  {primaryExpanded ? <IconChevronDown className="size-3" /> : <IconChevronUp className="size-3" />}
+                </button>
+              )}
+            </div>
+          )}
+          <button className="w-full bg-white text-black font-bold text-[14px] py-2.5 rounded-full">{ctaLabel}</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="w-full max-w-[400px] bg-background border rounded-xl overflow-hidden shadow-sm">
-      <div className="flex items-center gap-2.5 px-4 py-3">
+    <div className="w-full max-w-[340px] bg-background border rounded-xl overflow-hidden shadow-sm">
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
         {page?.picture?.data?.url
-          ? <img src={page.picture.data.url} className="size-10 rounded-full shrink-0 object-cover border" alt="" />
+          ? <img src={page.picture.data.url} className="size-9 rounded-full shrink-0 object-cover border" alt="" />
           : <div className="size-10 rounded-full bg-emerald-600 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-white">{(page?.name || "P").slice(0, 1)}</span></div>}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
@@ -3431,16 +3541,16 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, web
           )}
         </div>
       )}
-      <MediaArea thumb={thumb} creative={creative} isVideo={isVideo} aspect={placement === "story" ? "aspect-[9/16]" : "aspect-square"} />
-      {(headline || webLink) && placement === "feed" && (
-        <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 border-t">
-          <div className="flex-1 min-w-0">
-            {webLink && <p className="text-[11px] text-[#65676B] uppercase truncate font-medium">{(() => { try { return new URL(webLink).hostname } catch { return webLink } })()}</p>}
-            {headline && <p className="text-[15px] font-bold truncate leading-tight mt-0.5">{headline}</p>}
-          </div>
-          <Button size="sm" variant="outline" className="h-9 px-4 text-[13px] font-bold bg-[#E4E6EB] hover:bg-[#D8DADF] border-none text-[#050505] shrink-0 ml-3 rounded-lg">{ctaLabel}</Button>
+      <MediaArea thumb={thumb} creative={creative} isVideo={isVideo} aspect="aspect-square" />
+      <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 border-t">
+        <div className="flex-1 min-w-0">
+          {headline
+            ? <p className="text-[14px] font-semibold truncate leading-tight text-foreground/90">{headline}</p>
+            : <p className="text-[14px] font-semibold truncate leading-tight text-muted-foreground/50 italic">No headline</p>}
+          {description && <p className="text-[12px] text-[#65676B] truncate leading-tight mt-0.5">{description}</p>}
         </div>
-      )}
+        <Button size="sm" variant="outline" className="h-8 px-4 text-[13px] font-bold bg-[#E4E6EB] hover:bg-[#D8DADF] border-none text-[#050505] shrink-0 ml-3 rounded-lg">{ctaLabel}</Button>
+      </div>
       <div className="flex items-center gap-3 px-3 py-2 border-t">
         <div className="flex items-center gap-1 text-[13px] text-[#65676B]">
           <div className="flex -space-x-1 mr-1">
@@ -3463,9 +3573,54 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, web
 }
 
 // ── INSTAGRAM ──
-function InstagramMockup({ page, creative, thumb, isVideo }: MockupProps) {
+function InstagramMockup({ page, creative, thumb, isVideo, primaryText, ctaLabel, primaryExpanded, setPrimaryExpanded, placement }: MockupProps) {
+  if (placement === "story") {
+    return (
+      <div className="w-full max-w-[300px] bg-black rounded-[20px] overflow-hidden shadow-xl relative" style={{ aspectRatio: "9/16" }}>
+        {/* Progress bars */}
+        <div className="absolute top-2 left-2 right-2 z-30 flex gap-1">
+          {[0, 0.5, 0].map((fill, i) => (
+            <div key={i} className="flex-1 h-[2px] bg-white/40 rounded-full overflow-hidden">
+              {fill > 0 && <div className="h-full bg-white rounded-full" style={{ width: `${fill * 100}%` }} />}
+            </div>
+          ))}
+        </div>
+        {/* Header overlay */}
+        <div className="absolute top-5 left-0 right-0 z-30 flex items-center gap-2 px-3">
+          {page?.picture?.data?.url
+            ? <div className="size-8 rounded-full overflow-hidden border-2 border-white shrink-0"><img src={page.picture.data.url} className="w-full h-full object-cover" alt="" /></div>
+            : <div className="size-8 rounded-full bg-gradient-to-br from-yellow-400 via-pink-500 to-purple-600 p-[2px] shrink-0"><div className="size-full rounded-full bg-black/40 flex items-center justify-center text-white text-xs font-bold">{(page?.name || "P").slice(0, 1)}</div></div>}
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-[13px] font-semibold leading-tight truncate">{page?.name || "Your Page"}</p>
+            <p className="text-white/70 text-[11px]">Ad</p>
+          </div>
+          <button className="text-white/90 p-1"><IconDotsVertical className="size-4" /></button>
+          <button className="text-white/90 p-1"><IconX className="size-4" /></button>
+        </div>
+        {/* Media */}
+        <div className="absolute inset-0">
+          <CreativeCardMedia creative={creative} className="w-full h-full object-cover" />
+        </div>
+        {/* Bottom */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 px-3 pb-5 pt-14 bg-gradient-to-t from-black/75 to-transparent">
+          {primaryText && (
+            <div className="mb-2.5">
+              <p className={cn("text-white text-[13px] leading-snug", primaryExpanded ? "" : "line-clamp-2")}>{primaryText}</p>
+              {primaryText.length > 80 && (
+                <button onClick={() => setPrimaryExpanded(!primaryExpanded)} className="text-white/60 text-[11px] flex items-center gap-0.5 mt-0.5">
+                  {primaryExpanded ? <IconChevronDown className="size-3" /> : <IconChevronUp className="size-3" />}
+                </button>
+              )}
+            </div>
+          )}
+          <button className="w-full bg-white text-black font-bold text-[14px] py-2.5 rounded-full">{ctaLabel}</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="w-full max-w-[400px] bg-background border rounded-xl overflow-hidden shadow-sm">
+    <div className="w-full max-w-[340px] bg-background border rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-2">
           {page?.picture?.data?.url
@@ -3691,7 +3846,7 @@ function LinkedInMockup({ page, creative, thumb, isVideo, primaryText, headline,
 }
 
 function PreviewModal({
-  open, onClose, creatives, page, primaryText, headline, webLink, cta, adNameOverrides, onUpdateCreative,
+  open, onClose, creatives, page, primaryText, headline, description, webLink, cta, adNameOverrides, onUpdateCreative,
 }: {
   open: boolean
   onClose: () => void
@@ -3699,6 +3854,7 @@ function PreviewModal({
   page?: FacebookPage
   primaryText: string
   headline: string
+  description?: string
   webLink: string
   cta: string
   adNameOverrides: Record<string, string>
@@ -3713,6 +3869,10 @@ function PreviewModal({
   const thumbInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (open) { setActiveIdx(0); setPlacement("feed"); setMockup("meta"); setPrimaryExpanded(false) } }, [open])
+  // Clamp activeIdx whenever the creatives list shrinks
+  useEffect(() => {
+    if (activeIdx >= creatives.length && creatives.length > 0) setActiveIdx(0)
+  }, [creatives.length, activeIdx])
 
   if (creatives.length === 0) {
     return (
@@ -3728,16 +3888,31 @@ function PreviewModal({
     )
   }
 
-  const creative = creatives[activeIdx]
+  // Clamp activeIdx in case the creatives list shrank (e.g. user removed one)
+  const safeIdx = Math.min(activeIdx, creatives.length - 1)
+  const creative = creatives[safeIdx] ?? creatives[0]
+  if (!creative) {
+    return (
+      <Dialog open={open} onOpenChange={v => !v && onClose()}>
+        <DialogContent className="max-w-md p-6">
+          <DialogTitle>Preview</DialogTitle>
+          <p className="text-sm text-muted-foreground mt-2">No creative to preview.</p>
+          <div className="mt-4 flex justify-end">
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
   const customName = adNameOverrides[creative.id]
   const adName = customName ?? creative.file_name.replace(/\.[^/.]+$/, "")
   const isVideo = creative.media_type === "video"
   const thumb = creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url
   // Fallback to creative's saved metadata if main form fields are empty
-  const effectivePrimaryText = primaryText || creative.primary_text || ""
-  const effectiveHeadline = headline || creative.headline || ""
-  const effectiveWebLink = webLink || creative.link_url || ""
-  const effectiveCta = cta || creative.cta || "LEARN_MORE"
+  const effectivePrimaryText = primaryText
+  const effectiveHeadline = headline
+  const effectiveWebLink = webLink
+  const effectiveCta = cta || "LEARN_MORE"
   const ctaLabel = CTA_OPTIONS.find(o => o.value === effectiveCta)?.label || "Learn More"
   const duration = (creative as any).duration as string | undefined
   const fileSizeMB = (creative as any).file_size ? `${((creative as any).file_size / 1024 / 1024).toFixed(2)}MB` : ""
@@ -3799,13 +3974,13 @@ function PreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-5xl h-[92vh] flex flex-col p-0 gap-0 overflow-hidden">
-        <div className="grid grid-cols-[1fr_400px] flex-1 min-h-0 overflow-hidden">
-          {/* LEFT: Mockup area */}
-          <div className="bg-muted/30 overflow-y-auto p-6 flex flex-col items-center">
+      <DialogContent className="max-w-5xl !h-[92vh] !max-h-[92vh] p-0 gap-0 overflow-hidden flex flex-row">
+        {/* LEFT: Mockup area — scrolls independently, mockup centered */}
+        <div className="flex-1 min-w-0 h-full overflow-y-auto bg-[#F0F2F5] dark:bg-zinc-900/60 flex flex-col items-center justify-center px-6 py-6">
+          <div className="flex flex-col items-center gap-2 w-full max-w-[380px]">
             {/* Carousel nav for multiple ads */}
             {creatives.length > 1 && (
-              <div className="flex items-center gap-3 mb-3 self-start">
+              <div className="flex items-center gap-2 self-start">
                 <button onClick={() => setActiveIdx(i => Math.max(0, i - 1))} disabled={activeIdx === 0}
                   className="size-7 rounded-full bg-background border flex items-center justify-center hover:bg-muted disabled:opacity-30">
                   <IconArrowLeft className="size-3.5" />
@@ -3828,15 +4003,17 @@ function PreviewModal({
               isVideo={isVideo}
               primaryText={effectivePrimaryText}
               headline={effectiveHeadline}
+              description={description}
               webLink={effectiveWebLink}
               ctaLabel={ctaLabel}
               primaryExpanded={primaryExpanded}
               setPrimaryExpanded={setPrimaryExpanded}
             />
           </div>
+        </div>
 
-          {/* RIGHT: Details panel */}
-          <div className="border-l flex flex-col overflow-hidden">
+        {/* RIGHT: Details panel */}
+        <div className="w-[340px] shrink-0 border-l flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
               <DialogTitle className="text-base font-semibold">Preview</DialogTitle>
             </div>
@@ -3934,14 +4111,14 @@ function PreviewModal({
                     <p className="font-medium text-foreground/80 break-all">{adName}</p>
                   </div>
 
-                  <div className="px-3 py-2 border-b text-xs">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-muted-foreground">Thumbnail URL</p>
-                      <button onClick={refreshThumbnail} className={cn("text-muted-foreground hover:text-foreground", refreshing && "animate-spin")}>
+                  <div className="flex items-center justify-between px-3 py-2 border-b text-xs gap-2">
+                    <span className="text-muted-foreground shrink-0">Thumbnail URL</span>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <a href={thumb} target="_blank" rel="noopener noreferrer" title={thumb} className="text-primary hover:underline truncate max-w-[140px]">{thumb || "—"}</a>
+                      <button onClick={refreshThumbnail} className={cn("text-muted-foreground hover:text-foreground shrink-0", refreshing && "animate-spin")}>
                         <IconRefresh className="size-3" />
                       </button>
                     </div>
-                    <a href={thumb} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline break-all">{thumb || "—"}</a>
                   </div>
 
                   <div className="px-3 py-2 text-xs">
@@ -4046,7 +4223,6 @@ function PreviewModal({
               </div>
             </div>
           </div>
-        </div>
       </DialogContent>
     </Dialog>
   )
@@ -4136,11 +4312,13 @@ function formatCurrency(n: number): string {
 }
 
 function LoadMediaModal({
-  open, onClose, adAccountId, adAccounts, alreadySelected, onConfirm,
+  open, onClose, adAccountId, adAccounts, alreadySelected, onConfirm, refreshSignal,
 }: {
   open: boolean; onClose: () => void; adAccountId: string
   adAccounts?: AdAccountItem[]
   alreadySelected: Set<string>; onConfirm: (ids: string[], creatives: Creative[]) => void
+  // Increment from parent to force re-fetch (e.g. after a new upload completes)
+  refreshSignal?: number
 }) {
   // ── Existing Ads tab state ──────────────────────────────────────
   const [existingAds, setExistingAds] = useState<ExistingAdRow[]>([])
@@ -4192,6 +4370,12 @@ function LoadMediaModal({
     setSelected(new Set(alreadySelected))
     fetchCreatives()
   }, [open, adAccountId])
+
+  // Re-fetch when parent signals new upload completed (so newly-uploaded media appears)
+  useEffect(() => {
+    if (!open || !adAccountId || !refreshSignal) return
+    fetchCreatives()
+  }, [refreshSignal])
 
   // Polling for missing thumbnails in Library tab
   useEffect(() => {
@@ -5133,8 +5317,6 @@ function DuplicateAdSetModal({
   const [excludedAudiences, setExcludedAudiences] = useState<string[]>([])
   const [setDSA, setSetDSA] = useState(false)
   const [customAttribution, setCustomAttribution] = useState(false)
-  const searchRef = useRef<HTMLDivElement>(null)
-
   useEffect(() => {
     if (open) {
       setSearch("")
@@ -5191,14 +5373,6 @@ function DuplicateAdSetModal({
   // Reset detail when source changes
   useEffect(() => { setDetail(null) }, [selectedSourceId])
 
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false)
-    }
-    document.addEventListener("mousedown", h)
-    return () => document.removeEventListener("mousedown", h)
-  }, [])
-
   const sourceAdSet = allAdSets.find(a => a.id === selectedSourceId)
   const filtered = allAdSets.filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase()) || a.id.includes(search)
@@ -5206,7 +5380,7 @@ function DuplicateAdSetModal({
 
   const selectSource = (a: AdSet) => {
     setSelectedSourceId(a.id)
-    setNewName(`${a.name} - copy`)
+    setNewName(`${a.name.replace(/\s*[-–]\s*Copy\s*\d*\s*$/i, "").replace(/\s*\(copy\)\s*$/i, "")} - Copy`)
     setSearchOpen(false)
     setSearch("")
   }
@@ -5219,7 +5393,7 @@ function DuplicateAdSetModal({
       const newAdSets: AdSet[] = []
       const errors: string[] = []
       for (let i = 0; i < count; i++) {
-        const suffix = count > 1 ? ` - ${i + 1}` : ""
+        const suffix = count > 1 ? ` ${i + 1}` : ""
         const res = await fetch(`/api/facebook/adsets/${selectedSourceId}/duplicate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -5280,63 +5454,68 @@ function DuplicateAdSetModal({
             <p className="text-sm font-semibold mb-2">
               Select an existing Ad Set <span className="text-muted-foreground font-normal italic">(1 ad set maximum)</span>
             </p>
-            <div ref={searchRef} className="relative">
-              <div className="flex items-center gap-2 px-2.5 py-2 border rounded-lg bg-muted/20 min-h-[40px]">
-                <IconSearch className="size-3.5 text-muted-foreground/50 shrink-0" />
-                {sourceAdSet ? (
-                  <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md bg-background border text-xs font-medium max-w-full">
-                    <IconCircleCheck className="size-3 text-emerald-500 shrink-0" />
-                    <span className="truncate">{sourceAdSet.name}</span>
-                    <IconBrandMeta className="size-3 text-[#0064E0] shrink-0" />
-                    <button
-                      onClick={() => { setSelectedSourceId(""); setNewName("") }}
-                      className="hover:text-destructive ml-1"
-                    >
-                      <IconX className="size-3" />
+            <Popover open={searchOpen && !sourceAdSet} onOpenChange={setSearchOpen}>
+              <PopoverTrigger asChild>
+                <div className="flex items-center gap-2 px-2.5 py-2 border rounded-lg bg-muted/20 min-h-[40px] cursor-text">
+                  <IconSearch className="size-3.5 text-muted-foreground/50 shrink-0" />
+                  {sourceAdSet ? (
+                    <span className="inline-flex items-center gap-1.5 pl-2 pr-1 py-0.5 rounded-md bg-background border text-xs font-medium max-w-full">
+                      <IconCircleCheck className="size-3 text-emerald-500 shrink-0" />
+                      <span className="truncate">{sourceAdSet.name}</span>
+                      <IconBrandMeta className="size-3 text-[#0064E0] shrink-0" />
+                      <button
+                        onClick={() => { setSelectedSourceId(""); setNewName("") }}
+                        className="hover:text-destructive ml-1"
+                      >
+                        <IconX className="size-3" />
+                      </button>
+                    </span>
+                  ) : (
+                    <input
+                      autoFocus
+                      value={search}
+                      onChange={e => { setSearch(e.target.value); setSearchOpen(true) }}
+                      onFocus={() => setSearchOpen(true)}
+                      placeholder="Search by Ad Set name or ID"
+                      className="flex-1 bg-transparent outline-none text-sm"
+                    />
+                  )}
+                  {sourceAdSet && (
+                    <button onClick={() => { setSelectedSourceId(""); setNewName("") }} className="text-muted-foreground hover:text-foreground ml-auto">
+                      <IconX className="size-3.5" />
                     </button>
-                  </span>
-                ) : (
-                  <input
-                    autoFocus
-                    value={search}
-                    onChange={e => { setSearch(e.target.value); setSearchOpen(true) }}
-                    onFocus={() => setSearchOpen(true)}
-                    placeholder="Search by Ad Set name or ID"
-                    className="flex-1 bg-transparent outline-none text-sm"
-                  />
-                )}
-                {sourceAdSet && (
-                  <button onClick={() => { setSelectedSourceId(""); setNewName("") }} className="text-muted-foreground hover:text-foreground ml-auto">
-                    <IconX className="size-3.5" />
-                  </button>
-                )}
-              </div>
-              {searchOpen && !sourceAdSet && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
-                  {filtered.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-muted-foreground">
-                      {allAdSets.length === 0 ? "No ad sets in this account" : "No match"}
-                    </div>
-                  ) : filtered.map(a => (
-                    <button key={a.id} onClick={() => selectSource(a)}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent border-b last:border-b-0">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{a.name}</p>
-                        <p className="text-[10px] text-muted-foreground">{a.id}</p>
-                      </div>
-                      <span className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0",
-                        a.effective_status === "ACTIVE"
-                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                          : "bg-muted text-muted-foreground"
-                      )}>
-                        {a.effective_status}
-                      </span>
-                    </button>
-                  ))}
+                  )}
                 </div>
-              )}
-            </div>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                sideOffset={4}
+                onOpenAutoFocus={e => e.preventDefault()}
+                className="p-0 gap-0 w-[var(--radix-popover-trigger-width)] max-w-none max-h-60 overflow-y-auto"
+              >
+                {filtered.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-muted-foreground">
+                    {allAdSets.length === 0 ? "No ad sets in this account" : "No match"}
+                  </div>
+                ) : filtered.map(a => (
+                  <button key={a.id} onClick={() => selectSource(a)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent border-b last:border-b-0">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{a.name}</p>
+                      <p className="text-[10px] text-muted-foreground">{a.id}</p>
+                    </div>
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0",
+                      a.effective_status === "ACTIVE"
+                        ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                        : "bg-muted text-muted-foreground"
+                    )}>
+                      {a.effective_status}
+                    </span>
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
           </div>
 
           {sourceAdSet && (
@@ -6115,7 +6294,18 @@ interface AdSetCfg {
   startTime: string
   endTime: string
   customAttribution: boolean
+  // Custom attribution window values (days). "0" = disabled. Maps to Meta attribution_spec.
+  attrViewDays: string       // "0" | "1"
+  attrClickDays: string      // "1" | "7" | "28"
+  attrEngagedViewDays: string // "0" | "1"  (video only)
   deepCopy: boolean
+  // Granular ad selection for deep copy. Empty array = copy all (uses deep_copy=true on /copies).
+  selectedAdIds: string[]
+  duplicatedAdsStatus: "ACTIVE" | "PAUSED"
+  // Cached ads list for the source ad set
+  adsList: { id: string; name: string; effective_status: string }[]
+  adsLoading: boolean
+  adsLoaded: boolean
   copyCurrentSettings: boolean
 }
 
@@ -6147,12 +6337,13 @@ function DuplicateCampaignModal({
   const [adSetsLoading, setAdSetsLoading] = useState(false)
   const [selectedAdSetIds, setSelectedAdSetIds] = useState<Set<string>>(new Set())
   const [adSetConfigs, setAdSetConfigs] = useState<Record<string, AdSetCfg>>({})
+  // Newly-created (empty) campaigns from Step 1, used as targets in Step 2
+  const [newCampaigns, setNewCampaigns] = useState<{ id: string; name: string }[]>([])
   // Step 3 results
   const [results, setResults] = useState<any[]>([])
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState("")
-
-  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [warnings, setWarnings] = useState<string[]>([])
 
   useEffect(() => {
     if (!open) return
@@ -6167,18 +6358,12 @@ function DuplicateCampaignModal({
     setLaunchAsActive(false)
     setSelectedAdSetIds(new Set())
     setAdSetConfigs({})
+    setNewCampaigns([])
     setResults([])
     setError("")
+    setWarnings([])
     fetchCampaigns()
   }, [open, adAccountId])
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setCampaignDropdownOpen(false)
-    }
-    document.addEventListener("mousedown", h)
-    return () => document.removeEventListener("mousedown", h)
-  }, [])
 
   const fetchCampaigns = async () => {
     if (!adAccountId) return
@@ -6193,7 +6378,21 @@ function DuplicateCampaignModal({
 
   const selectCampaign = (c: CampaignItem) => {
     setSelectedCampaignId(c.id)
-    setCampaignName(c.name + " - copy")
+    // Meta convention: "Name - Copy" — strip existing trailing copy suffix to avoid stacking
+    const baseName = c.name.replace(/\s*[-–]\s*Copy\s*\d*\s*$/i, "").replace(/\s*\(copy\)\s*$/i, "")
+    setCampaignName(`${baseName} - Copy`)
+    // Inherit budget from source campaign (Meta returns budget in cents → convert to dollars)
+    const sc = c as any
+    if (sc.daily_budget) {
+      setBudgetType("daily")
+      setBudgetAmount((parseInt(sc.daily_budget) / 100).toFixed(2))
+    } else if (sc.lifetime_budget) {
+      setBudgetType("lifetime")
+      setBudgetAmount((parseInt(sc.lifetime_budget) / 100).toFixed(2))
+    } else {
+      // CBO without budget set, or campaign with adset-level budgets (ABO)
+      setBudgetAmount("")
+    }
     setCampaignDropdownOpen(false)
     setCampaignSearch("")
   }
@@ -6206,46 +6405,14 @@ function DuplicateCampaignModal({
     return true
   })
 
-  const goToStep2 = async () => {
+  // Step 1 → Step 2: actually creates EMPTY campaigns in Meta, then loads source ad sets to configure
+  const createCampaignsAndContinue = async () => {
     if (!selectedCampaignId || !campaignName.trim()) return
-    setAdSetsLoading(true)
-    try {
-      const res = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(adAccountId)}&campaign_id=${selectedCampaignId}`)
-      const d = await res.json()
-      const list: AdSet[] = d.adSets || []
-      setSourceAdSets(list)
-      // Auto-select all
-      const ids = new Set(list.map(a => a.id))
-      setSelectedAdSetIds(ids)
-      const cfgs: Record<string, AdSetCfg> = {}
-      list.forEach(a => {
-        cfgs[a.id] = {
-          id: a.id,
-          sourceName: a.name,
-          sourceStatus: a.effective_status,
-          customName: `${a.name} (copy)`,
-          copies: 1,
-          // ACTIVE → default true, PAUSED → default false (user can toggle on to activate + show full panel)
-          statusActive: a.effective_status === "ACTIVE",
-          startTime: "",
-          endTime: "",
-          customAttribution: false,
-          deepCopy: false,
-          copyCurrentSettings: true,
-        }
-      })
-      setAdSetConfigs(cfgs)
-    } catch {}
-    setAdSetsLoading(false)
-    setStep(2)
-  }
-
-  const handleCreate = async () => {
     setCreating(true)
     setError("")
     try {
-      const adSetConfigsArr = Array.from(selectedAdSetIds).map(id => adSetConfigs[id]).filter(Boolean)
-      const res = await fetch(`/api/facebook/campaigns/${selectedCampaignId}/duplicate`, {
+      // 1) Create the empty campaign(s) in Meta
+      const cRes = await fetch(`/api/facebook/campaigns/${selectedCampaignId}/duplicate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -6255,6 +6422,81 @@ function DuplicateCampaignModal({
           dailyBudget: budgetType === "daily" && budgetAmount ? budgetAmount : undefined,
           lifetimeBudget: budgetType === "lifetime" && budgetAmount ? budgetAmount : undefined,
           bidStrategy: bidStrategy === "inherit" ? undefined : bidStrategy,
+          adSetConfigs: [], // empty — only create campaign shells
+        }),
+      })
+      const cData = await cRes.json()
+      if (!cRes.ok) {
+        setError(cData.error || `HTTP ${cRes.status}`)
+        setCreating(false)
+        return
+      }
+      const created = (cData.campaigns || []) as { id: string; name: string }[]
+      setNewCampaigns(created)
+      if (Array.isArray(cData.warnings) && cData.warnings.length > 0) {
+        setWarnings(cData.warnings)
+      }
+
+      // 2) Fetch source ad sets to configure
+      setAdSetsLoading(true)
+      try {
+        const res = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(adAccountId)}&campaign_id=${selectedCampaignId}`)
+        const d = await res.json()
+        const list: AdSet[] = d.adSets || []
+        setSourceAdSets(list)
+        const ids = new Set(list.map(a => a.id))
+        setSelectedAdSetIds(ids)
+        const cfgs: Record<string, AdSetCfg> = {}
+        list.forEach(a => {
+          // Meta convention: "<original> - Copy". Strip trailing " - Copy" / " (copy)" first to avoid stacking.
+          const baseName = a.name.replace(/\s*[-–]\s*Copy\s*\d*\s*$/i, "").replace(/\s*\(copy\)\s*$/i, "")
+          cfgs[a.id] = {
+            id: a.id,
+            sourceName: a.name,
+            sourceStatus: a.effective_status,
+            customName: `${baseName} - Copy`,
+            copies: 1,
+            statusActive: a.effective_status === "ACTIVE",
+            startTime: "",
+            endTime: "",
+            customAttribution: false,
+            attrViewDays: "1",         // 1d_view
+            attrClickDays: "7",        // 7d_click (Meta default)
+            attrEngagedViewDays: "0",  // disabled
+            deepCopy: false,
+            selectedAdIds: [],
+            duplicatedAdsStatus: "PAUSED",
+            adsList: [],
+            adsLoading: false,
+            adsLoaded: false,
+            copyCurrentSettings: true,
+          }
+        })
+        setAdSetConfigs(cfgs)
+      } catch {}
+      setAdSetsLoading(false)
+      setStep(2)
+    } catch (e: any) {
+      setError(e.message || "Failed to create campaigns")
+    }
+    setCreating(false)
+  }
+
+  // Step 2: add ad sets into the already-created campaigns
+  const handleCreate = async () => {
+    if (newCampaigns.length === 0) {
+      setError("No created campaigns. Go back to Step 1.")
+      return
+    }
+    setCreating(true)
+    setError("")
+    try {
+      const adSetConfigsArr = Array.from(selectedAdSetIds).map(id => adSetConfigs[id]).filter(Boolean)
+      const res = await fetch(`/api/facebook/campaigns/duplicate-adsets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetCampaignIds: newCampaigns.map(c => c.id),
           adSetConfigs: adSetConfigsArr,
         }),
       })
@@ -6264,10 +6506,20 @@ function DuplicateCampaignModal({
         setCreating(false)
         return
       }
-      setResults(data.campaigns || [])
-      // Push new ad sets to parent for selection
+      const allWarnings = [
+        ...(Array.isArray(data.warnings) ? data.warnings : []),
+        ...(Array.isArray(data.errors) ? data.errors : []),
+      ]
+      if (allWarnings.length > 0) setWarnings(prev => [...prev, ...allWarnings])
+      // Merge: results campaigns only have ids — enrich with names from newCampaigns
+      const enriched = (data.campaigns || []).map((c: any) => ({
+        ...c,
+        name: newCampaigns.find(nc => nc.id === c.id)?.name || c.id,
+      }))
+      setResults(enriched)
+      // Push all new ad sets to parent
       const allNewAdSets: AdSet[] = []
-      for (const cmp of (data.campaigns || [])) {
+      for (const cmp of enriched) {
         for (const a of (cmp.adSets || [])) {
           allNewAdSets.push({
             id: a.id,
@@ -6286,7 +6538,7 @@ function DuplicateCampaignModal({
     setCreating(false)
   }
 
-  const totalAdSetsToCreate = Array.from(selectedAdSetIds).reduce((sum, id) => sum + (adSetConfigs[id]?.copies || 1), 0) * campaignCount
+  const totalAdSetsToCreate = Array.from(selectedAdSetIds).reduce((sum, id) => sum + (adSetConfigs[id]?.copies || 1), 0) * newCampaigns.length
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -6343,41 +6595,45 @@ function DuplicateCampaignModal({
 
             {/* Campaign selector */}
             <div className="flex gap-2">
-              <div ref={dropdownRef} className="relative flex-1">
-                <button
-                  onClick={() => setCampaignDropdownOpen(o => !o)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/30 text-left"
+              <Popover open={campaignDropdownOpen} onOpenChange={setCampaignDropdownOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    className="flex-1 flex items-center justify-between px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/30 text-left"
+                  >
+                    {sourceCampaign ? (
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <IconBrandMeta className="size-4 text-[#0064E0] shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-bold truncate">{sourceCampaign.name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            Manual | {sourceCampaign._adset_count || 0} ad sets | {sourceCampaign.id} | {(sourceCampaign.objective || "").replace(/_/g, " ")} | spend: {sourceCampaign._spend ? `${(sourceCampaign._spend / 1000).toFixed(1)}K` : "0"}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Select a campaign...</span>
+                    )}
+                    <IconSelector className="size-4 text-muted-foreground shrink-0 ml-2" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  sideOffset={4}
+                  className="p-0 gap-0 w-[var(--radix-popover-trigger-width)] max-w-none"
                 >
-                  {sourceCampaign ? (
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <IconBrandMeta className="size-4 text-[#0064E0] shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold truncate">{sourceCampaign.name}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          Manual | {sourceCampaign._adset_count || 0} ad sets | {sourceCampaign.id} | {(sourceCampaign.objective || "").replace(/_/g, " ")} | spend: {sourceCampaign._spend ? `${(sourceCampaign._spend / 1000).toFixed(1)}K` : "0"}
-                        </p>
-                      </div>
+                  <div className="p-2 border-b">
+                    <div className="relative">
+                      <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+                      <input
+                        autoFocus
+                        value={campaignSearch}
+                        onChange={e => setCampaignSearch(e.target.value)}
+                        placeholder="Search campaigns..."
+                        className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                      />
                     </div>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">Select a campaign...</span>
-                  )}
-                  <IconSelector className="size-4 text-muted-foreground shrink-0 ml-2" />
-                </button>
-                {campaignDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-xl shadow-lg z-50 overflow-hidden">
-                    <div className="p-2 border-b">
-                      <div className="relative">
-                        <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-                        <input
-                          autoFocus
-                          value={campaignSearch}
-                          onChange={e => setCampaignSearch(e.target.value)}
-                          placeholder="Search campaigns..."
-                          className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-72 overflow-y-auto">
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
                       {campaignsLoading ? (
                         <div className="px-3 py-3 text-xs text-muted-foreground flex items-center gap-2">
                           <IconLoader2 className="size-3 animate-spin" />Loading...
@@ -6406,9 +6662,8 @@ function DuplicateCampaignModal({
                         </button>
                       ))}
                     </div>
-                  </div>
-                )}
-              </div>
+                </PopoverContent>
+              </Popover>
               <button onClick={fetchCampaigns} className="size-10 border rounded-lg flex items-center justify-center hover:bg-muted/30">
                 <IconRefresh className={cn("size-4 text-muted-foreground", campaignsLoading && "animate-spin")} />
               </button>
@@ -6486,7 +6741,17 @@ function DuplicateCampaignModal({
                     <div className="border-t p-3 space-y-3">
                       <div>
                         <label className="text-sm font-bold block mb-1.5">Budget Type</label>
-                        <Select value={budgetType} onValueChange={v => setBudgetType(v as any)}>
+                        <Select
+                          value={budgetType}
+                          onValueChange={v => {
+                            const t = v as "daily" | "lifetime"
+                            setBudgetType(t)
+                            // Re-inherit from source when switching type
+                            const sc = sourceCampaign as any
+                            const src = t === "daily" ? sc?.daily_budget : sc?.lifetime_budget
+                            setBudgetAmount(src ? (parseInt(src) / 100).toFixed(2) : "")
+                          }}
+                        >
                           <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="daily">Daily Budget</SelectItem>
@@ -6495,7 +6760,25 @@ function DuplicateCampaignModal({
                         </Select>
                       </div>
                       <div>
-                        <label className="text-sm font-bold block mb-1.5">{budgetType === "daily" ? "Daily Budget" : "Lifetime Budget"}</label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-sm font-bold">{budgetType === "daily" ? "Daily Budget" : "Lifetime Budget"}</label>
+                          {(() => {
+                            const sc = sourceCampaign as any
+                            const sourceBudget = budgetType === "daily" ? sc?.daily_budget : sc?.lifetime_budget
+                            if (!sourceBudget) return null
+                            const sourceVal = (parseInt(sourceBudget) / 100).toFixed(2)
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setBudgetAmount(sourceVal)}
+                                className="text-[11px] text-primary hover:underline flex items-center gap-1"
+                                title="Use source campaign's budget"
+                              >
+                                <IconRefresh className="size-3" />Source: ${sourceVal}
+                              </button>
+                            )
+                          })()}
+                        </div>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                           <input
@@ -6506,7 +6789,20 @@ function DuplicateCampaignModal({
                             className="w-full pl-7 pr-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
                           />
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-1">{budgetType === "daily" ? "Amount to spend each day" : "Total amount over campaign lifetime"}</p>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {budgetType === "daily" ? "Amount to spend each day" : "Total amount over campaign lifetime"}
+                          {budgetAmount && sourceCampaign && (() => {
+                            const sc = sourceCampaign as any
+                            const src = budgetType === "daily" ? sc.daily_budget : sc.lifetime_budget
+                            if (!src) return null
+                            const sourceVal = parseInt(src) / 100
+                            const inputVal = parseFloat(budgetAmount) || 0
+                            if (Math.abs(sourceVal - inputVal) < 0.01) {
+                              return <span className="ml-1 text-emerald-600 dark:text-emerald-400">• Inherited from source</span>
+                            }
+                            return <span className="ml-1 text-amber-600 dark:text-amber-400">• Overridden (source: ${sourceVal.toFixed(2)})</span>
+                          })()}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -6549,6 +6845,44 @@ function DuplicateCampaignModal({
         {/* STEP 2 — Configure Ad Sets */}
         {step === 2 && (
           <div className="px-5 py-4 space-y-3">
+            {newCampaigns.length > 0 && (
+              <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 rounded-lg px-3 py-2.5 text-xs">
+                <div className="flex items-start gap-2">
+                  <IconCircleCheck className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-emerald-700 dark:text-emerald-400">
+                      Created {newCampaigns.length} campaign{newCampaigns.length > 1 ? "s" : ""} in Meta
+                    </p>
+                    <ul className="mt-1 space-y-0.5 text-emerald-700/80 dark:text-emerald-400/80">
+                      {newCampaigns.map(c => (
+                        <li key={c.id} className="truncate">• {c.name} <span className="font-mono opacity-60">({c.id})</span></li>
+                      ))}
+                    </ul>
+                    <p className="mt-1.5 text-emerald-700/70 dark:text-emerald-400/70 italic">Add ad sets below, or close to leave empty.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {warnings.length > 0 && (
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-800 rounded-lg px-3 py-2.5 text-xs">
+                <div className="flex items-start gap-2">
+                  <IconAlertTriangle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-amber-800 dark:text-amber-300">
+                      {warnings.length} warning{warnings.length > 1 ? "s" : ""} from Meta
+                    </p>
+                    <ul className="mt-1 space-y-0.5 text-amber-800/90 dark:text-amber-300/90 max-h-32 overflow-y-auto">
+                      {warnings.map((w, i) => (
+                        <li key={i} className="break-words">• {w}</li>
+                      ))}
+                    </ul>
+                    <button onClick={() => setWarnings([])} className="mt-1.5 text-[11px] underline opacity-70 hover:opacity-100">Dismiss</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg px-3 py-2 text-[11px] flex items-center justify-between">
               <span><span className="font-bold text-blue-700 dark:text-blue-300">Ad Account Timezone:</span> America/Los_Angeles (UTC-07:00)</span>
               <span><span className="font-bold text-blue-700 dark:text-blue-300">Time:</span> {new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</span>
@@ -6609,6 +6943,30 @@ function DuplicateCampaignModal({
               if (!cfg) return null
               const updateCfg = (patch: Partial<AdSetCfg>) => {
                 setAdSetConfigs(prev => ({ ...prev, [adset.id]: { ...prev[adset.id], ...patch } }))
+              }
+              const fetchAdsForCfg = async () => {
+                if (cfg.adsLoaded || cfg.adsLoading) return
+                updateCfg({ adsLoading: true })
+                try {
+                  const r = await fetch(`/api/facebook/adsets/${adset.id}/ads`)
+                  const d = await r.json()
+                  const list = (d.ads || []).map((a: any) => ({
+                    id: a.id, name: a.name, effective_status: a.effective_status,
+                  }))
+                  // Default: all ads selected
+                  setAdSetConfigs(prev => ({
+                    ...prev,
+                    [adset.id]: {
+                      ...prev[adset.id],
+                      adsList: list,
+                      adsLoaded: true,
+                      adsLoading: false,
+                      selectedAdIds: list.map((a: any) => a.id),
+                    },
+                  }))
+                } catch {
+                  updateCfg({ adsLoading: false })
+                }
               }
               return (
                 <div key={adset.id} className={cn("border rounded-xl overflow-hidden",
@@ -6719,7 +7077,28 @@ function DuplicateCampaignModal({
                             cfg.copyCurrentSettings ? "translate-x-4" : "translate-x-0.5")} />
                         </button>
                       </div>
-                      <p className="text-[11px] text-muted-foreground">Budget: No budget • {adset.effective_status} • Scheduled</p>
+                      {(() => {
+                        const a = adset as any
+                        const daily = a.daily_budget ? `$${(parseInt(a.daily_budget) / 100).toFixed(2)}/day` : null
+                        const lifetime = a.lifetime_budget ? `$${(parseInt(a.lifetime_budget) / 100).toFixed(2)} lifetime` : null
+                        const budget = daily || lifetime || "Inherits from campaign (CBO)"
+                        const statusLabel = a.effective_status === "ACTIVE" ? "Active"
+                          : a.effective_status === "PAUSED" ? "Paused"
+                          : a.effective_status === "CAMPAIGN_PAUSED" ? "Paused (campaign off)"
+                          : a.effective_status === "ARCHIVED" ? "Archived"
+                          : a.effective_status === "DELETED" ? "Deleted"
+                          : (a.effective_status || "—")
+                        const schedule = a.start_time
+                          ? `from ${new Date(a.start_time).toLocaleDateString()}${a.end_time ? ` to ${new Date(a.end_time).toLocaleDateString()}` : ""}`
+                          : "Run continuously"
+                        return (
+                          <p className="text-[11px] text-muted-foreground">
+                            <span className="font-medium">Budget:</span> {budget} <span className="opacity-50">•</span>{" "}
+                            <span className="font-medium">Status:</span> {statusLabel} <span className="opacity-50">•</span>{" "}
+                            <span className="font-medium">Schedule:</span> {schedule}
+                          </p>
+                        )
+                      })()}
 
                       <div className="grid grid-cols-[1fr_auto] gap-2">
                         <div>
@@ -6765,33 +7144,176 @@ function DuplicateCampaignModal({
                         <span><span className="font-medium text-foreground/70">Ad Scheduling (Day Parting)</span> - Requires Lifetime Budget. Turn off "Copy current settings" and select "Lifetime Budget" to enable.</span>
                       </p>
 
-                      <div className="flex items-start justify-between gap-2 py-2 border-t">
-                        <div>
-                          <p className="text-sm font-medium">Set Custom Attribution Window</p>
-                          <p className="text-[11px] text-muted-foreground">Using original ad set's attribution settings</p>
+                      {/* Custom Attribution Window */}
+                      <div className="border-t pt-2">
+                        <div className="flex items-start justify-between gap-2 py-1">
+                          <div>
+                            <p className="text-sm font-medium">Set Custom Attribution Window</p>
+                            <p className="text-[11px] text-muted-foreground">{cfg.customAttribution ? "Override the source ad set's attribution settings" : "Using original ad set's attribution settings"}</p>
+                          </div>
+                          <button onClick={() => updateCfg({ customAttribution: !cfg.customAttribution })}
+                            className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 mt-0.5",
+                              cfg.customAttribution ? "bg-primary" : "bg-muted-foreground/30")}>
+                            <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
+                              cfg.customAttribution ? "translate-x-4" : "translate-x-0.5")} />
+                          </button>
                         </div>
-                        <button onClick={() => updateCfg({ customAttribution: !cfg.customAttribution })}
-                          className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 mt-0.5",
-                            cfg.customAttribution ? "bg-primary" : "bg-muted-foreground/30")}>
-                          <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
-                            cfg.customAttribution ? "translate-x-4" : "translate-x-0.5")} />
-                        </button>
+                        {cfg.customAttribution && (
+                          <div className="space-y-2 mt-2 pl-1">
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="text-[11px] font-medium block mb-1 flex items-center gap-1">
+                                  View-through Days <IconInfoCircle className="size-3 text-muted-foreground" />
+                                </label>
+                                <Select value={cfg.attrViewDays} onValueChange={v => updateCfg({ attrViewDays: v })}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="0">Disabled (0 days)</SelectItem>
+                                    <SelectItem value="1">1 day</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div>
+                                <label className="text-[11px] font-medium block mb-1 flex items-center gap-1">
+                                  Click-through Days <IconInfoCircle className="size-3 text-muted-foreground" />
+                                </label>
+                                <Select value={cfg.attrClickDays} onValueChange={v => updateCfg({ attrClickDays: v })}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="1">1 day</SelectItem>
+                                    <SelectItem value="7">7 days</SelectItem>
+                                    <SelectItem value="28">28 days</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-medium block mb-1 flex items-center gap-1">
+                                Engaged-view Days <span className="text-muted-foreground">(Video ads only)</span> <IconInfoCircle className="size-3 text-muted-foreground" />
+                              </label>
+                              <Select value={cfg.attrEngagedViewDays} onValueChange={v => updateCfg({ attrEngagedViewDays: v })}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="0">Disabled (0 days)</SelectItem>
+                                  <SelectItem value="1">1 day</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-2 text-[11px] text-amber-800 dark:text-amber-300">
+                              <p className="font-bold flex items-center gap-1 mb-0.5">
+                                <IconAlertTriangle className="size-3" />Attribution Window Limitations
+                              </p>
+                              <p className="mb-1">Facebook restricts attribution window combinations based on campaign objective and optimization goal. If you receive an error, try different combinations or keep the original attribution settings.</p>
+                              <p>Common valid combinations: 1d_view, 1d_click, 7d_click, 1d_view + 1d_click, 1d_view + 7d_click. Engaged-view is only available for video ads.</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="flex items-start justify-between gap-2 bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900 rounded-lg p-2">
-                        <div>
-                          <p className="text-sm font-medium flex items-center gap-1">
-                            Duplicate ads from original ad set
-                            <IconInfoCircle className="size-3 text-muted-foreground" />
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">Copy all existing ads to new ad set</p>
+                      {/* Duplicate ads from original ad set */}
+                      <div className="border-t pt-2">
+                        <div className={cn("flex items-start justify-between gap-2 rounded-lg p-2",
+                          cfg.deepCopy ? "bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900" : "bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900")}>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium flex items-center gap-1">
+                              Duplicate ads from original ad set
+                              <IconInfoCircle className="size-3 text-muted-foreground" />
+                              {cfg.deepCopy && (
+                                <span className="ml-2 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                                  ✓ Will copy {cfg.selectedAdIds.length} ad{cfg.selectedAdIds.length !== 1 ? "s" : ""}
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">{cfg.deepCopy ? `${cfg.selectedAdIds.length} ad${cfg.selectedAdIds.length !== 1 ? "s" : ""} from original ad set will be copied` : "Copy all existing ads to new ad set"}</p>
+                          </div>
+                          <button onClick={() => {
+                            const next = !cfg.deepCopy
+                            updateCfg({ deepCopy: next })
+                            if (next) fetchAdsForCfg()
+                          }}
+                            className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 mt-0.5",
+                              cfg.deepCopy ? "bg-emerald-500" : "bg-muted-foreground/30")}>
+                            <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
+                              cfg.deepCopy ? "translate-x-4" : "translate-x-0.5")} />
+                          </button>
                         </div>
-                        <button onClick={() => updateCfg({ deepCopy: !cfg.deepCopy })}
-                          className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 mt-0.5",
-                            cfg.deepCopy ? "bg-primary" : "bg-muted-foreground/30")}>
-                          <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
-                            cfg.deepCopy ? "translate-x-4" : "translate-x-0.5")} />
-                        </button>
+                        {cfg.deepCopy && (
+                          <div className="space-y-2 mt-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <label className="text-[11px] font-medium">Duplicated ads status <span className="text-muted-foreground italic">Ads will be created as {cfg.duplicatedAdsStatus}</span></label>
+                              <Select value={cfg.duplicatedAdsStatus} onValueChange={v => updateCfg({ duplicatedAdsStatus: v as "ACTIVE" | "PAUSED" })}>
+                                <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="PAUSED">PAUSED</SelectItem>
+                                  <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="border rounded-lg overflow-hidden">
+                              <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b text-[11px]">
+                                <button
+                                  onClick={() => {
+                                    const allSelected = cfg.adsList.length > 0 && cfg.selectedAdIds.length === cfg.adsList.length
+                                    updateCfg({ selectedAdIds: allSelected ? [] : cfg.adsList.map(a => a.id) })
+                                  }}
+                                  className="font-medium flex items-center gap-1.5 hover:text-foreground"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    readOnly
+                                    checked={cfg.adsList.length > 0 && cfg.selectedAdIds.length === cfg.adsList.length}
+                                    ref={el => { if (el) el.indeterminate = cfg.selectedAdIds.length > 0 && cfg.selectedAdIds.length < cfg.adsList.length }}
+                                    className="size-3.5"
+                                  />
+                                  Choose ads to copy <span className="text-muted-foreground">{cfg.selectedAdIds.length}/{cfg.adsList.length}</span>
+                                </button>
+                                <div className="flex items-center gap-3 text-muted-foreground">
+                                  <span>None</span>
+                                  <span>Use only</span>
+                                  <span>All</span>
+                                  <IconChevronDown className="size-3" />
+                                </div>
+                              </div>
+                              <div className="max-h-40 overflow-y-auto">
+                                {cfg.adsLoading ? (
+                                  <div className="px-3 py-3 text-xs text-muted-foreground flex items-center gap-2">
+                                    <IconLoader2 className="size-3 animate-spin" />Loading ads...
+                                  </div>
+                                ) : cfg.adsList.length === 0 ? (
+                                  <div className="px-3 py-3 text-xs text-muted-foreground italic">No ads in this ad set</div>
+                                ) : cfg.adsList.map(ad => {
+                                  const checked = cfg.selectedAdIds.includes(ad.id)
+                                  return (
+                                    <label key={ad.id} className="flex items-center gap-2 px-3 py-2 border-b last:border-b-0 hover:bg-muted/20 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={e => {
+                                          updateCfg({
+                                            selectedAdIds: e.target.checked
+                                              ? [...cfg.selectedAdIds, ad.id]
+                                              : cfg.selectedAdIds.filter(id => id !== ad.id),
+                                          })
+                                        }}
+                                        className="size-3.5"
+                                      />
+                                      <IconBrandMeta className="size-3.5 text-[#0064E0]" />
+                                      <span className="flex-1 truncate text-xs font-medium">{ad.name}</span>
+                                      <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-bold border",
+                                        ad.effective_status === "ACTIVE"
+                                          ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
+                                          : "bg-muted text-muted-foreground border-border"
+                                      )}>
+                                        {ad.effective_status}
+                                      </span>
+                                    </label>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -6864,14 +7386,16 @@ function DuplicateCampaignModal({
                 <IconRefresh className="size-3" />Reset
               </button>
               <div className="flex items-center gap-2">
-                {step === 2 && (
-                  <Button variant="outline" onClick={() => setStep(1)}>
-                    <IconArrowLeft className="size-3.5 mr-1" />Back
-                  </Button>
-                )}
                 {step === 1 ? (
-                  <Button onClick={goToStep2} disabled={!selectedCampaignId || !campaignName.trim()}>
-                    Create {campaignCount} Campaign{campaignCount > 1 ? "s" : ""}<IconArrowRight className="size-3.5 ml-1" />
+                  <Button
+                    onClick={createCampaignsAndContinue}
+                    disabled={!selectedCampaignId || !campaignName.trim() || creating}
+                    className="min-w-[200px]"
+                  >
+                    {creating
+                      ? <><IconLoader2 className="size-4 animate-spin mr-1" />Creating...</>
+                      : <>Create {campaignCount} Campaign{campaignCount > 1 ? "s" : ""} & Continue<IconArrowRight className="size-3.5 ml-1" /></>
+                    }
                   </Button>
                 ) : (
                   <Button onClick={handleCreate} disabled={selectedAdSetIds.size === 0 || creating} className="min-w-[180px]">
@@ -7284,6 +7808,22 @@ function SettingsModal({
         if (t === "campaignName") return "Campaign1"
         if (t === "aiName") return "Hero-Style"
         if (t === "pageName") return "Magnali"
+        if (t === "date") {
+          const fmt = settings.naming.dateFormat
+          if (fmt === "yyyy-mm-dd") return "2025-10-17"
+          if (fmt === "mm-dd-yyyy") return "10-17-2025"
+          if (fmt === "dd-mm-yyyy") return "17-10-2025"
+          if (fmt === "mmm-dd") return "Oct-17"
+          if (fmt === "dd-mmm-yy") return "17-Oct-25"
+          if (fmt === "yyyymmdd") return "20251017"
+          if (fmt === "mmm-dd-yyyy") return "Oct-17-2025"
+          if (fmt === "dd/mm/yyyy") return "17/10/2025"
+          if (fmt === "mm/dd/yyyy") return "10/17/2025"
+          if (fmt === "WwwYyy") return "W42Y25"
+          if (fmt === "Www") return "W42"
+          if (fmt === "Yyy") return "Y25"
+          return "Oct-17"
+        }
         return t
       }).join(SEPARATORS.find(s => s.value === settings.naming.separator)?.char || "")
 
@@ -7702,7 +8242,10 @@ function SettingsModal({
                   <div className="col-span-2">
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-sm font-bold">UTM Parameters</label>
-                      <button className="text-xs text-primary hover:underline">Add recommended tags</button>
+                      <button
+                        className="text-xs text-primary hover:underline"
+                        onClick={() => setSettings(s => ({ ...s, links: { ...s.links, utmParameters: "utm_source=facebook&utm_medium=paid_social&utm_campaign={{campaign.name}}&utm_content={{ad.name}}" } }))}
+                      >Add recommended tags</button>
                     </div>
                     <textarea
                       value={settings.links.utmParameters}
@@ -7775,7 +8318,705 @@ function SettingsModal({
   )
 }
 
+// ─── Ad Copy Templates ────────────────────────────────────────────────────────
+
+interface AdCopyTemplate {
+  id: string
+  name: string
+  primaryText: string
+  headline: string
+  description?: string
+  link?: string
+  cta: string
+  createdAt: string
+}
+
+function AdCopyTemplateModal({
+  open, onClose, adAccountId, adAccountName,
+  onApply,
+  currentPrimaryText, currentHeadline, currentDescription, currentLink, currentCta,
+}: {
+  open: boolean; onClose: () => void
+  adAccountId: string; adAccountName: string
+  onApply: (t: Omit<AdCopyTemplate, "id" | "name" | "createdAt">) => void
+  currentPrimaryText: string; currentHeadline: string
+  currentDescription: string; currentLink: string; currentCta: string
+}) {
+  const TEMPLATES_KEY = `ad_copy_templates_${adAccountId}`
+  const [templates, setTemplates] = useState<AdCopyTemplate[]>([])
+  const [search, setSearch] = useState("")
+  const [sort, setSort] = useState<"newest" | "oldest">("newest")
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
+
+  // Create/Edit state
+  const [createOpen, setCreateOpen] = useState(false)
+  const [editTarget, setEditTarget] = useState<AdCopyTemplate | null>(null)
+  const [formName, setFormName] = useState("")
+  const [formPrimaryText, setFormPrimaryText] = useState("")
+  const [formHeadline, setFormHeadline] = useState("")
+  const [formDescription, setFormDescription] = useState("")
+  const [formLink, setFormLink] = useState("")
+  const [formCta, setFormCta] = useState("SHOP_NOW")
+
+  // Load from Ad Set state
+  const [loadOpen, setLoadOpen] = useState(false)
+  const [loadSearch, setLoadSearch] = useState("")
+  const [loadingAds, setLoadingAds] = useState(false)
+  const [existingAds, setExistingAds] = useState<any[]>([])
+
+  // Expanded rows
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(["__default__"]))
+
+  useEffect(() => {
+    if (!open) return
+    try {
+      const raw = localStorage.getItem(TEMPLATES_KEY)
+      setTemplates(raw ? JSON.parse(raw) : [])
+    } catch { setTemplates([]) }
+    setSearch(""); setPage(1)
+  }, [open, adAccountId])
+
+  const saveTemplates = (ts: AdCopyTemplate[]) => {
+    setTemplates(ts)
+    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(ts)) } catch {}
+  }
+
+  // Read Default Settings
+  const defaultCopy = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(`default_ad_settings_${adAccountId}`)
+      if (!raw) return null
+      const s: DefaultAdSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+      return s.adCopy
+    } catch { return null }
+  }, [open, adAccountId])
+
+  const defaultLinks = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(`default_ad_settings_${adAccountId}`)
+      if (!raw) return null
+      const s: DefaultAdSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+      return s.links
+    } catch { return null }
+  }, [open, adAccountId])
+
+  const filtered = useMemo(() => {
+    let ts = [...templates]
+    if (search) {
+      const q = search.toLowerCase()
+      ts = ts.filter(t =>
+        t.name.toLowerCase().includes(q) ||
+        t.primaryText.toLowerCase().includes(q) ||
+        t.headline.toLowerCase().includes(q)
+      )
+    }
+    ts.sort((a, b) =>
+      sort === "newest"
+        ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    )
+    return ts
+  }, [templates, search, sort])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const toggleExpand = (id: string) =>
+    setExpandedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  const openCreate = (prefill?: Partial<AdCopyTemplate>) => {
+    setEditTarget(null)
+    setFormName(prefill?.name || "")
+    setFormPrimaryText(prefill?.primaryText ?? currentPrimaryText)
+    setFormHeadline(prefill?.headline ?? currentHeadline)
+    setFormDescription(prefill?.description ?? currentDescription)
+    setFormLink(prefill?.link ?? currentLink)
+    setFormCta(prefill?.cta ?? (currentCta || "SHOP_NOW"))
+    setCreateOpen(true)
+  }
+
+  const openEdit = (t: AdCopyTemplate) => {
+    setEditTarget(t)
+    setFormName(t.name)
+    setFormPrimaryText(t.primaryText)
+    setFormHeadline(t.headline)
+    setFormDescription(t.description || "")
+    setFormLink(t.link || "")
+    setFormCta(t.cta)
+    setCreateOpen(true)
+  }
+
+  const handleSaveTemplate = () => {
+    if (!formName.trim()) return
+    if (editTarget) {
+      saveTemplates(templates.map(t => t.id === editTarget.id
+        ? { ...t, name: formName, primaryText: formPrimaryText, headline: formHeadline, description: formDescription, link: formLink, cta: formCta }
+        : t
+      ))
+    } else {
+      const newT: AdCopyTemplate = {
+        id: crypto.randomUUID(),
+        name: formName.trim(),
+        primaryText: formPrimaryText,
+        headline: formHeadline,
+        description: formDescription,
+        link: formLink,
+        cta: formCta,
+        createdAt: new Date().toISOString(),
+      }
+      saveTemplates([newT, ...templates])
+    }
+    setCreateOpen(false)
+  }
+
+  const deleteTemplate = (id: string) => {
+    if (!confirm("Delete this template?")) return
+    saveTemplates(templates.filter(t => t.id !== id))
+  }
+
+  const applyDefault = () => {
+    onApply({
+      primaryText: defaultCopy?.primaryText || "",
+      headline: defaultCopy?.headline || "",
+      description: defaultCopy?.description || "",
+      link: defaultLinks?.webLink || "",
+      cta: defaultCopy?.cta || "SHOP_NOW",
+    })
+    onClose()
+  }
+
+  const applyTemplate = (t: AdCopyTemplate) => {
+    onApply({ primaryText: t.primaryText, headline: t.headline, description: t.description, link: t.link, cta: t.cta })
+    onClose()
+  }
+
+  const fetchExistingAds = async () => {
+    setLoadingAds(true)
+    try {
+      const res = await fetch(`/api/facebook/existing-ads?ad_account_id=${encodeURIComponent(adAccountId)}&active_only=1&limit=100`)
+      const data = await res.json()
+      setExistingAds((data.ads || []).filter((a: any) => a.primaryText || a.headline))
+    } catch {}
+    setLoadingAds(false)
+  }
+
+  const openLoadFromAdSet = () => {
+    setLoadSearch("")
+    setLoadOpen(true)
+    if (existingAds.length === 0) fetchExistingAds()
+  }
+
+  const filteredAds = useMemo(() => {
+    if (!loadSearch) return existingAds
+    const q = loadSearch.toLowerCase()
+    return existingAds.filter(a =>
+      a.name?.toLowerCase().includes(q) ||
+      a.primaryText?.toLowerCase().includes(q) ||
+      a.headline?.toLowerCase().includes(q)
+    )
+  }, [existingAds, loadSearch])
+
+  const applyFromAd = (ad: any) => {
+    onApply({ primaryText: ad.primaryText || "", headline: ad.headline || "", description: ad.description, link: ad.link, cta: ad.cta || "LEARN_MORE" })
+    onClose()
+  }
+
+  const saveAdAsTemplate = (ad: any) => {
+    openCreate({ name: ad.name || "", primaryText: ad.primaryText || "", headline: ad.headline || "", description: ad.description, link: ad.link, cta: ad.cta || "LEARN_MORE" })
+    setLoadOpen(false)
+  }
+
+  const formattedDate = (iso: string) => {
+    const d = new Date(iso)
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  }
+
+  if (!open) return null
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden [&>button:last-of-type]:hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3.5 border-b shrink-0">
+          <DialogTitle className="text-base font-bold">Select The Ad Copy Template</DialogTitle>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={openLoadFromAdSet}>
+              <IconCopy className="size-3.5" />Load from Ad Set
+              <IconInfoCircle className="size-3.5 text-muted-foreground" />
+            </Button>
+            <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => openCreate()}>
+              <IconPlus className="size-3.5" />Create Ad Copy Template
+            </Button>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="flex items-center gap-2 px-5 py-2.5 border-b shrink-0 bg-muted/20">
+          <div className="relative flex-1">
+            <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+            <input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              placeholder="Search Ad Copy Templates..."
+              className="w-full pl-9 pr-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+            />
+          </div>
+          <Select value={sort} onValueChange={v => setSort(v as any)}>
+            <SelectTrigger className="h-9 w-28 text-xs bg-background"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="oldest">Oldest</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex items-center gap-1.5 h-9 px-3 border rounded-lg bg-background text-xs text-muted-foreground">
+            <IconBuildingStore className="size-3.5" />
+            <span className="truncate max-w-[120px]">{adAccountName}</span>
+          </div>
+        </div>
+
+        {/* Template list */}
+        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+          {/* Default Settings card */}
+          {!search && (
+            <div className="border rounded-xl overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <button
+                  onClick={() => toggleExpand("__default__")}
+                  className={cn("size-7 rounded-lg border flex items-center justify-center shrink-0 hover:bg-muted/40 transition-colors",
+                    expandedIds.has("__default__") && "bg-muted/40")}
+                >
+                  <IconChevronDown className={cn("size-3.5 transition-transform", expandedIds.has("__default__") && "rotate-180")} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold">Default Settings</span>
+                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 font-medium">Default</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                    {[defaultCopy?.headline, defaultCopy?.cta, defaultLinks?.webLink ? new URL(defaultLinks.webLink.startsWith("http") ? defaultLinks.webLink : `https://${defaultLinks.webLink}`).hostname : null].filter(Boolean).join(" · ") || "No defaults configured"}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {formattedDate(new Date().toISOString())}
+                </span>
+                <Button size="sm" className="h-8 px-4 shrink-0" onClick={applyDefault}
+                  disabled={!defaultCopy?.primaryText && !defaultCopy?.headline}>
+                  Apply
+                </Button>
+                <button onClick={() => {/* open settings */}} className="text-muted-foreground hover:text-foreground p-1">
+                  <IconSettings className="size-4" />
+                </button>
+              </div>
+              {expandedIds.has("__default__") && (
+                <div className="border-t px-4 py-3 bg-muted/20 space-y-2">
+                  {defaultCopy?.primaryText && (
+                    <div className="grid grid-cols-[120px_1fr] gap-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide pt-0.5">Primary Text</span>
+                      <p className="text-xs leading-relaxed line-clamp-4">{defaultCopy.primaryText}</p>
+                    </div>
+                  )}
+                  {defaultCopy?.headline && (
+                    <div className="grid grid-cols-[120px_1fr] gap-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Headline</span>
+                      <p className="text-xs">{defaultCopy.headline}</p>
+                    </div>
+                  )}
+                  {defaultLinks?.webLink && (
+                    <div className="grid grid-cols-[120px_1fr] gap-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</span>
+                      <p className="text-xs text-muted-foreground truncate">{defaultLinks.webLink}</p>
+                    </div>
+                  )}
+                  {defaultCopy?.cta && (
+                    <div className="grid grid-cols-[120px_1fr] gap-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</span>
+                      <p className="text-xs">{defaultCopy.cta}</p>
+                    </div>
+                  )}
+                  {!defaultCopy?.primaryText && !defaultCopy?.headline && (
+                    <p className="text-xs text-muted-foreground italic">No defaults set. Configure in Settings → Ad Copy Defaults.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* User templates */}
+          {pageItems.map(t => (
+            <div key={t.id} className="border rounded-xl overflow-hidden">
+              <div className="flex items-center gap-3 px-4 py-3">
+                <button
+                  onClick={() => toggleExpand(t.id)}
+                  className={cn("size-7 rounded-lg border flex items-center justify-center shrink-0 hover:bg-muted/40 transition-colors",
+                    expandedIds.has(t.id) && "bg-muted/40")}
+                >
+                  <IconChevronDown className={cn("size-3.5 transition-transform", expandedIds.has(t.id) && "rotate-180")} />
+                </button>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-semibold">{t.name}</span>
+                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                    {[t.headline, t.cta, t.link ? (() => { try { return new URL(t.link).hostname } catch { return t.link } })() : null].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">{formattedDate(t.createdAt)}</span>
+                <Button size="sm" className="h-8 px-4 shrink-0" onClick={() => applyTemplate(t)}>Apply</Button>
+                <div className="relative group">
+                  <button className="text-muted-foreground hover:text-foreground p-1">
+                    <IconSettings className="size-4" />
+                  </button>
+                  <div className="absolute right-0 top-full mt-1 bg-popover border rounded-lg shadow-lg z-50 hidden group-hover:block w-36">
+                    <button onClick={() => openEdit(t)} className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center gap-2">
+                      <IconPencil className="size-3.5" />Edit
+                    </button>
+                    <button onClick={() => deleteTemplate(t.id)} className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-accent flex items-center gap-2">
+                      <IconTrash className="size-3.5" />Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {expandedIds.has(t.id) && (
+                <div className="border-t px-4 py-3 bg-muted/20 space-y-2">
+                  {t.primaryText && (
+                    <div className="grid grid-cols-[120px_1fr] gap-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide pt-0.5">Primary Text</span>
+                      <p className="text-xs leading-relaxed whitespace-pre-wrap line-clamp-4">{t.primaryText}</p>
+                    </div>
+                  )}
+                  {t.headline && (
+                    <div className="grid grid-cols-[120px_1fr] gap-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Headline</span>
+                      <p className="text-xs">{t.headline}</p>
+                    </div>
+                  )}
+                  {t.link && (
+                    <div className="grid grid-cols-[120px_1fr] gap-2">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</span>
+                      <p className="text-xs text-muted-foreground truncate">{t.link}</p>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-[120px_1fr] gap-2">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</span>
+                    <p className="text-xs">{t.cta}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {filtered.length === 0 && !search && templates.length === 0 && (
+            <div className="text-center py-10 text-sm text-muted-foreground">
+              <p className="font-medium mb-1">No templates yet</p>
+              <p className="text-xs">Click "Create Ad Copy Template" to save your first one.</p>
+            </div>
+          )}
+          {filtered.length === 0 && search && (
+            <div className="text-center py-10 text-sm text-muted-foreground">No templates match "{search}"</div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3 border-t shrink-0 bg-background">
+          <p className="text-xs text-muted-foreground">Viewing <span className="font-medium">{filtered.length}</span> Template{filtered.length !== 1 ? "s" : ""}</p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
+              <IconChevronLeft className="size-3.5 mr-1" />Previous
+            </Button>
+            <span className="text-sm font-medium px-2">{page}</span>
+            <Button variant="outline" size="sm" className="h-8" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+              Next<IconChevronRight className="size-3.5 ml-1" />
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+
+      {/* Create / Edit dialog */}
+      <Dialog open={createOpen} onOpenChange={v => !v && setCreateOpen(false)}>
+        <DialogContent className="max-w-lg max-h-[88vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <div className="px-5 py-4 border-b shrink-0">
+            <DialogTitle className="text-sm font-bold">{editTarget ? "Edit Template" : "Create Ad Copy Template"}</DialogTitle>
+          </div>
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Template Name <span className="text-destructive">*</span></label>
+              <input
+                value={formName}
+                onChange={e => setFormName(e.target.value)}
+                placeholder="e.g. Black Friday Sale 2025"
+                className="w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Primary Text</label>
+              <textarea
+                value={formPrimaryText}
+                onChange={e => setFormPrimaryText(e.target.value)}
+                rows={5}
+                placeholder="Write your primary ad text..."
+                className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Headline</label>
+              <input
+                value={formHeadline}
+                onChange={e => setFormHeadline(e.target.value)}
+                placeholder="Enter headline..."
+                className="w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground block mb-1.5">Description (optional)</label>
+              <input
+                value={formDescription}
+                onChange={e => setFormDescription(e.target.value)}
+                placeholder="Enter description..."
+                className="w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">Web Link (optional)</label>
+                <input
+                  type="url"
+                  value={formLink}
+                  onChange={e => setFormLink(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground block mb-1.5">CTA</label>
+                <Select value={formCta} onValueChange={setFormCta}>
+                  <SelectTrigger className="h-9 text-sm bg-muted/30"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2 px-5 py-3 border-t shrink-0">
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveTemplate} disabled={!formName.trim()}>
+              {editTarget ? "Save Changes" : "Create Template"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Load from Ad Set dialog */}
+      <Dialog open={loadOpen} onOpenChange={v => !v && setLoadOpen(false)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col p-0 gap-0 overflow-hidden">
+          <div className="px-5 py-4 border-b shrink-0">
+            <DialogTitle className="text-sm font-bold">Load from Ad Set</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-0.5">Select an active ad to import its copy</p>
+          </div>
+          <div className="px-5 py-3 border-b shrink-0">
+            <div className="relative">
+              <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+              <input
+                value={loadSearch}
+                onChange={e => setLoadSearch(e.target.value)}
+                placeholder="Search ads by name or copy..."
+                className="w-full pl-9 pr-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            {loadingAds && (
+              <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+                <IconLoader2 className="size-4 animate-spin" />
+                <span className="text-sm">Loading active ads...</span>
+              </div>
+            )}
+            {!loadingAds && filteredAds.length === 0 && (
+              <div className="text-center py-10 text-sm text-muted-foreground">
+                {loadSearch ? `No ads match "${loadSearch}"` : "No active ads with copy found in this account"}
+              </div>
+            )}
+            {!loadingAds && filteredAds.map((ad: any) => (
+              <div key={ad.id} className="border rounded-lg p-3 hover:bg-muted/20 transition-colors">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium truncate">{ad.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{ad.effective_status}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => saveAdAsTemplate(ad)}>
+                      <IconBookmark className="size-3" />Save
+                    </Button>
+                    <Button size="sm" className="h-7 text-xs" onClick={() => applyFromAd(ad)}>Apply</Button>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  {ad.primaryText && (
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{ad.primaryText}</p>
+                  )}
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                    {ad.headline && <span className="text-[11px] font-medium">{ad.headline}</span>}
+                    {ad.cta && <span className="text-[11px] text-muted-foreground">{ad.cta}</span>}
+                    {ad.link && <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">{(() => { try { return new URL(ad.link).hostname } catch { return ad.link } })()}</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </Dialog>
+  )
+}
+
 // ─── Ad Setup Panel ───────────────────────────────────────────────────────────
+
+// ─── Web Link + UTM + Display Link ────────────────────────────────────────────
+
+const META_DYNAMIC_PARAMS = [
+  { label: "Campaign Name",  value: "{{campaign.name}}" },
+  { label: "Campaign ID",    value: "{{campaign.id}}" },
+  { label: "Ad Set Name",    value: "{{adset.name}}" },
+  { label: "Ad Set ID",      value: "{{adset.id}}" },
+  { label: "Ad Name",        value: "{{ad.name}}" },
+  { label: "Ad ID",          value: "{{ad.id}}" },
+  { label: "Platform",       value: "{{site_source_name}}" },
+  { label: "Placement",      value: "{{placement}}" },
+]
+
+const UTM_SUGGESTIONS = [
+  {
+    label: "Standard Facebook",
+    value: "utm_source=facebook&utm_medium=paid_social&utm_campaign={{campaign.name}}&utm_content={{ad.name}}",
+  },
+  {
+    label: "Full tracking",
+    value: "utm_source=facebook&utm_medium=paid_social&utm_campaign={{campaign.name}}&utm_term={{adset.name}}&utm_content={{ad.name}}&utm_id={{ad.id}}",
+  },
+  {
+    label: "Simple",
+    value: "utm_source=facebook&utm_medium=cpc",
+  },
+]
+
+function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayLink, setDisplayLink }: {
+  webLink: string; setWebLink: (v: string) => void
+  utmParams: string; setUtmParams: (v: string) => void
+  displayLink: string; setDisplayLink: (v: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [dynOpen, setDynOpen] = useState(false)
+  const [utmSugOpen, setUtmSugOpen] = useState(false)
+  const utmRef = useRef<HTMLInputElement>(null)
+
+  const insertAtCursor = (text: string) => {
+    const el = utmRef.current
+    if (!el) { setUtmParams((utmParams ? utmParams + "&" : "") + text); return }
+    const start = el.selectionStart ?? utmParams.length
+    const end = el.selectionEnd ?? utmParams.length
+    const next = utmParams.slice(0, start) + text + utmParams.slice(end)
+    setUtmParams(next)
+    setTimeout(() => { el.focus(); el.setSelectionRange(start + text.length, start + text.length) }, 0)
+  }
+
+  return (
+    <div>
+      <label className="text-xs font-medium text-muted-foreground block mb-1.5">Web Link</label>
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <IconWorld className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+          <input type="url" value={webLink} onChange={e => setWebLink(e.target.value)}
+            placeholder="https://..."
+            className="w-full pl-8 pr-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50" />
+        </div>
+        <Button
+          variant="outline" size="icon"
+          className="size-9 shrink-0"
+          onClick={() => setExpanded(v => !v)}
+          title={expanded ? "Hide UTM & Display Link" : "Add UTM Parameters & Display Link"}
+        >
+          {expanded ? <IconMinus className="size-3.5" /> : <IconPlus className="size-3.5" />}
+        </Button>
+      </div>
+
+      {expanded && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {/* UTM Parameters */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-medium text-primary">UTM Parameters</label>
+              <div className="flex items-center gap-1">
+                {/* Dynamic params */}
+                <Popover open={dynOpen} onOpenChange={setDynOpen}>
+                  <PopoverTrigger asChild>
+                    <button className="text-[10px] px-1.5 py-0.5 border rounded font-mono text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors">
+                      {"{ }"}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-52 p-1" align="end">
+                    <p className="text-[10px] text-muted-foreground px-2 py-1 font-medium">Meta Dynamic Params</p>
+                    {META_DYNAMIC_PARAMS.map(p => (
+                      <button key={p.value} onClick={() => { insertAtCursor(p.value); setDynOpen(false) }}
+                        className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted rounded flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">{p.label}</span>
+                        <span className="font-mono text-[10px] text-primary truncate">{p.value}</span>
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+                {/* Suggestions */}
+                <Popover open={utmSugOpen} onOpenChange={setUtmSugOpen}>
+                  <PopoverTrigger asChild>
+                    <button className="text-[10px] text-primary hover:underline">from suggest</button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 p-1" align="end">
+                    <p className="text-[10px] text-muted-foreground px-2 py-1 font-medium">UTM Templates</p>
+                    {UTM_SUGGESTIONS.map(s => (
+                      <button key={s.label} onClick={() => { setUtmParams(s.value); setUtmSugOpen(false) }}
+                        className="w-full text-left px-2 py-2 hover:bg-muted rounded">
+                        <p className="text-xs font-medium mb-0.5">{s.label}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono break-all leading-tight">{s.value}</p>
+                      </button>
+                    ))}
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <input
+              ref={utmRef}
+              type="text"
+              value={utmParams}
+              onChange={e => setUtmParams(e.target.value)}
+              placeholder="utm_source=facebook&utm_medium=paid"
+              className="w-full px-3 py-2 text-xs bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40 font-mono"
+            />
+            {utmParams && webLink && (
+              <p className="text-[10px] text-muted-foreground/60 mt-1 truncate font-mono">
+                → {webLink}{webLink.includes("?") ? "&" : "?"}{utmParams}
+              </p>
+            )}
+          </div>
+
+          {/* Display Link */}
+          <div>
+            <label className="text-[11px] font-medium text-primary block mb-1">Display Link</label>
+            <input
+              type="text"
+              value={displayLink}
+              onChange={e => setDisplayLink(e.target.value)}
+              placeholder="e.g. wellnessnest.co/shop"
+              className="w-full px-3 py-2 text-xs bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
+            />
+            <p className="text-[10px] text-muted-foreground/60 mt-1 leading-tight">
+              Short URL shown in the ad (does not affect destination)
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+type AdSourceMode = "new_ad" | "post_id" | "creative_id"
 
 function AdSetupPanel({
   primaryTexts, setPrimaryTexts,
@@ -7783,21 +9024,34 @@ function AdSetupPanel({
   description, setDescription,
   cta, setCta,
   webLink, setWebLink,
+  utmParams, setUtmParams,
+  displayLink, setDisplayLink,
   launchAsActive, setLaunchAsActive,
   adAccountId, adAccountName, orgName,
+  selectedCreatives,
+  adSourceMode, setAdSourceMode,
+  adSourceIds, setAdSourceIds,
 }: {
   primaryTexts: string[]; setPrimaryTexts: (v: string[]) => void
   headlines: string[]; setHeadlines: (v: string[]) => void
   description: string; setDescription: (v: string) => void
   cta: string; setCta: (v: string) => void
   webLink: string; setWebLink: (v: string) => void
+  utmParams: string; setUtmParams: (v: string) => void
+  displayLink: string; setDisplayLink: (v: string) => void
   launchAsActive: boolean; setLaunchAsActive: (v: boolean) => void
   adAccountId: string
   adAccountName: string
   orgName: string
+  selectedCreatives: Creative[]
+  adSourceMode: AdSourceMode
+  setAdSourceMode: (v: AdSourceMode) => void
+  adSourceIds: Record<string, string>
+  setAdSourceIds: (v: Record<string, string>) => void
 }) {
   const [showDesc, setShowDesc] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [copyTemplateOpen, setCopyTemplateOpen] = useState(false)
 
   const updateText = (idx: number, val: string) => {
     const next = [...primaryTexts]; next[idx] = val; setPrimaryTexts(next)
@@ -7820,6 +9074,24 @@ function AdSetupPanel({
         adAccountName={adAccountName}
         orgName={orgName}
       />
+      <AdCopyTemplateModal
+        open={copyTemplateOpen}
+        onClose={() => setCopyTemplateOpen(false)}
+        adAccountId={adAccountId}
+        adAccountName={adAccountName}
+        currentPrimaryText={primaryTexts[0] || ""}
+        currentHeadline={headlines[0] || ""}
+        currentDescription={description}
+        currentLink={webLink}
+        currentCta={cta}
+        onApply={t => {
+          if (t.primaryText) setPrimaryTexts([t.primaryText])
+          if (t.headline) setHeadlines([t.headline])
+          if (t.description) setDescription(t.description)
+          if (t.link) setWebLink(t.link)
+          if (t.cta) setCta(t.cta)
+        }}
+      />
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-semibold">Ad Setup</span>
@@ -7829,7 +9101,7 @@ function AdSetupPanel({
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setSettingsOpen(true)}>
             <IconSettings className="size-3" />Settings<IconChevronDown className="size-3" />
           </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1">
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCopyTemplateOpen(true)}>
             <IconTextCaption className="size-3" />Load Copy
           </Button>
         </div>
@@ -7929,18 +9201,144 @@ function AdSetupPanel({
         </div>
 
         {/* Web Link */}
-        <div>
-          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Web Link</label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <IconWorld className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-              <input type="url" value={webLink} onChange={e => setWebLink(e.target.value)}
-                placeholder="https://..."
-                className="w-full pl-8 pr-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50" />
+        <WebLinkSection
+          webLink={webLink} setWebLink={setWebLink}
+          utmParams={utmParams} setUtmParams={setUtmParams}
+          displayLink={displayLink} setDisplayLink={setDisplayLink}
+        />
+
+        {/* Ad Source — shown when media is loaded */}
+        {selectedCreatives.length > 0 && (() => {
+          const resolvedCount = selectedCreatives.filter(c =>
+            adSourceMode === "post_id"
+              ? !!adSourceIds[c.id]
+              : adSourceMode === "creative_id"
+                ? !!adSourceIds[c.id]
+                : !!(c.fb_video_id || c.fb_image_hash)
+          ).length
+
+          const AD_SOURCE_OPTIONS: { value: AdSourceMode; label: string; desc: string }[] = [
+            { value: "post_id",     label: "Post ID",      desc: "Full copy · includes engagement" },
+            { value: "creative_id", label: "Creative ID",  desc: "Creative only · no engagement"   },
+            { value: "new_ad",      label: "New ad",       desc: "Launch fresh · no reused ID"     },
+          ]
+
+          return (
+            <div className="border rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/20">
+                <div className="flex items-center gap-1.5">
+                  <IconStack2 className="size-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold">Ad Source</span>
+                  <IconInfoCircle className="size-3 text-muted-foreground/50" title="How ads reference your creative on Meta" />
+                  {adSourceMode === "new_ad"
+                    ? <span className="text-[10px] text-green-600 font-medium">{resolvedCount}/{selectedCreatives.length} resolved</span>
+                    : resolvedCount > 0
+                      ? <span className="text-[10px] text-green-600 font-medium">{resolvedCount}/{selectedCreatives.length} resolved</span>
+                      : <span className="text-[10px] text-amber-500 font-medium">0/{selectedCreatives.length} resolved</span>
+                  }
+                </div>
+                <button
+                  onClick={() => setAdSourceMode("new_ad")}
+                  title="Reset to New ad"
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <IconRefresh className="size-3.5" />
+                </button>
+              </div>
+
+              {/* 3 options */}
+              <div className="grid grid-cols-3 gap-1.5 p-2">
+                {AD_SOURCE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setAdSourceMode(opt.value)}
+                    className={cn(
+                      "flex flex-col items-start px-2.5 py-2 rounded-lg border text-left transition-all",
+                      adSourceMode === opt.value
+                        ? "border-primary bg-primary/5 ring-1 ring-primary"
+                        : "border-border hover:border-muted-foreground/40"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <div className={cn(
+                        "size-3 rounded-full border-2 flex items-center justify-center shrink-0",
+                        adSourceMode === opt.value ? "border-primary" : "border-muted-foreground/40"
+                      )}>
+                        {adSourceMode === opt.value && <div className="size-1.5 rounded-full bg-primary" />}
+                      </div>
+                      <span className="text-[11px] font-semibold leading-tight">{opt.label}</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground leading-tight pl-[18px]">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Per-creative ID inputs (Post ID / Creative ID modes) */}
+              {(adSourceMode === "post_id" || adSourceMode === "creative_id") && (
+                <div className="px-2 pb-2 space-y-1.5">
+                  {selectedCreatives.map(c => {
+                    const thumb = c.fb_thumbnail_url || c.fb_image_url || c.file_url
+                    const val = adSourceIds[c.id] || ""
+                    const isResolved = !!val
+                    return (
+                      <div key={c.id} className="flex items-center gap-2">
+                        <div className="relative size-8 rounded overflow-hidden bg-muted shrink-0">
+                          {thumb
+                            ? <img src={thumb} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center"><IconVideo className="size-3 text-muted-foreground/40" /></div>}
+                          {isResolved && (
+                            <div className="absolute inset-0 bg-green-500/20 flex items-end justify-end p-0.5">
+                              <div className="size-3 rounded-full bg-green-500 flex items-center justify-center">
+                                <IconCheck className="size-2 text-white" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <input
+                          type="text"
+                          value={val}
+                          onChange={e => setAdSourceIds({ ...adSourceIds, [c.id]: e.target.value.trim() })}
+                          placeholder={adSourceMode === "post_id" ? "Paste Post ID (e.g. 123_456)" : "Paste Creative ID"}
+                          className="flex-1 px-2 py-1 text-[11px] bg-muted/30 border rounded-md outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
+                        />
+                      </div>
+                    )
+                  })}
+                  <p className="text-[10px] text-muted-foreground px-0.5">
+                    {adSourceMode === "post_id"
+                      ? "Find Post ID in Meta Ads Manager → Ad → Creative → Post ID"
+                      : "Find Creative ID in Meta Ads Manager → Ad → Creative → Creative ID"}
+                  </p>
+                </div>
+              )}
+
+              {/* Thumbnails row for new_ad mode */}
+              {adSourceMode === "new_ad" && (
+                <div className="px-3 pb-3 flex gap-2 flex-wrap">
+                  {selectedCreatives.map(c => {
+                    const thumb = c.fb_thumbnail_url || c.fb_image_url || c.file_url
+                    const ready = !!(c.fb_video_id || c.fb_image_hash)
+                    return (
+                      <div key={c.id} className="relative" title={c.file_name}>
+                        <div className="size-10 rounded overflow-hidden bg-muted border">
+                          {thumb
+                            ? <img src={thumb} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center"><IconVideo className="size-3 text-muted-foreground/40" /></div>}
+                        </div>
+                        <div className={cn(
+                          "absolute -bottom-1 -right-1 size-3.5 rounded-full border border-background flex items-center justify-center",
+                          ready ? "bg-green-500" : "bg-amber-400"
+                        )}>
+                          {ready ? <IconCheck className="size-2 text-white" /> : <IconLoader2 className="size-2 text-white animate-spin" />}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-            <Button variant="outline" size="icon" className="size-9 shrink-0"><IconPlus className="size-3.5" /></Button>
-          </div>
-        </div>
+          )
+        })()}
 
         {/* Shop & Catalog */}
         <div>
@@ -8254,7 +9652,7 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
                 {/* Red X always visible top-left */}
                 <button
                   onClick={() => onDeselect(c.id)}
-                  className="absolute top-2 left-2 z-10 size-5 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-md"
+                  className="absolute top-2 left-2 z-1 size-5 rounded-md bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-md"
                   title="Remove from ads"
                 >
                   <IconX className="size-3" />
@@ -8403,14 +9801,175 @@ function UserAvatar({ name }: { name: string }) {
   )
 }
 
+// ─── Batch Detail Modal ────────────────────────────────────────────────────────
+
+function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
+  batch: LaunchBatch | null
+  open: boolean
+  onClose: () => void
+  onRelaunch: (b: LaunchBatch) => void
+}) {
+  if (!batch) return null
+  const accountNumId = batch.ad_account_id?.replace("act_", "")
+  const amsBase = `https://adsmanager.facebook.com/adsmanager/manage`
+  const ctaLabel = CTA_OPTIONS.find(o => o.value === batch.cta)?.label || batch.cta || "—"
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b">
+          <DialogTitle className="text-base font-semibold">Launch Details</DialogTitle>
+          <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold",
+            batch.status === "success" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+            batch.status === "partial" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+            "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400")}>
+            {batch.status === "success" ? "Success" : batch.status === "partial" ? "Partial" : "Failed"}
+          </span>
+          <span className="text-xs text-muted-foreground ml-auto">{new Date(batch.created_at).toLocaleString()} · {batch.user_name}</span>
+        </div>
+
+        <div className="overflow-y-auto max-h-[70vh] p-5 space-y-5">
+          {/* Stats */}
+          <div className="grid grid-cols-4 gap-3">
+            {[
+              { label: "Ads Created", value: batch.total_ads, color: "text-foreground" },
+              { label: "Failed", value: batch.failed_ads, color: batch.failed_ads > 0 ? "text-red-500" : "text-muted-foreground" },
+              { label: "Ad Sets", value: batch.adset_ids?.length || 0, color: "text-foreground" },
+              { label: "Creatives", value: batch.creative_ids?.length || 0, color: "text-foreground" },
+            ].map(s => (
+              <div key={s.label} className="text-center bg-muted/30 rounded-xl py-3">
+                <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Creatives */}
+          {batch.creative_thumbs?.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Creatives</p>
+              <div className="flex gap-2 flex-wrap">
+                {batch.creative_thumbs.map((thumb, i) => (
+                  <div key={i} className="size-16 rounded-lg overflow-hidden bg-muted border shrink-0">
+                    {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" /> :
+                      <div className="w-full h-full flex items-center justify-center"><IconVideo className="size-4 text-muted-foreground/40" /></div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ad copy */}
+          <div className="grid grid-cols-2 gap-4">
+            {batch.primary_text && (
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Primary Text</p>
+                <p className="text-sm bg-muted/30 rounded-lg p-3 leading-relaxed border">{batch.primary_text}</p>
+              </div>
+            )}
+            <div className="space-y-3">
+              {batch.headline && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Headline</p>
+                  <p className="text-sm font-medium">{batch.headline}</p>
+                </div>
+              )}
+              <div className="flex gap-4">
+                {batch.cta && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">CTA</p>
+                    <span className="text-xs px-2 py-0.5 rounded bg-muted font-medium">{ctaLabel}</span>
+                  </div>
+                )}
+                {batch.duration_ms && (
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Duration</p>
+                    <p className="text-xs font-medium">{formatDuration(batch.duration_ms)}</p>
+                  </div>
+                )}
+              </div>
+              {batch.web_link && (
+                <div>
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Destination URL</p>
+                  <a href={batch.web_link} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline break-all">{batch.web_link}</a>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Ad Sets */}
+          {batch.adset_names?.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Ad Sets Targeted</p>
+              <div className="flex flex-wrap gap-1.5">
+                {batch.adset_names.map((name, i) => (
+                  <a
+                    key={i}
+                    href={`${amsBase}/adsets?act=${accountNumId}&selected_adset_ids=${batch.adset_ids?.[i] || ""}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 rounded-md hover:bg-blue-100 border border-blue-200 dark:border-blue-800/50 transition-colors"
+                  >
+                    {name}<IconExternalLink className="size-3" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Errors */}
+          {batch.errors?.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-2">Errors ({batch.errors.length})</p>
+              <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                {batch.errors.map((err: any, i: number) => (
+                  <div key={i} className="text-xs bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 rounded-lg px-3 py-2">
+                    <span className="font-semibold text-red-700 dark:text-red-400">{err.fileName || err.adSetId}</span>
+                    <span className="text-red-600 dark:text-red-400/80"> — {err.error}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="flex items-center gap-2 px-5 py-3 border-t bg-muted/10">
+          <a
+            href={`${amsBase}/ads?act=${accountNumId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <IconBrandMeta className="size-3.5 text-[#1877F2]" />
+              View in Meta Ads Manager
+              <IconExternalLink className="size-3" />
+            </Button>
+          </a>
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
+            <Button size="sm" className="gap-1.5" onClick={() => { onRelaunch(batch); onClose() }}>
+              <IconRocket className="size-3.5" />Re-launch
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── Launch History Section ───────────────────────────────────────────────────
 
-function LaunchHistorySection({ reloadTrigger }: { reloadTrigger: number }) {
+function LaunchHistorySection({ reloadTrigger, onRelaunch }: { reloadTrigger: number; onRelaunch: (b: LaunchBatch) => void }) {
   const [tab, setTab] = useState<"launches" | "drafts" | "scheduled">("launches")
   const [batches, setBatches] = useState<LaunchBatch[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [selectedBatch, setSelectedBatch] = useState<LaunchBatch | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -8443,6 +10002,12 @@ function LaunchHistorySection({ reloadTrigger }: { reloadTrigger: number }) {
 
   return (
     <div className="border-t flex flex-col">
+      <BatchDetailModal
+        batch={selectedBatch}
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        onRelaunch={onRelaunch}
+      />
       <div className="flex items-center border-b px-4 shrink-0 gap-0">
         {TABS.map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setTab(key)}
@@ -8548,9 +10113,23 @@ function LaunchHistorySection({ reloadTrigger }: { reloadTrigger: number }) {
             </span>
 
             {/* Actions */}
-            <Button variant="ghost" size="sm" className="h-6 text-xs gap-0.5">
-              View Details<IconExternalLink className="size-3 ml-0.5" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost" size="sm"
+                className="h-6 text-xs gap-0.5 px-2"
+                onClick={() => { setSelectedBatch(b); setDetailOpen(true) }}
+              >
+                Details
+              </Button>
+              <Button
+                variant="ghost" size="sm"
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                title="Re-launch this batch"
+                onClick={() => onRelaunch(b)}
+              >
+                <IconRocket className="size-3" />
+              </Button>
+            </div>
           </div>
         ))}
       </div>
@@ -8560,82 +10139,455 @@ function LaunchHistorySection({ reloadTrigger }: { reloadTrigger: number }) {
 
 // ─── Table Mode ───────────────────────────────────────────────────────────────
 
-function TableMode({ rows, adSets, onAddRow, onUpdateRow, onDeleteRow }: {
-  rows: TableRow[]; adSets: AdSet[]
-  onAddRow: () => void; onUpdateRow: (id: string, field: keyof TableRow, value: any) => void; onDeleteRow: (id: string) => void
+function TableMode({
+  rows, adSets, onAddRow, onUpdateRow, onDeleteRow, onDuplicateRow,
+  selectedPage, igAccountCache, selectedIgPageId, searchQuery,
+}: {
+  rows: TableRow[]
+  adSets: AdSet[]
+  onAddRow: () => void
+  onUpdateRow: (id: string, field: keyof TableRow, value: any) => void
+  onDeleteRow: (id: string) => void
+  onDuplicateRow: (id: string) => void
+  selectedPage?: FacebookPage
+  igAccountCache: Record<string, IgAccount[]>
+  selectedIgPageId: string
+  searchQuery: string
 }) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [expandedVar, setExpandedVar] = useState<Record<string, { primary: boolean; headline: boolean; description: boolean }>>({})
+  const [sortField, setSortField] = useState<"adName" | "primaryText" | "headline" | "description" | null>(null)
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+
+  const toggleSort = (field: "adName" | "primaryText" | "headline" | "description") => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc")
+    else { setSortField(field); setSortDir("asc") }
+  }
+
+  const SortIcon = ({ field }: { field: "adName" | "primaryText" | "headline" | "description" }) => {
+    if (sortField !== field) return <IconArrowsUpDown className="size-3 opacity-30 ml-0.5" />
+    return sortDir === "asc" ? <IconArrowUp className="size-3 text-primary ml-0.5" /> : <IconArrowDown className="size-3 text-primary ml-0.5" />
+  }
+
+  const filteredRows = useMemo(() => {
+    let list = rows
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      list = list.filter(r =>
+        r.adName.toLowerCase().includes(q) ||
+        r.primaryText.toLowerCase().includes(q) ||
+        r.headline.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q)
+      )
+    }
+    if (sortField) {
+      list = [...list].sort((a, b) => {
+        const av = ((a as any)[sortField] || "").toLowerCase()
+        const bv = ((b as any)[sortField] || "").toLowerCase()
+        return sortDir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av)
+      })
+    }
+    return list
+  }, [rows, searchQuery, sortField, sortDir])
+
+  const allSelected = filteredRows.length > 0 && filteredRows.every(r => selectedIds.has(r.id))
+  const toggleAll = () => {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(filteredRows.map(r => r.id)))
+  }
+  const toggleRow = (id: string) => setSelectedIds(prev => {
+    const next = new Set(prev)
+    next.has(id) ? next.delete(id) : next.add(id)
+    return next
+  })
+
+  const igAccount = useMemo(() => {
+    if (!selectedIgPageId) return null
+    for (const accounts of Object.values(igAccountCache)) {
+      const found = accounts.find(a => a.id === selectedIgPageId)
+      if (found) return found
+    }
+    return null
+  }, [igAccountCache, selectedIgPageId])
+
+  const getExpanded = (id: string) => expandedVar[id] || { primary: false, headline: false, description: false }
+  const setExpanded = (id: string, patch: Partial<{ primary: boolean; headline: boolean; description: boolean }>) =>
+    setExpandedVar(prev => ({ ...prev, [id]: { ...getExpanded(id), ...patch } }))
+
+  const selectedCount = selectedIds.size
+
   return (
-    <div className="flex-1 overflow-auto">
-      <table className="w-full text-sm border-collapse min-w-[1000px]">
-        <thead>
-          <tr className="border-b bg-muted/20 sticky top-0">
-            <th className="w-8 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">#</th>
-            <th className="w-36 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">CREATIVE</th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">AD NAME</th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">PRIMARY TEXT</th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">HEADLINE</th>
-            <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">DESCRIPTION</th>
-            <th className="w-48 px-3 py-2.5 text-left text-xs">
-              <span className="font-semibold text-muted-foreground">AD SETS </span>
-              <span className="text-destructive font-bold">REQUIRED</span>
-            </th>
-            <th className="w-8 px-3 py-2.5" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, i) => (
-            <tr key={row.id} className="border-b hover:bg-muted/20 group">
-              <td className="px-3 py-2 text-xs text-muted-foreground">{i + 1}</td>
-              <td className="px-3 py-2">
-                {row.creative ? (
-                  <div className="flex items-center gap-2">
-                    <div className="size-10 rounded overflow-hidden bg-muted shrink-0">
-                      {(row.creative.fb_thumbnail_url || row.creative.fb_image_url || row.creative.file_url)
-                        ? <img src={row.creative.media_type === "video" ? row.creative.fb_thumbnail_url! : (row.creative.fb_image_url || row.creative.file_url)} className="w-full h-full object-cover" alt="" />
-                        : <div className="w-full h-full flex items-center justify-center"><IconPhoto className="size-4 text-muted-foreground/40" /></div>}
-                    </div>
-                    <span className="px-1.5 py-0.5 text-[10px] font-medium bg-muted rounded">SINGLE</span>
-                  </div>
-                ) : (
-                  <div className="size-10 rounded border-2 border-dashed border-muted-foreground/20 flex items-center justify-center">
-                    <IconPlus className="size-4 text-muted-foreground/40" />
-                  </div>
-                )}
-              </td>
-              <td className="px-3 py-2">
-                <input value={row.adName} onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
-                  placeholder="Untitled" className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground/40 focus:bg-muted/30 rounded px-1 py-0.5" />
-              </td>
-              <td className="px-3 py-2">
-                <textarea value={row.primaryText} onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
-                  placeholder="Primary text..." rows={2} className="w-full text-sm bg-transparent outline-none resize-none placeholder:text-muted-foreground/40 focus:bg-muted/30 rounded px-1 py-0.5" />
-              </td>
-              <td className="px-3 py-2">
-                <input value={row.headline} onChange={e => onUpdateRow(row.id, "headline", e.target.value)}
-                  placeholder="Headline..." className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground/40 focus:bg-muted/30 rounded px-1 py-0.5" />
-              </td>
-              <td className="px-3 py-2">
-                <input value={row.description} onChange={e => onUpdateRow(row.id, "description", e.target.value)}
-                  placeholder="Description..." className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground/40 focus:bg-muted/30 rounded px-1 py-0.5" />
-              </td>
-              <td className="px-3 py-2">
-                <Select value={row.adSetIds[0] || ""} onValueChange={v => onUpdateRow(row.id, "adSetIds", [v])}>
-                  <SelectTrigger className="h-8 text-xs bg-muted/30"><SelectValue placeholder="Select ad sets..." /></SelectTrigger>
-                  <SelectContent>{adSets.map(a => <SelectItem key={a.id} value={a.id} className="text-xs">{a.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </td>
-              <td className="px-3 py-2">
-                <button onClick={() => onDeleteRow(row.id)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all">
-                  <IconTrash className="size-3.5" />
-                </button>
-              </td>
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="flex-1 overflow-auto">
+        <table className="w-full text-sm border-collapse" style={{ minWidth: 1280 }}>
+          <thead className="sticky top-0 z-10 bg-background">
+            <tr className="border-b">
+              <th className="w-10 px-3 py-2.5 text-left">
+                <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
+              </th>
+              <th className="w-7 px-1 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">#</th>
+              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
+              <th
+                className="w-40 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                onClick={() => toggleSort("adName")}
+              >
+                <span className="flex items-center gap-0.5">Ad Name <SortIcon field="adName" /></span>
+              </th>
+              <th
+                className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground min-w-[180px]"
+                onClick={() => toggleSort("primaryText")}
+              >
+                <span className="flex items-center gap-0.5">Primary Text <SortIcon field="primaryText" /></span>
+              </th>
+              <th
+                className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                onClick={() => toggleSort("headline")}
+              >
+                <span className="flex items-center gap-0.5">Headline <SortIcon field="headline" /></span>
+              </th>
+              <th
+                className="w-40 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                onClick={() => toggleSort("description")}
+              >
+                <span className="flex items-center gap-0.5">Description <SortIcon field="description" /></span>
+              </th>
+              <th className="w-52 px-3 py-2.5 text-left">
+                <span className="flex items-center gap-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  Ad Sets <span className="text-destructive">Required</span>
+                  <IconArrowsUpDown className="size-3 opacity-30 ml-0.5" />
+                </span>
+              </th>
+              <th className="w-20 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profile</th>
+              <th className="w-14 px-3 py-2.5" />
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <button onClick={onAddRow} className="flex items-center gap-1.5 px-4 py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 w-full transition-colors">
-        <IconPlus className="size-3.5" />Add New Row
-      </button>
+          </thead>
+          <tbody>
+            {filteredRows.map((row, i) => {
+              const isSelected = selectedIds.has(row.id)
+              const exp = getExpanded(row.id)
+              const ptVars = row.primaryTextVariations || []
+              const hlVars = row.headlineVariations || []
+              const descVars = row.descriptionVariations || []
+              const mediaSrc = row.creative
+                ? (row.creative.media_type === "video"
+                    ? row.creative.fb_thumbnail_url
+                    : (row.creative.fb_image_url || row.creative.file_url))
+                : null
+
+              return (
+                <tr
+                  key={row.id}
+                  className={cn(
+                    "border-b group transition-colors align-top",
+                    isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "hover:bg-muted/20"
+                  )}
+                >
+                  {/* Checkbox */}
+                  <td className="px-3 pt-3 pb-2">
+                    <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={isSelected} onChange={() => toggleRow(row.id)} />
+                  </td>
+
+                  {/* # */}
+                  <td className="px-1 pt-3 pb-2 text-[11px] text-muted-foreground">{i + 1}</td>
+
+                  {/* CREATIVE */}
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-1.5 items-start">
+                      {/* Format badge — green for SINGLE */}
+                      <Select value="single" onValueChange={() => {}}>
+                        <SelectTrigger className="h-5 w-[82px] text-[10px] px-1.5 border-green-200 bg-green-50 text-green-700 font-semibold dark:bg-green-900/30 dark:border-green-800 dark:text-green-400">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="single" className="text-xs">SINGLE</SelectItem>
+                          <SelectItem value="carousel" className="text-xs">CAROUSEL</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {/* Thumbnail */}
+                      <div className="size-16 rounded overflow-hidden bg-muted/60 border border-border/50 shrink-0 relative">
+                        {mediaSrc
+                          ? <img src={mediaSrc} className="w-full h-full object-cover" alt="" />
+                          : <div className="w-full h-full flex items-center justify-center">
+                              {row.creative
+                                ? <IconPhoto className="size-5 text-muted-foreground/40" />
+                                : <IconPlus className="size-5 text-muted-foreground/30" />
+                              }
+                            </div>
+                        }
+                        {row.creative?.media_type === "video" && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
+                              <IconPlayerPlay className="size-2.5 text-white fill-white" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* AD NAME (separate column) */}
+                  <td className="px-3 py-2 align-top">
+                    <textarea
+                      value={row.adName}
+                      onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
+                      placeholder="Ad name..."
+                      rows={3}
+                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
+                    />
+                  </td>
+
+                  {/* PRIMARY TEXT */}
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-1">
+                      <textarea
+                        value={row.primaryText}
+                        onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
+                        placeholder="Primary text..."
+                        rows={3}
+                        className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
+                      />
+                      {exp.primary && ptVars.map((v, vi) => (
+                        <div key={vi} className="flex items-start gap-1">
+                          <textarea
+                            value={v}
+                            onChange={e => {
+                              const arr = [...ptVars]; arr[vi] = e.target.value
+                              onUpdateRow(row.id, "primaryTextVariations", arr)
+                            }}
+                            rows={2}
+                            placeholder={`Variation ${vi + 2}...`}
+                            className="flex-1 text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40"
+                          />
+                          <button
+                            onClick={() => {
+                              const arr = ptVars.filter((_, j) => j !== vi)
+                              onUpdateRow(row.id, "primaryTextVariations", arr)
+                              if (arr.length === 0) setExpanded(row.id, { primary: false })
+                            }}
+                            className="mt-1 text-muted-foreground hover:text-destructive"
+                          >
+                            <IconX className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => {
+                          onUpdateRow(row.id, "primaryTextVariations", [...ptVars, ""])
+                          setExpanded(row.id, { primary: true })
+                        }}
+                        className="text-[10px] text-blue-600 hover:text-blue-700 text-left font-medium"
+                      >
+                        Primary Text Variations {ptVars.length > 0 ? `${ptVars.length + 1} ` : ""}+
+                      </button>
+                    </div>
+                  </td>
+
+                  {/* HEADLINE */}
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-1">
+                      <input
+                        value={row.headline}
+                        onChange={e => onUpdateRow(row.id, "headline", e.target.value)}
+                        placeholder="Headline..."
+                        className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+                      />
+                      {exp.headline && hlVars.map((v, vi) => (
+                        <div key={vi} className="flex items-center gap-1">
+                          <input
+                            value={v}
+                            onChange={e => {
+                              const arr = [...hlVars]; arr[vi] = e.target.value
+                              onUpdateRow(row.id, "headlineVariations", arr)
+                            }}
+                            placeholder={`Variation ${vi + 2}...`}
+                            className="flex-1 text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+                          />
+                          <button
+                            onClick={() => {
+                              const arr = hlVars.filter((_, j) => j !== vi)
+                              onUpdateRow(row.id, "headlineVariations", arr)
+                              if (arr.length === 0) setExpanded(row.id, { headline: false })
+                            }}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <IconX className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => {
+                          onUpdateRow(row.id, "headlineVariations", [...hlVars, ""])
+                          setExpanded(row.id, { headline: true })
+                        }}
+                        className="text-[10px] text-blue-600 hover:text-blue-700 text-left font-medium"
+                      >
+                        Headline Variations {hlVars.length > 0 ? `${hlVars.length + 1} ` : ""}+
+                      </button>
+                    </div>
+                  </td>
+
+                  {/* DESCRIPTION */}
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-1">
+                      <input
+                        value={row.description}
+                        onChange={e => onUpdateRow(row.id, "description", e.target.value)}
+                        placeholder="Description..."
+                        className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+                      />
+                      {exp.description && descVars.map((v, vi) => (
+                        <div key={vi} className="flex items-center gap-1">
+                          <input
+                            value={v}
+                            onChange={e => {
+                              const arr = [...descVars]; arr[vi] = e.target.value
+                              onUpdateRow(row.id, "descriptionVariations", arr)
+                            }}
+                            placeholder={`Variation ${vi + 2}...`}
+                            className="flex-1 text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+                          />
+                          <button
+                            onClick={() => {
+                              const arr = descVars.filter((_, j) => j !== vi)
+                              onUpdateRow(row.id, "descriptionVariations", arr)
+                              if (arr.length === 0) setExpanded(row.id, { description: false })
+                            }}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <IconX className="size-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => {
+                          onUpdateRow(row.id, "descriptionVariations", [...descVars, ""])
+                          setExpanded(row.id, { description: true })
+                        }}
+                        className="text-[10px] text-blue-600 hover:text-blue-700 text-left font-medium"
+                      >
+                        Description Variations {descVars.length > 0 ? `${descVars.length + 1} ` : ""}+
+                      </button>
+                    </div>
+                  </td>
+
+                  {/* AD SETS */}
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-1.5">
+                      {row.adSetIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {row.adSetIds.map(id => {
+                            const as = adSets.find(a => a.id === id)
+                            if (!as) return null
+                            return (
+                              <span key={id} className="inline-flex items-center gap-0.5 text-[10px] bg-muted/80 border border-border/50 px-1.5 py-0.5 rounded-full">
+                                <span className="max-w-[90px] truncate">{as.name}</span>
+                                <button
+                                  onClick={() => onUpdateRow(row.id, "adSetIds", row.adSetIds.filter(x => x !== id))}
+                                  className="text-muted-foreground hover:text-foreground ml-0.5"
+                                >
+                                  <IconX className="size-2.5" />
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
+                      <Select value="" onValueChange={v => {
+                        if (v && !row.adSetIds.includes(v)) onUpdateRow(row.id, "adSetIds", [...row.adSetIds, v])
+                      }}>
+                        <SelectTrigger className="h-7 text-[11px] border-dashed">
+                          <SelectValue placeholder="+ Add ad set" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {adSets.filter(a => !row.adSetIds.includes(a.id)).map(a => (
+                            <SelectItem key={a.id} value={a.id} className="text-xs">{a.name}</SelectItem>
+                          ))}
+                          {adSets.filter(a => !row.adSetIds.includes(a.id)).length === 0 && (
+                            <div className="text-xs text-muted-foreground px-2 py-1.5">All ad sets added</div>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </td>
+
+                  {/* AD PROFILE */}
+                  <td className="px-3 pt-3 pb-2">
+                    <div className="flex items-center gap-1">
+                      {selectedPage ? (
+                        <div className="size-7 rounded-full overflow-hidden bg-blue-100 shrink-0 ring-1 ring-border" title={selectedPage.name}>
+                          {selectedPage.picture?.data?.url
+                            ? <img src={selectedPage.picture.data.url} className="w-full h-full object-cover" alt={selectedPage.name} />
+                            : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-4 text-blue-600" /></div>
+                          }
+                        </div>
+                      ) : (
+                        <div className="size-7 rounded-full bg-muted flex items-center justify-center ring-1 ring-border/50" title="No FB page">
+                          <IconBrandFacebook className="size-3.5 text-muted-foreground/40" />
+                        </div>
+                      )}
+                      {igAccount ? (
+                        <div className="size-7 rounded-full overflow-hidden shrink-0 ring-1 ring-border" title={igAccount.username || "Instagram"}>
+                          {igAccount.profile_pic
+                            ? <img src={igAccount.profile_pic} className="w-full h-full object-cover" alt={igAccount.username || "IG"} />
+                            : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-purple-600"><IconBrandInstagram className="size-4 text-white" /></div>
+                          }
+                        </div>
+                      ) : (
+                        <div className="size-7 rounded-full bg-muted flex items-center justify-center ring-1 ring-border/50" title="No IG account">
+                          <IconBrandInstagram className="size-3.5 text-muted-foreground/40" />
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* ACTIONS */}
+                  <td className="px-3 pt-3 pb-2">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => onDuplicateRow(row.id)} className="text-muted-foreground hover:text-foreground" title="Duplicate row">
+                        <IconCopy className="size-3.5" />
+                      </button>
+                      <button onClick={() => onDeleteRow(row.id)} className="text-muted-foreground hover:text-destructive" title="Delete row">
+                        <IconTrash className="size-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+
+        <button
+          onClick={onAddRow}
+          className="flex items-center gap-1.5 px-4 py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 w-full transition-colors border-b"
+        >
+          <IconPlus className="size-3.5" />Add New Row
+        </button>
+      </div>
+
+      {/* Bulk selection bar */}
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-950/20 border-t border-blue-200 dark:border-blue-800/50 shrink-0">
+          <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">
+            {selectedCount} of {filteredRows.length} row{filteredRows.length !== 1 ? "s" : ""} selected
+          </span>
+          <button
+            onClick={() => { Array.from(selectedIds).forEach(id => onDuplicateRow(id)); setSelectedIds(new Set()) }}
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+          >
+            Duplicate {selectedCount} Row{selectedCount !== 1 ? "s" : ""}
+          </button>
+          <button
+            onClick={() => { Array.from(selectedIds).forEach(id => onDeleteRow(id)); setSelectedIds(new Set()) }}
+            className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+          >
+            Remove {selectedCount} Row{selectedCount !== 1 ? "s" : ""}
+          </button>
+          <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-muted-foreground hover:text-foreground">
+            <IconX className="size-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -8671,6 +10623,10 @@ export default function LaunchPage() {
   const [cta, setCta] = useState("LEARN_MORE")
   const [webLink, setWebLink] = useState("")
   const [launchAsActive, setLaunchAsActive] = useState(false)
+  const [adSourceMode, setAdSourceMode] = useState<AdSourceMode>("new_ad")
+  const [adSourceIds, setAdSourceIds] = useState<Record<string, string>>({})
+  const [utmParams, setUtmParams] = useState("")
+  const [displayLink, setDisplayLink] = useState("")
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set())
   const [selectedCreatives, setSelectedCreatives] = useState<Creative[]>([])
   const [adNameOverrides, setAdNameOverrides] = useState<Record<string, string>>({})
@@ -8702,6 +10658,28 @@ export default function LaunchPage() {
         })
         .catch(() => {})
     } catch {}
+  }, [selectedAccountId])
+
+  // Load Default Ad Settings when account changes → pre-fill empty form fields
+  useEffect(() => {
+    if (!selectedAccountId) return
+    try {
+      const raw = localStorage.getItem(`default_ad_settings_${selectedAccountId}`)
+      if (!raw) return
+      const s: DefaultAdSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+      // Pre-fill ad copy only when fields are empty (don't overwrite user input)
+      if (!primaryTexts[0]?.trim() && s.adCopy.primaryText) setPrimaryTexts([s.adCopy.primaryText])
+      if (!headlines[0]?.trim() && s.adCopy.headline) setHeadlines([s.adCopy.headline])
+      if (!description && s.adCopy.description) setDescription(s.adCopy.description)
+      if (s.adCopy.cta) setCta(s.adCopy.cta)
+      // Pre-fill web/app links
+      if (!webLink && s.links.webLink) setWebLink(s.links.webLink)
+      if (!utmParams && s.links.utmParameters) setUtmParams(s.links.utmParameters)
+      if (!displayLink && s.links.displayLink) setDisplayLink(s.links.displayLink)
+      // Apply launch defaults
+      setLaunchAsActive(!s.launch.launchAsPaused)
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId])
 
   // Continuous polling for missing thumbnails in selected creatives
@@ -8761,6 +10739,8 @@ export default function LaunchPage() {
   const [allAdSets, setAllAdSets] = useState<AdSet[]>([])
 
   const [mediaModalOpen, setMediaModalOpen] = useState(false)
+  // Increment to force LoadMediaModal Library tab to re-fetch (used after a new upload completes)
+  const [mediaRefreshSignal, setMediaRefreshSignal] = useState(0)
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [partnershipModalOpen, setPartnershipModalOpen] = useState(false)
@@ -8783,12 +10763,14 @@ export default function LaunchPage() {
   const [adFormat, setAdFormat] = useState<AdFormatState>({ type: "single" })
   const [collectionAds, setCollectionAds] = useState<CollectionAdsState>({
     enabled: false,
+    templateType: "storefront",
     catalogId: "", catalogName: "", catalogVertical: "",
     productSetId: "", productSetName: "",
+    productCount: 4,
     order: "dynamic",
     productHeadlineChips: ["product_name"],
     productDescriptionChips: ["current_price"],
-    buttonLabel: "",
+    ieHeadline: "",
     destinationUrl: "",
   })
   const [catalogAds, setCatalogAds] = useState<CatalogAdsState>({
@@ -8830,6 +10812,7 @@ export default function LaunchPage() {
   const [launchResult, setLaunchResult] = useState<LaunchResult | null>(null)
   const [historyReload, setHistoryReload] = useState(0)
   const [error, setError] = useState("")
+  const [relaunchBanner, setRelaunchBanner] = useState("")
 
   // Upload dock state — per-file progress tracking
   const [uploads, setUploads] = useState<UploadItem[]>([])
@@ -9130,9 +11113,11 @@ export default function LaunchPage() {
     setUploads(prev => [...prev, ...items])
 
     // Upload sequentially in background; swap temp creative → real creative when done
+    let anyUploaded = false
     for (const item of items) {
       const real = await uploadOneFile(item)
       if (real) {
+        anyUploaded = true
         // Swap temp → real, but ALWAYS keep local blob URL for instant preview
         setSelectedCreatives(prev => prev.map(c => {
           if (c.id !== item.id) return c
@@ -9162,10 +11147,14 @@ export default function LaunchPage() {
             .then(r => r.json())
             .then(d => {
               if (d.thumbnail_url) {
-                setSelectedCreatives(prev => prev.map(c => c.id === real.id
-                  ? { ...c, fb_thumbnail_url: d.thumbnail_url, file_url: d.thumbnail_url }
-                  : c
-                ))
+                setSelectedCreatives(prev => prev.map(c => {
+                  if (c.id !== real.id) return c
+                  // Update thumbnail only — DO NOT overwrite file_url, otherwise the video URL
+                  // is replaced by the JPEG thumbnail URL → <video> element no longer renders → no hover play.
+                  return { ...c, fb_thumbnail_url: d.thumbnail_url }
+                }))
+                // Tell Library tab to re-fetch so the new thumbnail shows there too
+                setMediaRefreshSignal(s => s + 1)
                 console.log(`[thumbnail] Saved to Supabase: ${real.file_name}`)
               }
             })
@@ -9186,6 +11175,8 @@ export default function LaunchPage() {
         setSelectedMediaIds(prev => { const s = new Set(prev); s.delete(item.id); return s })
       }
     }
+    // Refresh Library tab so freshly uploaded items appear with thumbnails
+    if (anyUploaded) setMediaRefreshSignal(s => s + 1)
   }
 
   // Legacy props for GalleryMediaPanel — kept for backward compat (now empty)
@@ -9306,6 +11297,16 @@ export default function LaunchPage() {
     return true
   }
 
+  const handleRelaunch = (batch: LaunchBatch) => {
+    if (batch.primary_text) setPrimaryTexts([batch.primary_text])
+    if (batch.headline) setHeadlines([batch.headline])
+    if (batch.cta) setCta(batch.cta)
+    if (batch.web_link) setWebLink(batch.web_link)
+    setRelaunchBanner(`Settings restored from launch on ${new Date(batch.created_at).toLocaleDateString()} — re-select your ad sets and creatives, then launch.`)
+    setTimeout(() => setRelaunchBanner(""), 8000)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
   const doLaunch = async (scheduledTime?: string) => {
     if (!validate()) return
     setLaunching(true)
@@ -9313,6 +11314,18 @@ export default function LaunchPage() {
     try {
       const primaryText = primaryTexts.find(t => t.trim()) || ""
       const headline = headlines.find(h => h.trim()) || ""
+
+      // Read saved Default Ad Settings so enhancements + launch flags reach the API
+      let savedEnhancements: DefaultAdSettings["enhancements"] | undefined
+      let savedLaunchSettings: DefaultAdSettings["launch"] | undefined
+      try {
+        const raw = localStorage.getItem(`default_ad_settings_${selectedAccountId}`)
+        if (raw) {
+          const s: DefaultAdSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+          savedEnhancements = s.enhancements
+          savedLaunchSettings = s.launch
+        }
+      } catch {}
 
       const res = await fetch("/api/facebook/launch-direct", {
         method: "POST",
@@ -9327,7 +11340,10 @@ export default function LaunchPage() {
           headline: headline.trim(),
           primaryText: primaryText.trim(),
           cta,
-          webLink: webLink.trim(),
+          webLink: utmParams.trim()
+            ? `${webLink.trim()}${webLink.includes("?") ? "&" : "?"}${utmParams.trim()}`
+            : webLink.trim(),
+          displayLink: displayLink.trim() || undefined,
           createPaused: !launchAsActive,
           startTime: scheduledTime,
           partnerPageId: partnership.enabled && partnership.partnerPageId ? partnership.partnerPageId : undefined,
@@ -9373,6 +11389,23 @@ export default function LaunchPage() {
                   .map(g => ({ name: g.name, creativeIds: g.creativeIds, placements: g.placements || {} })),
               }
             : undefined,
+          adSourceMode,
+          adSourceIds: Object.keys(adSourceIds).length > 0 ? adSourceIds : undefined,
+          enhancements: savedEnhancements,
+          launchSettings: savedLaunchSettings,
+          collectionAds: collectionAds.enabled && collectionAds.catalogId && collectionAds.productSetId
+            ? {
+                templateType: collectionAds.templateType,
+                catalogId: collectionAds.catalogId,
+                productSetId: collectionAds.productSetId,
+                productCount: collectionAds.productCount,
+                order: collectionAds.order,
+                ieHeadline: collectionAds.ieHeadline || undefined,
+                destinationUrl: collectionAds.destinationUrl,
+                productHeadlineChips: collectionAds.productHeadlineChips,
+                productDescriptionChips: collectionAds.productDescriptionChips,
+              }
+            : undefined,
         }),
       })
       const data = await res.json()
@@ -9399,6 +11432,44 @@ export default function LaunchPage() {
     }
   }
 
+  const [tableSearchQuery, setTableSearchQuery] = useState("")
+  const [tableAutoSync, setTableAutoSync] = useState(false)
+  const [tableBulkOpen, setTableBulkOpen] = useState(false)
+  const [tableMoreOpen, setTableMoreOpen] = useState(false)
+  const tableBulkRef = useRef<HTMLDivElement>(null)
+  const tableMoreRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (tableBulkRef.current && !tableBulkRef.current.contains(e.target as Node)) setTableBulkOpen(false)
+      if (tableMoreRef.current && !tableMoreRef.current.contains(e.target as Node)) setTableMoreOpen(false)
+    }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [])
+
+  const syncTableFromGallery = useCallback(() => {
+    const sharedPt = primaryTexts.find(t => t.trim()) || ""
+    const sharedHl = headlines.find(h => h.trim()) || ""
+    const adSetIdList = selectedAdSets.map((a: AdSet) => a.id)
+    setTableRows(prev => prev.map(r => ({
+      ...r,
+      ...(sharedPt ? { primaryText: sharedPt } : {}),
+      ...(sharedHl ? { headline: sharedHl } : {}),
+      ...(description ? { description } : {}),
+      ...(adSetIdList.length > 0 ? { adSetIds: adSetIdList } : {}),
+      ...(cta ? { cta } : {}),
+      ...(webLink ? { webLink } : {}),
+    })))
+  }, [primaryTexts, headlines, description, cta, webLink, selectedAdSets])
+
+  // Auto-sync when gallery values change (only while auto-sync is on and in table mode)
+  useEffect(() => {
+    if (!tableAutoSync || mode !== "table") return
+    syncTableFromGallery()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableAutoSync, primaryTexts, headlines, description, cta, webLink, selectedAdSets])
+
   const addTableRow = () => {
     setTableRows(prev => [...prev, { id: String(Date.now()), creative: null, adName: "", primaryText: "", headline: "", description: "", adSetIds: [] }])
   }
@@ -9408,6 +11479,34 @@ export default function LaunchPage() {
   const deleteTableRow = (id: string) => {
     setTableRows(prev => prev.filter(r => r.id !== id))
   }
+  const duplicateTableRow = (id: string) => {
+    setTableRows(prev => {
+      const idx = prev.findIndex(r => r.id === id)
+      if (idx < 0) return prev
+      const copy = { ...prev[idx], id: String(Date.now()), adName: prev[idx].adName ? `${prev[idx].adName} (copy)` : "" }
+      return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)]
+    })
+  }
+
+  const exportTableCSV = () => {
+    const headers = ["Ad Name", "Primary Text", "Headline", "Description", "Ad Sets", "CTA", "Web Link"]
+    const csv = [
+      headers.join(","),
+      ...tableRows.map(r => [
+        JSON.stringify(r.adName),
+        JSON.stringify(r.primaryText),
+        JSON.stringify(r.headline),
+        JSON.stringify(r.description),
+        JSON.stringify(r.adSetIds.map(id => allAdSets.find(a => a.id === id)?.name || id).join(";")),
+        JSON.stringify(r.cta || ""),
+        JSON.stringify(r.webLink || ""),
+      ].join(","))
+    ].join("\n")
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a"); a.href = url; a.download = "ads-table.csv"; a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const selectedPage = pages.find(p => p.id === selectedPageId)
 
@@ -9415,6 +11514,7 @@ export default function LaunchPage() {
     <>
       <LoadMediaModal open={mediaModalOpen} onClose={() => setMediaModalOpen(false)}
         adAccountId={selectedAccountId} adAccounts={adAccounts} alreadySelected={selectedMediaIds}
+        refreshSignal={mediaRefreshSignal}
         onConfirm={(ids, creatives) => {
           setSelectedMediaIds(new Set(ids))
           setSelectedCreatives(creatives)
@@ -9479,9 +11579,7 @@ export default function LaunchPage() {
         onClose={() => setCollectionModalOpen(false)}
         value={collectionAds}
         onConfirm={(v) => { setCollectionAds(v); setAdFormat({ type: v.enabled ? "collection" : "single" }) }}
-        baseHeadline={headlines.find(h => h.trim()) || ""}
         baseWebLink={webLink}
-        onLoadMedia={() => { setCollectionModalOpen(false); setMediaModalOpen(true) }}
         adAccountId={selectedAccountId}
       />
       <CatalogAdsModal
@@ -9532,6 +11630,7 @@ export default function LaunchPage() {
         page={selectedPage}
         primaryText={primaryTexts.find(t => t.trim()) || ""}
         headline={headlines.find(h => h.trim()) || ""}
+        description={description}
         webLink={webLink}
         cta={cta}
         adNameOverrides={adNameOverrides}
@@ -9648,7 +11747,43 @@ export default function LaunchPage() {
           {/* Right: mode toggle */}
           <div className="ml-auto">
             <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs"
-              onClick={() => setMode(mode === "gallery" ? "table" : "gallery")}>
+              onClick={() => {
+                if (mode === "gallery") {
+                  // Sync gallery state → table rows when switching to table mode
+                  const sharedPt = primaryTexts.find(t => t.trim()) || ""
+                  const sharedHl = headlines.find(h => h.trim()) || ""
+                  const adSetIdList = selectedAdSets.map(a => a.id)
+                  if (selectedCreatives.length > 0) {
+                    setTableRows(selectedCreatives.map((c, i) => ({
+                      id: `tr_${c.id}_${i}`,
+                      creative: c,
+                      adName: adNameOverrides[c.id] || c.file_name || "",
+                      primaryText: sharedPt,
+                      headline: sharedHl,
+                      description,
+                      adSetIds: adSetIdList,
+                      cta,
+                      webLink,
+                    })))
+                  } else {
+                    // No creatives selected: just fill one empty row with form data
+                    setTableRows([{
+                      id: "tr_empty",
+                      creative: null,
+                      adName: "",
+                      primaryText: sharedPt,
+                      headline: sharedHl,
+                      description,
+                      adSetIds: adSetIdList,
+                      cta,
+                      webLink,
+                    }])
+                  }
+                  setMode("table")
+                } else {
+                  setMode("gallery")
+                }
+              }}>
               {mode === "gallery"
                 ? <><IconTable className="size-3.5" />Edit in Table Mode</>
                 : <><IconLayoutGrid className="size-3.5" />Edit in Gallery Mode</>}
@@ -9675,9 +11810,14 @@ export default function LaunchPage() {
                 cta={cta} setCta={setCta}
                 webLink={webLink} setWebLink={setWebLink}
                 launchAsActive={launchAsActive} setLaunchAsActive={setLaunchAsActive}
+                utmParams={utmParams} setUtmParams={setUtmParams}
+                displayLink={displayLink} setDisplayLink={setDisplayLink}
                 adAccountId={selectedAccountId}
                 adAccountName={selectedAccount?.name || selectedAccountId}
                 orgName="tuanquang269"
+                selectedCreatives={selectedCreatives}
+                adSourceMode={adSourceMode} setAdSourceMode={setAdSourceMode}
+                adSourceIds={adSourceIds} setAdSourceIds={setAdSourceIds}
               />
             </div>
 
@@ -9825,23 +11965,177 @@ export default function LaunchPage() {
               </div>
             </div>
             </div>
-            <LaunchHistorySection reloadTrigger={historyReload} />
+            {relaunchBanner && (
+              <div className="mx-4 mb-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-lg text-xs text-blue-700 dark:text-blue-400 flex items-center gap-2">
+                <IconCircleCheck className="size-3.5 shrink-0" />
+                {relaunchBanner}
+              </div>
+            )}
+            <LaunchHistorySection reloadTrigger={historyReload} onRelaunch={handleRelaunch} />
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
-              <span className="text-sm font-medium text-muted-foreground">Table ({tableRows.length} {tableRows.length === 1 ? "ad" : "ads"})</span>
-              <Button variant="outline" size="sm" className="h-7 text-xs">CSV</Button>
+            {/* Table toolbar */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 border-b shrink-0 flex-wrap">
+              {/* Title + CSV + Search */}
+              <span className="text-sm font-semibold whitespace-nowrap">Table ({tableRows.length} {tableRows.length === 1 ? "ad" : "ads"})</span>
+              <button
+                onClick={exportTableCSV}
+                className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-border/60 hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                title="Export to CSV"
+              >
+                <IconDownload className="size-3" />CSV
+              </button>
               <div className="relative">
                 <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50" />
-                <input placeholder="Search by ad name or copy..." className="pl-7 pr-3 py-1.5 text-xs bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring w-44 placeholder:text-muted-foreground/50" />
+                <input
+                  value={tableSearchQuery}
+                  onChange={e => setTableSearchQuery(e.target.value)}
+                  placeholder="Search by ad name or copy..."
+                  className="pl-7 pr-3 py-1.5 text-xs bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring w-48 placeholder:text-muted-foreground/50"
+                />
+                {tableSearchQuery && (
+                  <button onClick={() => setTableSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <IconX className="size-3" />
+                  </button>
+                )}
               </div>
+
+              {/* Divider */}
+              <div className="h-5 w-px bg-border mx-0.5" />
+
+              {/* Auto-sync toggle */}
+              <div className="flex items-center gap-1.5" title={tableAutoSync ? "Auto-sync ON: gallery changes propagate to all rows" : "Auto-sync OFF"}>
+                <button
+                  onClick={() => setTableAutoSync(s => !s)}
+                  className={cn("relative inline-flex h-[18px] w-8 items-center rounded-full transition-colors shrink-0",
+                    tableAutoSync ? "bg-primary" : "bg-muted-foreground/30")}
+                >
+                  <span className={cn("inline-block size-3 rounded-full bg-white shadow-sm transition-transform",
+                    tableAutoSync ? "translate-x-[18px]" : "translate-x-0.5")} />
+                </button>
+              </div>
+
+              {/* Ad Profile button */}
+              <button
+                onClick={() => setAdProfilesOpen(true)}
+                className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                title="Ad Profile (Facebook & Instagram)"
+              >
+                <IconUsers className="size-3.5" />
+              </button>
+
+              {/* Sync button */}
+              <button
+                onClick={syncTableFromGallery}
+                className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                title="Sync ad copy from Gallery Mode to all table rows"
+              >
+                <IconRefresh className="size-3.5" />Sync
+              </button>
+
+              {/* Configure columns */}
+              <button
+                className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                title="Configure columns"
+              >
+                <IconArrowsSort className="size-3.5" />
+              </button>
+
+              {/* Right section */}
               <div className="ml-auto flex items-center gap-1">
-                <Button variant="outline" size="sm" className="h-7 text-xs gap-1">Bulk Edit <IconChevronDown className="size-3" /></Button>
+                {/* AI Group */}
+                <button className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="AI Group">
+                  <IconWorldPin className="size-3.5" />AI Group
+                </button>
+
+                {/* Column view buttons */}
+                <button className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Single column view">
+                  <IconLayout className="size-3.5" />
+                </button>
+                <button className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Stacked view">
+                  <IconStack2 className="size-3.5" />
+                </button>
+                <button className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Grid view">
+                  <IconLayoutGrid className="size-3.5" />
+                </button>
+                <button className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Side-by-side view">
+                  <IconSelector className="size-3.5" />
+                </button>
+
+                {/* Bulk Edit dropdown */}
+                <div ref={tableBulkRef} className="relative">
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs gap-1 px-2.5"
+                    onClick={() => setTableBulkOpen(o => !o)}
+                  >
+                    <IconPencil className="size-3" />Bulk Edit<IconChevronDown className="size-3" />
+                  </Button>
+                  {tableBulkOpen && (
+                    <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-52 overflow-hidden py-1">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Apply to all rows</p>
+                      {[
+                        { label: "Primary Text from Gallery", action: () => { const pt = primaryTexts.find(t => t.trim()) || ""; if (pt) setTableRows(prev => prev.map(r => ({ ...r, primaryText: pt }))); setTableBulkOpen(false) } },
+                        { label: "Headline from Gallery", action: () => { const hl = headlines.find(h => h.trim()) || ""; if (hl) setTableRows(prev => prev.map(r => ({ ...r, headline: hl }))); setTableBulkOpen(false) } },
+                        { label: "Description from Gallery", action: () => { if (description) setTableRows(prev => prev.map(r => ({ ...r, description }))); setTableBulkOpen(false) } },
+                        { label: "Ad Sets from Gallery", action: () => { const ids = selectedAdSets.map((a: AdSet) => a.id); if (ids.length) setTableRows(prev => prev.map(r => ({ ...r, adSetIds: ids }))); setTableBulkOpen(false) } },
+                        { label: "CTA from Gallery", action: () => { if (cta) setTableRows(prev => prev.map(r => ({ ...r, cta }))); setTableBulkOpen(false) } },
+                      ].map(item => (
+                        <button key={item.label} onClick={item.action} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors">
+                          {item.label}
+                        </button>
+                      ))}
+                      <div className="border-t my-1" />
+                      <button onClick={() => { setTableRows(prev => prev.map(r => ({ ...r, adSetIds: [] }))); setTableBulkOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors text-destructive">
+                        Clear all Ad Sets
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* 3-dot more menu */}
+                <div ref={tableMoreRef} className="relative">
+                  <button
+                    onClick={() => setTableMoreOpen(o => !o)}
+                    className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                    title="More options"
+                  >
+                    <IconDotsVertical className="size-4" />
+                  </button>
+                  {tableMoreOpen && (
+                    <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-44 overflow-hidden py-1">
+                      <button onClick={() => { addTableRow(); setTableMoreOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2">
+                        <IconPlus className="size-3.5" />Add new row
+                      </button>
+                      <button onClick={() => { exportTableCSV(); setTableMoreOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2">
+                        <IconDownload className="size-3.5" />Export CSV
+                      </button>
+                      <button onClick={() => { syncTableFromGallery(); setTableMoreOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2">
+                        <IconRefresh className="size-3.5" />Sync from Gallery
+                      </button>
+                      <div className="border-t my-1" />
+                      <button onClick={() => { setTableRows([{ id: String(Date.now()), creative: null, adName: "", primaryText: "", headline: "", description: "", adSetIds: [] }]); setTableMoreOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2 text-destructive">
+                        <IconTrash className="size-3.5" />Clear all rows
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
-            <TableMode rows={tableRows} adSets={allAdSets} onAddRow={addTableRow} onUpdateRow={updateTableRow} onDeleteRow={deleteTableRow} />
+            <TableMode
+              rows={tableRows}
+              adSets={allAdSets}
+              onAddRow={addTableRow}
+              onUpdateRow={updateTableRow}
+              onDeleteRow={deleteTableRow}
+              onDuplicateRow={duplicateTableRow}
+              selectedPage={selectedPage}
+              igAccountCache={igAccountCache}
+              selectedIgPageId={selectedIgPageId}
+              searchQuery={tableSearchQuery}
+            />
 
             {error && (
               <div className="flex items-center gap-1.5 text-xs text-destructive px-4 py-1">

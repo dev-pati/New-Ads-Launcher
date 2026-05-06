@@ -2,23 +2,10 @@ import { NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getFacebookPages } from "@/lib/facebook"
 
-// Dev-only mock data — set MOCK_META_API=true in .env.local to skip real Meta API calls
-// (preserves rate limit quota when developing UI)
-const MOCK_PAGES = [
-  { id: "100000000000001", name: "Mock Page A", access_token: "mock", category: "Brand", picture: { data: { url: "https://placehold.co/100x100/10b981/white?text=A" } } },
-  { id: "100000000000002", name: "Mock Page B", access_token: "mock", category: "Brand", picture: { data: { url: "https://placehold.co/100x100/3b82f6/white?text=B" } } },
-  { id: "100000000000003", name: "Mock Test Page", access_token: "mock", category: "Business", picture: { data: { url: "https://placehold.co/100x100/8b5cf6/white?text=T" } } },
-]
-
 export async function GET() {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    if (process.env.MOCK_META_API === "true") {
-      console.log("[pages] MOCK MODE — returning fake pages")
-      return NextResponse.json({ pages: MOCK_PAGES, mock: true })
-    }
 
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection found. Go to /connect to link Facebook." }, { status: 401 })

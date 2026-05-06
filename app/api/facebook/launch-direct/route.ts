@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
-import { createAd, getVideoThumbnail } from "@/lib/facebook"
+import { createAd, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
 
 // Simple launch: create ads directly in existing ad sets.
 // N creatives × M ad sets = N×M ads. No campaign/adset creation needed.
@@ -39,7 +39,24 @@ export async function POST(request: NextRequest) {
       carouselAds,
       flexibleAds,
       multiPlacementAds,
+      adSourceMode,  // "new_ad" | "post_id" | "creative_id"
+      adSourceIds,   // Record<creativeId, objectStoryId | metaCreativeId>
+      enhancements,  // DefaultAdSettings["enhancements"] | undefined
+      launchSettings, // DefaultAdSettings["launch"] | undefined
+      collectionAds, // CollectionAds config | undefined
     } = body
+
+    // Build degrees_of_freedom_spec from Creative Enhancement settings.
+    // metaCreativeEnhancements master toggle maps to standard_enhancements enroll_status.
+    const degreesOfFreedom: Record<string, any> | undefined = enhancements
+      ? {
+          creative_features_spec: {
+            standard_enhancements: {
+              enroll_status: enhancements.metaCreativeEnhancements ? "OPT_IN" : "OPT_OUT",
+            },
+          },
+        }
+      : undefined
 
     if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
     if (!adSetIds?.length) return NextResponse.json({ error: "Select at least one ad set" }, { status: 400 })
@@ -72,6 +89,53 @@ export async function POST(request: NextRequest) {
     const adStatus = createPaused === false ? "ACTIVE" : "PAUSED"
     const created: any[] = []
     const errors: any[] = []
+
+    // Skip polling for videos that already have a fb_thumbnail_url (proxy: thumbnail only exists
+    // after Meta finishes processing). Only poll the recently-uploaded ones.
+    const videosToCheck: { creativeId: string; videoId: string; fileName: string }[] = creatives
+      .filter((c: any) => c.fb_video_id && !c.fb_thumbnail_url)
+      .map((c: any) => ({ creativeId: c.id, videoId: c.fb_video_id, fileName: c.file_name }))
+
+    if (videosToCheck.length > 0) {
+      console.log(`[launch-direct] Polling ${videosToCheck.length} unprocessed video(s) for "ready" status (max 30s)…`)
+      // Short 30s timeout — most videos finish in 10-20s. If still processing, fail fast and ask user to retry.
+      const readyResults = await Promise.all(
+        videosToCheck.map(v => pollVideoReady(v.videoId, token, 30_000).then(r => ({ ...v, ...r })))
+      )
+      const notReady = readyResults.filter(r => !r.ready)
+      for (const nr of notReady) {
+        errors.push({
+          creativeId: nr.creativeId,
+          fileName: nr.fileName,
+          error: `Video still processing on Meta. Wait 30-60s after upload then re-launch. (${nr.errorMsg})`,
+        })
+        const idx = creatives.findIndex((c: any) => c.id === nr.creativeId)
+        if (idx >= 0) creatives.splice(idx, 1)
+      }
+      if (notReady.length === videosToCheck.length && creatives.length === 0) {
+        return NextResponse.json({
+          success: false,
+          errors,
+          totalAds: 0,
+          summary: `All ${notReady.length} video(s) still processing. Upload finishes uploading first → Meta processes for ~10-30s → then launch.`,
+        }, { status: 400 })
+      }
+      const ready = readyResults.filter(r => r.ready)
+      console.log(`[launch-direct] ${ready.length}/${videosToCheck.length} videos ready (max wait ${Math.max(...readyResults.map(r => r.waitedMs))}ms)`)
+
+      // Save thumbnails so next launch skips this video entirely
+      await Promise.all(ready.map(async (r) => {
+        const cr: any = creatives.find((c: any) => c.id === r.creativeId)
+        if (!cr) return
+        try {
+          const thumbUrl = await getVideoThumbnail(r.videoId, token)
+          if (thumbUrl) {
+            cr.fb_thumbnail_url = thumbUrl
+            await supabase.from("creatives").update({ fb_thumbnail_url: thumbUrl }).eq("id", r.creativeId)
+          }
+        } catch {}
+      }))
+    }
 
     // ── Multi Placement Ads branch ──────────────────────────────────
     // Each group → ONE ad per ad set, using asset_feed_spec with placement customization rules
@@ -268,10 +332,60 @@ export async function POST(request: NextRequest) {
         }
 
         const adName = creative.file_name.replace(/\.[^/.]+$/, "")
+        const sourceId = adSourceIds?.[creative.id] || ""
 
-        let thumbnailUrl: string | undefined = creative.fb_thumbnail_url || undefined
-        if (creative.fb_video_id && !thumbnailUrl) {
-          thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token)) || undefined
+        // ── Post ID mode ──────────────────────────────────────────────────────
+        if (adSourceMode === "post_id" && sourceId) {
+          try {
+            const ad = await createAd(adAccountId, token, {
+              name: adName,
+              adset_id: adSetId,
+              page_id: pageId,
+              object_story_id: sourceId,
+              title: "", body: "", cta: cta || "LEARN_MORE", link_url: webLink || "",
+              status: adStatus,
+            })
+            await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+            created.push({ adId: ad.id, adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "post_id" })
+          } catch (err: any) {
+            errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (post_id mode)" })
+          }
+          continue
+        }
+
+        // ── Creative ID mode ──────────────────────────────────────────────────
+        if (adSourceMode === "creative_id" && sourceId) {
+          try {
+            const ad = await createAd(adAccountId, token, {
+              name: adName,
+              adset_id: adSetId,
+              page_id: pageId,
+              reuse_creative_id: sourceId,
+              title: "", body: "", cta: cta || "LEARN_MORE", link_url: webLink || "",
+              status: adStatus,
+            })
+            await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+            created.push({ adId: ad.id, adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "creative_id" })
+          } catch (err: any) {
+            errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (creative_id mode)" })
+          }
+          continue
+        }
+
+        // ── New ad mode (default) ─────────────────────────────────────────────
+        // Meta REQUIRES image_url or image_hash in video_data (subcode 1443226).
+        // Always fetch from Meta CDN — Supabase URL won't work because Meta filters non-fbcdn URLs.
+        let thumbnailUrl: string | undefined
+        const isMetaCdn = (u?: string | null) => !!u && /(fbcdn\.net|facebook\.com)/.test(u)
+        if (creative.fb_video_id) {
+          if (isMetaCdn(creative.fb_thumbnail_url)) {
+            thumbnailUrl = creative.fb_thumbnail_url
+          } else {
+            thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token)) || undefined
+            if (thumbnailUrl) {
+              await supabase.from("creatives").update({ fb_thumbnail_url: thumbnailUrl }).eq("id", creative.id)
+            }
+          }
         }
 
         try {
@@ -292,6 +406,8 @@ export async function POST(request: NextRequest) {
             partnership_display_mode: partnershipDisplayMode || undefined,
             multilanguage: multilanguage || undefined,
             catalog_ads: catalogAds || undefined,
+            collection_ads: collectionAds || undefined,
+            degrees_of_freedom_spec: degreesOfFreedom,
           })
 
           await supabase

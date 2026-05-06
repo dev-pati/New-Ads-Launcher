@@ -9,16 +9,6 @@ export async function GET() {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (process.env.MOCK_META_API === "true") {
-      return NextResponse.json({
-        status: "ok",
-        mock: true,
-        tip: "✓ Mock mode active — no Meta API calls being made",
-        appUsage: { call_count: 0, total_cputime: 0, total_time: 0 },
-        maxAppPct: 0,
-      })
-    }
-
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 

@@ -189,6 +189,20 @@ export async function getPixels(
 }
 
 // Campaign interfaces and functions
+export interface CampaignInsight {
+  spend: string
+  impressions: string
+  clicks: string
+  reach?: string
+  cpc?: string
+  cpm?: string
+  ctr?: string
+  actions?: { action_type: string; value: string }[]
+  cost_per_action_type?: { action_type: string; value: string }[]
+  date_start: string
+  date_stop: string
+}
+
 export interface Campaign {
   id: string
   name: string
@@ -197,41 +211,29 @@ export interface Campaign {
   objective: string
   daily_budget?: string
   lifetime_budget?: string
+  spend_cap?: string
+  bid_strategy?: string
+  start_time?: string
+  stop_time?: string
   created_time: string
   updated_time: string
   insights?: { data: CampaignInsight[] }
 }
 
-export interface CampaignInsight {
-  impressions: string
-  clicks: string
-  spend: string
-  cpc?: string
-  cpm?: string
-  ctr?: string
-  reach?: string
-  date_start: string
-  date_stop: string
-}
-
 export async function getCampaigns(
   adAccountId: string,
-  accessToken: string
+  accessToken: string,
+  datePreset: string = "last_7d"
 ): Promise<Campaign[]> {
   const fields = [
-    "id",
-    "name",
-    "status",
-    "effective_status",
-    "objective",
-    "daily_budget",
-    "lifetime_budget",
-    "created_time",
-    "updated_time",
+    "id", "name", "status", "effective_status", "objective",
+    "daily_budget", "lifetime_budget", "spend_cap", "bid_strategy",
+    "start_time", "stop_time", "created_time", "updated_time",
+    `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`,
   ].join(",")
 
   const res = await fetch(
-    `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${fields}&limit=50&access_token=${accessToken}`
+    `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
   )
   if (!res.ok) {
     const error = await res.json()
@@ -250,41 +252,40 @@ export interface AdSet {
   campaign_id: string
   daily_budget?: string
   lifetime_budget?: string
+  budget_remaining?: string
+  bid_strategy?: string
+  bid_amount?: string
+  optimization_goal?: string
+  billing_event?: string
   targeting?: {
     age_min?: number
     age_max?: number
     genders?: number[]
     geo_locations?: { countries?: string[] }
   }
-  optimization_goal?: string
-  billing_event?: string
-  bid_amount?: string
   start_time?: string
   end_time?: string
   created_time: string
+  insights?: { data: CampaignInsight[] }
 }
 
 export async function getAdSets(
   adAccountId: string,
   accessToken: string,
-  campaignId?: string
+  campaignId?: string,
+  datePreset: string = "last_7d"
 ): Promise<AdSet[]> {
   const fields = [
-    "id",
-    "name",
-    "status",
-    "effective_status",
-    "campaign_id",
-    "daily_budget",
-    "lifetime_budget",
-    "optimization_goal",
-    "billing_event",
-    "created_time",
+    "id", "name", "status", "effective_status", "campaign_id",
+    "daily_budget", "lifetime_budget", "budget_remaining",
+    "optimization_goal", "billing_event", "bid_strategy", "bid_amount",
+    "start_time", "end_time", "created_time",
+    `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`,
   ].join(",")
 
-  let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${fields}&limit=50&access_token=${accessToken}`
+  let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
   if (campaignId) {
-    url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${fields}&limit=50&access_token=${accessToken}`
+    url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
   }
 
   const res = await fetch(url)
@@ -318,22 +319,19 @@ export interface Ad {
 export async function getAds(
   adAccountId: string,
   accessToken: string,
-  adSetId?: string
+  adSetId?: string,
+  datePreset: string = "last_7d"
 ): Promise<Ad[]> {
   const fields = [
-    "id",
-    "name",
-    "status",
-    "effective_status",
-    "adset_id",
-    "campaign_id",
+    "id", "name", "status", "effective_status", "adset_id", "campaign_id",
     "creative{id,name,title,body,image_url,thumbnail_url}",
     "created_time",
+    `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`,
   ].join(",")
 
-  let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${fields}&limit=50&access_token=${accessToken}`
+  let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
   if (adSetId) {
-    url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${fields}&limit=50&access_token=${accessToken}`
+    url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
   }
 
   const res = await fetch(url)
@@ -652,6 +650,54 @@ export async function getVideoThumbnail(videoId: string, accessToken: string): P
   }
 }
 
+// Poll Meta until a video has finished processing (video_status === "ready").
+// Meta /advideos accepts upload immediately and returns an id, but the video is "processing"
+// for 10s–2min. Using video_id in createAd before "ready" → ad created but renders no video.
+// Returns { ready, status, errorMsg } so caller can surface accurate status.
+export async function pollVideoReady(
+  videoId: string,
+  accessToken: string,
+  maxWaitMs: number = 120_000
+): Promise<{ ready: boolean; status: string; errorMsg?: string; waitedMs: number }> {
+  const start = Date.now()
+  const intervals = [1500, 2500, 4000, 5000, 7000, 10000, 15000, 20000]
+  let i = 0
+
+  while (Date.now() - start < maxWaitMs) {
+    try {
+      const res = await fetch(
+        `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`
+      )
+      if (res.ok) {
+        const data = await res.json()
+        const vstatus = data.status?.video_status as string | undefined
+        // Possible values: "uploading", "processing", "ready", "expired", "error"
+        if (vstatus === "ready") {
+          return { ready: true, status: vstatus, waitedMs: Date.now() - start }
+        }
+        if (vstatus === "error") {
+          const errMsg = data.status?.processing_phase?.errors?.[0]?.message
+            || data.status?.uploading_phase?.errors?.[0]?.message
+            || "Video processing failed on Meta"
+          return { ready: false, status: vstatus, errorMsg: errMsg, waitedMs: Date.now() - start }
+        }
+        if (vstatus === "expired") {
+          return { ready: false, status: vstatus, errorMsg: "Video upload expired", waitedMs: Date.now() - start }
+        }
+      }
+    } catch {}
+    const wait = intervals[Math.min(i, intervals.length - 1)]
+    await new Promise(r => setTimeout(r, wait))
+    i++
+  }
+  return {
+    ready: false,
+    status: "timeout",
+    errorMsg: `Video still processing after ${Math.floor(maxWaitMs / 1000)}s — try again in a minute.`,
+    waitedMs: Date.now() - start,
+  }
+}
+
 // Fetch a video's playable source URL from Facebook
 export async function getVideoSource(videoId: string, accessToken: string): Promise<string | null> {
   try {
@@ -708,6 +754,14 @@ export async function createAd(
         prioritizeVideo: boolean
       }
     }
+    collection_ads?: {
+      templateType: "storefront" | "lookbook" | "customer_acquisition"
+      productSetId: string
+      productCount: number
+      order: "dynamic" | "specific"
+      ieHeadline?: string
+      destinationUrl: string
+    }
     carousel_cards?: Array<{
       image_hash?: string
       video_id?: string
@@ -728,8 +782,59 @@ export async function createAd(
       videos: { video_id: string; thumbnail_url?: string }[]
       customRules: any[]
     }
+    // Ad Source modes
+    object_story_id?: string   // Post ID mode: reuse existing dark post (carries social proof)
+    reuse_creative_id?: string // Creative ID mode: reuse existing Meta creative_id
   }
 ): Promise<{ id: string }> {
+  // ── Post ID mode ─────────────────────────────────────────────────────────────
+  // Reuse an existing Facebook dark post by its object_story_id.
+  // The ad inherits all accumulated social proof (likes, comments, shares).
+  if (params.object_story_id) {
+    console.log("[createAd] post_id mode — object_story_id:", params.object_story_id)
+    const b = new URLSearchParams({
+      name: params.name,
+      adset_id: params.adset_id,
+      creative: JSON.stringify({ object_story_id: params.object_story_id }),
+      status: params.status || "PAUSED",
+      access_token: accessToken,
+    })
+    const r = await fetch(`${GRAPH_API_BASE}/${adAccountId}/ads`, { method: "POST", body: b })
+    const rText = await r.text()
+    let rData: any = {}
+    try { rData = JSON.parse(rText) } catch {}
+    if (!r.ok) {
+      const fb = rData.error
+      throw new Error([fb?.message || "Failed to create ad (post_id mode)", fb?.error_user_msg].filter(Boolean).join(" — "))
+    }
+    console.log("[createAd] post_id mode OK:", rData.id)
+    return { id: rData.id }
+  }
+
+  // ── Creative ID mode ──────────────────────────────────────────────────────────
+  // Reuse an existing Meta creative by creative_id. No new creative is created.
+  // No social proof is carried over; only the creative assets are reused.
+  if (params.reuse_creative_id) {
+    console.log("[createAd] creative_id mode — creative_id:", params.reuse_creative_id)
+    const b = new URLSearchParams({
+      name: params.name,
+      adset_id: params.adset_id,
+      creative: JSON.stringify({ creative_id: params.reuse_creative_id }),
+      status: params.status || "PAUSED",
+      access_token: accessToken,
+    })
+    const r = await fetch(`${GRAPH_API_BASE}/${adAccountId}/ads`, { method: "POST", body: b })
+    const rText = await r.text()
+    let rData: any = {}
+    try { rData = JSON.parse(rText) } catch {}
+    if (!r.ok) {
+      const fb = rData.error
+      throw new Error([fb?.message || "Failed to create ad (creative_id mode)", fb?.error_user_msg].filter(Boolean).join(" — "))
+    }
+    console.log("[createAd] creative_id mode OK:", rData.id)
+    return { id: rData.id }
+  }
+
   const creativeSpec: any = {
     page_id: params.page_id,
     link_data: {
@@ -749,6 +854,8 @@ export async function createAd(
       message: params.body,
       call_to_action: { type: params.cta, value: { link: params.link_url } },
     }
+    // image_url is REQUIRED by Meta for video ads (subcode 1443226 if missing).
+    // Caller (launch-direct) prefers Meta CDN URLs but Supabase public URLs work too.
     if (params.thumbnail_url) videoData.image_url = params.thumbnail_url
     creativeSpec.video_data = videoData
     delete creativeSpec.link_data
@@ -868,6 +975,25 @@ export async function createAd(
     }
   }
 
+  // Collection Ads (Instant Experience / Instant Storefront):
+  // Attach product_set_id to the creative spec while keeping link_data intact.
+  // Meta auto-generates the Instant Experience canvas based on the product set + cover media.
+  if (params.collection_ads) {
+    const ca = params.collection_ads
+    creativeSpec.product_set_id = ca.productSetId
+    // Override description with IE headline if provided (shown inside the Instant Experience)
+    if (ca.ieHeadline && creativeSpec.link_data) {
+      creativeSpec.link_data.description = ca.ieHeadline
+    }
+    // Override the destination URL for the "See more" button inside the IE
+    if (ca.destinationUrl && creativeSpec.link_data) {
+      creativeSpec.link_data.link = ca.destinationUrl
+      if (creativeSpec.link_data.call_to_action?.value) {
+        creativeSpec.link_data.call_to_action.value.link = ca.destinationUrl
+      }
+    }
+  }
+
   // Multilanguage Ads: per-locale text variations via asset_feed_spec
   if (params.multilanguage && params.multilanguage.translations.length > 0) {
     const titles: any[] = [{ text: params.title }]
@@ -876,10 +1002,6 @@ export async function createAd(
     const customizationRules: any[] = []
 
     for (const t of params.multilanguage.translations) {
-      const titleIdx = titles.length
-      const bodyIdx = bodies.length
-      const descIdx = descriptions.length
-
       titles.push({ text: t.headline || params.title, adlabels: [{ name: `headline_${t.language}` }] })
       bodies.push({ text: t.primaryText || params.body, adlabels: [{ name: `body_${t.language}` }] })
       if (t.description || params.description) {
@@ -922,15 +1044,45 @@ export async function createAd(
     status: params.status || "PAUSED",
     access_token: accessToken,
   })
+  console.log("[createAd] POST /act_X/ads with creative spec:", JSON.stringify(creativeJson, null, 2))
   const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/ads`, { method: "POST", body })
+  const respText = await res.text()
+  let respData: any = {}
+  try { respData = JSON.parse(respText) } catch {}
   if (!res.ok) {
-    const error = await res.json()
-    const fb = error.error
+    const fb = respData.error
     const detail = fb?.error_user_msg || fb?.error_user_title || ""
     const msg = [fb?.message || "Failed to create ad", detail].filter(Boolean).join(" — ")
+    console.error("[createAd] FAILED:", res.status, respText)
     throw new Error(msg)
   }
-  return res.json()
+  console.log("[createAd] OK:", respData.id)
+
+  // Immediately fetch the new ad's creative + status to surface server-side issues
+  // (e.g. dark post creation failed → object_story_id missing → "Story Unavailable" preview)
+  if (respData.id) {
+    try {
+      const verifyFields = "id,status,effective_status,issues_info,recommendations,creative{id,object_story_id,object_type,thumbnail_url,effective_object_story_id,status}"
+      const vRes = await fetch(`${GRAPH_API_BASE}/${respData.id}?fields=${verifyFields}&access_token=${accessToken}`)
+      const vData = await vRes.json()
+      console.log(`[createAd] verify ${respData.id}:`, JSON.stringify(vData, null, 2))
+      if (vData.issues_info && vData.issues_info.length > 0) {
+        console.warn(`[createAd] Meta reported issues for ad ${respData.id}:`, vData.issues_info)
+      }
+      if (vData.creative && !vData.creative.object_story_id && !vData.creative.effective_object_story_id) {
+        const stillProcessing = vData.effective_status === "IN_PROCESS" || vData.creative.status === "IN_PROCESS"
+        if (stillProcessing) {
+          console.log(`[createAd] Ad ${respData.id} object_story_id pending — Meta IN_PROCESS, will populate in 1-3 min (normal).`)
+        } else {
+          console.warn(`[createAd] Ad ${respData.id} NO object_story_id and not IN_PROCESS — dark post failed → "Story Unavailable".`)
+        }
+      }
+    } catch (e) {
+      console.warn("[createAd] verify failed:", e)
+    }
+  }
+
+  return respData
 }
 
 // ─── Existing Ads with Insights (for Existing Ads tab in Load Media) ───────
@@ -955,6 +1107,12 @@ export interface ExistingAdItem {
   results: number
   roas: number
   platform: string
+  // Ad copy fields
+  primaryText?: string
+  headline?: string
+  description?: string
+  link?: string
+  cta?: string
 }
 
 export async function getExistingAds(
@@ -1044,6 +1202,7 @@ export async function getExistingAds(
     const roasArr = insights.purchase_roas || []
     const roas = roasArr.length > 0 ? parseFloat(roasArr[0].value || "0") : 0
 
+    const ctaRaw = linkData?.call_to_action?.type || videoData?.call_to_action?.type
     return {
       id: ad.id,
       name: ad.name,
@@ -1064,6 +1223,11 @@ export async function getExistingAds(
       results,
       roas,
       platform: "Web",
+      primaryText: linkData?.message || videoData?.message || undefined,
+      headline: linkData?.name || videoData?.title || undefined,
+      description: linkData?.description || undefined,
+      link: linkData?.link || videoData?.call_to_action?.value?.link || undefined,
+      cta: ctaRaw || undefined,
     }
   })
 

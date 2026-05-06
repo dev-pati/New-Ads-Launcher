@@ -15,42 +15,6 @@ export async function GET(
 
     const { id } = await params
 
-    // Mock mode
-    if (process.env.MOCK_META_API === "true") {
-      return NextResponse.json({
-        adSet: {
-          id,
-          name: "SR-EN-GP-LDP-Adv_GhostKitchen || Top15 || 22/01/2026_Seth - Copy",
-          status: "ACTIVE",
-          effective_status: "ACTIVE",
-          daily_budget: "71692",
-          start_time: "2026-02-17T00:00:00+0000",
-          pacing_type: ["standard"],
-          optimization_goal: "OFFSITE_CONVERSIONS",
-          billing_event: "IMPRESSIONS",
-          destination_type: "UNDEFINED",
-          attribution_spec: [{ event_type: "CLICK_THROUGH", window_days: 7 }, { event_type: "VIEW_THROUGH", window_days: 1 }],
-          targeting: {
-            geo_locations: { countries: ["US", "IE", "IT", "NL", "NO", "CA", "CH", "GB", "BE", "GR", "AU", "AT", "PL", "CZ", "SK", "CY", "FR", "DE"] },
-            age_min: 18,
-            age_max: 65,
-            genders: [],
-          },
-          ad_count: 3,
-        },
-        campaign: {
-          id: "cmp_mock",
-          name: "Mock Campaign",
-          objective: "OUTCOME_SALES",
-          daily_budget: "71692",
-          buying_type: "AUCTION",
-          special_ad_categories: [],
-          is_cbo: true,
-        },
-        mock: true,
-      })
-    }
-
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 

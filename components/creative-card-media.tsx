@@ -46,6 +46,34 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   const playable = videoSrc && /^(blob|data|https?):/.test(videoSrc) && isVideoFile(videoSrc)
 
   if (playable) {
+    // Compact mode (list rows): only load first frame as poster initially.
+    // Hover triggers play (loads full video on demand) — only the hovered video loads,
+    // so 30+ rows don't all decode at once.
+    if (compact) {
+      return (
+        <video
+          ref={videoRef}
+          src={videoSrc + (videoSrc.includes("#t=") ? "" : "#t=0.1")}
+          muted
+          playsInline
+          loop
+          preload="metadata"
+          poster={metaThumb || undefined}
+          className={className}
+          onMouseEnter={e => {
+            const v = e.currentTarget
+            // Switch preload to auto on demand so the video can actually play
+            if (v.preload !== "auto") v.preload = "auto"
+            v.play().catch(() => {})
+          }}
+          onMouseLeave={e => {
+            const v = e.currentTarget
+            v.pause()
+            try { v.currentTime = 0 } catch {}
+          }}
+        />
+      )
+    }
     return (
       <video
         ref={videoRef}

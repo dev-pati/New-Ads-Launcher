@@ -23,34 +23,14 @@ export async function POST(
     const status = launchAsActive ? "ACTIVE" : "PAUSED"
     const adSetConfigs: any[] = Array.isArray(body.adSetConfigs) ? body.adSetConfigs : []
 
-    if (process.env.MOCK_META_API === "true") {
-      const campaigns = Array.from({ length: count }, (_, i) => {
-        const cid = `cmp_copy_${Date.now()}_${i}`
-        const adSets = adSetConfigs.flatMap((cfg, j) => {
-          const copies = Math.max(1, cfg.copies || 1)
-          return Array.from({ length: copies }, (_, k) => ({
-            id: `ads_copy_${Date.now()}_${i}_${j}_${k}`,
-            name: (cfg.customName || `Ad Set ${j + 1}`) + (copies > 1 ? ` - ${k + 1}` : ""),
-          }))
-        })
-        if (adSets.length === 0) {
-          adSets.push({ id: `ads_copy_${Date.now()}_${i}_default`, name: "New Engagement Ad Set (copy)" })
-        }
-        return {
-          id: cid,
-          name: (customName || "Source Campaign - copy") + (count > 1 ? ` - ${i + 1}` : ""),
-          adSets,
-        }
-      })
-      return NextResponse.json({ campaigns, mock: true })
-    }
-
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
     const results: any[] = []
+    const warnings: string[] = []
     for (let i = 0; i < count; i++) {
-      const suffix = count > 1 ? ` - ${i + 1}` : ""
+      // Meta-style suffix: "Name - Copy 1", "Name - Copy 2" (customName usually already ends with " - Copy")
+      const suffix = count > 1 ? ` ${i + 1}` : ""
       const finalName = (customName || "Copy") + suffix
 
       // Step 1: Create campaign copy via Meta /copies
@@ -61,6 +41,7 @@ export async function POST(
       })
       const copyRes = await fetch(`${GRAPH_API_BASE}/${id}/copies?${copyParams}`, { method: "POST" })
       const copyData = await copyRes.json()
+      console.log(`[duplicate campaign] /copies response (i=${i}):`, JSON.stringify(copyData))
       if (!copyRes.ok) {
         const msg = copyData.error?.message || "Failed to copy campaign"
         if (/rate limit|#4|request limit/i.test(msg)) {
@@ -69,18 +50,56 @@ export async function POST(
         return NextResponse.json({ error: msg, partialResults: results }, { status: 500 })
       }
       const newCampaignId = copyData.copied_campaign_id || copyData.id
+      if (!newCampaignId) {
+        return NextResponse.json({
+          error: "Meta did not return a new campaign ID",
+          rawResponse: copyData,
+          partialResults: results,
+        }, { status: 500 })
+      }
 
       // Apply campaign overrides (name + budget + bid strategy)
+      // Wait briefly — Meta needs a moment after /copies before the new campaign is patchable
+      await new Promise(r => setTimeout(r, 400))
+
       const updates: Record<string, string> = { name: finalName }
       if (body.dailyBudget) updates.daily_budget = String(Math.round(parseFloat(body.dailyBudget) * 100))
       if (body.lifetimeBudget) updates.lifetime_budget = String(Math.round(parseFloat(body.lifetimeBudget) * 100))
       if (body.bidStrategy && body.bidStrategy !== "inherit") updates.bid_strategy = body.bidStrategy
+
+      let renamed = false
+      const maxRetries = 3
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const patchBody = new URLSearchParams(updates)
+          const patchRes = await fetch(`${GRAPH_API_BASE}/${newCampaignId}?access_token=${encodeURIComponent(connection.access_token)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: patchBody.toString(),
+          })
+          const patchData = await patchRes.json().catch(() => ({}))
+          console.log(`[duplicate campaign] PATCH ${newCampaignId} attempt ${attempt}:`, patchRes.status, JSON.stringify(patchData))
+          if (patchRes.ok) {
+            renamed = true
+            break
+          }
+          if (attempt < maxRetries) {
+            await new Promise(r => setTimeout(r, 600 * attempt))
+          } else {
+            warnings.push(`Campaign ${newCampaignId} created but rename failed (${maxRetries} attempts): ${patchData.error?.message || "unknown"}`)
+          }
+        } catch (e: any) {
+          if (attempt === maxRetries) {
+            warnings.push(`Campaign ${newCampaignId} rename network error: ${e.message}`)
+          }
+        }
+      }
+
+      // Verify by fetching the new campaign
       try {
-        const patchRes = await fetch(`${GRAPH_API_BASE}/${newCampaignId}`, {
-          method: "POST",
-          body: new URLSearchParams({ ...updates, access_token: connection.access_token }),
-        })
-        if (!patchRes.ok) console.warn("[duplicate campaign] patch warning")
+        const verifyRes = await fetch(`${GRAPH_API_BASE}/${newCampaignId}?fields=id,name,status,account_id&access_token=${connection.access_token}`)
+        const verifyData = await verifyRes.json()
+        console.log(`[duplicate campaign] verify ${newCampaignId} (renamed=${renamed}):`, JSON.stringify(verifyData))
       } catch {}
 
       // Step 2: Duplicate selected ad sets into new campaign
@@ -88,7 +107,7 @@ export async function POST(
       for (const cfg of adSetConfigs) {
         const copies = Math.max(1, cfg.copies || 1)
         for (let k = 0; k < copies; k++) {
-          const aSuffix = copies > 1 ? ` - ${k + 1}` : ""
+          const aSuffix = copies > 1 ? ` ${k + 1}` : ""
           const adsetParams = new URLSearchParams({
             access_token: connection.access_token,
             campaign_id: newCampaignId,
@@ -120,7 +139,7 @@ export async function POST(
       results.push({ id: newCampaignId, name: finalName, adSets })
     }
 
-    return NextResponse.json({ campaigns: results })
+    return NextResponse.json({ campaigns: results, warnings })
   } catch (err: any) {
     console.error("[duplicate campaign] error:", err)
     return NextResponse.json({ error: err.message || "Failed to duplicate campaign" }, { status: 500 })
