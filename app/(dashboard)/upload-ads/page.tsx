@@ -20,6 +20,7 @@ import {
   IconRocket,
   IconLoader2,
 } from "@tabler/icons-react"
+import { CreativeCardMedia } from "@/components/creative-card-media"
 
 interface Creative {
   id: string
@@ -66,10 +67,17 @@ export default function UploadAdsPage() {
             setTimeout(async () => {
               try {
                 const d = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" }).then(r => r.json())
-                if (d.thumbnail_url) {
+                if (d.thumbnail_url || d.source_url) {
                   setCreatives(prev => prev.map(x =>
-                    x.id === c.id ? { ...x, fb_thumbnail_url: d.thumbnail_url } : x
+                    x.id === c.id ? { 
+                      ...x, 
+                      fb_thumbnail_url: d.thumbnail_url || x.fb_thumbnail_url,
+                      file_url: d.source_url || x.file_url || d.thumbnail_url
+                    } : x
                   ))
+                  if (d.thumbnail_url && d.source_url) return
+                  attempt++
+                  poll()
                 } else {
                   attempt++
                   poll()
@@ -179,27 +187,7 @@ export default function UploadAdsPage() {
                     {isSelected && <IconCheck className="size-3.5" />}
                   </div>
 
-                  {/* Preview */}
-                  {c.media_type === "video" ? (
-                    c.fb_thumbnail_url ? (
-                      <img
-                        src={c.fb_thumbnail_url}
-                        alt={c.file_name}
-                        className="h-40 w-full rounded-t-xl object-cover object-center"
-                      />
-                    ) : (
-                      <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-t-xl bg-muted">
-                        <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Processing...</span>
-                      </div>
-                    )
-                  ) : (
-                    <img
-                      src={c.fb_image_url || c.file_url}
-                      alt={c.file_name}
-                      className="h-40 w-full rounded-t-xl object-cover object-center"
-                    />
-                  )}
+                  <CreativeCardMedia creative={c} className="h-40 w-full rounded-t-xl object-cover object-center" />
                 </div>
 
                 <CardContent className="p-3">

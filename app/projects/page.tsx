@@ -78,7 +78,7 @@ export default function HomePage() {
 
   const handleSelectOrg = (org: Org) => {
     document.cookie = `active_org_id=${org.id}; path=/; max-age=${60 * 60 * 24 * 365}`
-    router.push("/campaigns")
+    router.push("/launch")
   }
 
   const handleCreateOrg = async (e: React.FormEvent) => {

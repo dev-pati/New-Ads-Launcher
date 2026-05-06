@@ -1,15 +1,16 @@
 const GRAPH_API_VERSION = "v25.0"
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`
 
-// NOTE: ads_management, ads_read, business_management, pages_manage_ads
-// require App Review OR must be added in Facebook Developer Dashboard
-// under Use Cases → Customize for dev mode to work.
+// NOTE: ads_management, ads_read, business_management, pages_manage_ads,
+// catalog_management require App Review OR must be added in Facebook Developer
+// Dashboard under Use Cases → Customize for dev mode to work.
 export const FB_PERMISSIONS = [
   "business_management",
   "pages_show_list",
   "pages_read_engagement",
   "ads_read",
   "ads_management",
+  "catalog_management",
 ].join(",")
 
 export function getFacebookLoginUrl(redirectUri: string, state: string) {
@@ -78,12 +79,19 @@ export async function getFacebookUser(accessToken: string): Promise<FacebookUser
   return res.json()
 }
 
+export interface InstagramAccount {
+  id: string
+  username?: string
+  profile_pic?: string
+}
+
 export interface FacebookPage {
   id: string
   name: string
   access_token: string
   category: string
   picture?: { data: { url: string } }
+  instagram_accounts?: { data: InstagramAccount[] }
 }
 
 export async function getFacebookPages(accessToken: string): Promise<FacebookPage[]> {
@@ -96,6 +104,48 @@ export async function getFacebookPages(accessToken: string): Promise<FacebookPag
   }
   const data = await res.json()
   return data.data || []
+}
+
+// Fetch pages filtered by the business that owns the given ad account.
+// Falls back to all /me/accounts pages if the account has no business (personal account).
+export async function getAdAccountPages(adAccountId: string, userToken: string): Promise<FacebookPage[]> {
+  const allPages = await getFacebookPages(userToken)
+
+  try {
+    const accountRes = await fetch(
+      `${GRAPH_API_BASE}/${adAccountId}?fields=business&access_token=${userToken}`
+    )
+    if (!accountRes.ok) return allPages
+    const accountData = await accountRes.json()
+    const businessId = accountData.business?.id
+    if (!businessId) return allPages
+
+    const bizRes = await fetch(
+      `${GRAPH_API_BASE}/${businessId}/pages?fields=id&limit=500&access_token=${userToken}`
+    )
+    if (!bizRes.ok) return allPages
+    const bizData = await bizRes.json()
+    const bizPageIds = new Set<string>((bizData.data || []).map((p: any) => p.id as string))
+
+    const filtered = allPages.filter(p => bizPageIds.has(p.id))
+    return filtered.length > 0 ? filtered : allPages
+  } catch {
+    return allPages
+  }
+}
+
+// Fetch instagram accounts for a specific page using the page's own access token
+export async function getPageInstagramAccounts(pageId: string, pageAccessToken: string): Promise<InstagramAccount[]> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API_BASE}/${pageId}?fields=instagram_accounts{id,username,profile_pic}&access_token=${pageAccessToken}`
+    )
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.instagram_accounts?.data || []
+  } catch {
+    return []
+  }
 }
 
 export interface AdAccount {
@@ -571,15 +621,46 @@ export async function copyAdSet(
   return { id: newId }
 }
 
-// Fetch a video's thumbnail URL from Facebook (picture field)
+// Fetch a video's HD thumbnail URL from Facebook
+// Uses thumbnails edge to get largest available quality
 export async function getVideoThumbnail(videoId: string, accessToken: string): Promise<string | null> {
   try {
+    // Try thumbnails edge first (returns multiple resolutions of actual video frames)
+    const tRes = await fetch(
+      `${GRAPH_API_BASE}/${videoId}/thumbnails?fields=uri,width,height,is_preferred&access_token=${accessToken}`
+    )
+    if (tRes.ok) {
+      const tData = await tRes.json()
+      const thumbs: Array<{ uri: string; width: number; height: number; is_preferred?: boolean }> = tData.data || []
+      if (thumbs.length > 0) {
+        // Prefer is_preferred, otherwise pick largest by area
+        const preferred = thumbs.find(t => t.is_preferred)
+        if (preferred?.uri) return preferred.uri
+        const largest = thumbs.reduce((best, t) => (t.width * t.height) > (best.width * best.height) ? t : best, thumbs[0])
+        if (largest?.uri) return largest.uri
+      }
+    }
+    // Fallback to picture field (low res)
     const res = await fetch(
       `${GRAPH_API_BASE}/${videoId}?fields=picture&access_token=${accessToken}`
     )
     if (!res.ok) return null
     const data = await res.json()
     return data.picture || null
+  } catch {
+    return null
+  }
+}
+
+// Fetch a video's playable source URL from Facebook
+export async function getVideoSource(videoId: string, accessToken: string): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=source&access_token=${accessToken}`
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    return data.source || null
   } catch {
     return null
   }
@@ -604,6 +685,49 @@ export async function createAd(
     display_url?: string
     status?: string
     degrees_of_freedom_spec?: Record<string, any>
+    branded_content_sponsor_page_id?: string
+    partnership_display_mode?: "dynamic" | "both" | "first"
+    multilanguage?: {
+      defaultLanguage: string
+      translations: Array<{
+        language: string
+        primaryText: string
+        headline: string
+        description: string
+      }>
+    }
+    catalog_ads?: {
+      catalogId: string
+      productSetId?: string
+      formatMode: "automatic" | "manual"
+      format: "single" | "carousel"
+      frameImageUrl?: string
+      dynamicMedia: {
+        optimizedMediaSelection: boolean
+        automaticVideoCropping: boolean
+        prioritizeVideo: boolean
+      }
+    }
+    carousel_cards?: Array<{
+      image_hash?: string
+      video_id?: string
+      name: string
+      description?: string
+      link: string
+      call_to_action: { type: string; value: { link: string } }
+    }>
+    carousel_show_collection_tiles?: boolean
+    carousel_show_single_media?: boolean
+    flexible_asset_feed?: {
+      image_hashes: string[]
+      videos: { video_id: string; thumbnail_url?: string }[]
+      group_asset_indices: Array<{ image_indices?: number[]; video_indices?: number[] }>
+    }
+    multi_placement?: {
+      imageHashes: string[]
+      videos: { video_id: string; thumbnail_url?: string }[]
+      customRules: any[]
+    }
   }
 ): Promise<{ id: string }> {
   const creativeSpec: any = {
@@ -630,9 +754,165 @@ export async function createAd(
     delete creativeSpec.link_data
   }
 
+  // Carousel ads — replace link_data with multi_share + child_attachments
+  if (params.carousel_cards && params.carousel_cards.length >= 2) {
+    creativeSpec.link_data = {
+      link: params.link_url,
+      message: params.body,
+      call_to_action: { type: params.cta, value: { link: params.link_url } },
+      multi_share_optimized: true,
+      multi_share_end_card: true,
+      child_attachments: params.carousel_cards,
+      ...(params.carousel_show_collection_tiles ? { format_option: "collection_video" } : {}),
+      ...(params.carousel_show_single_media ? { format_option: "single_media" } : {}),
+    }
+    delete creativeSpec.video_data
+  }
+
   const creativeJson: any = { object_story_spec: creativeSpec }
   if (params.degrees_of_freedom_spec) {
     creativeJson.degrees_of_freedom_spec = params.degrees_of_freedom_spec
+  }
+  // Multi Placement Ads — asset_feed_spec with placement-aware customization rules
+  // Meta auto-picks best aspect for each placement; if customRules provided (manual mode),
+  // it explicitly maps assets to placements
+  if (params.multi_placement) {
+    const mp = params.multi_placement
+    const images = mp.imageHashes.map((h, i) => ({ hash: h, adlabels: [{ name: `img_${i}` }] }))
+    const videos = mp.videos.map((v, i) => ({ video_id: v.video_id, thumbnail_url: v.thumbnail_url, adlabels: [{ name: `vid_${i}` }] }))
+
+    const spec: any = {
+      titles: [{ text: params.title }],
+      bodies: [{ text: params.body }],
+      link_urls: [{ website_url: params.link_url }],
+      call_to_action_types: [params.cta],
+      ad_formats: videos.length > 0 ? ["SINGLE_VIDEO", "SINGLE_IMAGE"] : ["SINGLE_IMAGE"],
+    }
+    if (images.length > 0) spec.images = images
+    if (videos.length > 0) spec.videos = videos
+    if (mp.customRules.length > 0) spec.asset_customization_rules = mp.customRules
+
+    creativeJson.asset_feed_spec = spec
+    delete creativeSpec.link_data
+    delete creativeSpec.video_data
+  }
+
+  // Flexible Ads — build asset_feed_spec with grouped media variants
+  // Each group of media becomes a "variant pool"; Meta picks combinations dynamically
+  if (params.flexible_asset_feed) {
+    const fa = params.flexible_asset_feed
+    const images = fa.image_hashes.map(h => ({ hash: h }))
+    const videos = fa.videos.map(v => ({ video_id: v.video_id, thumbnail_url: v.thumbnail_url }))
+
+    creativeJson.asset_feed_spec = {
+      titles: [{ text: params.title }],
+      bodies: [{ text: params.body }],
+      link_urls: [{ website_url: params.link_url }],
+      call_to_action_types: [params.cta],
+      ...(images.length > 0 && { images }),
+      ...(videos.length > 0 && { videos }),
+      ad_formats: videos.length > 0 ? ["SINGLE_VIDEO", "SINGLE_IMAGE"] : ["SINGLE_IMAGE"],
+      // Group media variants: Meta uses these as alternatives within each group position
+      groups: fa.group_asset_indices.map(g => ({
+        image_indices: g.image_indices || [],
+        video_indices: g.video_indices || [],
+      })),
+    }
+    delete creativeSpec.link_data
+    delete creativeSpec.video_data
+  }
+
+  // Partnership Ads: brand collaboration
+  if (params.branded_content_sponsor_page_id) {
+    creativeJson.branded_content_sponsor_page_id = params.branded_content_sponsor_page_id
+    if (params.partnership_display_mode) {
+      // Maps to Meta's collaborative_ads_partner field for header display
+      creativeJson.partnership_display_mode = params.partnership_display_mode
+    }
+  }
+
+  // Catalog Ads (DPA): rebuild creative around product set + template_data
+  if (params.catalog_ads) {
+    const ca = params.catalog_ads
+    // Use template_data for catalog/dynamic ads — fields with {{product.*}} resolved by Meta
+    const templateData: any = {
+      message: params.body || "{{product.description}}",
+      name: params.title || "{{product.name}}",
+      description: "{{product.current_price}}",
+      link: params.link_url || "{{product.url}}",
+      call_to_action: { type: params.cta },
+      format_option: ca.format === "carousel" ? "carousel_images" : "single_image",
+    }
+    creativeSpec.template_data = templateData
+    creativeSpec.product_set_id = ca.productSetId || undefined
+    delete creativeSpec.link_data
+    delete creativeSpec.video_data
+
+    // Frame image (overlay) — Meta expects image_url on template_data.image_layer_specs
+    if (ca.frameImageUrl) {
+      templateData.image_layer_specs = [{ image_source: "CATALOG", overlay_shape: "rectangle", image_url: ca.frameImageUrl }]
+    }
+
+    // Dynamic Media → creative_features_spec
+    if (ca.dynamicMedia.optimizedMediaSelection) {
+      creativeJson.creative_features_spec = {
+        ...(creativeJson.creative_features_spec || {}),
+        product_extensions: { enroll_status: "OPT_IN" },
+      }
+      if (ca.dynamicMedia.automaticVideoCropping) {
+        creativeJson.creative_features_spec.video_auto_crop = { enroll_status: "OPT_IN" }
+      }
+      if (ca.dynamicMedia.prioritizeVideo) {
+        creativeJson.creative_features_spec.video_priority = { enroll_status: "OPT_IN" }
+      }
+    }
+  }
+
+  // Multilanguage Ads: per-locale text variations via asset_feed_spec
+  if (params.multilanguage && params.multilanguage.translations.length > 0) {
+    const titles: any[] = [{ text: params.title }]
+    const bodies: any[] = [{ text: params.body }]
+    const descriptions: any[] = params.description ? [{ text: params.description }] : []
+    const customizationRules: any[] = []
+
+    for (const t of params.multilanguage.translations) {
+      const titleIdx = titles.length
+      const bodyIdx = bodies.length
+      const descIdx = descriptions.length
+
+      titles.push({ text: t.headline || params.title, adlabels: [{ name: `headline_${t.language}` }] })
+      bodies.push({ text: t.primaryText || params.body, adlabels: [{ name: `body_${t.language}` }] })
+      if (t.description || params.description) {
+        descriptions.push({ text: t.description || params.description, adlabels: [{ name: `desc_${t.language}` }] })
+      }
+
+      const rule: any = {
+        customization_spec: { locales: [t.language] },
+        title_label: { name: `headline_${t.language}` },
+        body_label: { name: `body_${t.language}` },
+      }
+      if (t.description || params.description) {
+        rule.description_label = { name: `desc_${t.language}` }
+      }
+      customizationRules.push(rule)
+    }
+
+    const assetFeedSpec: any = {
+      titles,
+      bodies,
+      ad_formats: ["SINGLE_IMAGE"],
+      call_to_action_types: [params.cta],
+      link_urls: [{ website_url: params.link_url, display_url: params.display_url }],
+      asset_customization_rules: customizationRules,
+    }
+    if (descriptions.length > 0) assetFeedSpec.descriptions = descriptions
+    if (params.image_hash) assetFeedSpec.images = [{ hash: params.image_hash }]
+    if (params.video_id) {
+      assetFeedSpec.videos = [{ video_id: params.video_id, thumbnail_url: params.thumbnail_url }]
+      assetFeedSpec.ad_formats = ["SINGLE_VIDEO"]
+    }
+
+    creativeJson.asset_feed_spec = assetFeedSpec
   }
 
   const body = new URLSearchParams({
@@ -651,6 +931,226 @@ export async function createAd(
     throw new Error(msg)
   }
   return res.json()
+}
+
+// ─── Existing Ads with Insights (for Existing Ads tab in Load Media) ───────
+
+export interface ExistingAdItem {
+  id: string
+  name: string
+  status: string
+  effective_status: string
+  date_created: string
+  page_name?: string
+  page_id?: string
+  post_id?: string
+  post_url?: string
+  thumb_url?: string
+  image_hash?: string
+  video_id?: string
+  media_type: "image" | "video" | "unknown"
+  spend: number
+  impressions: number
+  reach: number
+  results: number
+  roas: number
+  platform: string
+}
+
+export async function getExistingAds(
+  adAccountId: string,
+  accessToken: string,
+  opts: { datePreset?: string; limit?: number; after?: string; activeOnly?: boolean; activeAdSetOnly?: boolean }
+): Promise<{ ads: ExistingAdItem[]; paging?: { after?: string; before?: string }; totalCount?: number }> {
+  const accId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+  const datePreset = opts.datePreset || "last_30d"
+  const limit = opts.limit || 50
+
+  const fields = [
+    "id",
+    "name",
+    "status",
+    "effective_status",
+    "created_time",
+    "creative{id,thumbnail_url,image_hash,video_id,object_story_id,object_story_spec{page_id,link_data,video_data,instagram_actor_id}}",
+    `insights.date_preset(${datePreset}){spend,impressions,reach,actions,purchase_roas}`,
+  ].join(",")
+
+  const filtering: any[] = []
+  if (opts.activeOnly) {
+    filtering.push({ field: "ad.effective_status", operator: "IN", value: ["ACTIVE"] })
+  }
+  if (opts.activeAdSetOnly) {
+    filtering.push({ field: "adset.effective_status", operator: "IN", value: ["ACTIVE"] })
+  }
+
+  const params = new URLSearchParams({
+    fields,
+    limit: String(limit),
+    access_token: accessToken,
+  })
+  if (filtering.length > 0) params.set("filtering", JSON.stringify(filtering))
+  if (opts.after) params.set("after", opts.after)
+
+  const url = `${GRAPH_API_BASE}/${accId}/ads?${params}`
+  const res = await fetch(url)
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}))
+    throw new Error(e.error?.message || "Failed to fetch existing ads")
+  }
+  const data = await res.json()
+
+  // Collect unique page IDs to fetch page names in batch
+  const pageIds = new Set<string>()
+  for (const ad of (data.data || [])) {
+    const pid = ad.creative?.object_story_spec?.page_id
+    if (pid) pageIds.add(pid)
+  }
+
+  const pageNameMap = new Map<string, string>()
+  if (pageIds.size > 0) {
+    try {
+      const idsParam = Array.from(pageIds).join(",")
+      const pageRes = await fetch(`${GRAPH_API_BASE}/?ids=${idsParam}&fields=id,name&access_token=${accessToken}`)
+      if (pageRes.ok) {
+        const pageData = await pageRes.json()
+        for (const pid of pageIds) {
+          if (pageData[pid]?.name) pageNameMap.set(pid, pageData[pid].name)
+        }
+      }
+    } catch {}
+  }
+
+  const ads: ExistingAdItem[] = (data.data || []).map((ad: any) => {
+    const insights = ad.insights?.data?.[0] || {}
+    const oss = ad.creative?.object_story_spec || {}
+    const pageId = oss.page_id
+    const linkData = oss.link_data
+    const videoData = oss.video_data
+
+    // Extract creative
+    const imageHash = ad.creative?.image_hash || linkData?.image_hash
+    const videoId = ad.creative?.video_id || videoData?.video_id
+    const thumb = ad.creative?.thumbnail_url
+
+    // Results = sum of conversion-like actions
+    const actions = (insights.actions || []) as Array<{ action_type: string; value: string }>
+    const purchases = actions.find(a => a.action_type === "purchase" || a.action_type === "offsite_conversion.fb_pixel_purchase")
+    const leads = actions.find(a => a.action_type === "lead" || a.action_type === "offsite_conversion.fb_pixel_lead")
+    const link_clicks = actions.find(a => a.action_type === "link_click")
+    const results = parseFloat(purchases?.value || leads?.value || link_clicks?.value || "0")
+
+    // ROAS
+    const roasArr = insights.purchase_roas || []
+    const roas = roasArr.length > 0 ? parseFloat(roasArr[0].value || "0") : 0
+
+    return {
+      id: ad.id,
+      name: ad.name,
+      status: ad.status,
+      effective_status: ad.effective_status,
+      date_created: ad.created_time,
+      page_name: pageId ? pageNameMap.get(pageId) : undefined,
+      page_id: pageId,
+      post_id: ad.creative?.object_story_id,
+      post_url: ad.creative?.object_story_id ? `https://www.facebook.com/${ad.creative.object_story_id.split("_").join("/posts/")}` : undefined,
+      thumb_url: thumb,
+      image_hash: imageHash,
+      video_id: videoId,
+      media_type: videoId ? "video" : imageHash ? "image" : "unknown",
+      spend: parseFloat(insights.spend || "0"),
+      impressions: parseInt(insights.impressions || "0", 10),
+      reach: parseInt(insights.reach || "0", 10),
+      results,
+      roas,
+      platform: "Web",
+    }
+  })
+
+  return {
+    ads,
+    paging: data.paging?.cursors,
+    totalCount: data.summary?.total_count,
+  }
+}
+
+// ─── Product Catalogs (for Collection Ads) ──────────────────────────────────
+
+export interface ProductCatalog { id: string; name: string; product_count?: number; vertical?: string }
+export interface ProductSet { id: string; name: string; product_count?: number; filter?: any }
+export interface CatalogProduct { id: string; name?: string; image_url?: string; price?: string; brand?: string }
+
+// Fetch catalogs — tries multiple endpoints (via businesses, ad account business, direct)
+export async function getProductCatalogs(accessToken: string, adAccountId?: string): Promise<{ catalogs: ProductCatalog[]; debug: string[] }> {
+  const seen = new Set<string>()
+  const catalogs: ProductCatalog[] = []
+  const debug: string[] = []
+
+  // 1) /me/businesses → owned + client catalogs
+  try {
+    const url = `${GRAPH_API_BASE}/me/businesses?fields=id,name,owned_product_catalogs.limit(100){id,name,product_count,vertical},client_product_catalogs.limit(100){id,name,product_count,vertical}&limit=50&access_token=${accessToken}`
+    const r = await fetch(url)
+    if (r.ok) {
+      const biz = await r.json()
+      let bizCount = 0, catCount = 0
+      for (const b of (biz.data || [])) {
+        bizCount++
+        for (const c of (b.owned_product_catalogs?.data || [])) {
+          if (!seen.has(c.id)) { seen.add(c.id); catalogs.push(c); catCount++ }
+        }
+        for (const c of (b.client_product_catalogs?.data || [])) {
+          if (!seen.has(c.id)) { seen.add(c.id); catalogs.push(c); catCount++ }
+        }
+      }
+      debug.push(`/me/businesses: ${bizCount} businesses, ${catCount} catalogs`)
+    } else {
+      const e = await r.json().catch(() => ({}))
+      debug.push(`/me/businesses failed: ${e.error?.message || r.status}`)
+    }
+  } catch (e: any) {
+    debug.push(`/me/businesses error: ${e.message}`)
+  }
+
+  // 2) Via ad account → its business → catalogs
+  if (adAccountId) {
+    try {
+      const accId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+      const url = `${GRAPH_API_BASE}/${accId}?fields=business{id,name,owned_product_catalogs.limit(100){id,name,product_count,vertical}}&access_token=${accessToken}`
+      const r = await fetch(url)
+      if (r.ok) {
+        const acc = await r.json()
+        let added = 0
+        for (const c of (acc.business?.owned_product_catalogs?.data || [])) {
+          if (!seen.has(c.id)) { seen.add(c.id); catalogs.push(c); added++ }
+        }
+        debug.push(`ad account business catalogs: ${added}`)
+      } else {
+        const e = await r.json().catch(() => ({}))
+        debug.push(`ad account fetch failed: ${e.error?.message || r.status}`)
+      }
+    } catch (e: any) {
+      debug.push(`ad account error: ${e.message}`)
+    }
+  }
+
+  return { catalogs, debug }
+}
+
+export async function getProductSets(catalogId: string, accessToken: string): Promise<ProductSet[]> {
+  const res = await fetch(`${GRAPH_API_BASE}/${catalogId}/product_sets?fields=id,name,product_count&limit=100&access_token=${accessToken}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error?.message || "Failed to fetch product sets")
+  }
+  const data = await res.json()
+  return data.data || []
+}
+
+export async function getCatalogProducts(catalogId: string, accessToken: string, limit = 4): Promise<CatalogProduct[]> {
+  const res = await fetch(`${GRAPH_API_BASE}/${catalogId}/products?fields=id,name,image_url,price,brand&limit=${limit}&access_token=${accessToken}`)
+  if (!res.ok) return []
+  const data = await res.json()
+  return data.data || []
 }
 
 // Campaign insights

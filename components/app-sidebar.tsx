@@ -1,50 +1,122 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { usePathname, useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
 import Link from "next/link"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarRail,
-} from "@/components/ui/sidebar"
-import { Button } from "@/components/ui/button"
-import {
-  IconTargetArrow,
-  IconAd2,
-  IconBrandFacebook,
-  IconLogout,
-  IconCheck,
-  IconSettings,
-  IconUpload,
-  IconArrowLeft,
-  IconExternalLink,
-  IconSun,
-  IconMoon,
-  IconLayoutGrid,
-} from "@tabler/icons-react"
+import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useOrg } from "@/lib/org-context"
 import { useTheme } from "next-themes"
 import { useUserSettings } from "@/hooks/use-user-settings"
-import Image from "next/image"
+import { cn } from "@/lib/utils"
+import {
+  IconRocket,
+  IconPhoto,
+  IconChartBar,
+  IconBolt,
+  IconLink,
+  IconBulb,
+  IconSearch,
+  IconGift,
+  IconSettings,
+  IconBell,
+  IconChevronLeft,
+  IconChevronRight,
+  IconSun,
+  IconMoon,
+  IconLogout,
+} from "@tabler/icons-react"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
-const navItems = [
-  { title: "Campaigns", href: "/campaigns", icon: IconTargetArrow },
-  { title: "Ads Manager", href: "/ads", icon: IconAd2 },
-  { title: "Upload Ads", href: "/upload-ads", icon: IconUpload },
-  { title: "Presets", href: "/presets", icon: IconLayoutGrid },
-  { title: "Pages", href: "/pages", icon: IconExternalLink },
-  { title: "Settings", href: "/settings", icon: IconSettings, adminOnly: true },
-] as const
+type SubItem = { label: string; href: string }
+type NavSection = {
+  id: string
+  label: string
+  icon: React.ElementType
+  subItems: SubItem[]
+}
+
+const navSections: NavSection[] = [
+  {
+    id: "launch",
+    label: "Launch",
+    icon: IconRocket,
+    subItems: [
+      { label: "Ad Launcher", href: "/launch" },
+      { label: "Ads Manager", href: "/ads-manager" },
+      { label: "Templates", href: "/templates" },
+    ],
+  },
+  {
+    id: "assets",
+    label: "Assets",
+    icon: IconPhoto,
+    subItems: [
+      { label: "All Assets", href: "/assets" },
+      { label: "Boards", href: "/assets/boards" },
+      { label: "My Uploads", href: "/assets/my-uploads" },
+    ],
+  },
+  {
+    id: "insights",
+    label: "Insights",
+    icon: IconChartBar,
+    subItems: [
+      { label: "Top Ads", href: "/insights" },
+      { label: "Statistics", href: "/insights/statistics" },
+      { label: "Comments", href: "/insights/comments" },
+    ],
+  },
+  {
+    id: "automate",
+    label: "Automate",
+    icon: IconBolt,
+    subItems: [
+      { label: "Automations", href: "/automate" },
+      { label: "Rules", href: "/automate/rules" },
+    ],
+  },
+  {
+    id: "connect",
+    label: "Connect",
+    icon: IconLink,
+    subItems: [
+      { label: "Ad Channels", href: "/connect" },
+      { label: "Media", href: "/connect/media" },
+      { label: "API", href: "/connect/api" },
+      { label: "MCP", href: "/connect/mcp" },
+    ],
+  },
+  {
+    id: "inspo",
+    label: "Inspo",
+    icon: IconBulb,
+    subItems: [
+      { label: "Ad Scan", href: "/inspo" },
+      { label: "AI", href: "/inspo/ai" },
+      { label: "Brand Spy", href: "/inspo/brand-spy" },
+      { label: "Saved Ads", href: "/inspo/saved" },
+    ],
+  },
+]
+
+const bottomNav = [
+  { label: "Search", href: "/search", icon: IconSearch },
+  { label: "Rewards", href: "/rewards", icon: IconGift },
+  { label: "Settings", href: "/settings", icon: IconSettings },
+]
+
+function getActiveSection(pathname: string): string {
+  if (pathname.startsWith("/launch") || pathname.startsWith("/ads-manager") || pathname.startsWith("/templates")) return "launch"
+  if (pathname.startsWith("/assets")) return "assets"
+  if (pathname.startsWith("/insights")) return "insights"
+  if (pathname.startsWith("/automate")) return "automate"
+  if (pathname.startsWith("/connect")) return "connect"
+  if (pathname.startsWith("/inspo")) return "inspo"
+  if (pathname.startsWith("/search")) return "search"
+  if (pathname.startsWith("/rewards")) return "rewards"
+  if (pathname.startsWith("/settings")) return "settings"
+  return "launch"
+}
 
 interface AppSidebarProps {
   userName?: string
@@ -57,37 +129,12 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
   const { activeOrg } = useOrg()
   const { resolvedTheme, setTheme } = useTheme()
   const { settings, updateSettings } = useUserSettings()
-  const [fbConnection, setFbConnection] = useState<{
-    connected: boolean
-    name?: string
-    picture?: string
-  }>({ connected: false })
+  const [collapsed, setCollapsed] = useState(false)
+  const activeSection = getActiveSection(pathname)
 
-  // Apply saved theme from DB on load
   useEffect(() => {
-    if (settings?.theme && settings.theme !== "system") {
-      setTheme(settings.theme)
-    }
+    if (settings?.theme && settings.theme !== "system") setTheme(settings.theme)
   }, [settings?.theme, setTheme])
-
-  useEffect(() => {
-    async function checkFbConnection() {
-      try {
-        const res = await fetch("/api/facebook/connection")
-        const data = await res.json()
-        if (data.connected) {
-          setFbConnection({
-            connected: true,
-            name: data.user?.name,
-            picture: data.user?.picture,
-          })
-        }
-      } catch {
-        // ignore
-      }
-    }
-    checkFbConnection()
-  }, [])
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -96,156 +143,220 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
     router.refresh()
   }
 
-  const handleConnectFb = () => {
-    window.location.href = "/api/auth/facebook"
+  const toggleTheme = () => {
+    const newTheme = resolvedTheme === "dark" ? "light" : "dark"
+    setTheme(newTheme)
+    updateSettings({ theme: newTheme })
   }
 
+  const orgInitials = activeOrg?.name ? activeOrg.name.slice(0, 2).toUpperCase() : "AD"
+  const userInitials = userName ? userName.slice(0, 2).toUpperCase() : (userEmail ? userEmail.slice(0, 2).toUpperCase() : "??")
+
   return (
-    <Sidebar>
-      <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-2">
-          <Image
-            src="/applogo.webp"
-            alt="Logo"
-            width={32}
-            height={32}
-            className="bg-white"
-          />
-          <span className="font-heading text-base font-semibold">
-            AdLauncher
-          </span>
-        </div>
-        {/* Org info + back */}
-        {activeOrg && (
-          <div className="flex items-center gap-2 px-2 pb-1">
-            <Link
-              href="/projects"
-              className="flex size-7 items-center justify-center rounded hover:bg-muted"
-            >
-              <IconArrowLeft className="size-3.5 text-muted-foreground" />
-            </Link>
-            <span className="truncate text-xs font-medium text-muted-foreground">
-              {activeOrg.name}
-            </span>
+    <aside
+      className={cn(
+        "flex flex-col h-full shrink-0 bg-sidebar border-r border-sidebar-border transition-[width] duration-200 ease-in-out overflow-hidden",
+        collapsed ? "w-[60px]" : "w-[210px]"
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 h-12 border-b border-sidebar-border shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="size-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs shrink-0">
+            {orgInitials}
           </div>
-        )}
-      </SidebarHeader>
-
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.filter((item) => !("adminOnly" in item && item.adminOnly) || activeOrg?.role === "admin").map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={
-                      pathname === item.href ||
-                      (item.href !== "/settings" &&
-                        pathname.startsWith(item.href))
-                    }
-                  >
-                    <Link href={item.href}>
-                      <item.icon className="size-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-
-      <SidebarFooter className="gap-3">
-        {/* Facebook Connection Block */}
-        <div className="mx-2 rounded-lg border bg-card p-3">
-          {fbConnection.connected ? (
-            <div className="flex flex-col items-center gap-2 text-center">
-              {fbConnection.picture ? (
-                <img
-                  src={fbConnection.picture}
-                  alt={fbConnection.name || ""}
-                  className="size-10 rounded-full"
-                />
-              ) : (
-                <div className="flex size-10 items-center justify-center rounded-full bg-[#1877F2]/10">
-                  <IconBrandFacebook className="size-5 text-[#1877F2]" />
-                </div>
-              )}
-              <div>
-                <div className="flex items-center justify-center gap-1">
-                  <IconCheck className="size-3.5 text-green-500" />
-                  <span className="text-xs font-medium text-green-600">
-                    Connected
-                  </span>
-                </div>
-                <p className="mt-0.5 text-sm ">
-                  {fbConnection.name}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 text-center">
-              <div className="flex size-10 items-center justify-center rounded-full bg-[#1877F2]/10">
-                <IconBrandFacebook className="size-5 text-[#1877F2]" />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Connect to Facebook
-              </p>
-              <Button
-                size="sm"
-                className="w-full bg-[#1877F2] text-white hover:bg-[#166FE5]"
-                onClick={handleConnectFb}
-              >
-                <IconBrandFacebook className="size-3.5" />
-                Connect
-              </Button>
-            </div>
+          {!collapsed && (
+            <span className="font-heading text-sm font-semibold text-sidebar-foreground truncate">
+              {activeOrg?.name || "Workspace"}
+            </span>
           )}
         </div>
-
-        {/* User info + Logout */}
-        <div className="flex items-center justify-between px-2 pb-1">
-          <div className="min-w-0">
-            {userName && (
-              <p className="truncate text-sm font-medium">{userName}</p>
-            )}
-            {userEmail && (
-              <p className="truncate text-xs text-muted-foreground">
-                {userEmail}
-              </p>
-            )}
-          </div>
-          <div className="flex shrink-0 items-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={() => {
-                const newTheme = resolvedTheme === "dark" ? "light" : "dark"
-                setTheme(newTheme)
-                updateSettings({ theme: newTheme })
-              }}
-              title="Toggle theme"
+        <div className="flex items-center gap-0.5 shrink-0">
+          {!collapsed && (
+            <button
+              className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+              title="Notifications"
             >
-              {resolvedTheme === "dark" ? <IconSun className="size-4" /> : <IconMoon className="size-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8"
-              onClick={handleLogout}
-              title="Logout"
-            >
-              <IconLogout className="size-4" />
-            </Button>
-          </div>
+              <IconBell className="size-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+          >
+            {collapsed ? <IconChevronRight className="size-3.5" /> : <IconChevronLeft className="size-3.5" />}
+          </button>
         </div>
-      </SidebarFooter>
+      </div>
 
-      <SidebarRail />
-    </Sidebar>
+      {/* Main nav */}
+      <nav className="flex-1 overflow-y-auto py-2 space-y-0.5">
+        {navSections.map((section) => {
+          const isActive = activeSection === section.id
+          const Icon = section.icon
+
+          if (collapsed) {
+            return (
+              <Tooltip key={section.id} delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={section.subItems[0].href}
+                    className={cn(
+                      "flex items-center justify-center h-10 mx-2 rounded-lg transition-colors",
+                      isActive
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                        : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
+                  >
+                    <Icon className="size-[18px]" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="font-medium">
+                  {section.label}
+                </TooltipContent>
+              </Tooltip>
+            )
+          }
+
+          return (
+            <div key={section.id}>
+              {/* Section header row */}
+              <Link
+                href={section.subItems[0].href}
+                className={cn(
+                  "flex items-center gap-2.5 h-9 px-3 mx-2 rounded-lg text-sm font-medium transition-colors",
+                  isActive
+                    ? "text-foreground"
+                    : "text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                )}
+              >
+                <Icon className={cn("size-4 shrink-0", isActive ? "text-primary" : "")} />
+                <span>{section.label}</span>
+              </Link>
+
+              {/* Sub-items */}
+              {isActive && (
+                <div className="ml-5 mt-0.5 mb-1">
+                  {/* Launch stats widget */}
+                  {section.id === "launch" && (
+                    <div className="mx-2 mb-2 rounded-lg bg-sidebar-accent px-3 py-2">
+                      <p className="text-[10px] font-medium text-sidebar-foreground/40 uppercase tracking-wide mb-1.5">
+                        Your team's last 30d
+                      </p>
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <div className="text-xs font-bold text-sidebar-foreground">—</div>
+                          <div className="text-[9px] text-sidebar-foreground/45">Ads</div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-sidebar-foreground">—</div>
+                          <div className="text-[9px] text-sidebar-foreground/45">Batches</div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-sidebar-foreground">—</div>
+                          <div className="text-[9px] text-sidebar-foreground/45">Saved</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {section.subItems.map((sub) => {
+                    const isSubActive = pathname === sub.href || pathname.startsWith(sub.href + "/")
+                    return (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        className={cn(
+                          "flex items-center h-8 px-3 rounded-lg text-sm transition-colors mb-0.5",
+                          isSubActive
+                            ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
+                            : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                        )}
+                      >
+                        {sub.label}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </nav>
+
+      {/* Bottom nav */}
+      <div className="border-t border-sidebar-border py-1.5">
+        {bottomNav.map((item) => {
+          const Icon = item.icon
+          const isActive = pathname.startsWith(item.href)
+          if (collapsed) {
+            return (
+              <Tooltip key={item.href} delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Link
+                    href={item.href}
+                    className={cn(
+                      "flex items-center justify-center h-9 mx-2 rounded-lg transition-colors",
+                      isActive
+                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                        : "text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
+                  >
+                    <Icon className="size-4" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right">{item.label}</TooltipContent>
+              </Tooltip>
+            )
+          }
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-2.5 h-9 px-3 mx-2 rounded-lg text-sm transition-colors",
+                isActive
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
+                  : "text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              )}
+            >
+              <Icon className="size-4" />
+              <span>{item.label}</span>
+            </Link>
+          )
+        })}
+      </div>
+
+      {/* User footer */}
+      <div className="border-t border-sidebar-border p-2">
+        <div className={cn("flex items-center gap-2", collapsed && "justify-center")}>
+          <div className="size-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-semibold shrink-0">
+            {userInitials}
+          </div>
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                {userName && <p className="text-xs font-medium text-sidebar-foreground truncate">{userName}</p>}
+                {userEmail && <p className="text-[10px] text-sidebar-foreground/45 truncate">{userEmail}</p>}
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
+                <button
+                  onClick={toggleTheme}
+                  className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+                >
+                  {resolvedTheme === "dark" ? <IconSun className="size-3.5" /> : <IconMoon className="size-3.5" />}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+                >
+                  <IconLogout className="size-3.5" />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </aside>
   )
 }

@@ -3,717 +3,646 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>AdLauncher — Wireframe Mockup</title>
+<title>AdLauncher — Wireframe</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f1117;color:#fff;height:100vh;display:flex;flex-direction:column}
-  header{background:#161b27;border-bottom:1px solid #2a2f3e;padding:12px 20px;display:flex;align-items:center;gap:16px;flex-shrink:0}
-  header h1{font-size:15px;font-weight:700;color:#fff}
-  header p{font-size:12px;color:#6b7280}
-  .tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
-  .tab{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid #2a2f3e;background:#1e2433;color:#9ca3af;transition:.15s}
-  .tab:hover{background:#2a2f3e;color:#fff}
-  .tab.active{background:#2563eb;border-color:#2563eb;color:#fff}
-  .canvas-wrap{flex:1;overflow:hidden;position:relative}
-  canvas{display:block;width:100%;height:100%}
-  .note{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.3);border-radius:8px;padding:8px 16px;font-size:12px;color:#93c5fd;pointer-events:none}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f1117;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{background:#161b27;border-bottom:1px solid #2a2f3e;padding:10px 20px;display:flex;align-items:center;gap:16px;flex-shrink:0}
+header h1{font-size:14px;font-weight:700}
+header p{font-size:11px;color:#6b7280}
+.tabs{display:flex;gap:4px;margin-left:auto}
+.tab{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid #2a2f3e;background:#1e2433;color:#9ca3af}
+.tab.active{background:#2563eb;border-color:#2563eb;color:#fff}
+canvas{display:block}
 </style>
 </head>
 <body>
 <header>
-  <div>
-    <h1>🚀 AdLauncher — Wireframe</h1>
-    <p>Sơ đồ giao diện để duyệt trước khi xây dựng</p>
-  </div>
-  <div class="tabs" id="tabs">
-    <div class="tab active" data-screen="onboard">1. Onboarding</div>
-    <div class="tab" data-screen="dashboard">2. Dashboard</div>
-    <div class="tab" data-screen="launch">3. Bulk Launch</div>
-    <div class="tab" data-screen="assets">4. Assets</div>
-    <div class="tab" data-screen="adsmanager">5. Ads Manager</div>
-    <div class="tab" data-screen="analytics">6. Analytics</div>
-    <div class="tab" data-screen="automation">7. Automation</div>
-    <div class="tab" data-screen="team">8. Team</div>
+  <div><h1>🚀 AdLauncher — Wireframe</h1><p>Click tab để xem từng màn hình</p></div>
+  <div class="tabs">
+    <div class="tab active" data-s="onboard">1. Onboarding</div>
+    <div class="tab" data-s="dashboard">2. Dashboard</div>
+    <div class="tab" data-s="launch">3. Bulk Launch</div>
+    <div class="tab" data-s="assets">4. Assets</div>
+    <div class="tab" data-s="adsmanager">5. Ads Manager</div>
+    <div class="tab" data-s="analytics">6. Analytics</div>
+    <div class="tab" data-s="automation">7. Automation</div>
+    <div class="tab" data-s="team">8. Team</div>
   </div>
 </header>
-<div class="canvas-wrap">
-  <canvas id="c"></canvas>
-  <div class="note">Click các tab phía trên để xem từng màn hình • Đây là wireframe để duyệt concept</div>
-</div>
+<canvas id="c"></canvas>
 
 <script>
-const canvas = document.getElementById('c')
-const ctx = canvas.getContext('2d')
-let W, H, scale
-let currentScreen = 'onboard'
+const cv = document.getElementById('c')
+const ctx = cv.getContext('2d')
+let W, H, dpr, current = 'onboard'
+
+const K = {
+  bg:'#0f1117', sb:'#161b27', panel:'#1a1f2e', card:'#1e2433',
+  bdr:'#2a2f3e', blue:'#2563eb', bll:'#3b82f6', grn:'#16a34a',
+  org:'#d97706', red:'#dc2626', txt:'#f9fafb', mut:'#6b7280', dim:'#374151'
+}
 
 function resize(){
-  const wrap = canvas.parentElement
-  W = wrap.clientWidth; H = wrap.clientHeight
-  canvas.width = W * devicePixelRatio
-  canvas.height = H * devicePixelRatio
-  canvas.style.width = W + 'px'
-  canvas.style.height = H + 'px'
-  ctx.scale(devicePixelRatio, devicePixelRatio)
-  scale = Math.min(W/1280, H/780)
+  dpr = window.devicePixelRatio || 1
+  W = window.innerWidth
+  H = window.innerHeight - document.querySelector('header').offsetHeight
+  cv.width = W * dpr; cv.height = H * dpr
+  cv.style.width = W + 'px'; cv.style.height = H + 'px'
+  ctx.scale(dpr, dpr)
   draw()
 }
 
-// ── Helpers ──────────────────────────────────
-const C = {
-  bg:     '#0f1117',
-  sidebar:'#161b27',
-  panel:  '#1a1f2e',
-  card:   '#1e2433',
-  border: '#2a2f3e',
-  blue:   '#2563eb',
-  blueL:  '#3b82f6',
-  green:  '#16a34a',
-  orange: '#d97706',
-  red:    '#dc2626',
-  text:   '#f9fafb',
-  muted:  '#6b7280',
-  dim:    '#374151',
-}
+// scale from 1280x720 base
+function s(v){ return v * Math.min(W/1280, H/720) }
 
-function px(v){ return v * scale }
-
-function r(x,y,w,h,rad=0,fill=null,stroke=null){
+function rect(x,y,w,h,rad,fill,stroke){
   ctx.beginPath()
-  if(rad){
-    const r2=Math.min(rad,w/2,h/2)
-    ctx.moveTo(x+r2,y); ctx.lineTo(x+w-r2,y)
-    ctx.arcTo(x+w,y,x+w,y+r2,r2)
-    ctx.lineTo(x+w,y+h-r2)
-    ctx.arcTo(x+w,y+h,x+w-r2,y+h,r2)
-    ctx.lineTo(x+r2,y+h)
-    ctx.arcTo(x,y+h,x,y+h-r2,r2)
-    ctx.lineTo(x,y+r2)
-    ctx.arcTo(x,y,x+r2,y,r2)
+  if(rad > 0){
+    ctx.roundRect(x,y,w,h,rad)
   } else {
     ctx.rect(x,y,w,h)
   }
-  ctx.closePath()
   if(fill){ctx.fillStyle=fill;ctx.fill()}
   if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=1;ctx.stroke()}
 }
 
-function t(text,x,y,size,color,align='left',bold=false){
-  ctx.font=`${bold?'700':'400'} ${px(size)}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`
-  ctx.fillStyle=color; ctx.textAlign=align
-  ctx.fillText(text,x,y)
+function txt(str,x,y,size,col,align,bold){
+  ctx.font = (bold?'700 ':'400 ') + s(size) + 'px -apple-system,BlinkMacSystemFont,sans-serif'
+  ctx.fillStyle = col
+  ctx.textAlign = align||'left'
+  ctx.fillText(str, x, y)
 }
 
-function pill(x,y,w,h,fill,text,tcolor='#fff',size=11){
-  r(x,y,w,h,h/2,fill)
-  t(text,x+w/2,y+h/2+px(size)*.35,size,tcolor,'center',true)
+function pill(x,y,w,h,fill,label,lc,fs){
+  rect(x,y,w,h,h/2,fill)
+  txt(label,x+w/2,y+h*0.65,fs||10,lc||'#fff','center',true)
 }
 
-function icon(emoji,x,y,size=18){
-  ctx.font=`${px(size)}px serif`
-  ctx.textAlign='center'
-  ctx.fillStyle='#fff'
-  ctx.fillText(emoji,x,y+px(size)*.35)
+function badge(x,y,label,fill,lc){
+  pill(x,y,s(60),s(18),fill,label,lc,9)
 }
 
 // ── SIDEBAR ──────────────────────────────────
-function drawSidebar(activeItem=''){
-  const sw=px(64), sh=H
-  r(0,0,sw,sh,0,C.sidebar)
-  r(sw-1,0,1,sh,0,C.border)
-
-  // Logo
-  r(px(12),px(12),px(40),px(40),px(8),C.blue)
-  t('A',px(32),px(38),18,'#fff','center',true)
-
+function sidebar(active){
+  const sw = s(60)
+  rect(0,0,sw,H,0,K.sb)
+  rect(sw-1,0,1,H,0,K.bdr)
+  // logo
+  rect(s(10),s(10),s(40),s(40),s(8),K.blue)
+  txt('A',s(30),s(38),16,'#fff','center',true)
   const items=[
-    {e:'🚀',l:'Launch',y:80},
-    {e:'🖼️',l:'Assets',y:140},
-    {e:'📊',l:'Insights',y:200},
-    {e:'⚡',l:'Automate',y:260},
-    {e:'🔗',l:'Connect',y:320},
-    {e:'💡',l:'Inspo',y:380},
+    {e:'🚀',l:'Launch',k:'launch',y:80},
+    {e:'🖼️',l:'Assets',k:'assets',y:140},
+    {e:'📊',l:'Insights',k:'insights',y:200},
+    {e:'⚡',l:'Automate',k:'automate',y:260},
+    {e:'🔗',l:'Connect',k:'connect',y:320},
+    {e:'💡',l:'Inspo',k:'inspo',y:380},
   ]
   items.forEach(it=>{
-    const active = it.l.toLowerCase()===activeItem
-    if(active) r(0,px(it.y-4),sw,px(48),0,'rgba(37,99,235,.2)')
-    r(active?0:sw,px(it.y-4),3,px(48),0,active?C.blue:null)
-    ctx.font=`${px(20)}px serif`; ctx.textAlign='center'
-    ctx.fillText(it.e,px(32),px(it.y+16))
-    t(it.l,px(32),px(it.y+34),9,active?C.blueL:C.muted,'center')
+    const on = it.k===active
+    if(on) rect(0,s(it.y-4),sw,s(44),0,'rgba(37,99,235,.2)')
+    ctx.font = s(18)+'px serif'; ctx.textAlign='center'
+    ctx.fillText(it.e, s(30), s(it.y+14))
+    txt(it.l,s(30),s(it.y+30),8,on?K.bll:K.mut,'center')
   })
-
-  // Bottom
-  const bots=[{e:'🔍',l:'Search',y:460},{e:'🎁',l:'Rewards',y:510},{e:'⚙️',l:'Settings',y:560}]
-  bots.forEach(it=>{
-    ctx.font=`${px(16)}px serif`; ctx.textAlign='center'
-    ctx.fillText(it.e,px(32),px(it.y+10))
-    t(it.l,px(32),px(it.y+26),9,C.muted,'center')
-  })
-
-  // Avatar
-  r(px(14),H-px(50),px(36),px(36),px(18),C.blue)
-  t('T',px(32),H-px(25),14,'#fff','center',true)
+  // avatar
+  rect(s(12),H-s(46),s(36),s(36),s(18),K.blue)
+  txt('T',s(30),H-s(22),13,'#fff','center',true)
 }
 
-// ── SECOND SIDEBAR ────────────────────────────
-function drawSubSidebar(items, active=''){
-  const x=px(64), sw=px(150), sh=H
-  r(x,0,sw,sh,0,C.panel)
-  r(x+sw-1,0,1,sh,0,C.border)
-  t('LAUNCH',x+px(16),px(24),9,C.muted,'left',true)
+// ── SUB SIDEBAR ───────────────────────────────
+function subbar(items, active){
+  const x=s(60), sw=s(148)
+  rect(x,0,sw,H,0,K.panel)
+  rect(x+sw-1,0,1,H,0,K.bdr)
   items.forEach((it,i)=>{
-    const y=px(36+i*36), act=it===active
-    if(act) r(x,y,sw,px(30),0,'rgba(37,99,235,.15)')
-    t((act?'▸ ':'')+it, x+px(act?20:16),y+px(20),12,act?C.blueL:C.text,'left',act)
+    const on=it===active, y=s(40+i*36)
+    if(on) rect(x,y-s(4),sw,s(32),0,'rgba(37,99,235,.15)')
+    txt((on?'▸ ':'')+it, x+s(on?20:14), y+s(16), 11, on?K.bll:K.txt)
   })
-  // upgrade
-  r(x+px(10),H-px(60),sw-px(20),px(36),px(8),'rgba(234,179,8,.1)')
-  t('⚡ Upgrade Plan',x+px(sw/2),H-px(36),11,'#eab308','center',true)
+  rect(x+s(10),H-s(54),sw-s(20),s(34),s(8),'rgba(234,179,8,.1)')
+  txt('⚡ Upgrade Plan',x+sw/2,H-s(30),10,'#eab308','center',true)
 }
 
 // ── TOPBAR ────────────────────────────────────
-function drawTopbar(x,title,steps=[],activeStep=0){
-  r(x,0,W-x,px(52),0,C.sidebar)
-  r(x,px(51),W-x,1,0,C.border)
-  t(title,x+px(20),px(32),15,C.text,'left',true)
-
-  if(steps.length){
-    // progress steps centered
-    const cx=(x+(W-x)/2), totalW=px(steps.length*160)
-    const sx=cx-totalW/2
-    steps.forEach((s,i)=>{
-      const done=i<activeStep, active2=i===activeStep
-      const col=done?C.green:active2?C.blue:C.dim
-      // circle
-      r(sx+i*px(160),px(16),px(20),px(20),px(10),col)
-      t(`${i+1}`,sx+i*px(160)+px(10),px(31),10,'#fff','center',true)
-      t(s,sx+i*px(160)+px(10),px(50),10,active2?C.text:C.muted,'center')
-      // line
-      if(i<steps.length-1){
-        r(sx+i*px(160)+px(20),px(25),px(140),px(2),0,done?C.green:C.dim)
-      }
-    })
-  }
+function topbar(cx, title){
+  rect(cx,0,W-cx,s(48),0,K.sb)
+  rect(cx,s(47),W-cx,1,0,K.bdr)
+  txt(title,cx+s(18),s(30),13,K.txt,'left',true)
 }
 
-// ── SCREENS ──────────────────────────────────
+// ══════════════════════════════════════════════
+//  SCREENS
+// ══════════════════════════════════════════════
 
 function screenOnboard(){
-  r(0,0,W,H,0,C.bg)
-  drawSidebar('launch')
-  drawSubSidebar(['Ad Launcher','Ads Manager','Templates'],'Ad Launcher')
+  rect(0,0,W,H,0,K.bg)
+  sidebar('launch')
+  subbar(['Ad Launcher','Ads Manager','Templates'],'Ad Launcher')
 
-  const cx=px(214), cw=W-cx
-  drawTopbar(cx,'Get started',['Connect','Billing','Launch'],0)
+  const cx=s(208), cw=W-cx
+  topbar(cx,'Get started')
 
-  // Step indicator
-  t('Step 1 of 3',cx+px(20),px(24),11,C.muted)
+  // progress steps
+  const steps=['Connect','Billing','Launch'], sw2=s(120)
+  const stx=cx+(cw-steps.length*sw2)/2
+  steps.forEach((st,i)=>{
+    const done=i<0, active=i===0
+    const col=active?K.blue:K.dim
+    const x=stx+i*sw2+sw2/2
+    rect(x-s(10),s(14),s(20),s(20),s(10),col)
+    txt(''+(i+1),x,s(28),9,'#fff','center',true)
+    txt(st,x,s(44),9,active?K.txt:K.mut,'center')
+    if(i<steps.length-1){rect(x+s(10),s(23),sw2-s(20),s(2),0,K.dim)}
+  })
   // progress bar
-  r(cx,px(51),cw,px(3),0,C.dim)
-  r(cx,px(51),cw*0.33,px(3),0,C.blue)
+  rect(cx,s(47),cw,s(3),0,K.dim)
+  rect(cx,s(47),cw*0.34,s(3),0,K.blue)
 
   // Card
-  const cardX=cx+px(60), cardW=cw-px(120), cardY=px(70), cardH=H-px(90)
-  r(cardX,cardY,cardW,cardH,px(12),C.card,C.border)
+  const crdX=cx+s(60), crdW=cw-s(120), crdY=s(58), crdH=H-crdY-s(12)
+  rect(crdX,crdY,crdW,crdH,s(12),K.card,K.bdr)
 
-  // Title
-  icon('🔗',cardX+cardW/2,cardY+px(52),28)
-  t('Connect your ad platform',cardX+cardW/2,cardY+px(100),18,C.text,'center',true)
-  t('Connect at least one ad platform to get started. You can add more later.',cardX+cardW/2,cardY+px(124),12,C.muted,'center')
+  ctx.font=s(28)+'px serif'; ctx.textAlign='center'
+  ctx.fillText('🔗',crdX+crdW/2,crdY+s(54))
+  txt('Connect your ad platform',crdX+crdW/2,crdY+s(80),16,K.txt,'center',true)
+  txt('Connect at least one ad platform to get started.',crdX+crdW/2,crdY+s(100),11,K.mut,'center')
 
-  // Platform grid
-  const platforms=[
-    {name:'Meta',color:'#1877f2',e:'f'},
-    {name:'TikTok',color:'#010101',e:'♪'},
-    {name:'Google Ads',color:'#4285f4',e:'G'},
-    {name:'Snapchat',color:'#fffc00',e:'👻'},
-    {name:'Pinterest',color:'#e60023',e:'P'},
-    {name:'Taboola',color:'#1877f2',e:'T'},
+  // platform cards
+  const plats=[
+    {n:'Meta',e:'📘',c:'#1877f2'},
+    {n:'TikTok',e:'🎵',c:'#ff0050'},
+    {n:'Google Ads',e:'🔵',c:'#4285f4'},
+    {n:'Snapchat',e:'👻',c:'#fffc00'},
+    {n:'Pinterest',e:'📌',c:'#e60023'},
+    {n:'Taboola',e:'📰',c:'#0066cc'},
   ]
-  const cols=3, gw=px(170), gh=px(110), gx=cardX+(cardW-cols*gw-px(20)*(cols-1))/2, gy=cardY+px(148)
-  platforms.forEach((p,i)=>{
+  const cols=3, pw=(crdW-s(60))/cols, ph=s(110), pgx=crdX+s(20), pgy=crdY+s(118)
+  plats.forEach((p,i)=>{
     const col=i%cols, row=Math.floor(i/cols)
-    const bx=gx+col*(gw+px(20)), by=gy+row*(gh+px(16))
-    r(bx,by,gw,gh,px(10),C.panel,C.border)
-    // logo circle
-    r(bx+gw/2-px(22),by+px(14),px(44),px(44),px(22),p.color+'33')
-    t(p.e,bx+gw/2,by+px(46),16,p.color,'center',true)
-    t(p.name,bx+gw/2,by+px(72),11,C.text,'center',true)
-    pill(bx+(gw-px(80))/2,by+gh-px(26),px(80),px(20),C.blue,'Connect','#fff',10)
+    const px2=pgx+col*(pw+s(10)), py2=pgy+row*(ph+s(14))
+    rect(px2,py2,pw,ph,s(10),K.panel,K.bdr)
+    ctx.font=s(24)+'px serif'; ctx.textAlign='center'
+    ctx.fillText(p.e, px2+pw/2, py2+s(40))
+    txt(p.n,px2+pw/2,py2+s(62),11,K.txt,'center',true)
+    pill(px2+(pw-s(80))/2,py2+ph-s(26),s(80),s(20),K.blue,'Connect','#fff',10)
   })
 }
 
 function screenDashboard(){
-  r(0,0,W,H,0,C.bg)
-  drawSidebar('insights')
-  drawSubSidebar(['Overview','Performance','Batches'],'Overview')
+  rect(0,0,W,H,0,K.bg)
+  sidebar('insights')
+  subbar(['Overview','Performance','Batches'],'Overview')
 
-  const cx=px(214), cw=W-cx
-  drawTopbar(cx,'Dashboard')
+  const cx=s(208), cw=W-cx
+  topbar(cx,'Dashboard')
 
-  // Stats row
-  const stats=[
-    {label:'Ads Launched Today',val:'124',icon:'🚀',col:C.blue},
-    {label:'Active Campaigns',val:'38',icon:'📁',col:C.green},
-    {label:'Total Spend',val:'$12,450',icon:'💸',col:C.orange},
-    {label:'Avg ROAS',val:'3.4x',icon:'📈',col:'#8b5cf6'},
+  // KPI cards
+  const kpis=[
+    {l:'Ads Launched Today',v:'124',e:'🚀',c:K.blue},
+    {l:'Active Campaigns',v:'38',e:'📁',c:K.grn},
+    {l:'Total Spend',v:'$12,450',e:'💸',c:K.org},
+    {l:'Avg ROAS',v:'3.4×',e:'📈',c:'#8b5cf6'},
   ]
-  const sw2=(cw-px(80))/4, sx=cx+px(20)
-  stats.forEach((s,i)=>{
-    const bx=sx+i*(sw2+px(16)), by=px(68)
-    r(bx,by,sw2,px(80),px(10),C.card,C.border)
-    r(bx+px(12),by+px(12),px(36),px(36),px(8),s.col+'22')
-    icon(s.icon,bx+px(30),by+px(36),18)
-    t(s.val,bx+sw2-px(12),by+px(36),18,C.text,'right',true)
-    t(s.label,bx+px(12),by+px(64),10,C.muted)
+  const kw=(cw-s(20)-s(12)*3)/4
+  kpis.forEach((k,i)=>{
+    const kx=cx+s(16)+i*(kw+s(12)), ky=s(56)
+    rect(kx,ky,kw,s(76),s(8),K.card,K.bdr)
+    rect(kx+s(10),ky+s(10),s(34),s(34),s(6),k.c+'33')
+    ctx.font=s(18)+'px serif'; ctx.textAlign='left'
+    ctx.fillText(k.e, kx+s(17), ky+s(34))
+    txt(k.v,kx+kw-s(12),ky+s(34),18,K.txt,'right',true)
+    txt(k.l,kx+s(10),ky+s(62),9,K.mut)
   })
 
-  // Chart placeholder
-  const chartY=px(168), chartH=H-px(330)
-  r(cx+px(20),chartY,cw-px(270),chartH,px(10),C.card,C.border)
-  t('📊 Ad Performance (Spend / ROAS)',cx+px(36),chartY+px(26),12,C.text,'left',true)
-  // fake bars
-  const bars=7, bw2=px(30), bsp=px(16)
-  const btotalW=bars*(bw2+bsp), bsx=cx+px(20)+(cw-px(270)-btotalW)/2
-  const labels=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-  const vals=[55,70,45,90,80,60,85]
-  for(let i=0;i<bars;i++){
-    const bh=vals[i]/100*(chartH-px(70))
-    const bx2=bsx+i*(bw2+bsp), by2=chartY+chartH-px(40)-bh
-    r(bx2,by2,bw2,bh,px(4),C.blue+'88')
-    t(labels[i],bx2+bw2/2,chartY+chartH-px(24),9,C.muted,'center')
-  }
+  // Chart
+  const chY=s(148), chH=H-chY-s(100), chW=cw-s(260)
+  rect(cx+s(16),chY,chW,chH,s(10),K.card,K.bdr)
+  txt('📊 Spend & ROAS — Last 7 days',cx+s(32),chY+s(26),12,K.txt,'left',true)
+  const bars2=7, bw2=s(26), bsp=s(14)
+  const btx=cx+s(16)+(chW-(bars2*(bw2+bsp)))/2
+  const lbs=['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const vs=[55,70,45,90,80,60,85]
+  vs.forEach((v,i)=>{
+    const bh=v/100*(chH-s(60))
+    const bx=btx+i*(bw2+bsp), by=chY+chH-s(36)-bh
+    rect(bx,by,bw2,bh,s(4),K.blue+'99')
+    txt(lbs[i],bx+bw2/2,chY+chH-s(18),8,K.mut,'center')
+  })
 
-  // Batch history
-  const listX=cx+px(20)+(cw-px(270)), listW=px(230), listY=chartY
-  r(listX,listY,listW,chartH,px(10),C.card,C.border)
-  t('Recent Batches',listX+px(14),listY+px(26),12,C.text,'left',true)
-  const batches=['Batch #42 — 24 ads','Batch #41 — 18 ads','Batch #40 — 36 ads','Batch #39 — 12 ads']
-  batches.forEach((b,i)=>{
-    const by3=listY+px(44)+i*px(46)
-    r(listX+px(10),by3,listW-px(20),px(38),px(6),C.panel)
-    t(b,listX+px(20),by3+px(15),11,C.text)
-    pill(listX+listW-px(60),by3+px(8),px(48),px(18),C.green+'33','Done','#4ade80',9)
+  // Batch list
+  const blX=cx+s(16)+chW+s(12), blW=W-blX-s(16)
+  rect(blX,chY,blW,chH,s(10),K.card,K.bdr)
+  txt('Recent Batches',blX+s(12),chY+s(26),12,K.txt,'left',true)
+  const bts=['Batch #42 — 24 ads','Batch #41 — 18 ads','Batch #40 — 36 ads','Batch #39 — 12 ads']
+  bts.forEach((b,i)=>{
+    const by=chY+s(40)+i*s(44)
+    rect(blX+s(8),by,blW-s(16),s(36),s(6),K.panel)
+    txt(b,blX+s(18),by+s(22),10,K.txt)
+    pill(blX+blW-s(58),by+s(9),s(48),s(18),K.grn+'33','Done','#4ade80',8)
   })
 
   // Team
-  const teamY=chartY+chartH+px(16), teamH=H-teamY-px(16)
-  r(cx+px(20),teamY,cw-px(40),teamH,px(10),C.card,C.border)
-  t('👥 Team Activity',cx+px(34),teamY+px(24),12,C.text,'left',true)
-  const members=['Thuan N.','Kevin L.','Anna P.','David K.']
-  const mv=[42,38,29,17]
-  members.forEach((m,i)=>{
-    const mx2=cx+px(80)+i*((cw-px(120))/4), my=teamY+px(44)
-    r(mx2-px(18),my,px(36),px(36),px(18),['#2563eb','#7c3aed','#0891b2','#16a34a'][i])
-    t(m[0],mx2,my+px(22),14,'#fff','center',true)
-    t(m,mx2,my+px(54),10,C.muted,'center')
-    t(mv[i]+' ads',mx2,my+px(68),11,C.text,'center',true)
+  const tmY=H-s(84)
+  rect(cx+s(16),tmY,cw-s(32),s(76),s(10),K.card,K.bdr)
+  txt('👥 Team this week',cx+s(32),tmY+s(24),12,K.txt,'left',true)
+  const mbs=[{n:'Thuan N.',v:42,c:K.blue},{n:'Kevin L.',v:38,c:'#7c3aed'},{n:'Anna P.',v:29,c:'#0891b2'},{n:'David K.',v:17,c:K.grn}]
+  mbs.forEach((m,i)=>{
+    const mx=cx+s(200)+i*s(180), my=tmY+s(10)
+    rect(mx,my,s(36),s(36),s(18),m.c)
+    txt(m.n[0],mx+s(18),my+s(22),13,'#fff','center',true)
+    txt(m.n,mx+s(52),my+s(16),10,K.txt)
+    txt(m.v+' ads',mx+s(52),my+s(30),9,K.mut)
   })
 }
 
 function screenLaunch(){
-  r(0,0,W,H,0,C.bg)
-  drawSidebar('launch')
-  drawSubSidebar(['Ad Launcher','Ads Manager','Templates'],'Ad Launcher')
+  rect(0,0,W,H,0,K.bg)
+  sidebar('launch')
+  subbar(['Ad Launcher','Ads Manager','Templates'],'Ad Launcher')
 
-  const cx=px(214), cw=W-cx
-  drawTopbar(cx,'Bulk Ad Launcher')
+  const cx=s(208), cw=W-cx
+  topbar(cx,'Bulk Ad Launcher')
 
-  // Left panel — upload
-  const lx=cx+px(16), lw=px(340), ly=px(68), lh=H-py-px(16)
-  r(lx,ly,lw,H-ly-px(16),px(10),C.card,C.border)
-  t('📁 Upload Creative',lx+px(16),ly+px(28),13,C.text,'left',true)
+  // Left: Upload panel
+  const lx=cx+s(14), lw=s(320), ly=s(56), lh=H-ly-s(14)
+  rect(lx,ly,lw,lh,s(10),K.card,K.bdr)
+  txt('📁 Upload Creative',lx+s(14),ly+s(26),12,K.txt,'left',true)
 
-  // drop zone
-  const dz=ly+px(44)
-  r(lx+px(12),dz,lw-px(24),px(120),px(10),C.panel)
-  ctx.setLineDash([5,4]); ctx.strokeStyle=C.border; ctx.lineWidth=1.5
-  ctx.strokeRect(lx+px(12),dz,lw-px(24),px(120))
+  // dropzone
+  const dzy=ly+s(38), dzh=s(110)
+  rect(lx+s(10),dzy,lw-s(20),dzh,s(8),K.panel)
+  ctx.setLineDash([5,4]); ctx.strokeStyle=K.bdr; ctx.lineWidth=1.5
+  ctx.strokeRect(lx+s(10),dzy,lw-s(20),dzh)
   ctx.setLineDash([])
-  icon('☁️',lx+lw/2,dz+px(50),28)
-  t('Drag & drop files here',lx+lw/2,dz+px(84),11,C.muted,'center')
-  t('or click to browse',lx+lw/2,dz+px(100),10,C.muted,'center')
-  pill(lx+lw/2-px(55),dz+px(108),px(110),px(22),C.blue,'Browse Files','#fff',10)
+  ctx.font=s(26)+'px serif'; ctx.textAlign='center'
+  ctx.fillText('☁️',lx+lw/2,dzy+s(48))
+  txt('Drag & drop files here',lx+lw/2,dzy+s(72),10,K.mut,'center')
+  pill(lx+lw/2-s(50),dzy+dzh-s(22),s(100),s(20),K.blue,'Browse Files','#fff',10)
 
-  // Cloud integrations
-  t('Connect cloud storage:',lx+px(16),dz+px(148),10,C.muted)
-  const clouds=['Drive','Dropbox','Frame.io','Box']
-  clouds.forEach((c,i)=>{
-    pill(lx+px(16)+i*px(76),dz+px(158),px(68),px(22),C.dim,c,C.text,9)
+  // cloud icons
+  txt('Connect:',lx+s(14),dzy+dzh+s(16),9,K.mut)
+  const cls=['Drive','Dropbox','Frame.io','Box']
+  cls.forEach((c,i)=>pill(lx+s(70)+i*s(62),dzy+dzh+s(4),s(56),s(18),K.dim,c,K.txt,8))
+
+  // file list
+  const fls=[
+    {n:'video_hero.mp4',t:'video',st:'Ready',sc:K.grn},
+    {n:'banner_sale.jpg',t:'image',st:'Ready',sc:K.grn},
+    {n:'story_01.mp4',t:'video',st:'Uploading',sc:K.blue},
+    {n:'carousel_1.jpg',t:'image',st:'Processing',sc:K.org},
+    {n:'ugc_test.mp4',t:'video',st:'Queued',sc:K.dim},
+  ]
+  fls.forEach((f,i)=>{
+    const fy=dzy+dzh+s(30)+i*s(36)
+    rect(lx+s(8),fy,lw-s(16),s(28),s(6),K.panel)
+    ctx.font=s(12)+'px serif'; ctx.textAlign='left'
+    ctx.fillText(f.t==='video'?'🎬':'🖼️', lx+s(18), fy+s(18))
+    txt(f.n,lx+s(36),fy+s(18),9,K.txt)
+    pill(lx+lw-s(78),fy+s(5),s(66),s(18),f.sc+'22',f.st,f.sc===K.dim?K.mut:f.sc,8)
   })
 
-  // File list
-  const files=['video_01.mp4','banner_sale.jpg','story_en.mp4','carousel_1.jpg','video_02.mp4']
-  const fstatus=[C.green,C.green,C.blue,C.orange,C.dim]
-  const flabel=['Ready','Ready','Uploading','Processing','Queued']
-  files.forEach((f,i)=>{
-    const fy=dz+px(196)+i*px(38)
-    r(lx+px(10),fy,lw-px(20),px(30),px(6),C.panel)
-    const isVid=f.endsWith('.mp4')
-    icon(isVid?'🎬':'🖼️',lx+px(28),fy+px(20),12)
-    t(f,lx+px(44),fy+px(20),11,C.text)
-    pill(lx+lw-px(90),fy+px(6),px(76),px(18),fstatus[i]+'22',flabel[i],fstatus[i]==='#d97706'?'#fbbf24':fstatus[i]==='#2563eb'?'#93c5fd':fstatus[i]===C.dim?C.muted:'#4ade80',9)
-  })
+  // Right: Config panel
+  const rx=lx+lw+s(14), rw=W-rx-s(14)
+  rect(rx,ly,rw,lh,s(10),K.card,K.bdr)
+  txt('⚙️ Launch Configuration',rx+s(14),ly+s(26),12,K.txt,'left',true)
 
-  // Right panel — config
-  const rx=lx+lw+px(16), rw=W-rx-px(16)
-  r(rx,ly,rw,H-ly-px(16),px(10),C.card,C.border)
-  t('⚙️ Launch Configuration',rx+px(16),ly+px(28),13,C.text,'left',true)
+  let ry=ly+s(46)
 
-  // Platforms
-  t('Target Platform',rx+px(16),ly+px(56),10,C.muted,'left',true)
+  // Platform
+  txt('Platform',rx+s(14),ry,9,K.mut)
   const plats=['Meta','TikTok','Google','Snapchat']
-  const psel=[true,false,false,false]
+  const pw2=(rw-s(28)-s(8)*3)/4
   plats.forEach((p,i)=>{
-    const px2=rx+px(16)+i*(rw/4-px(4))
-    r(px2,ly+px(64),rw/4-px(12),px(36),px(8),psel[i]?'rgba(37,99,235,.2)':C.panel,psel[i]?C.blue:C.border)
-    t(p,px2+(rw/4-px(12))/2,ly+px(88),11,psel[i]?C.blueL:C.text,'center',psel[i])
+    const px2=rx+s(14)+i*(pw2+s(8))
+    rect(px2,ry+s(6),pw2,s(30),s(6),i===0?'rgba(37,99,235,.25)':K.panel,i===0?K.blue:K.bdr)
+    txt(p,px2+pw2/2,ry+s(26),10,i===0?K.bll:K.txt,'center',i===0)
   })
+  ry+=s(48)
 
   // Campaign
-  const ry2=ly+px(116)
-  t('Campaign',rx+px(16),ry2,10,C.muted,'left',true)
-  r(rx+px(16),ry2+px(8),rw-px(32),px(34),px(6),C.panel,C.border)
-  t('● Create new campaign',rx+px(28),ry2+px(30),11,C.text)
-  r(rx+rw-px(100),ry2+px(14),px(84),px(22),px(6),C.panel,C.border)
-  t('Existing ▾',rx+rw-px(58),ry2+px(30),10,C.muted,'center')
+  txt('Campaign',rx+s(14),ry,9,K.mut)
+  rect(rx+s(14),ry+s(6),rw-s(28),s(30),s(6),K.panel,K.bdr)
+  txt('● Create new campaign',rx+s(24),ry+s(26),10,K.txt)
+  ry+=s(48)
 
-  // Ad set mode
-  const ry3=ry2+px(62)
-  t('Ad Set Mode',rx+px(16),ry3,10,C.muted,'left',true)
+  // Ad Set Mode
+  txt('Ad Set Mode',rx+s(14),ry,9,K.mut)
   const modes=['1 Ad Set','Per Creative','Auto-divide','Custom']
-  const msel=[false,false,true,false]
+  const mw=(rw-s(28)-s(8)*3)/4
   modes.forEach((m,i)=>{
-    const mx=rx+px(16)+i*(rw/4-px(4))
-    r(mx,ry3+px(8),rw/4-px(12),px(30),px(6),msel[i]?'rgba(37,99,235,.2)':C.panel,msel[i]?C.blue:C.border)
-    t(m,mx+(rw/4-px(12))/2,ry3+px(28),10,msel[i]?C.blueL:C.text,'center',msel[i])
+    const mx=rx+s(14)+i*(mw+s(8))
+    rect(mx,ry+s(6),mw,s(28),s(6),i===2?'rgba(37,99,235,.25)':K.panel,i===2?K.blue:K.bdr)
+    txt(m,mx+mw/2,ry+s(24),9,i===2?K.bll:K.txt,'center',i===2)
   })
+  ry+=s(48)
 
-  // Text content
-  const ry4=ry3+px(56)
-  t('Ad Content',rx+px(16),ry4,10,C.muted,'left',true)
-  const fields=[{l:'Headline',v:'Get 50% Off Today Only!'},{l:'Primary Text',v:'Don\'t miss our biggest sale...'},{l:'CTA',v:'SHOP_NOW'},{l:'Website URL',v:'https://example.com/sale'}]
-  fields.forEach((f,i)=>{
-    const fy=ry4+px(8)+i*px(48), fh=i===1?px(44):px(30)
-    t(f.l,rx+px(16),fy-px(2),9,C.muted)
-    r(rx+px(16),fy+px(2),rw-px(32),fh,px(6),C.panel,C.border)
-    t(f.v,rx+px(26),fy+px(18),10,C.text)
+  // Content
+  txt('Ad Content',rx+s(14),ry,9,K.mut)
+  const flds=[{l:'Headline',v:'Get 50% Off Today Only!'},{l:'Primary Text',v:'Don\'t miss our biggest sale of...'},{l:'CTA',v:'SHOP_NOW'},{l:'Website URL',v:'https://example.com/sale'}]
+  flds.forEach((f,i)=>{
+    const fh=i===1?s(44):s(28), fy=ry+s(8)+i*(fh+s(10))
+    txt(f.l,rx+s(14),fy-s(1),8,K.mut)
+    rect(rx+s(14),fy+s(3),rw-s(28),fh,s(6),K.panel,K.bdr)
+    txt(f.v,rx+s(24),fy+s(18),9,K.txt)
   })
 
   // Launch button
-  const btnY=H-px(70)
-  r(rx+px(16),btnY,rw-px(32),px(44),px(10),C.blue)
-  t('🚀  Launch 5 Ads',rx+px(16)+(rw-px(32))/2,btnY+px(27),14,'#fff','center',true)
+  const btnY=H-s(66)
+  rect(rx+s(14),btnY,rw-s(28),s(42),s(10),K.blue)
+  txt('🚀  Launch 5 Ads',rx+s(14)+(rw-s(28))/2,btnY+s(26),13,'#fff','center',true)
 }
 
 function screenAssets(){
-  r(0,0,W,H,0,C.bg)
-  drawSidebar('assets')
-  drawSubSidebar(['All Assets','Images','Videos','Top Performers'],'All Assets')
+  rect(0,0,W,H,0,K.bg)
+  sidebar('assets')
+  subbar(['All Assets','Images','Videos','Top Performers'],'All Assets')
 
-  const cx=px(214), cw=W-cx
-  drawTopbar(cx,'Creative Library')
+  const cx=s(208), cw=W-cx
+  topbar(cx,'Creative Library')
 
-  // Toolbar
-  r(cx+px(16),px(68),cw-px(32),px(44),px(8),C.panel,C.border)
-  r(cx+px(24),px(80),px(200),px(22),px(6),C.card,C.border)
-  t('🔍 Search assets...',cx+px(34),px(96),10,C.muted)
-  pill(cx+px(240),px(76),px(70),px(28),C.dim,'All ▾','#fff',10)
-  pill(cx+px(318),px(76),px(80),px(28),C.dim,'Images ▾','#fff',10)
-  pill(cx+px(406),px(76),px(70),px(28),C.dim,'Videos ▾','#fff',10)
-  pill(cw-px(80),px(76),px(80),px(28),C.blue,'Upload','#fff',10)
+  // toolbar
+  rect(cx+s(14),s(56),cw-s(28),s(38),s(8),K.panel,K.bdr)
+  rect(cx+s(22),s(63),s(180),s(22),s(6),K.card,K.bdr)
+  txt('🔍  Search assets...',cx+s(30),s(78),9,K.mut)
+  const fbtns=['All','Images','Videos']
+  fbtns.forEach((b,i)=>pill(cx+s(214)+i*s(76),s(62),s(68),s(24),K.dim,b,K.txt,9))
+  pill(W-s(110),s(62),s(90),s(24),K.blue,'+ Upload','#fff',10)
 
-  // Grid
-  const cols2=5, gx2=cx+px(16), gw2=(cw-px(32)-px(16)*4)/5, gh2=px(160), topY=px(128)
-  const items2=[
-    {t:'video_hero.mp4',s:'4.2MB',m:'video',c:C.blue},
-    {t:'banner_sale.jpg',s:'890KB',m:'image',c:C.green},
-    {t:'story_01.mp4',s:'12MB',m:'video',c:C.blue},
-    {t:'carousel_1.jpg',s:'1.1MB',m:'image',c:C.green},
-    {t:'ugc_testimonial.mp4',s:'8.5MB',m:'video',c:C.blue},
-    {t:'promo_banner.jpg',s:'750KB',m:'image',c:C.green},
-    {t:'reel_format.mp4',s:'22MB',m:'video',c:C.blue},
-    {t:'product_shot.jpg',s:'2.1MB',m:'image',c:C.green},
-    {t:'animation.mp4',s:'5.8MB',m:'video',c:C.blue},
-    {t:'lifestyle.jpg',s:'1.6MB',m:'image',c:C.green},
+  // grid
+  const cols=5, gx=cx+s(14), gy=s(102), gw=(cw-s(28)-s(12)*(cols-1))/cols, gh=s(150)
+  const items=[
+    {n:'video_hero',t:'video'},{n:'banner_sale',t:'image'},{n:'story_01',t:'video'},
+    {n:'carousel_1',t:'image'},{n:'ugc_test',t:'video'},{n:'promo_banner',t:'image'},
+    {n:'reel_format',t:'video'},{n:'product_shot',t:'image'},{n:'animation',t:'video'},
+    {n:'lifestyle',t:'image'},
   ]
-  items2.forEach((it,i)=>{
-    const col=i%cols2, row=Math.floor(i/cols2)
-    const ix=gx2+col*(gw2+px(16)), iy=topY+row*(gh2+px(16))
-    r(ix,iy,gw2,gh2,px(8),C.card,C.border)
-    // thumbnail area
-    r(ix,iy,gw2,gh2-px(44),px(8),it.m==='video'?'#1a1a2e':'#1a2e1a')
-    icon(it.m==='video'?'🎬':'🖼️',ix+gw2/2,iy+(gh2-px(44))/2,24)
-    // info
-    t(it.t,ix+px(8),iy+gh2-px(28),9,C.text)
-    t(it.s,ix+px(8),iy+gh2-px(12),8,C.muted)
-    pill(ix+gw2-px(50),iy+gh2-px(34),px(42),px(16),it.c+'22',it.m==='video'?'Video':'Image',it.m==='video'?'#93c5fd':'#4ade80',8)
+  items.forEach((it,i)=>{
+    const col=i%cols, row=Math.floor(i/cols)
+    const ix=gx+col*(gw+s(12)), iy=gy+row*(gh+s(12))
+    rect(ix,iy,gw,gh,s(8),K.card,K.bdr)
+    rect(ix,iy,gw,gh-s(38),s(8),it.t==='video'?'#0d1b2e':'#0d2b1b')
+    ctx.font=s(26)+'px serif'; ctx.textAlign='center'
+    ctx.fillText(it.t==='video'?'🎬':'🖼️', ix+gw/2, iy+(gh-s(38))/2+s(10))
+    txt(it.n,ix+s(6),iy+gh-s(22),8,K.txt)
+    pill(ix+gw-s(50),iy+gh-s(32),s(44),s(16),it.t==='video'?K.blue+'33':K.grn+'33',it.t==='video'?'Video':'Image',it.t==='video'?'#93c5fd':'#4ade80',7)
   })
 }
 
-function screenAdsManager(){
-  r(0,0,W,H,0,C.bg)
-  drawSidebar('launch')
-  drawSubSidebar(['Ad Launcher','Ads Manager','Templates'],'Ads Manager')
+function screenAdsmanager(){
+  rect(0,0,W,H,0,K.bg)
+  sidebar('launch')
+  subbar(['Ad Launcher','Ads Manager','Templates'],'Ads Manager')
 
-  const cx=px(214), cw=W-cx
-  drawTopbar(cx,'Ads Manager')
+  const cx=s(208), cw=W-cx
+  topbar(cx,'Ads Manager')
 
-  // Table header
-  const cols3=[
-    {l:'#',w:px(32)},{l:'Preview',w:px(70)},{l:'Name',w:px(180)},
-    {l:'Campaign',w:px(150)},{l:'Ad Set',w:px(140)},{l:'Headline',w:px(160)},
-    {l:'Primary Text',w:px(180)},{l:'CTA',w:px(90)},{l:'Status',w:px(90)},
+  // columns
+  const cols=[
+    {l:'#',w:s(28)},{l:'Preview',w:s(60)},{l:'Name',w:s(160)},
+    {l:'Campaign',w:s(140)},{l:'Ad Set',w:s(130)},
+    {l:'Headline',w:s(150)},{l:'Primary Text',w:s(170)},
+    {l:'CTA',w:s(80)},{l:'Status',w:s(84)},
   ]
-  let colX=cx
-  const thY=px(68), thH=px(34)
-  r(cx,thY,cw,thH,0,C.panel)
-  r(cx,thY+thH-1,cw,1,0,C.border)
-  cols3.forEach(col=>{
-    t(col.l,colX+px(8),thY+px(22),10,C.muted,'left',true)
-    r(colX+col.w-1,thY,1,thH,0,C.border)
-    colX+=col.w
+  const thY=s(56), thH=s(32)
+  rect(cx,thY,cw,thH,0,K.panel)
+  rect(cx,thY+thH-1,cw,1,0,K.bdr)
+  let cx2=cx
+  cols.forEach(c=>{
+    txt(c.l,cx2+s(6),thY+s(20),9,K.mut,'left',true)
+    rect(cx2+c.w-1,thY,1,thH,0,K.bdr)
+    cx2+=c.w
   })
 
-  // Rows
+  // rows
   const rows=[
-    {name:'video_hero.mp4',camp:'TEST CBO Q1',adset:'All - Auto Bid',hl:'50% Off Today!',pt:'Shop the biggest sale...',cta:'SHOP_NOW',status:'Ready',sc:C.green},
-    {name:'banner_sale.jpg',camp:'TEST CBO Q1',adset:'All - Auto Bid',hl:'Limited Time Offer',pt:'Get yours before it\'s...',cta:'LEARN_MORE',status:'Launched',sc:C.blue},
-    {name:'story_01.mp4',camp:'SCALE CBO',adset:'US - Broad',hl:'',pt:'',cta:'SIGN_UP',status:'Draft',sc:C.muted},
-    {name:'carousel_1.jpg',camp:'SCALE CBO',adset:'US - Broad',hl:'New Collection Drop',pt:'Discover our latest...',cta:'SHOP_NOW',status:'Ready',sc:C.green},
-    {name:'ugc_test.mp4',camp:'LAB ABO',adset:'UK - Interest',hl:'Real Results',pt:'See what our customers...',cta:'LEARN_MORE',status:'Ready',sc:C.green},
-    {name:'promo_banner.jpg',camp:'LAB ABO',adset:'UK - Interest',hl:'',pt:'',cta:'',status:'Draft',sc:C.muted},
+    {n:'video_hero.mp4',t:'video',camp:'TEST CBO Q1',adset:'All-AutoBid',hl:'50% Off Today!',pt:'Shop the biggest sale...',cta:'SHOP_NOW',st:'Ready',sc:K.grn},
+    {n:'banner_sale.jpg',t:'image',camp:'TEST CBO Q1',adset:'All-AutoBid',hl:'Limited Time Offer',pt:'Get yours before it\'s gone...',cta:'LEARN_MORE',st:'Launched',sc:K.blue},
+    {n:'story_01.mp4',t:'video',camp:'SCALE CBO',adset:'US-Broad',hl:'',pt:'',cta:'SIGN_UP',st:'Draft',sc:K.mut},
+    {n:'carousel_1.jpg',t:'image',camp:'SCALE CBO',adset:'US-Broad',hl:'New Collection Drop',pt:'Discover our latest...',cta:'SHOP_NOW',st:'Ready',sc:K.grn},
+    {n:'ugc_test.mp4',t:'video',camp:'LAB ABO',adset:'UK-Interest',hl:'Real Results',pt:'See what customers say...',cta:'LEARN_MORE',st:'Ready',sc:K.grn},
+    {n:'promo_banner.jpg',t:'image',camp:'LAB ABO',adset:'UK-Interest',hl:'',pt:'',cta:'',st:'Draft',sc:K.mut},
   ]
   rows.forEach((row,i)=>{
-    const ry=thY+thH+i*px(40)
-    r(cx,ry,cw,px(40),0,i%2===0?C.card:C.panel)
-    r(cx,ry+px(39),cw,1,0,C.border)
-    let rx2=cx
+    const ry=thY+thH+i*s(38)
+    rect(cx,ry,cw,s(38),0,i%2===0?K.card:K.panel)
+    rect(cx,ry+s(37),cw,1,0,K.bdr)
+    let rx=cx
     // #
-    t(`${i+1}`,rx2+px(16),ry+px(24),10,C.muted,'center')
-    rx2+=px(32)
+    txt(''+(i+1),rx+rx/2+s(14),ry+s(24),9,K.mut,'center')
+    rx+=s(28)
     // preview
-    r(rx2+px(5),ry+px(5),px(30),px(30),px(4),C.dim)
-    icon(row.name.endsWith('.mp4')?'🎬':'🖼️',rx2+px(20),ry+px(22),14)
-    rx2+=px(70)
-    // cells
-    const cells=[row.name,row.camp,row.adset,row.hl,row.pt,row.cta]
-    const widths=[px(180),px(150),px(140),px(160),px(180),px(90)]
-    cells.forEach((c,j)=>{
-      const maxW=widths[j]-px(20)
+    rect(rx+s(5),ry+s(4),s(28),s(28),s(4),K.dim)
+    ctx.font=s(14)+'px serif'; ctx.textAlign='center'
+    ctx.fillText(row.t==='video'?'🎬':'🖼️', rx+s(19), ry+s(21))
+    rx+=s(60)
+    // data cells
+    const cells=[row.n,row.camp,row.adset,row.hl,row.pt,row.cta]
+    const cws=[s(160),s(140),s(130),s(150),s(170),s(80)]
+    cells.forEach((cell,j)=>{
       ctx.save()
-      ctx.rect(rx2,ry,widths[j],px(40))
-      ctx.clip()
-      t(c||'—',rx2+px(8),ry+px(24),10,c?C.text:C.dim)
+      ctx.beginPath(); ctx.rect(rx,ry,cws[j],s(38)); ctx.clip()
+      txt(cell||'—',rx+s(6),ry+s(24),9,cell?K.txt:K.dim)
       ctx.restore()
-      r(rx2+widths[j]-1,ry,1,px(40),0,C.border)
-      rx2+=widths[j]
+      rect(rx+cws[j]-1,ry,1,s(38),0,K.bdr)
+      rx+=cws[j]
     })
     // status
-    pill(rx2+px(8),ry+px(11),px(70),px(18),row.sc+'22',row.status,row.sc==='#6b7280'?C.muted:row.sc,9)
+    pill(rx+s(6),ry+s(10),s(66),s(18),row.sc+'22',row.st,row.sc===K.mut?K.mut:row.sc,8)
   })
 
-  // Bottom bar
-  r(cx,H-px(40),cw,px(40),0,C.panel,C.border)
-  t('6 creatives · 4 Ready · 2 Draft',cx+px(20),H-px(14),11,C.muted)
-  pill(W-px(160),H-px(32),px(130),px(24),C.blue,'Launch Selected (4)','#fff',10)
+  // bottom bar
+  rect(cx,H-s(36),cw,s(36),0,K.panel)
+  rect(cx,H-s(37),cw,1,0,K.bdr)
+  txt('6 creatives  ·  4 Ready  ·  2 Draft',cx+s(18),H-s(14),10,K.mut)
+  pill(W-s(150),H-s(28),s(132),s(22),K.blue,'Launch Selected (4)','#fff',10)
 }
 
 function screenAnalytics(){
-  r(0,0,W,H,0,C.bg)
-  drawSidebar('insights')
-  drawSubSidebar(['Overview','Creative Perf.','ROAS','Competitors'],'Creative Perf.')
+  rect(0,0,W,H,0,K.bg)
+  sidebar('insights')
+  subbar(['Overview','Creative Perf.','ROAS','Competitors'],'Creative Perf.')
 
-  const cx=px(214), cw=W-cx
-  drawTopbar(cx,'Analytics — Creative Performance')
+  const cx=s(208), cw=W-cx
+  topbar(cx,'Analytics — Creative Performance')
 
   // KPIs
   const kpis=[
     {l:'Impressions',v:'2.4M',d:'+12%',up:true},
     {l:'Clicks',v:'48.2K',d:'+8%',up:true},
     {l:'Spend',v:'$12,450',d:'-3%',up:false},
-    {l:'ROAS',v:'3.4x',d:'+22%',up:true},
+    {l:'ROAS',v:'3.4×',d:'+22%',up:true},
     {l:'CPM',v:'$5.18',d:'-6%',up:true},
   ]
-  const kw=(cw-px(40)-px(16)*4)/5
+  const kw=(cw-s(28)-s(12)*4)/5
   kpis.forEach((k,i)=>{
-    const kx=cx+px(20)+i*(kw+px(16)), ky=px(68)
-    r(kx,ky,kw,px(72),px(8),C.card,C.border)
-    t(k.v,kx+px(12),ky+px(34),18,C.text,'left',true)
-    t(k.l,kx+px(12),ky+px(52),9,C.muted)
-    const dc=k.up?C.green:C.red
-    pill(kx+kw-px(46),ky+px(8),px(40),px(18),dc+'22',k.d,dc,9)
+    const kx=cx+s(14)+i*(kw+s(12)), ky=s(56)
+    rect(kx,ky,kw,s(68),s(8),K.card,K.bdr)
+    txt(k.v,kx+s(10),ky+s(30),17,K.txt,'left',true)
+    txt(k.l,kx+s(10),ky+s(50),8,K.mut)
+    const dc=k.up?K.grn:K.red
+    pill(kx+kw-s(44),ky+s(8),s(38),s(16),dc+'22',k.d,dc,8)
   })
 
-  // Top creatives table
-  const tY=px(158), tH=H-tY-px(16)
-  r(cx+px(20),tY,cw-px(280),tH,px(10),C.card,C.border)
-  t('🏆 Top Performing Creatives',cx+px(36),tY+px(26),13,C.text,'left',true)
-
-  const tcols=[{l:'Creative',w:px(160)},{l:'Impressions',w:px(100)},{l:'CTR',w:px(80)},{l:'ROAS',w:px(80)},{l:'Spend',w:px(90)},{l:'Status',w:px(80)}]
-  let tcx=cx+px(20)
-  tcols.forEach(c=>{
-    t(c.l,tcx+px(8),tY+px(52),9,C.muted,'left',true)
-    tcx+=c.w
-  })
-  r(cx+px(20),tY+px(56),cw-px(280),1,0,C.border)
+  // Table
+  const tY=s(140), tW=cw-s(220)
+  rect(cx+s(14),tY,tW,H-tY-s(14),s(10),K.card,K.bdr)
+  txt('🏆 Top Performing Creatives',cx+s(28),tY+s(24),12,K.txt,'left',true)
+  const tcols=[{l:'Creative',w:s(140)},{l:'Impressions',w:s(90)},{l:'CTR',w:s(70)},{l:'ROAS',w:s(70)},{l:'Spend',w:s(80)},{l:'',w:s(40)}]
+  let tcx=cx+s(14)
+  tcols.forEach(c=>{txt(c.l,tcx+s(8),tY+s(46),8,K.mut,'left',true);tcx+=c.w})
+  rect(cx+s(14),tY+s(50),tW,1,0,K.bdr)
 
   const trows=[
-    {n:'video_hero.mp4',imp:'480K',ctr:'4.2%',roas:'5.1x',spend:'$2,100',s:'🟢'},
-    {n:'ugc_testimonial',imp:'320K',ctr:'3.8%',roas:'4.7x',spend:'$1,800',s:'🟢'},
-    {n:'banner_sale.jpg',imp:'280K',ctr:'2.9%',roas:'3.2x',spend:'$1,400',s:'🟢'},
-    {n:'story_01.mp4',imp:'190K',ctr:'2.1%',roas:'2.8x',spend:'$900',s:'🟡'},
-    {n:'carousel_1.jpg',imp:'150K',ctr:'1.8%',roas:'1.9x',spend:'$700',s:'🔴'},
+    {n:'video_hero',imp:'480K',ctr:'4.2%',roas:'5.1×',sp:'$2,100',s:'🟢'},
+    {n:'ugc_test',imp:'320K',ctr:'3.8%',roas:'4.7×',sp:'$1,800',s:'🟢'},
+    {n:'banner_sale',imp:'280K',ctr:'2.9%',roas:'3.2×',sp:'$1,400',s:'🟢'},
+    {n:'story_01',imp:'190K',ctr:'2.1%',roas:'2.8×',sp:'$900',s:'🟡'},
+    {n:'carousel_1',imp:'150K',ctr:'1.8%',roas:'1.9×',sp:'$700',s:'🔴'},
   ]
   trows.forEach((row,i)=>{
-    const ry=tY+px(60)+i*px(42)
-    r(cx+px(20),ry,cw-px(280),px(42),0,i%2===0?'transparent':C.panel+'66')
-    let trx=cx+px(20)
-    icon(row.n.endsWith('.mp4')?'🎬':'🖼️',trx+px(14),ry+px(22),12)
-    t(row.n.replace(/\.(mp4|jpg)/,''),trx+px(26),ry+px(24),10,C.text)
-    trx+=px(160)
-    ;[row.imp,row.ctr,row.roas,row.spend].forEach((v,j)=>{
-      const w=[px(100),px(80),px(80),px(90)][j]
-      t(v,trx+px(8),ry+px(24),11,j===2?'#4ade80':j===1?C.blueL:C.text)
+    const ry=tY+s(54)+i*s(40)
+    rect(cx+s(14),ry,tW,s(40),0,i%2===0?'transparent':K.panel+'55')
+    let trx=cx+s(14)
+    ctx.font=s(12)+'px serif'; ctx.textAlign='left'
+    ctx.fillText(row.n.includes('video')||row.n.includes('story')?'🎬':'🖼️', trx+s(8), ry+s(24))
+    txt(row.n,trx+s(26),ry+s(24),9,K.txt)
+    trx+=s(140)
+    ;[row.imp,row.ctr,row.roas,row.sp].forEach((v,j)=>{
+      const w=[s(90),s(70),s(70),s(80)][j]
+      txt(v,trx+s(8),ry+s(24),10,j===2?'#4ade80':j===1?K.bll:K.txt)
       trx+=w
     })
-    t(row.s,trx+px(12),ry+px(24),14,C.text,'center')
+    ctx.font=s(14)+'px serif'; ctx.textAlign='center'
+    ctx.fillText(row.s, trx+s(12), ry+s(24))
   })
 
-  // Sidebar chart
-  const scx=W-px(244), scw=px(230)
-  r(scx,tY,scw,tH,px(10),C.card,C.border)
-  t('📊 Spend by Platform',scx+px(14),tY+px(26),12,C.text,'left',true)
-  const pdata=[{n:'Meta',v:60,c:C.blue},{n:'TikTok',v:25,c:'#ff0050'},{n:'Google',v:10,c:'#4285f4'},{n:'Snap',v:5,c:'#fffc00'}]
-  const pieR=px(50), pieCX=scx+scw/2, pieCY=tY+px(130)
-  let startA=-Math.PI/2
-  pdata.forEach(p=>{
-    const angle=(p.v/100)*Math.PI*2
-    ctx.beginPath(); ctx.moveTo(pieCX,pieCY)
-    ctx.arc(pieCX,pieCY,pieR,startA,startA+angle)
+  // Pie chart
+  const px=cx+s(14)+tW+s(12), pw=W-px-s(14)
+  rect(px,tY,pw,H-tY-s(14),s(10),K.card,K.bdr)
+  txt('Spend by Platform',px+s(12),tY+s(24),11,K.txt,'left',true)
+  const pr=s(48), pcx=px+pw/2, pcy=tY+s(120)
+  const pd=[{n:'Meta',v:60,c:K.blue},{n:'TikTok',v:25,c:'#ff0050'},{n:'Google',v:10,c:'#4285f4'},{n:'Snap',v:5,c:'#fffc00'}]
+  let ang=-Math.PI/2
+  pd.forEach(p=>{
+    const a=p.v/100*Math.PI*2
+    ctx.beginPath(); ctx.moveTo(pcx,pcy)
+    ctx.arc(pcx,pcy,pr,ang,ang+a)
     ctx.closePath(); ctx.fillStyle=p.c; ctx.fill()
-    startA+=angle
+    ang+=a
   })
-  r(pieCX-px(22),pieCY-px(22),px(44),px(44),px(22),C.card)
-  t('100%',pieCX,pieCY+px(6),10,C.text,'center',true)
-  pdata.forEach((p,i)=>{
-    const ly2=tY+px(200)+i*px(28)
-    r(scx+px(14),ly2,px(12),px(12),px(2),p.c)
-    t(`${p.n}  ${p.v}%`,scx+px(32),ly2+px(10),11,C.text)
+  rect(pcx-s(20),pcy-s(20),s(40),s(40),s(20),K.card)
+  pd.forEach((p,i)=>{
+    const ly=tY+s(186)+i*s(26)
+    rect(px+s(12),ly,s(12),s(12),s(2),p.c)
+    txt(p.n+'  '+p.v+'%',px+s(28),ly+s(10),10,K.txt)
   })
 }
 
 function screenAutomation(){
-  r(0,0,W,H,0,C.bg)
-  drawSidebar('automate')
-  drawSubSidebar(['Rules','Schedules','Logs'],'Rules')
+  rect(0,0,W,H,0,K.bg)
+  sidebar('automate')
+  subbar(['Rules','Schedules','Logs'],'Rules')
 
-  const cx=px(214), cw=W-cx
-  drawTopbar(cx,'Automation Rules')
+  const cx=s(208), cw=W-cx
+  topbar(cx,'Automation Rules')
 
-  // Header
-  r(cx+px(20),px(68),cw-px(40),px(40),px(8),C.panel,C.border)
-  t('⚡ Active Rules',cx+px(36),px(94),13,C.text,'left',true)
-  pill(W-px(160),px(76),px(130),px(24),C.blue,'+ New Rule','#fff',11)
+  rect(cx+s(14),s(56),cw-s(28),s(36),s(8),K.panel,K.bdr)
+  txt('⚡ Active Rules (5)',cx+s(28),s(80),12,K.txt,'left',true)
+  pill(W-s(120),s(64),s(104),s(22),K.blue,'+ New Rule','#fff',10)
 
   const rules=[
-    {name:'Pause Low ROAS',cond:'ROAS < 1.5 for 3 days',action:'Pause Ad Set',status:true,runs:24},
-    {name:'Scale Winners',cond:'ROAS > 4.0 for 2 days',action:'Increase budget 20%',status:true,runs:8},
-    {name:'Daily Budget Cap',cond:'Spend > $500/day',action:'Pause Campaign',status:false,runs:0},
-    {name:'CPA Alert',cond:'CPA > $30',action:'Send Slack notification',status:true,runs:12},
-    {name:'Auto-Activate',cond:'ROAS > 2.5 after pause',action:'Resume Ad Set',status:true,runs:5},
+    {n:'Pause Low ROAS',c:'ROAS < 1.5 for 3 days',a:'Pause Ad Set',on:true,r:24},
+    {n:'Scale Winners',c:'ROAS > 4.0 for 2 days',a:'Increase budget 20%',on:true,r:8},
+    {n:'Daily Budget Cap',c:'Spend > $500/day',a:'Pause Campaign',on:false,r:0},
+    {n:'CPA Alert',c:'CPA > $30',a:'Send Slack notification',on:true,r:12},
+    {n:'Auto-Activate',c:'ROAS > 2.5 after pause',a:'Resume Ad Set',on:true,r:5},
   ]
-
   rules.forEach((rule,i)=>{
-    const ry=px(124)+i*px(70)
-    r(cx+px(20),ry,cw-px(40),px(60),px(10),C.card,C.border)
-
+    const ry=s(102)+i*s(62)
+    rect(cx+s(14),ry,cw-s(28),s(54),s(10),K.card,K.bdr)
+    txt(rule.n,cx+s(28),ry+s(20),12,K.txt,'left',true)
+    txt('IF  '+rule.c,cx+s(28),ry+s(38),9,K.mut)
+    txt('→ '+rule.a,cx+s(180),ry+s(38),9,K.bll)
+    txt('Triggered '+rule.r+'×',W-s(140),ry+s(38),8,K.mut)
     // toggle
-    const ton=rule.status
-    r(W-px(70),ry+px(18),px(40),px(22),px(11),ton?C.green+'44':C.dim)
-    r(W-(ton?px(38):px(64)),ry+px(20),px(18),px(18),px(9),ton?C.green:C.muted)
-
-    t(rule.name,cx+px(36),ry+px(22),13,C.text,'left',true)
-    t(`IF ${rule.cond}`,cx+px(36),ry+px(40),10,C.muted)
-    t(`→ ${rule.action}`,cx+px(220),ry+px(40),10,C.blueL)
-    t(`Triggered ${rule.runs}x`,W-px(130),ry+px(40),9,C.muted)
-    pill(cx+px(36),ry+px(8),px(50),px(16),rule.status?C.green+'22':C.dim,rule.status?'Active':'Off',rule.status?'#4ade80':C.muted,8)
+    const ton=rule.on
+    rect(W-s(66),ry+s(14),s(36),s(20),s(10),ton?K.grn+'44':K.dim)
+    rect(ton?W-s(36):W-s(62),ry+s(16),s(16),s(16),s(8),ton?K.grn:K.mut)
+    pill(cx+s(28),ry+s(6),s(44),s(16),rule.on?K.grn+'22':K.dim,rule.on?'Active':'Off',rule.on?'#4ade80':K.mut,8)
   })
 
-  // Rule builder preview
-  const bY=px(124)+rules.length*px(70)+px(16)
-  r(cx+px(20),bY,cw-px(40),H-bY-px(16),px(10),C.panel,C.border)
-  t('🔧 Rule Builder',cx+px(36),bY+px(26),12,C.text,'left',true)
-  // IF block
-  r(cx+px(36),bY+px(44),px(180),px(36),px(6),C.card,C.border)
-  t('IF',cx+px(50),bY+px(67),10,C.muted,'left',true)
-  t('ROAS < value',cx+px(74),bY+px(67),11,C.text)
-  // THEN block
-  r(cx+px(36)+px(196),bY+px(44),px(180),px(36),px(6),C.card,C.border)
-  t('THEN',cx+px(50)+px(196),bY+px(67),10,C.muted)
-  t('Pause Ad Set',cx+px(88)+px(196),bY+px(67),11,C.text)
-  t('→',cx+px(36)+px(184),bY+px(62),14,C.muted)
-  // For block
-  r(cx+px(36)+px(392),bY+px(44),px(140),px(36),px(6),C.card,C.border)
-  t('FOR',cx+px(50)+px(392),bY+px(67),10,C.muted)
-  t('3 consecutive days',cx+px(78)+px(392),bY+px(67),10,C.text)
+  // Builder
+  const bY=s(102)+rules.length*s(62)+s(12)
+  rect(cx+s(14),bY,cw-s(28),H-bY-s(14),s(10),K.panel,K.bdr)
+  txt('🔧 Rule Builder',cx+s(28),bY+s(24),12,K.txt,'left',true)
+  const blks=[{l:'IF',v:'ROAS < value'},{l:'THEN',v:'Pause Ad Set'},{l:'FOR',v:'3 consecutive days'}]
+  blks.forEach((b,i)=>{
+    const bx=cx+s(28)+i*s(196), by=bY+s(38)
+    rect(bx,by,s(176),s(34),s(6),K.card,K.bdr)
+    txt(b.l,bx+s(10),by+s(22),8,K.mut)
+    txt(b.v,bx+s(40),by+s(22),10,K.txt)
+    if(i<blks.length-1) txt('→',bx+s(180),by+s(22),12,K.mut,'center')
+  })
 }
 
 function screenTeam(){
-  r(0,0,W,H,0,C.bg)
-  drawSidebar('connect')
-  drawSubSidebar(['Members','Roles','Workspaces','Activity'],'Members')
+  rect(0,0,W,H,0,K.bg)
+  sidebar('connect')
+  subbar(['Members','Roles','Workspaces','Activity'],'Members')
 
-  const cx=px(214), cw=W-cx
-  drawTopbar(cx,'Team Management')
+  const cx=s(208), cw=W-cx
+  topbar(cx,'Team Management')
 
-  // Stats
-  const tstats=[{l:'Total Members',v:'12'},{l:'Active Now',v:'4'},{l:'Ad Accounts',v:'6'},{l:'Workspaces',v:'3'}]
-  tstats.forEach((s,i)=>{
-    const sx=cx+px(20)+i*((cw-px(40)-px(48))/4+px(16)), sy=px(68)
-    r(sx,sy,（cw-px(40)-px(48))/4,px(60),px(8),C.card,C.border)
-    t(s.v,sx+px(12),sy+px(30),20,C.text,'left',true)
-    t(s.l,sx+px(12),sy+px(48),9,C.muted)
+  // stats
+  const sts=[{l:'Total Members',v:'12'},{l:'Active Now',v:'4'},{l:'Ad Accounts',v:'6'},{l:'Workspaces',v:'3'}]
+  const sw=(cw-s(28)-s(12)*3)/4
+  sts.forEach((st,i)=>{
+    const sx=cx+s(14)+i*(sw+s(12))
+    rect(sx,s(56),sw,s(64),s(8),K.card,K.bdr)
+    txt(st.v,sx+s(12),s(88),20,K.txt,'left',true)
+    txt(st.l,sx+s(12),s(108),8,K.mut)
   })
 
-  // Members table
-  r(cx+px(20),px(148),cw-px(40),H-px(164),px(10),C.card,C.border)
-  t('👥 Team Members',cx+px(36),px(174),13,C.text,'left',true)
-  pill(W-px(160),px(160),px(130),px(24),C.blue,'+ Invite Member','#fff',10)
+  // table
+  const tY=s(136)
+  rect(cx+s(14),tY,cw-s(28),H-tY-s(14),s(10),K.card,K.bdr)
+  txt('👥 Team Members',cx+s(28),tY+s(24),12,K.txt,'left',true)
+  pill(W-s(148),tY+s(10),s(130),s(22),K.blue,'+ Invite Member','#fff',10)
 
-  const members2=[
-    {n:'Thuan Nguyen',e:'thuan@agency.com',r:'Full Access',last:'Now',av:'T',ac:'#2563eb'},
-    {n:'Kevin Lee',e:'kevin@agency.com',r:'Launch Only',last:'2h ago',av:'K',ac:'#7c3aed'},
-    {n:'Anna Pham',e:'anna@agency.com',r:'Analytics View',last:'1d ago',av:'A',ac:'#0891b2'},
-    {n:'David Kim',e:'david@agency.com',r:'Edit Only',last:'3d ago',av:'D',ac:'#16a34a'},
-    {n:'Sarah Chen',e:'sarah@agency.com',r:'Full Access',last:'1w ago',av:'S',ac:'#d97706'},
+  const tcols=[{l:'Member',w:s(200)},{l:'Email',w:s(200)},{l:'Role',w:s(140)},{l:'Permissions',w:s(120)},{l:'Last Active',w:s(110)},{l:'',w:s(60)}]
+  let thx=cx+s(14)
+  tcols.forEach(c=>{txt(c.l,thx+s(10),tY+s(50),8,K.mut,'left',true);thx+=c.w})
+  rect(cx+s(14),tY+s(54),cw-s(28),1,0,K.bdr)
+
+  const mbs=[
+    {n:'Thuan Nguyen',e:'thuan@agency.com',r:'Full Access',p:'All features',la:'Now',av:'T',c:K.blue},
+    {n:'Kevin Lee',e:'kevin@agency.com',r:'Launch Only',p:'Launch ads',la:'2h ago',av:'K',c:'#7c3aed'},
+    {n:'Anna Pham',e:'anna@agency.com',r:'Analytics View',p:'Read only',la:'1d ago',av:'A',c:'#0891b2'},
+    {n:'David Kim',e:'david@agency.com',r:'Edit Only',p:'Edit content',la:'3d ago',av:'D',c:K.grn},
+    {n:'Sarah Chen',e:'sarah@agency.com',r:'Full Access',p:'All features',la:'1w ago',av:'S',c:K.org},
   ]
-
-  const tcols2=[{l:'Member',w:px(240)},{l:'Email',w:px(220)},{l:'Role',w:px(160)},{l:'Last Active',w:px(120)},{l:'Actions',w:px(100)}]
-  let thx=cx+px(20)
-  tcols2.forEach(c=>{ t(c.l,thx+px(12),px(202),9,C.muted,'left',true); thx+=c.w })
-  r(cx+px(20),px(204),cw-px(40),1,0,C.border)
-
-  members2.forEach((m,i)=>{
-    const ry=px(208)+i*px(50)
-    r(cx+px(20),ry,cw-px(40),px(50),0,i%2===0?'transparent':C.panel+'44')
-    let mrx=cx+px(20)
-    // avatar + name
-    r(mrx+px(12),ry+px(10),px(30),px(30),px(15),m.ac)
-    t(m.av,mrx+px(27),ry+px(30),12,'#fff','center',true)
-    t(m.n,mrx+px(52),ry+px(28),11,C.text)
-    mrx+=px(240)
-    t(m.e,mrx+px(12),ry+px(28),10,C.muted)
-    mrx+=px(220)
-    const rcol={
-      'Full Access':C.blue,'Launch Only':C.green,'Analytics View':'#8b5cf6','Edit Only':C.orange
-    }[m.r]||C.muted
-    pill(mrx+px(8),ry+px(16),px(120),px(18),rcol+'22',m.r,rcol,9)
-    mrx+=px(160)
-    t(m.last,mrx+px(12),ry+px(28),10,C.muted)
-    mrx+=px(120)
-    t('⋮',mrx+px(20),ry+px(28),16,C.muted,'center')
+  mbs.forEach((m,i)=>{
+    const ry=tY+s(58)+i*s(44)
+    rect(cx+s(14),ry,cw-s(28),s(44),0,i%2===0?'transparent':K.panel+'44')
+    let mrx=cx+s(14)
+    rect(mrx+s(10),ry+s(8),s(28),s(28),s(14),m.c)
+    txt(m.av,mrx+s(24),ry+s(26),11,'#fff','center',true)
+    txt(m.n,mrx+s(46),ry+s(26),10,K.txt)
+    mrx+=s(200)
+    txt(m.e,mrx+s(10),ry+s(26),9,K.mut)
+    mrx+=s(200)
+    const rc={
+      'Full Access':K.blue,'Launch Only':K.grn,'Analytics View':'#8b5cf6','Edit Only':K.org
+    }[m.r]||K.mut
+    pill(mrx+s(6),ry+s(13),s(110),s(18),rc+'22',m.r,rc,8)
+    mrx+=s(140)
+    txt(m.p,mrx+s(10),ry+s(26),9,K.mut)
+    mrx+=s(120)
+    txt(m.la,mrx+s(10),ry+s(26),9,K.mut)
+    mrx+=s(110)
+    txt('⋮',mrx+s(14),ry+s(26),14,K.mut,'center')
   })
 }
 
@@ -723,7 +652,7 @@ const screens={
   dashboard:screenDashboard,
   launch:screenLaunch,
   assets:screenAssets,
-  adsmanager:screenAdsManager,
+  adsmanager:screenAdsmanager,
   analytics:screenAnalytics,
   automation:screenAutomation,
   team:screenTeam,
@@ -731,23 +660,19 @@ const screens={
 
 function draw(){
   ctx.clearRect(0,0,W,H)
-  try{
-    screens[currentScreen]?.()
-  }catch(e){
-    r(0,0,W,H,0,'#111')
-    t('Rendering...',W/2,H/2,16,C.muted,'center')
+  try{ screens[current]() }
+  catch(e){
+    rect(0,0,W,H,0,'#111')
+    txt('Error: '+e.message,W/2,H/2,12,'#f87171','center')
+    console.error(e)
   }
 }
 
-// fix (() reference to px
-function py(v){ return px(v) }
-
-// Tabs
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.addEventListener('click',()=>{
-    document.querySelectorAll('.tab').forEach(t2=>t2.classList.remove('active'))
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'))
     tab.classList.add('active')
-    currentScreen=tab.dataset.screen
+    current=tab.dataset.s
     draw()
   })
 })

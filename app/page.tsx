@@ -50,7 +50,7 @@ export default function LandingPage() {
             {isSignedIn === null ? (
               <div className="h-9 w-24" />
             ) : isSignedIn ? (
-              <Button onClick={() => router.push("/projects")} size="sm">
+              <Button onClick={() => router.push("/launch")} size="sm">
                 <IconRocket className="size-4" />
                 Dashboard
               </Button>
@@ -114,7 +114,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-10 flex items-center justify-center gap-4">
                 {isSignedIn ? (
-                  <Button size="lg" onClick={() => router.push("/projects")} className="gap-2 px-8">
+                  <Button size="lg" onClick={() => router.push("/launch")} className="gap-2 px-8">
                     Go to Dashboard
                     <IconArrowRight className="size-4" />
                   </Button>
@@ -251,7 +251,7 @@ export default function LandingPage() {
             </p>
             <div className="mt-8">
               {isSignedIn ? (
-                <Button size="lg" variant="secondary" onClick={() => router.push("/projects")} className="gap-2 px-8">
+                <Button size="lg" variant="secondary" onClick={() => router.push("/launch")} className="gap-2 px-8">
                   Go to Dashboard
                   <IconArrowRight className="size-4" />
                 </Button>

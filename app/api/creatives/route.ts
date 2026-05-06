@@ -3,6 +3,11 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
 
+// Large media uploads (videos can be 100MB+) — use Node runtime + extended timeout
+export const runtime = "nodejs"
+export const maxDuration = 300 // 5 minutes for big videos
+export const dynamic = "force-dynamic"
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getAuthContext()

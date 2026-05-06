@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
-import { getVideoThumbnail } from "@/lib/facebook"
+import { getVideoThumbnail, getVideoSource } from "@/lib/facebook"
 
 export async function POST(
   _request: NextRequest,
@@ -26,15 +26,28 @@ export async function POST(
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
-    const thumbnailUrl = await getVideoThumbnail(creative.fb_video_id, connection.access_token)
-    if (!thumbnailUrl) return NextResponse.json({ thumbnail_url: null })
+    const [thumbnailUrl, sourceUrl] = await Promise.all([
+      getVideoThumbnail(creative.fb_video_id, connection.access_token),
+      getVideoSource(creative.fb_video_id, connection.access_token)
+    ])
 
-    await supabase
-      .from("creatives")
-      .update({ fb_thumbnail_url: thumbnailUrl, file_url: thumbnailUrl })
-      .eq("id", id)
+    if (!thumbnailUrl && !sourceUrl) return NextResponse.json({ thumbnail_url: null })
 
-    return NextResponse.json({ thumbnail_url: thumbnailUrl })
+    const update: any = {}
+    if (thumbnailUrl) update.fb_thumbnail_url = thumbnailUrl
+    if (sourceUrl) update.file_url = sourceUrl
+
+    if (Object.keys(update).length > 0) {
+      await supabase
+        .from("creatives")
+        .update(update)
+        .eq("id", id)
+    }
+
+    return NextResponse.json({ 
+      thumbnail_url: thumbnailUrl || creative.fb_thumbnail_url,
+      source_url: sourceUrl
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
