@@ -53,6 +53,7 @@ import { CreativeCardMedia } from "@/components/creative-card-media"
 
 interface AdSet { id: string; name: string; status: string; effective_status: string; campaign_id: string; daily_budget?: string }
 interface Creative { id: string; file_name: string; file_url: string; media_type: "image" | "video"; headline?: string; primary_text?: string; cta?: string; link_url?: string; fb_image_url?: string; fb_thumbnail_url?: string; fb_image_hash?: string; fb_video_id?: string; created_at?: string; transcript?: string; tags?: string[] }
+interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "image" | "video"; duration?: number | null; width?: number; height?: number; dimensions?: string | null; date_added?: string; status?: string | null; thumbnail_url?: string; fb_video_id?: string; fb_image_hash?: string; fb_image_url?: string }
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
@@ -4252,6 +4253,154 @@ function DynamicMediaToggle({ title, desc, checked, onChange, disabled, indent }
   )
 }
 
+// ─── Drive Link Tab ───────────────────────────────────────────────────────────
+
+function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
+  gdriveToken: string | null
+  onRequestAuth: () => void
+  adAccountId: string
+  onImported: (creatives: Creative[]) => void
+}) {
+  const [links, setLinks] = useState("")
+  const [includeSubfolders, setIncludeSubfolders] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [results, setResults] = useState<{ name: string; status: "done" | "error"; error?: string }[]>([])
+
+  const extractFileId = (url: string): { id: string; type: "file" | "folder" } | null => {
+    const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
+    if (fileMatch) return { id: fileMatch[1], type: "file" }
+    const folderMatch = url.match(/\/folders\/([a-zA-Z0-9_-]+)/)
+    if (folderMatch) return { id: folderMatch[1], type: "folder" }
+    return null
+  }
+
+  const handleViewContents = async () => {
+    if (!gdriveToken) { onRequestAuth(); return }
+    const urls = links.split("\n").map(l => l.trim()).filter(Boolean)
+    if (urls.length === 0) return
+    setImporting(true)
+    setResults([])
+    const newCreatives: Creative[] = []
+
+    for (const url of urls) {
+      const parsed = extractFileId(url)
+      if (!parsed) { setResults(p => [...p, { name: url, status: "error", error: "Invalid Drive URL" }]); continue }
+
+      if (parsed.type === "file") {
+        // Get file metadata then import
+        try {
+          const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${parsed.id}?fields=id,name,mimeType`, {
+            headers: { Authorization: `Bearer ${gdriveToken}` }
+          })
+          const meta = await metaRes.json()
+          if (!metaRes.ok) throw new Error(meta.error?.message || "Failed to get file info")
+          const res = await fetch("/api/google/import-drive", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken: gdriveToken, fileId: meta.id, fileName: meta.name, mimeType: meta.mimeType, adAccountId }),
+          })
+          const d = await res.json()
+          if (!res.ok) throw new Error(d.error || "Import failed")
+          newCreatives.push(d.creative)
+          setResults(p => [...p, { name: meta.name, status: "done" }])
+        } catch (e: any) {
+          setResults(p => [...p, { name: url, status: "error", error: e.message }])
+        }
+      } else {
+        // Folder: list files then import each
+        try {
+          const q = includeSubfolders
+            ? `'${parsed.id}' in parents and mimeType != 'application/vnd.google-apps.folder'`
+            : `'${parsed.id}' in parents and (mimeType contains 'image/' or mimeType contains 'video/')`
+          const listRes = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)&pageSize=50`,
+            { headers: { Authorization: `Bearer ${gdriveToken}` } }
+          )
+          const listData = await listRes.json()
+          const files: { id: string; name: string; mimeType: string }[] = listData.files || []
+          for (const file of files) {
+            if (!file.mimeType.startsWith("image/") && !file.mimeType.startsWith("video/")) continue
+            try {
+              const res = await fetch("/api/google/import-drive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ accessToken: gdriveToken, fileId: file.id, fileName: file.name, mimeType: file.mimeType, adAccountId }),
+              })
+              const d = await res.json()
+              if (!res.ok) throw new Error(d.error || "Import failed")
+              newCreatives.push(d.creative)
+              setResults(p => [...p, { name: file.name, status: "done" }])
+            } catch (e: any) {
+              setResults(p => [...p, { name: file.name, status: "error", error: e.message }])
+            }
+          }
+        } catch (e: any) {
+          setResults(p => [...p, { name: url, status: "error", error: e.message }])
+        }
+      }
+    }
+    if (newCreatives.length > 0) onImported(newCreatives)
+    setImporting(false)
+  }
+
+  return (
+    <div className="flex-1 flex flex-col p-6 gap-4 overflow-y-auto">
+      <div>
+        <h3 className="text-sm font-semibold mb-1">Import from Google Drive</h3>
+        <p className="text-xs text-muted-foreground">
+          Paste <strong>one or multiple</strong> Google Drive links below. When using multiple links,{" "}
+          <strong>put each link on a separate line</strong> to batch import from multiple folders.
+        </p>
+      </div>
+      <textarea
+        value={links}
+        onChange={e => setLinks(e.target.value)}
+        rows={5}
+        placeholder={"https://drive.google.com/drive/folders/...\nhttps://drive.google.com/file/d/...\nhttps://drive.google.com/drive/folders/..."}
+        className="w-full px-3 py-2.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none font-mono placeholder:text-muted-foreground/40"
+      />
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <IconFolderOpen className="size-4 text-muted-foreground" />
+          Include files from subfolders
+          <button
+            role="switch"
+            onClick={() => setIncludeSubfolders(v => !v)}
+            className={cn("relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors",
+              includeSubfolders ? "bg-primary" : "bg-muted")}
+          >
+            <span className={cn("pointer-events-none inline-block size-4 rounded-full bg-white shadow transition-transform",
+              includeSubfolders ? "translate-x-4" : "translate-x-0")} />
+          </button>
+        </label>
+        <Button
+          onClick={handleViewContents}
+          disabled={!links.trim() || importing}
+          className="gap-2 bg-[#4285F4] hover:bg-[#3574E2] text-white px-6"
+        >
+          <IconFolderOpen className="size-4" />
+          {importing ? "Importing..." : "View Contents"}
+          {!importing && <span className="text-xs opacity-70 ml-1">Ctrl↵</span>}
+        </Button>
+      </div>
+      {results.length > 0 && (
+        <div className="space-y-1.5">
+          {results.map((r, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-muted/30 border">
+              {r.status === "done"
+                ? <IconCheck className="size-3.5 text-green-500 shrink-0" />
+                : <IconX className="size-3.5 text-destructive shrink-0" />
+              }
+              <span className="truncate flex-1">{r.name}</span>
+              {r.error && <span className="text-destructive shrink-0">{r.error}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Load Media Modal ─────────────────────────────────────────────────────────
 
 type MediaTab = "library" | "existing" | "gdrive" | "drive_browser" | "drive_link" | "integrations"
@@ -4348,6 +4497,13 @@ function LoadMediaModal({
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [mediaTab, setMediaTab] = useState<MediaTab>("library")
+  // FB Media Library (from Facebook ad account)
+  const [fbMedia, setFbMedia] = useState<FbMediaItem[]>([])
+  const [fbMediaLoading, setFbMediaLoading] = useState(false)
+  const [fbMediaLoaded, setFbMediaLoaded] = useState(false)
+  const [fbMediaError, setFbMediaError] = useState<string | null>(null)
+  const [fbMediaTypeFilter, setFbMediaTypeFilter] = useState<"all" | "image" | "video">("all")
+  const [fbMediaSort, setFbMediaSort] = useState<{ field: string; dir: "asc" | "desc" }>({ field: "date", dir: "desc" })
   const [selected, setSelected] = useState<Set<string>>(new Set(alreadySelected))
   // Filter chip values
   const [filters, setFilters] = useState<{
@@ -4392,7 +4548,15 @@ function LoadMediaModal({
     if (!open || !adAccountId) return
     setSelected(new Set(alreadySelected))
     fetchCreatives()
+    setFbMediaLoaded(false)
+    setFbMedia([])
   }, [open, adAccountId])
+
+  // Load FB media when library tab is active
+  useEffect(() => {
+    if (!open || mediaTab !== "library" || fbMediaLoaded || fbMediaLoading) return
+    fetchFbMedia()
+  }, [open, mediaTab, adAccountId])
 
   // Preload Google scripts when modal opens so they're ready before user clicks
   useEffect(() => {
@@ -4684,6 +4848,21 @@ function LoadMediaModal({
       .finally(() => setLoading(false))
   }
 
+  const fetchFbMedia = () => {
+    if (!adAccountId) return
+    setFbMediaLoading(true)
+    setFbMediaError(null)
+    fetch(`/api/facebook/ad-media?ad_account_id=${encodeURIComponent(adAccountId)}&limit=200`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setFbMediaError(d.error); return }
+        setFbMedia(d.media || [])
+        setFbMediaLoaded(true)
+      })
+      .catch(() => setFbMediaError("Failed to load media"))
+      .finally(() => setFbMediaLoading(false))
+  }
+
   const dimsOf = (c: Creative) => (c as any).dimensions || (c.media_type === "video" ? "9:16" : "1:1")
   const durationOf = (c: Creative) => (c as any).duration || (c.media_type === "video" ? "0:30" : "—")
   const uploaderOf = (c: Creative) => (c as any).uploader || (c as any).user_email || "—"
@@ -4702,22 +4881,28 @@ function LoadMediaModal({
     dateAdded: ["today", "week", "month", "year"],
   }
 
-  const filtered = allCreatives.filter(c => {
-    const isReady = !!(c.fb_image_hash || c.fb_video_id)
-    const matchSearch = !search || c.file_name.toLowerCase().includes(search.toLowerCase()) || (c as any).fb_ad_id?.includes(search)
-    if (!matchSearch) return false
-    if (filters.fileType !== "all" && c.media_type !== filters.fileType) return false
-    if (filters.status !== "all") {
-      const st = filters.status === "ready" ? isReady : filters.status === "pending" ? !isReady : (c as any).status === "launched"
-      if (!st) return false
+  // Media Library uses fbMedia (from Facebook ad account)
+  const fmtDuration = (sec?: number | null) => {
+    if (!sec) return "—"
+    const m = Math.floor(sec / 60), s = sec % 60
+    return `${m}:${String(s).padStart(2, "0")}`
+  }
+  const fmtDims = (m: FbMediaItem) => {
+    if (m.dimensions) return m.dimensions
+    if (m.width && m.height) {
+      const g = (a: number, b: number): number => b === 0 ? a : g(b, a % b)
+      const d = g(m.width, m.height)
+      return `${m.width / d}:${m.height / d}`
     }
-    if (filters.uploader !== "all" && uploaderOf(c) !== filters.uploader) return false
-    if (filters.dimensions !== "all" && dimsOf(c) !== filters.dimensions) return false
-    if (filters.workspace !== "all" && workspaceOf(c) !== filters.workspace) return false
-    if (filters.dateAdded !== "all") {
-      const d = c.created_at ? new Date(c.created_at) : null
-      if (!d) return false
-      const ms = Date.now() - d.getTime()
+    return m.media_type === "video" ? "9:16" : "—"
+  }
+
+  const filtered = fbMedia.filter(m => {
+    const matchSearch = !search || m.name.toLowerCase().includes(search.toLowerCase()) || m.fb_id?.includes(search)
+    if (!matchSearch) return false
+    if (filters.fileType !== "all" && m.media_type !== filters.fileType) return false
+    if (filters.dateAdded !== "all" && m.date_added) {
+      const ms = Date.now() - new Date(m.date_added).getTime()
       const day = 86400000
       if (filters.dateAdded === "today" && ms > day) return false
       if (filters.dateAdded === "week" && ms > 7 * day) return false
@@ -4727,35 +4912,44 @@ function LoadMediaModal({
     return true
   })
 
-  // Sort
   const sorted = [...filtered].sort((a, b) => {
     let va: any, vb: any
     switch (sortField) {
-      case "name": va = a.file_name; vb = b.file_name; break
-      case "ad_id": va = (a as any).fb_ad_id || ""; vb = (b as any).fb_ad_id || ""; break
-      case "dimensions": va = dimsOf(a); vb = dimsOf(b); break
-      case "duration": va = durationOf(a); vb = durationOf(b); break
-      case "date": va = a.created_at || ""; vb = b.created_at || ""; break
-      case "user": va = uploaderOf(a); vb = uploaderOf(b); break
-      case "workspace": va = workspaceOf(a); vb = workspaceOf(b); break
-      default: return 0
+      case "name": va = a.name; vb = b.name; break
+      case "dimensions": va = fmtDims(a); vb = fmtDims(b); break
+      case "duration": va = a.duration || 0; vb = b.duration || 0; break
+      case "date": va = a.date_added || ""; vb = b.date_added || ""; break
+      case "status": va = a.status || ""; vb = b.status || ""; break
+      default: va = a.date_added || ""; vb = b.date_added || ""; break
     }
-    return sortDir === "asc" ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1)
+    if (typeof va === "number") return sortDir === "asc" ? va - vb : vb - va
+    return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
   })
 
   const toggle = (id: string) => {
     setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   }
   const toggleAll = () => {
-    setSelected(prev => prev.size === sorted.length ? new Set() : new Set(sorted.map(c => c.id)))
+    setSelected(prev => prev.size === sorted.length ? new Set() : new Set(sorted.map(m => m.id)))
   }
   const handleConfirm = () => {
-    onConfirm(Array.from(selected), allCreatives.filter(c => selected.has(c.id)))
+    const selectedMedia = fbMedia.filter(m => selected.has(m.id))
+    const creatives: Creative[] = selectedMedia.map(m => ({
+      id: m.id,
+      file_name: m.name,
+      file_url: m.thumbnail_url || "",
+      media_type: m.media_type,
+      fb_image_hash: m.fb_image_hash,
+      fb_image_url: m.fb_image_url,
+      fb_thumbnail_url: m.thumbnail_url,
+      fb_video_id: m.fb_video_id,
+    }))
+    onConfirm(Array.from(selected), creatives)
     onClose()
   }
   const handlePasteSubmit = () => {
     const ids = pasteText.split(/[\s,;\n]+/).map(s => s.trim()).filter(Boolean)
-    const matched = allCreatives.filter(c => ids.includes(c.id) || ids.includes((c as any).fb_ad_id))
+    const matched = fbMedia.filter(m => ids.includes(m.id) || ids.includes(m.fb_id))
     setSelected(prev => { const s = new Set(prev); matched.forEach(m => s.add(m.id)); return s })
     setPasteText("")
     setPasteOpen(false)
@@ -4953,9 +5147,15 @@ function LoadMediaModal({
 
             {/* Table body */}
             <div className="flex-1 overflow-auto">
-              {loading ? (
+              {fbMediaLoading ? (
                 <div className="flex items-center justify-center h-40">
                   <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : fbMediaError ? (
+                <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
+                  <IconPhoto className="size-8 opacity-30" />
+                  <p className="text-sm text-destructive">{fbMediaError}</p>
+                  <Button size="sm" variant="outline" onClick={fetchFbMedia}>Retry</Button>
                 </div>
               ) : sorted.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
@@ -4963,14 +5163,11 @@ function LoadMediaModal({
                   <p className="text-sm">No media assets found</p>
                 </div>
               ) : (
-                sorted.map(c => {
-                  const isSelected = selected.has(c.id)
-                  const isReady = !!(c.fb_image_hash || c.fb_video_id)
-                  const adId = (c as any).fb_ad_id || (c as any).ad_id || "—"
-                  const adSetName = (c as any).adset_name || (c as any).fb_adset_name
-                  const thumb = c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url)
+                sorted.map(m => {
+                  const isSelected = selected.has(m.id)
+                  const statusLabel = m.status ? m.status.replace(/_/g, " ") : "Active"
                   return (
-                    <div key={c.id} onClick={() => toggle(c.id)}
+                    <div key={m.id} onClick={() => toggle(m.id)}
                       className={cn("grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors",
                         isSelected && "bg-primary/5 hover:bg-primary/10")}
                       style={{ gridTemplateColumns: "28px 2.5fr 80px 100px 80px 120px 1.6fr 120px 120px" }}>
@@ -4980,34 +5177,30 @@ function LoadMediaModal({
                       </div>
                       <div className="flex items-center gap-2.5 min-w-0 pr-3">
                         <div className="size-9 rounded overflow-hidden bg-muted shrink-0 relative">
-                          <CreativeCardMedia creative={c} className="w-full h-full object-cover" compact />
-                          {c.media_type === "video" && (
+                          {m.thumbnail_url
+                            ? <img src={m.thumbnail_url} className="w-full h-full object-cover" alt="" />
+                            : <div className="w-full h-full flex items-center justify-center"><IconPhoto className="size-4 text-muted-foreground/40" /></div>
+                          }
+                          {m.media_type === "video" && (
                             <div className="absolute bottom-0 right-0 size-3.5 rounded-tl bg-black/60 flex items-center justify-center pointer-events-none">
                               <IconPlayerPlay className="size-2 text-white" />
                             </div>
                           )}
                         </div>
-                        <span className="text-sm truncate" title={c.file_name}>{c.file_name}</span>
+                        <span className="text-sm truncate" title={m.name}>{m.name}</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">{adId !== "—" ? adId.slice(-3) : "—"}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-muted/50 w-fit">{dimsOf(c)}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-muted/50 w-fit">{durationOf(c)}</span>
+                      <span className="text-xs text-muted-foreground font-mono">{m.fb_id?.slice(-6) || "—"}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-muted/50 w-fit">{fmtDims(m)}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-muted/50 w-fit">{m.media_type === "video" ? fmtDuration(m.duration) : "—"}</span>
                       <span className="text-xs text-muted-foreground">
-                        {c.created_at ? new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                        {m.date_added ? new Date(m.date_added).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                       </span>
-                      {adSetName ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 w-fit max-w-full">
-                          <IconBrandMeta className="size-3 shrink-0 text-[#0064E0]" />
-                          <span className="truncate">Ad Set: {adSetName.slice(0, 20)}{adSetName.length > 20 ? "..." : ""}</span>
-                        </span>
-                      ) : (
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium w-fit",
-                          isReady ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground")}>
-                          {isReady ? "Ready" : "Pending"}
-                        </span>
-                      )}
-                      <span className="text-xs text-muted-foreground truncate" title={uploaderOf(c)}>{uploaderOf(c)}</span>
-                      <span className="text-xs text-muted-foreground truncate font-mono">{workspaceOf(c)}</span>
+                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 w-fit max-w-full">
+                        <IconBrandMeta className="size-3 shrink-0 text-[#0064E0]" />
+                        <span className="truncate capitalize">{statusLabel.toLowerCase()}</span>
+                      </span>
+                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground truncate font-mono">{adAccountId.replace("act_", "").slice(0, 12)}</span>
                     </div>
                   )
                 })
@@ -5017,7 +5210,7 @@ function LoadMediaModal({
             {/* Footer */}
             <div className="border-t shrink-0">
               <div className="px-6 pt-2 pb-1">
-                <span className="text-xs text-muted-foreground">{sorted.length} of {allCreatives.length} row(s).</span>
+                <span className="text-xs text-muted-foreground">{sorted.length} of {fbMedia.length} row(s).</span>
               </div>
               <Button
                 onClick={handleConfirm}
@@ -5329,7 +5522,13 @@ function LoadMediaModal({
               </Button>
             </div>
           </>
-        ) : mediaTab === "gdrive" || mediaTab === "drive_browser" || mediaTab === "drive_link" ? (
+        ) : mediaTab === "drive_link" ? (
+          <DriveLinkTab gdriveToken={gdriveToken} onRequestAuth={openGoogleDrivePicker} adAccountId={adAccountId}
+            onImported={(creatives) => {
+              setAllCreatives(prev => [...creatives.filter(c => !prev.some(p => p.id === c.id)), ...prev])
+              setSelected(prev => new Set([...prev, ...creatives.map(c => c.id)]))
+            }} />
+        ) : mediaTab === "gdrive" || mediaTab === "drive_browser" ? (
           <div className="flex-1 flex flex-col overflow-hidden">
             {gdriveQueue.length > 0 ? (
               /* Import progress list */
