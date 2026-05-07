@@ -7036,7 +7036,7 @@ function DuplicateCampaignModal({
                 <PopoverContent
                   align="start"
                   sideOffset={4}
-                  className="p-0 gap-0 w-[var(--radix-popover-trigger-width)] max-w-none"
+                  className="p-0 gap-0 w-[var(--radix-popover-trigger-width)] max-w-[560px]"
                 >
                   <div className="p-2 border-b">
                     <div className="relative">
@@ -7073,7 +7073,7 @@ function DuplicateCampaignModal({
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{c.name}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              Ad Sets: {c._adset_count || 0} | Total Ads: {(c._adset_count || 0) * 1} | Manual | {(c.objective || "").replace(/_/g, " ")} | spend: {c._spend || 0}
+                              Ad Sets: {c._adset_count ?? "—"} | {(c.objective || "").replace(/_/g, " ")} | spend: {c._spend ? `$${(c._spend / 100).toFixed(0)}` : "$0"}
                             </p>
                           </div>
                         </button>
