@@ -4503,6 +4503,7 @@ function LoadMediaModal({
   const [fbMediaLoaded, setFbMediaLoaded] = useState(false)
   const [fbMediaHasMore, setFbMediaHasMore] = useState(false)
   const [fbMediaError, setFbMediaError] = useState<string | null>(null)
+  const [fbMediaSaving, setFbMediaSaving] = useState(false)
   const [fbMediaTypeFilter, setFbMediaTypeFilter] = useState<"all" | "image" | "video">("all")
   const [fbMediaSort, setFbMediaSort] = useState<{ field: string; dir: "asc" | "desc" }>({ field: "date", dir: "desc" })
   const FB_MEDIA_PAGE = 30
@@ -4937,20 +4938,41 @@ function LoadMediaModal({
   const toggleAll = () => {
     setSelected(prev => prev.size === sorted.length ? new Set() : new Set(sorted.map(m => m.id)))
   }
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const selectedMedia = fbMedia.filter(m => selected.has(m.id))
-    const creatives: Creative[] = selectedMedia.map(m => ({
-      id: m.id,
-      file_name: m.name,
-      file_url: m.thumbnail_url || "",
-      media_type: m.media_type,
-      fb_image_hash: m.fb_image_hash,
-      fb_image_url: m.fb_image_url,
-      fb_thumbnail_url: m.thumbnail_url,
-      fb_video_id: m.fb_video_id,
-    }))
-    onConfirm(Array.from(selected), creatives)
-    onClose()
+    if (selectedMedia.length === 0) { onClose(); return }
+
+    setFbMediaSaving(true)
+    try {
+      const res = await fetch("/api/facebook/ad-media/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ad_account_id: adAccountId,
+          items: selectedMedia.map(m => ({
+            id: m.id,
+            name: m.name,
+            media_type: m.media_type,
+            thumbnail_url: m.thumbnail_url,
+            fb_image_hash: m.fb_image_hash,
+            fb_image_url: m.fb_image_url,
+            fb_video_id: m.fb_video_id,
+          })),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.creatives?.length) {
+        setFbMediaError(data.error || "Failed to save media")
+        return
+      }
+      const creatives: Creative[] = data.creatives
+      onConfirm(creatives.map((c: any) => c.id), creatives)
+      onClose()
+    } catch (err: any) {
+      setFbMediaError(err.message || "Failed to save media")
+    } finally {
+      setFbMediaSaving(false)
+    }
   }
   const handlePasteSubmit = () => {
     const ids = pasteText.split(/[\s,;\n]+/).map(s => s.trim()).filter(Boolean)
@@ -5225,10 +5247,10 @@ function LoadMediaModal({
               </div>
               <Button
                 onClick={handleConfirm}
-                disabled={selected.size === 0}
+                disabled={selected.size === 0 || fbMediaSaving}
                 className="w-full h-12 rounded-none rounded-b-xl text-base font-semibold"
               >
-                Add {selected.size > 0 ? `${selected.size} ` : "New "}Creatives
+                {fbMediaSaving ? <><IconLoader2 className="size-4 animate-spin mr-2" />Saving...</> : `Add ${selected.size > 0 ? `${selected.size} ` : "New "}Creatives`}
               </Button>
             </div>
           </>
