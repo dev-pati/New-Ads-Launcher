@@ -11288,12 +11288,10 @@ export default function LaunchPage() {
     setUploadDockOpen(false)
   }
 
-  // Chunked upload for videos using Facebook Resumable Upload API.
-  // Always uses OUR chunk size (3.5MB) — Facebook's end_offset can be 50MB+
-  // which would exceed Vercel's 4.5MB body limit. We ignore FB's end_offset
-  // and always slice to CHUNK_SIZE. FB accepts smaller chunks than it suggests.
+  // Direct video upload: client → Facebook in 1 request (no chunking needed).
+  // Server only handles auth (get token) and DB save. No Vercel body limit applies
+  // because the large payload goes client → Facebook directly.
   const uploadVideoChunked = async (item: UploadItem): Promise<Creative | null> => {
-    const CHUNK_SIZE = 3.5 * 1024 * 1024 // 3.5MB — safe under Vercel 4.5MB limit
     const currentPrimary = primaryTexts.find(t => t.trim()) || ""
     const currentHeadline = headlines.find(h => h.trim()) || ""
 
@@ -11302,55 +11300,37 @@ export default function LaunchPage() {
       try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } }
     }
 
-    // 1. Start upload session (tiny JSON body — never hits size limit)
-    const startRes = await fetch("/api/facebook/video-upload/start", {
+    // 1. Get FB access token from our server (auth check + token proxy)
+    const tokenRes = await fetch("/api/facebook/video-upload/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ad_account_id: selectedAccountId,
-        file_name: item.file.name,
-        file_size: item.file.size,
-      }),
+      body: JSON.stringify({ ad_account_id: selectedAccountId, file_name: item.file.name, file_size: item.file.size }),
     })
-    const startData = await safeJson(startRes)
-    if (!startRes.ok) {
-      updateUpload(item.id, { status: "error", error: startData.error || "Failed to start upload session" })
+    const tokenData = await safeJson(tokenRes)
+    if (!tokenRes.ok) {
+      updateUpload(item.id, { status: "error", error: tokenData.error || "Auth failed" })
       return null
     }
-    const { upload_session_id, video_id } = startData
+    const { ad_account_id: normAccountId, access_token } = tokenData
 
-    // 2. Upload fixed-size chunks — always compute end from OUR CHUNK_SIZE,
-    //    never from Facebook's end_offset (which can be 50MB+).
-    //    Use Facebook's returned start_offset to advance position.
-    let offset = 0
-    const totalChunks = Math.ceil(item.file.size / CHUNK_SIZE)
-    let chunkIndex = 0
+    // 2. Upload entire file directly to Facebook (client → FB, bypasses Vercel completely)
+    updateUpload(item.id, { uploaded: 0, fileSize: item.file.size })
+    const form = new FormData()
+    form.append("access_token", access_token)
+    form.append("title", item.file.name)
+    form.append("source", item.file, item.file.name)
 
-    while (offset < item.file.size) {
-      chunkIndex++
-      const chunkEnd = Math.min(offset + CHUNK_SIZE, item.file.size)
-      const chunk = item.file.slice(offset, chunkEnd)
-
-      const chunkParams = new URLSearchParams({
-        ad_account_id: selectedAccountId,
-        upload_session_id,
-        start_offset: String(offset),
-      })
-      const chunkRes = await fetch(`/api/facebook/video-upload/chunk?${chunkParams}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: chunk,
-      })
-      const chunkData = await safeJson(chunkRes)
-      if (!chunkRes.ok) {
-        updateUpload(item.id, { status: "error", error: chunkData.error || `Chunk ${chunkIndex}/${totalChunks} failed` })
-        return null
-      }
-
-      // Use FB's start_offset to advance (it echoes our chunkEnd on success)
-      offset = parseInt(chunkData.start_offset ?? String(chunkEnd))
-      updateUpload(item.id, { uploaded: offset, fileSize: item.file.size })
+    const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${normAccountId}/advideos`, {
+      method: "POST",
+      body: form,
+    })
+    const uploadData = await safeJson(uploadRes)
+    if (!uploadRes.ok || uploadData.error) {
+      updateUpload(item.id, { status: "error", error: uploadData.error?.message || uploadData.error || "Upload to Facebook failed" })
+      return null
     }
+    const video_id = uploadData.id
+    updateUpload(item.id, { uploaded: item.file.size, fileSize: item.file.size })
 
     // 3. Finish session (tiny JSON body)
     const finishRes = await fetch("/api/facebook/video-upload/finish", {
@@ -11358,7 +11338,6 @@ export default function LaunchPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ad_account_id: selectedAccountId,
-        upload_session_id,
         video_id,
         file_name: item.file.name,
         file_size: item.file.size,
