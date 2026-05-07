@@ -5160,7 +5160,7 @@ function LoadMediaModal({
                 <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
                   <IconPhoto className="size-8 opacity-30" />
                   <p className="text-sm text-destructive">{fbMediaError}</p>
-                  <Button size="sm" variant="outline" onClick={fetchFbMedia}>Retry</Button>
+                  <Button size="sm" variant="outline" onClick={() => fetchFbMedia()}>Retry</Button>
                 </div>
               ) : sorted.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-40 gap-2 text-muted-foreground">
@@ -6788,7 +6788,18 @@ function DuplicateCampaignModal({
     try {
       const res = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(adAccountId)}`)
       const d = await res.json()
-      setCampaigns(d.campaigns || [])
+      const raw: any[] = d.campaigns || []
+      setCampaigns(raw.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+        effective_status: c.effective_status,
+        objective: c.objective,
+        daily_budget: c.daily_budget,
+        lifetime_budget: c.lifetime_budget,
+        _adset_count: c.adsets?.summary?.total_count ?? undefined,
+        _spend: parseFloat(c.insights?.data?.[0]?.spend || "0"),
+      })))
     } catch {}
     setCampaignsLoading(false)
   }
@@ -7012,45 +7023,44 @@ function DuplicateCampaignModal({
 
             {/* Campaign selector */}
             <div className="flex gap-2">
-              <Popover open={campaignDropdownOpen} onOpenChange={setCampaignDropdownOpen}>
-                <PopoverTrigger asChild>
-                  <button
-                    className="flex-1 flex items-center justify-between px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/30 text-left"
-                  >
-                    {sourceCampaign ? (
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <IconBrandMeta className="size-4 text-[#0064E0] shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-bold truncate">{sourceCampaign.name}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">
-                            Manual | {sourceCampaign._adset_count || 0} ad sets | {sourceCampaign.id} | {(sourceCampaign.objective || "").replace(/_/g, " ")} | spend: {sourceCampaign._spend ? `${(sourceCampaign._spend / 1000).toFixed(1)}K` : "0"}
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">Select a campaign...</span>
-                    )}
-                    <IconSelector className="size-4 text-muted-foreground shrink-0 ml-2" />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent
-                  align="start"
-                  sideOffset={4}
-                  className="p-0 gap-0 w-[var(--radix-popover-trigger-width)] max-w-[560px]"
+              <div className="flex-1 relative">
+                {campaignDropdownOpen && (
+                  <div className="fixed inset-0 z-40" onClick={() => setCampaignDropdownOpen(false)} />
+                )}
+                <button
+                  onClick={() => setCampaignDropdownOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/30 text-left"
                 >
-                  <div className="p-2 border-b">
-                    <div className="relative">
-                      <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-                      <input
-                        autoFocus
-                        value={campaignSearch}
-                        onChange={e => setCampaignSearch(e.target.value)}
-                        placeholder="Search campaigns..."
-                        className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
-                      />
+                  {sourceCampaign ? (
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <IconBrandMeta className="size-4 text-[#0064E0] shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold truncate">{sourceCampaign.name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {sourceCampaign._adset_count ?? "—"} ad sets | {(sourceCampaign.objective || "").replace(/_/g, " ")} | spend: ${(sourceCampaign._spend || 0).toFixed(0)}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="max-h-72 overflow-y-auto">
+                  ) : (
+                    <span className="text-sm text-muted-foreground">Select a campaign...</span>
+                  )}
+                  <IconSelector className="size-4 text-muted-foreground shrink-0 ml-2" />
+                </button>
+                {campaignDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border rounded-lg shadow-lg overflow-hidden">
+                    <div className="p-2 border-b">
+                      <div className="relative">
+                        <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+                        <input
+                          autoFocus
+                          value={campaignSearch}
+                          onChange={e => setCampaignSearch(e.target.value)}
+                          placeholder="Search campaigns..."
+                          className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
                       {campaignsLoading ? (
                         <div className="px-3 py-3 text-xs text-muted-foreground flex items-center gap-2">
                           <IconLoader2 className="size-3 animate-spin" />Loading...
@@ -7073,14 +7083,15 @@ function DuplicateCampaignModal({
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{c.name}</p>
                             <p className="text-[11px] text-muted-foreground">
-                              Ad Sets: {c._adset_count ?? "—"} | {(c.objective || "").replace(/_/g, " ")} | spend: {c._spend ? `$${(c._spend / 100).toFixed(0)}` : "$0"}
+                              Ad Sets: {c._adset_count ?? "—"} | {(c.objective || "").replace(/_/g, " ")} | spend: ${(c._spend || 0).toFixed(0)}
                             </p>
                           </div>
                         </button>
                       ))}
                     </div>
-                </PopoverContent>
-              </Popover>
+                  </div>
+                )}
+              </div>
               <button onClick={fetchCampaigns} className="size-10 border rounded-lg flex items-center justify-center hover:bg-muted/30">
                 <IconRefresh className={cn("size-4 text-muted-foreground", campaignsLoading && "animate-spin")} />
               </button>
@@ -7101,7 +7112,7 @@ function DuplicateCampaignModal({
                       <IconPlus className="size-3" />{sourceCampaign._adset_count || 0} ad set{(sourceCampaign._adset_count || 0) !== 1 ? "s" : ""}
                     </span>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-background border">
-                      <IconClock className="size-3" />${((sourceCampaign._spend || 0) / 1).toFixed(2)} spend
+                      <IconClock className="size-3" />${(sourceCampaign._spend || 0).toFixed(2)} spend
                     </span>
                     {sourceCampaign.daily_budget && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-background border font-bold">

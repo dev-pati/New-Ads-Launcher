@@ -218,6 +218,7 @@ export interface Campaign {
   created_time: string
   updated_time: string
   insights?: { data: CampaignInsight[] }
+  adsets?: { summary: { total_count: number } }
 }
 
 export async function getCampaigns(
@@ -230,6 +231,7 @@ export async function getCampaigns(
     "daily_budget", "lifetime_budget", "spend_cap", "bid_strategy",
     "start_time", "stop_time", "created_time", "updated_time",
     `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`,
+    "adsets.limit(0).summary(true)",
   ].join(",")
 
   const res = await fetch(
