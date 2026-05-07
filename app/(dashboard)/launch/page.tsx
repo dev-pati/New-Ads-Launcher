@@ -4546,7 +4546,7 @@ function LoadMediaModal({
 
   const openGoogleDrivePicker = async () => {
     setGdriveError(null)
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ""
 
     // If scripts not preloaded yet, load them now (fallback)
     if (!gdriveScriptsReady.current) {
