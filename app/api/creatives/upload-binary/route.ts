@@ -6,7 +6,7 @@ import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
 // Large media upload via raw binary body (avoids FormData parser limits).
 // Client sends file as raw body, metadata via URL params + headers.
 export const runtime = "nodejs"
-export const maxDuration = 600 // 10 minutes for big videos
+export const maxDuration = 300 // Vercel Hobby plan max
 export const dynamic = "force-dynamic"
 
 export async function POST(request: NextRequest) {
