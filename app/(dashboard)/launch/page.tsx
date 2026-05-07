@@ -5170,7 +5170,7 @@ function LoadMediaModal({
               ) : (
                 sorted.map(m => {
                   const isSelected = selected.has(m.id)
-                  const statusLabel = m.status ? m.status.replace(/_/g, " ") : "Active"
+                  const statusLabel = m.status ? String(m.status).replace(/_/g, " ") : "Active"
                   return (
                     <div key={m.id} onClick={() => toggle(m.id)}
                       className={cn("grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors",
