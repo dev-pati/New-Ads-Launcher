@@ -7022,11 +7022,8 @@ function DuplicateCampaignModal({
             </Select>
 
             {/* Campaign selector */}
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                {campaignDropdownOpen && (
-                  <div className="fixed inset-0 z-40" onClick={() => setCampaignDropdownOpen(false)} />
-                )}
+            <div className="flex gap-2 items-start">
+              <div className="flex-1 space-y-1">
                 <button
                   onClick={() => setCampaignDropdownOpen(v => !v)}
                   className="w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/30 text-left"
@@ -7047,7 +7044,7 @@ function DuplicateCampaignModal({
                   <IconSelector className="size-4 text-muted-foreground shrink-0 ml-2" />
                 </button>
                 {campaignDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-popover border rounded-lg shadow-lg overflow-hidden">
+                  <div className="border rounded-lg bg-background overflow-hidden shadow-sm">
                     <div className="p-2 border-b">
                       <div className="relative">
                         <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
@@ -7060,7 +7057,7 @@ function DuplicateCampaignModal({
                         />
                       </div>
                     </div>
-                    <div className="max-h-64 overflow-y-auto">
+                    <div className="max-h-56 overflow-y-auto">
                       {campaignsLoading ? (
                         <div className="px-3 py-3 text-xs text-muted-foreground flex items-center gap-2">
                           <IconLoader2 className="size-3 animate-spin" />Loading...
@@ -7092,7 +7089,7 @@ function DuplicateCampaignModal({
                   </div>
                 )}
               </div>
-              <button onClick={fetchCampaigns} className="size-10 border rounded-lg flex items-center justify-center hover:bg-muted/30">
+              <button onClick={fetchCampaigns} className="size-10 border rounded-lg flex items-center justify-center hover:bg-muted/30 shrink-0">
                 <IconRefresh className={cn("size-4 text-muted-foreground", campaignsLoading && "animate-spin")} />
               </button>
             </div>
