@@ -11289,105 +11289,115 @@ export default function LaunchPage() {
   }
 
   // Chunked upload for videos using Facebook Resumable Upload API.
-  // Splits into 3.5MB chunks to stay under Vercel's 4.5MB body limit.
+  // Always uses OUR chunk size (3.5MB) — Facebook's end_offset can be 50MB+
+  // which would exceed Vercel's 4.5MB body limit. We ignore FB's end_offset
+  // and always slice to CHUNK_SIZE. FB accepts smaller chunks than it suggests.
   const uploadVideoChunked = async (item: UploadItem): Promise<Creative | null> => {
-    const CHUNK_SIZE = 3.5 * 1024 * 1024
+    const CHUNK_SIZE = 3.5 * 1024 * 1024 // 3.5MB — safe under Vercel 4.5MB limit
     const currentPrimary = primaryTexts.find(t => t.trim()) || ""
     const currentHeadline = headlines.find(h => h.trim()) || ""
 
-    try {
-      // 1. Start upload session
-      const startRes = await fetch("/api/facebook/video-upload/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ad_account_id: selectedAccountId,
-          file_name: item.file.name,
-          file_size: item.file.size,
-        }),
-      })
-      const startData = await startRes.json()
-      if (!startRes.ok) {
-        updateUpload(item.id, { status: "error", error: startData.error || "Failed to start upload" })
-        return null
-      }
-      const { upload_session_id, video_id } = startData
-      let startOffset = parseInt(startData.start_offset || "0")
-      let endOffset = parseInt(startData.end_offset || String(Math.min(CHUNK_SIZE, item.file.size)))
+    const safeJson = async (res: Response) => {
+      const text = await res.text()
+      try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } }
+    }
 
-      // 2. Upload chunks
-      while (startOffset < item.file.size) {
-        const chunk = item.file.slice(startOffset, endOffset)
-        const chunkParams = new URLSearchParams({
-          ad_account_id: selectedAccountId,
-          upload_session_id,
-          start_offset: String(startOffset),
-        })
-        const chunkRes = await fetch(`/api/facebook/video-upload/chunk?${chunkParams}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: chunk,
-        })
-        const chunkData = await chunkRes.json()
-        if (!chunkRes.ok) {
-          updateUpload(item.id, { status: "error", error: chunkData.error || "Chunk upload failed" })
-          return null
-        }
-        startOffset = parseInt(chunkData.start_offset)
-        endOffset = Math.min(parseInt(chunkData.end_offset || String(startOffset + CHUNK_SIZE)), item.file.size)
-        updateUpload(item.id, { uploaded: startOffset, fileSize: item.file.size })
-      }
-
-      // 3. Finish session
-      const finishRes = await fetch("/api/facebook/video-upload/finish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ad_account_id: selectedAccountId,
-          upload_session_id,
-          video_id,
-          file_name: item.file.name,
-          file_size: item.file.size,
-          headline: currentHeadline || null,
-          primary_text: currentPrimary || null,
-          description: description || null,
-          link_url: webLink || null,
-          cta: cta || "LEARN_MORE",
-        }),
-      })
-      const finishData = await finishRes.json()
-      if (!finishRes.ok) {
-        updateUpload(item.id, { status: "error", error: finishData.error || "Failed to finalize upload" })
-        return null
-      }
-
-      const creative: Creative = finishData.creative
-      updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
-
-      // Poll Meta for thumbnail in background
-      ;(async () => {
-        for (let attempt = 0; attempt < 6; attempt++) {
-          await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 4000))
-          try {
-            const tRes = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
-            const tData = await tRes.json()
-            if (tData.thumbnail_url || tData.source_url) {
-              setSelectedCreatives(prev => prev.map(c =>
-                c.id === creative.id
-                  ? { ...c, fb_thumbnail_url: tData.thumbnail_url || c.fb_thumbnail_url, file_url: tData.source_url || c.file_url || tData.thumbnail_url }
-                  : c
-              ))
-              if (tData.thumbnail_url && tData.source_url) break
-            }
-          } catch {}
-        }
-      })()
-
-      return creative
-    } catch (err: any) {
-      updateUpload(item.id, { status: "error", error: err.message || "Upload failed" })
+    // 1. Start upload session (tiny JSON body — never hits size limit)
+    const startRes = await fetch("/api/facebook/video-upload/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ad_account_id: selectedAccountId,
+        file_name: item.file.name,
+        file_size: item.file.size,
+      }),
+    })
+    const startData = await safeJson(startRes)
+    if (!startRes.ok) {
+      updateUpload(item.id, { status: "error", error: startData.error || "Failed to start upload session" })
       return null
     }
+    const { upload_session_id, video_id } = startData
+
+    // 2. Upload fixed-size chunks — always compute end from OUR CHUNK_SIZE,
+    //    never from Facebook's end_offset (which can be 50MB+).
+    //    Use Facebook's returned start_offset to advance position.
+    let offset = 0
+    const totalChunks = Math.ceil(item.file.size / CHUNK_SIZE)
+    let chunkIndex = 0
+
+    while (offset < item.file.size) {
+      chunkIndex++
+      const chunkEnd = Math.min(offset + CHUNK_SIZE, item.file.size)
+      const chunk = item.file.slice(offset, chunkEnd)
+
+      const chunkParams = new URLSearchParams({
+        ad_account_id: selectedAccountId,
+        upload_session_id,
+        start_offset: String(offset),
+      })
+      const chunkRes = await fetch(`/api/facebook/video-upload/chunk?${chunkParams}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: chunk,
+      })
+      const chunkData = await safeJson(chunkRes)
+      if (!chunkRes.ok) {
+        updateUpload(item.id, { status: "error", error: chunkData.error || `Chunk ${chunkIndex}/${totalChunks} failed` })
+        return null
+      }
+
+      // Use FB's start_offset to advance (it echoes our chunkEnd on success)
+      offset = parseInt(chunkData.start_offset ?? String(chunkEnd))
+      updateUpload(item.id, { uploaded: offset, fileSize: item.file.size })
+    }
+
+    // 3. Finish session (tiny JSON body)
+    const finishRes = await fetch("/api/facebook/video-upload/finish", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ad_account_id: selectedAccountId,
+        upload_session_id,
+        video_id,
+        file_name: item.file.name,
+        file_size: item.file.size,
+        headline: currentHeadline || null,
+        primary_text: currentPrimary || null,
+        description: description || null,
+        link_url: webLink || null,
+        cta: cta || "LEARN_MORE",
+      }),
+    })
+    const finishData = await safeJson(finishRes)
+    if (!finishRes.ok) {
+      updateUpload(item.id, { status: "error", error: finishData.error || "Failed to finalize upload" })
+      return null
+    }
+
+    const creative: Creative = finishData.creative
+    updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
+
+    // Poll Meta for thumbnail in background
+    ;(async () => {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 4000))
+        try {
+          const tRes = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
+          const tData = await tRes.json()
+          if (tData.thumbnail_url || tData.source_url) {
+            setSelectedCreatives(prev => prev.map(c =>
+              c.id === creative.id
+                ? { ...c, fb_thumbnail_url: tData.thumbnail_url || c.fb_thumbnail_url, file_url: tData.source_url || c.file_url || tData.thumbnail_url }
+                : c
+            ))
+            if (tData.thumbnail_url && tData.source_url) break
+          }
+        } catch {}
+      }
+    })()
+
+    return creative
   }
 
   const uploadOneFile = (item: UploadItem): Promise<Creative | null> => {
