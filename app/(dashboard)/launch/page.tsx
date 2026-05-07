@@ -4365,6 +4365,12 @@ function LoadMediaModal({
   const [includeOpen, setIncludeOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
 
+  // ── Google Drive state ──────────────────────────────────────────
+  const [gdriveToken, setGdriveToken] = useState<string | null>(null)
+  const [gdriveQueue, setGdriveQueue] = useState<{ id: string; name: string; mimeType: string; status: "pending" | "importing" | "done" | "error"; error?: string }[]>([])
+  const [gdriveImporting, setGdriveImporting] = useState(false)
+  const gdriveTokenRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (!open || !adAccountId) return
     setSelected(new Set(alreadySelected))
@@ -4495,6 +4501,97 @@ function LoadMediaModal({
     }))
     onConfirm(picked.map(a => `existing_${a.id}`), creatives)
     onClose()
+  }
+
+  // ── Google Drive Picker ──────────────────────────────────────────
+  const loadGoogleScript = (src: string) => new Promise<void>((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+    const s = document.createElement("script")
+    s.src = src; s.async = true
+    s.onload = () => resolve(); s.onerror = reject
+    document.head.appendChild(s)
+  })
+
+  const openGoogleDrivePicker = async () => {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY!
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!
+
+    await Promise.all([
+      loadGoogleScript("https://apis.google.com/js/api.js"),
+      loadGoogleScript("https://accounts.google.com/gsi/client"),
+    ])
+
+    const getToken = () => new Promise<string>((resolve, reject) => {
+      const tc = (window as any).google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: "https://www.googleapis.com/auth/drive.readonly",
+        callback: (resp: any) => {
+          if (resp.error) { reject(new Error(resp.error)); return }
+          gdriveTokenRef.current = resp.access_token
+          setGdriveToken(resp.access_token)
+          resolve(resp.access_token)
+        },
+      })
+      tc.requestAccessToken({ prompt: gdriveTokenRef.current ? "" : "consent" })
+    })
+
+    const token = gdriveTokenRef.current || await getToken()
+
+    await new Promise<void>(resolve => (window as any).gapi.load("picker", resolve))
+
+    // Radix Dialog sets pointer-events:none on body — override while Picker is open
+    document.body.style.pointerEvents = "auto"
+
+    const P = (window as any).google.picker
+    const picker = new P.PickerBuilder()
+      .addView(
+        new P.DocsView()
+          .setIncludeFolders(true)
+          .setMimeTypes("image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/x-msvideo")
+      )
+      .addView(new P.DocsView(P.ViewId.DOCS_IMAGES_AND_VIDEOS))
+      .setOAuthToken(token)
+      .enableFeature(P.Feature.MULTISELECT_ENABLED)
+      .setCallback(async (data: any) => {
+        // Restore pointer-events when picker is dismissed or files picked
+        if (data.action === P.Action.CANCEL || data.action === P.Action.PICKED) {
+          document.body.style.pointerEvents = ""
+        }
+        if (data.action !== P.Action.PICKED) return
+        const files = data.docs as { id: string; name: string; mimeType: string }[]
+        const queue = files.map(f => ({ id: f.id, name: f.name, mimeType: f.mimeType, status: "pending" as const }))
+        setGdriveQueue(queue)
+        setGdriveImporting(true)
+
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i]
+          setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "importing" } : q))
+          try {
+            const res = await fetch("/api/google/import-drive", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                accessToken: gdriveTokenRef.current,
+                fileId: f.id,
+                fileName: f.name,
+                mimeType: f.mimeType,
+                adAccountId,
+              }),
+            })
+            const d = await res.json()
+            if (!res.ok) throw new Error(d.error || "Import failed")
+            const creative: Creative = d.creative
+            setAllCreatives(prev => [creative, ...prev.filter(c => c.id !== creative.id)])
+            setSelected(prev => new Set([...prev, creative.id]))
+            setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "done" } : q))
+          } catch (err: any) {
+            setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "error", error: err.message } : q))
+          }
+        }
+        setGdriveImporting(false)
+      })
+      .build()
+    picker.setVisible(true)
   }
 
   const fetchCreatives = () => {
@@ -5189,12 +5286,54 @@ function LoadMediaModal({
             </div>
           </>
         ) : mediaTab === "gdrive" || mediaTab === "drive_browser" || mediaTab === "drive_link" ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-            <IconBrandGoogleDrive className="size-10 opacity-30" />
-            <p className="text-sm">Connect Google Drive to import media</p>
-            <Button variant="outline" size="sm" className="mt-2 gap-1.5">
-              <IconBrandGoogleDrive className="size-3.5" />Connect Google Drive
-            </Button>
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {gdriveQueue.length > 0 ? (
+              /* Import progress list */
+              <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium">
+                    {gdriveImporting ? "Importing from Google Drive..." : `Done — ${gdriveQueue.filter(q => q.status === "done").length}/${gdriveQueue.length} imported`}
+                  </p>
+                  {!gdriveImporting && (
+                    <button onClick={() => { setGdriveQueue([]); setMediaTab("library") }}
+                      className="text-xs text-primary hover:underline">
+                      View in library
+                    </button>
+                  )}
+                </div>
+                {gdriveQueue.map((f, i) => (
+                  <div key={i} className="flex items-center gap-3 p-2.5 border rounded-lg bg-muted/20">
+                    <IconBrandGoogleDrive className="size-4 shrink-0 text-[#4285F4]" />
+                    <span className="text-sm flex-1 truncate">{f.name}</span>
+                    {f.status === "pending" && <span className="text-xs text-muted-foreground">Waiting...</span>}
+                    {f.status === "importing" && <IconLoader2 className="size-4 animate-spin text-primary shrink-0" />}
+                    {f.status === "done" && <IconCheck className="size-4 text-green-500 shrink-0" />}
+                    {f.status === "error" && (
+                      <span className="text-xs text-destructive truncate max-w-[120px]" title={f.error}>{f.error}</span>
+                    )}
+                  </div>
+                ))}
+                {!gdriveImporting && (
+                  <Button variant="outline" size="sm" className="w-full mt-2 gap-1.5" onClick={openGoogleDrivePicker}>
+                    <IconBrandGoogleDrive className="size-3.5" />Import more files
+                  </Button>
+                )}
+              </div>
+            ) : (
+              /* Empty state */
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                <div className="size-16 rounded-2xl bg-muted/40 flex items-center justify-center">
+                  <IconBrandGoogleDrive className="size-8 text-[#4285F4]" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-foreground">Import from Google Drive</p>
+                  <p className="text-xs mt-1">Select images or videos — they'll be uploaded to Meta and added to your library</p>
+                </div>
+                <Button size="sm" className="mt-1 gap-1.5" onClick={openGoogleDrivePicker}>
+                  <IconBrandGoogleDrive className="size-3.5" />Open Google Drive
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
