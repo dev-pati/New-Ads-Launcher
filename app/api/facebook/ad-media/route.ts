@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 
-// GET /api/facebook/ad-media?ad_account_id=act_xxx&type=all|image|video&after=cursor&limit=50
+// GET /api/facebook/ad-media?ad_account_id=act_xxx&type=all|image|video&limit=30&offset=0
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
@@ -10,8 +10,8 @@ export async function GET(request: NextRequest) {
     const sp = request.nextUrl.searchParams
     const adAccountId = sp.get("ad_account_id")
     const type = sp.get("type") || "all"
-    const after = sp.get("after") || ""
-    const limit = Math.min(parseInt(sp.get("limit") || "100", 10), 200)
+    const limit = Math.min(parseInt(sp.get("limit") || "30", 10), 100)
+    const offset = parseInt(sp.get("offset") || "0", 10)
 
     if (!adAccountId) return NextResponse.json({ error: "ad_account_id required" }, { status: 400 })
 
@@ -20,15 +20,17 @@ export async function GET(request: NextRequest) {
 
     const token = connection.access_token
     const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-    const cursorParam = after ? `&after=${encodeURIComponent(after)}` : ""
+
+    // Fetch enough items to support offset + limit, sorted by date desc
+    // Facebook doesn't support offset natively for these endpoints, so fetch limit+offset and slice
+    const fbLimit = Math.min(limit + offset, 100)
 
     const results: any[] = []
-    let nextCursor: string | null = null
 
     if (type === "all" || type === "video") {
-      const videoFields = "id,title,description,created_time,length,thumbnails{uri},picture,status,embeddable"
+      const videoFields = "id,title,description,created_time,length,thumbnails{uri},picture,status"
       const vRes = await fetch(
-        `https://graph.facebook.com/v21.0/${normId}/advideos?fields=${videoFields}&limit=${limit}${cursorParam}&access_token=${token}`
+        `https://graph.facebook.com/v21.0/${normId}/advideos?fields=${videoFields}&limit=${fbLimit}&access_token=${token}`
       )
       const vData = await vRes.json()
       if (vData.data) {
@@ -46,14 +48,13 @@ export async function GET(request: NextRequest) {
             fb_video_id: v.id,
           })
         }
-        if (vData.paging?.cursors?.after) nextCursor = vData.paging.cursors.after
       }
     }
 
     if (type === "all" || type === "image") {
-      const imgFields = "hash,url,url_128,name,created_time,status,width,height,creatives"
+      const imgFields = "hash,url,url_128,name,created_time,status,width,height"
       const iRes = await fetch(
-        `https://graph.facebook.com/v21.0/${normId}/adimages?fields=${imgFields}&limit=${limit}${cursorParam}&access_token=${token}`
+        `https://graph.facebook.com/v21.0/${normId}/adimages?fields=${imgFields}&limit=${fbLimit}&access_token=${token}`
       )
       const iData = await iRes.json()
       if (iData.data) {
@@ -78,10 +79,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Sort by date descending
+    // Sort by date descending then slice for pagination
     results.sort((a, b) => new Date(b.date_added || 0).getTime() - new Date(a.date_added || 0).getTime())
+    const page = results.slice(offset, offset + limit)
 
-    return NextResponse.json({ media: results, nextCursor })
+    return NextResponse.json({ media: page })
   } catch (err: any) {
     console.error("[ad-media]", err)
     return NextResponse.json({ error: err.message || "Failed to fetch media" }, { status: 500 })

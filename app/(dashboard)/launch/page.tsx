@@ -4501,9 +4501,11 @@ function LoadMediaModal({
   const [fbMedia, setFbMedia] = useState<FbMediaItem[]>([])
   const [fbMediaLoading, setFbMediaLoading] = useState(false)
   const [fbMediaLoaded, setFbMediaLoaded] = useState(false)
+  const [fbMediaHasMore, setFbMediaHasMore] = useState(false)
   const [fbMediaError, setFbMediaError] = useState<string | null>(null)
   const [fbMediaTypeFilter, setFbMediaTypeFilter] = useState<"all" | "image" | "video">("all")
   const [fbMediaSort, setFbMediaSort] = useState<{ field: string; dir: "asc" | "desc" }>({ field: "date", dir: "desc" })
+  const FB_MEDIA_PAGE = 30
   const [selected, setSelected] = useState<Set<string>>(new Set(alreadySelected))
   // Filter chip values
   const [filters, setFilters] = useState<{
@@ -4848,15 +4850,18 @@ function LoadMediaModal({
       .finally(() => setLoading(false))
   }
 
-  const fetchFbMedia = () => {
+  const fetchFbMedia = (append = false) => {
     if (!adAccountId) return
     setFbMediaLoading(true)
     setFbMediaError(null)
-    fetch(`/api/facebook/ad-media?ad_account_id=${encodeURIComponent(adAccountId)}&limit=200`)
+    const offset = append ? fbMedia.length : 0
+    fetch(`/api/facebook/ad-media?ad_account_id=${encodeURIComponent(adAccountId)}&limit=${FB_MEDIA_PAGE}&offset=${offset}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) { setFbMediaError(d.error); return }
-        setFbMedia(d.media || [])
+        const incoming: FbMediaItem[] = d.media || []
+        setFbMedia(prev => append ? [...prev, ...incoming] : incoming)
+        setFbMediaHasMore(incoming.length === FB_MEDIA_PAGE)
         setFbMediaLoaded(true)
       })
       .catch(() => setFbMediaError("Failed to load media"))
@@ -5209,8 +5214,14 @@ function LoadMediaModal({
 
             {/* Footer */}
             <div className="border-t shrink-0">
-              <div className="px-6 pt-2 pb-1">
-                <span className="text-xs text-muted-foreground">{sorted.length} of {fbMedia.length} row(s).</span>
+              <div className="px-6 pt-2 pb-1 flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">{fbMedia.length} row(s){fbMediaHasMore ? "+" : ""}.</span>
+                {fbMediaHasMore && (
+                  <Button size="sm" variant="ghost" className="text-xs h-6 px-2" onClick={() => fetchFbMedia(true)} disabled={fbMediaLoading}>
+                    {fbMediaLoading ? <IconLoader2 className="size-3 animate-spin mr-1" /> : null}
+                    Load more
+                  </Button>
+                )}
               </div>
               <Button
                 onClick={handleConfirm}
