@@ -4366,16 +4366,48 @@ function LoadMediaModal({
   const [moreOpen, setMoreOpen] = useState(false)
 
   // ── Google Drive state ──────────────────────────────────────────
-  const [gdriveToken, setGdriveToken] = useState<string | null>(null)
+  const GDRIVE_LS_KEY = "gdrive_token_cache"
+  const loadCachedToken = (): string | null => {
+    try {
+      const raw = localStorage.getItem(GDRIVE_LS_KEY)
+      if (!raw) return null
+      const { token, expiresAt } = JSON.parse(raw)
+      if (Date.now() > expiresAt) { localStorage.removeItem(GDRIVE_LS_KEY); return null }
+      return token
+    } catch { return null }
+  }
+  const saveCachedToken = (token: string) => {
+    localStorage.setItem(GDRIVE_LS_KEY, JSON.stringify({ token, expiresAt: Date.now() + 55 * 60 * 1000 }))
+  }
+  const clearCachedToken = () => localStorage.removeItem(GDRIVE_LS_KEY)
+
+  const [gdriveToken, setGdriveToken] = useState<string | null>(() => loadCachedToken())
   const [gdriveQueue, setGdriveQueue] = useState<{ id: string; name: string; mimeType: string; status: "pending" | "importing" | "done" | "error"; error?: string }[]>([])
   const [gdriveImporting, setGdriveImporting] = useState(false)
-  const gdriveTokenRef = useRef<string | null>(null)
+  const [gdriveError, setGdriveError] = useState<string | null>(null)
+  const gdriveTokenRef = useRef<string | null>(loadCachedToken())
+  const gdriveScriptsReady = useRef(false)
 
   useEffect(() => {
     if (!open || !adAccountId) return
     setSelected(new Set(alreadySelected))
     fetchCreatives()
   }, [open, adAccountId])
+
+  // Preload Google scripts when modal opens so they're ready before user clicks
+  useEffect(() => {
+    if (!open || gdriveScriptsReady.current) return
+    const loadScript = (src: string) => new Promise<void>((resolve) => {
+      if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+      const s = document.createElement("script")
+      s.src = src; s.async = true; s.onload = () => resolve(); s.onerror = () => resolve()
+      document.head.appendChild(s)
+    })
+    Promise.all([
+      loadScript("https://apis.google.com/js/api.js"),
+      loadScript("https://accounts.google.com/gsi/client"),
+    ]).then(() => { gdriveScriptsReady.current = true })
+  }, [open])
 
   // Re-fetch when parent signals new upload completed (so newly-uploaded media appears)
   useEffect(() => {
@@ -4513,13 +4545,19 @@ function LoadMediaModal({
   })
 
   const openGoogleDrivePicker = async () => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY!
+    setGdriveError(null)
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!
 
-    await Promise.all([
-      loadGoogleScript("https://apis.google.com/js/api.js"),
-      loadGoogleScript("https://accounts.google.com/gsi/client"),
-    ])
+    // If scripts not preloaded yet, load them now (fallback)
+    if (!gdriveScriptsReady.current) {
+      await Promise.all([
+        loadGoogleScript("https://apis.google.com/js/api.js"),
+        loadGoogleScript("https://accounts.google.com/gsi/client"),
+      ])
+      gdriveScriptsReady.current = true
+    }
+
+    try {
 
     const getToken = () => new Promise<string>((resolve, reject) => {
       const tc = (window as any).google.accounts.oauth2.initTokenClient({
@@ -4529,6 +4567,7 @@ function LoadMediaModal({
           if (resp.error) { reject(new Error(resp.error)); return }
           gdriveTokenRef.current = resp.access_token
           setGdriveToken(resp.access_token)
+          saveCachedToken(resp.access_token)
           resolve(resp.access_token)
         },
       })
@@ -4592,6 +4631,11 @@ function LoadMediaModal({
       })
       .build()
     picker.setVisible(true)
+    } catch (err: any) {
+      document.body.style.pointerEvents = ""
+      const msg = err.message || "Google Drive connection failed"
+      setGdriveError(msg)
+    }
   }
 
   const fetchCreatives = () => {
@@ -5329,9 +5373,33 @@ function LoadMediaModal({
                   <p className="text-sm font-medium text-foreground">Import from Google Drive</p>
                   <p className="text-xs mt-1">Select images or videos — they'll be uploaded to Meta and added to your library</p>
                 </div>
-                <Button size="sm" className="mt-1 gap-1.5" onClick={openGoogleDrivePicker}>
-                  <IconBrandGoogleDrive className="size-3.5" />Open Google Drive
-                </Button>
+                {gdriveToken ? (
+                  <div className="flex flex-col items-center gap-2 mt-1">
+                    <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
+                      <div className="size-1.5 rounded-full bg-green-500" />
+                      Connected to Google Drive
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm" className="gap-1.5" onClick={openGoogleDrivePicker}>
+                        <IconBrandGoogleDrive className="size-3.5" />Open Google Drive
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-xs text-muted-foreground" onClick={() => {
+                        clearCachedToken()
+                        gdriveTokenRef.current = null
+                        setGdriveToken(null)
+                      }}>
+                        Disconnect
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Button size="sm" className="mt-1 gap-1.5" onClick={openGoogleDrivePicker}>
+                    <IconBrandGoogleDrive className="size-3.5" />Connect Google Drive
+                  </Button>
+                )}
+                {gdriveError && (
+                  <p className="text-xs text-destructive mt-1 text-center max-w-xs">{gdriveError}</p>
+                )}
               </div>
             )}
           </div>
