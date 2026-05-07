@@ -11288,7 +11288,114 @@ export default function LaunchPage() {
     setUploadDockOpen(false)
   }
 
+  // Chunked upload for videos using Facebook Resumable Upload API.
+  // Splits into 3.5MB chunks to stay under Vercel's 4.5MB body limit.
+  const uploadVideoChunked = async (item: UploadItem): Promise<Creative | null> => {
+    const CHUNK_SIZE = 3.5 * 1024 * 1024
+    const currentPrimary = primaryTexts.find(t => t.trim()) || ""
+    const currentHeadline = headlines.find(h => h.trim()) || ""
+
+    try {
+      // 1. Start upload session
+      const startRes = await fetch("/api/facebook/video-upload/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ad_account_id: selectedAccountId,
+          file_name: item.file.name,
+          file_size: item.file.size,
+        }),
+      })
+      const startData = await startRes.json()
+      if (!startRes.ok) {
+        updateUpload(item.id, { status: "error", error: startData.error || "Failed to start upload" })
+        return null
+      }
+      const { upload_session_id, video_id } = startData
+      let startOffset = parseInt(startData.start_offset || "0")
+      let endOffset = parseInt(startData.end_offset || String(Math.min(CHUNK_SIZE, item.file.size)))
+
+      // 2. Upload chunks
+      while (startOffset < item.file.size) {
+        const chunk = item.file.slice(startOffset, endOffset)
+        const chunkParams = new URLSearchParams({
+          ad_account_id: selectedAccountId,
+          upload_session_id,
+          start_offset: String(startOffset),
+        })
+        const chunkRes = await fetch(`/api/facebook/video-upload/chunk?${chunkParams}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: chunk,
+        })
+        const chunkData = await chunkRes.json()
+        if (!chunkRes.ok) {
+          updateUpload(item.id, { status: "error", error: chunkData.error || "Chunk upload failed" })
+          return null
+        }
+        startOffset = parseInt(chunkData.start_offset)
+        endOffset = Math.min(parseInt(chunkData.end_offset || String(startOffset + CHUNK_SIZE)), item.file.size)
+        updateUpload(item.id, { uploaded: startOffset, fileSize: item.file.size })
+      }
+
+      // 3. Finish session
+      const finishRes = await fetch("/api/facebook/video-upload/finish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ad_account_id: selectedAccountId,
+          upload_session_id,
+          video_id,
+          file_name: item.file.name,
+          file_size: item.file.size,
+          headline: currentHeadline || null,
+          primary_text: currentPrimary || null,
+          description: description || null,
+          link_url: webLink || null,
+          cta: cta || "LEARN_MORE",
+        }),
+      })
+      const finishData = await finishRes.json()
+      if (!finishRes.ok) {
+        updateUpload(item.id, { status: "error", error: finishData.error || "Failed to finalize upload" })
+        return null
+      }
+
+      const creative: Creative = finishData.creative
+      updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
+
+      // Poll Meta for thumbnail in background
+      ;(async () => {
+        for (let attempt = 0; attempt < 6; attempt++) {
+          await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 4000))
+          try {
+            const tRes = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
+            const tData = await tRes.json()
+            if (tData.thumbnail_url || tData.source_url) {
+              setSelectedCreatives(prev => prev.map(c =>
+                c.id === creative.id
+                  ? { ...c, fb_thumbnail_url: tData.thumbnail_url || c.fb_thumbnail_url, file_url: tData.source_url || c.file_url || tData.thumbnail_url }
+                  : c
+              ))
+              if (tData.thumbnail_url && tData.source_url) break
+            }
+          } catch {}
+        }
+      })()
+
+      return creative
+    } catch (err: any) {
+      updateUpload(item.id, { status: "error", error: err.message || "Upload failed" })
+      return null
+    }
+  }
+
   const uploadOneFile = (item: UploadItem): Promise<Creative | null> => {
+    // Large videos (>3MB) use Facebook Resumable Upload API (chunked) to bypass Vercel body limit
+    if (item.file.type.startsWith("video/") && item.file.size > 3 * 1024 * 1024) {
+      return uploadVideoChunked(item)
+    }
+
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest()
       // Snapshot current form values so creative inherits them in DB → reusable later
@@ -11344,10 +11451,10 @@ export default function LaunchPage() {
                       // Upgrade by REAL creative id (swap already happened in handleUploadFiles)
                       setSelectedCreatives(prev => prev.map(c =>
                         c.id === creative.id
-                          ? { 
-                              ...c, 
+                          ? {
+                              ...c,
                               fb_thumbnail_url: tData.thumbnail_url || c.fb_thumbnail_url,
-                              file_url: tData.source_url || c.file_url || tData.thumbnail_url 
+                              file_url: tData.source_url || c.file_url || tData.thumbnail_url
                             }
                           : c
                       ))
@@ -11359,11 +11466,12 @@ export default function LaunchPage() {
             }
             resolve(creative)
           } else {
-            updateUpload(item.id, { status: "error", error: data.error || `HTTP ${xhr.status}` })
+            const errMsg = data.error || `Upload failed (HTTP ${xhr.status})`
+            updateUpload(item.id, { status: "error", error: errMsg })
             resolve(null)
           }
         } catch (e: any) {
-          updateUpload(item.id, { status: "error", error: e.message })
+          updateUpload(item.id, { status: "error", error: "Server returned invalid response" })
           resolve(null)
         }
       }
