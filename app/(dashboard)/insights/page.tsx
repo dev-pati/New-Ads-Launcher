@@ -419,6 +419,15 @@ export default function InsightsPage() {
             <span className="flex-1 text-left">Custom Dashboard</span>
           </button>
 
+          {/* Top Creatives */}
+          <button onClick={() => setSection("top-creatives")}
+            className={cn("flex items-center gap-2.5 w-full px-2.5 py-2 text-sm rounded-md transition-colors",
+              section === "top-creatives" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}>
+            <IconTrophy className="size-4 shrink-0" />
+            <span className="flex-1 text-left">Top Creatives</span>
+          </button>
+
           {/* Statistics */}
           <div>
             <button onClick={() => setSection("statistics")}
