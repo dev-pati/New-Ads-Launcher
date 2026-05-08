@@ -10,7 +10,7 @@ import {
   IconArrowDown, IconArrowUp, IconArrowsUpDown, IconFilter, IconPlayerPlay,
   IconPhoto, IconAlertCircle, IconLoader2, IconMoodEmpty, IconRocket,
   IconLayoutGrid, IconTable, IconCheck, IconDotsVertical, IconBookmark,
-  IconShare, IconDownload, IconCircle,
+  IconShare, IconDownload, IconCircle, IconChartBar,
 } from "@tabler/icons-react"
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,

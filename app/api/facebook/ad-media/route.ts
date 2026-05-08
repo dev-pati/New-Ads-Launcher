@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
             media_type: "video",
             duration: v.length ? Math.round(v.length) : null,
             date_added: v.created_time,
-            status: v.status || null,
+            status: (typeof v.status === "object" ? v.status?.value : v.status) || null,
             thumbnail_url: thumb,
             fb_video_id: v.id,
           })

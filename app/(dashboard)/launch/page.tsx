@@ -4277,6 +4277,44 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
     return null
   }
 
+  // List all media files in a folder, with pagination and optional recursion into subfolders
+  const listFilesInFolder = async (folderId: string, recursive: boolean, token: string): Promise<{ id: string; name: string; mimeType: string }[]> => {
+    const all: { id: string; name: string; mimeType: string }[] = []
+
+    // Fetch all media files (paginated)
+    let pageToken: string | undefined
+    do {
+      const q = encodeURIComponent(`'${folderId}' in parents and (mimeType contains 'image/' or mimeType contains 'video/') and trashed = false`)
+      const qs = `q=${q}&fields=nextPageToken,files(id,name,mimeType)&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ""}`
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${qs}`, { headers: { Authorization: `Bearer ${token}` } })
+      const data = await res.json()
+      all.push(...(data.files || []))
+      pageToken = data.nextPageToken
+    } while (pageToken)
+
+    if (recursive) {
+      // Fetch all subfolders (paginated)
+      const subfolders: { id: string }[] = []
+      let subPageToken: string | undefined
+      do {
+        const q = encodeURIComponent(`'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`)
+        const qs = `q=${q}&fields=nextPageToken,files(id,name,mimeType)&pageSize=1000${subPageToken ? `&pageToken=${subPageToken}` : ""}`
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files?${qs}`, { headers: { Authorization: `Bearer ${token}` } })
+        const data = await res.json()
+        subfolders.push(...(data.files || []))
+        subPageToken = data.nextPageToken
+      } while (subPageToken)
+
+      // Recurse into each subfolder
+      for (const sub of subfolders) {
+        const subFiles = await listFilesInFolder(sub.id, true, token)
+        all.push(...subFiles)
+      }
+    }
+
+    return all
+  }
+
   const handleViewContents = async () => {
     if (!gdriveToken) { onRequestAuth(); return }
     const urls = links.split("\n").map(l => l.trim()).filter(Boolean)
@@ -4290,7 +4328,6 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
       if (!parsed) { setResults(p => [...p, { name: url, status: "error", error: "Invalid Drive URL" }]); continue }
 
       if (parsed.type === "file") {
-        // Get file metadata then import
         try {
           const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${parsed.id}?fields=id,name,mimeType`, {
             headers: { Authorization: `Bearer ${gdriveToken}` }
@@ -4310,19 +4347,10 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
           setResults(p => [...p, { name: url, status: "error", error: e.message }])
         }
       } else {
-        // Folder: list files then import each
+        // Folder: list all files with pagination + optional recursion, then import in parallel
         try {
-          const q = includeSubfolders
-            ? `'${parsed.id}' in parents and mimeType != 'application/vnd.google-apps.folder'`
-            : `'${parsed.id}' in parents and (mimeType contains 'image/' or mimeType contains 'video/')`
-          const listRes = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType)&pageSize=50`,
-            { headers: { Authorization: `Bearer ${gdriveToken}` } }
-          )
-          const listData = await listRes.json()
-          const files: { id: string; name: string; mimeType: string }[] = listData.files || []
-          for (const file of files) {
-            if (!file.mimeType.startsWith("image/") && !file.mimeType.startsWith("video/")) continue
+          const files = await listFilesInFolder(parsed.id, includeSubfolders, gdriveToken)
+          await Promise.allSettled(files.map(async (file) => {
             try {
               const res = await fetch("/api/google/import-drive", {
                 method: "POST",
@@ -4336,7 +4364,7 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
             } catch (e: any) {
               setResults(p => [...p, { name: file.name, status: "error", error: e.message }])
             }
-          }
+          }))
         } catch (e: any) {
           setResults(p => [...p, { name: url, status: "error", error: e.message }])
         }
@@ -4358,6 +4386,7 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
       <textarea
         value={links}
         onChange={e => setLinks(e.target.value)}
+        onKeyDown={e => { if (e.key === "Enter" && e.ctrlKey) { e.preventDefault(); handleViewContents() } }}
         rows={5}
         placeholder={"https://drive.google.com/drive/folders/...\nhttps://drive.google.com/file/d/...\nhttps://drive.google.com/drive/folders/..."}
         className="w-full px-3 py-2.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none font-mono placeholder:text-muted-foreground/40"
@@ -4526,6 +4555,10 @@ function LoadMediaModal({
   const [pasteText, setPasteText] = useState("")
   const [includeOpen, setIncludeOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
+  const uploadFileRef = useRef<HTMLInputElement>(null)
+  const uploadFolderRef = useRef<HTMLInputElement>(null)
 
   // ── Google Drive state ──────────────────────────────────────────
   const GDRIVE_LS_KEY = "gdrive_token_cache"
@@ -4903,14 +4936,22 @@ function LoadMediaModal({
   // Build dynamic chip options from data
   const uniq = (arr: any[]) => Array.from(new Set(arr.filter(Boolean)))
   const filterOptions = {
-    uploader: uniq(allCreatives.map(uploaderOf)),
-    status: ["ready", "pending", "launched"],
-    channels: ["meta", "tiktok", "google"],
-    fileType: ["image", "video"],
-    dimensions: uniq(allCreatives.map(dimsOf)),
-    workspace: uniq(allCreatives.map(workspaceOf)),
-    source: ["library", "drive", "upload"],
-    dateAdded: ["today", "week", "month", "year"],
+    uploader:   [] as string[],
+    status:     uniq(fbMedia.map(m => typeof m.status === "object" ? (m.status as any)?.value : m.status)) as string[],
+    channels:   [] as string[],
+    fileType:   ["image", "video"],
+    dimensions: uniq(fbMedia.map(m => {
+      if (m.dimensions) return m.dimensions
+      if (m.width && m.height) {
+        const g = (a: number, b: number): number => b === 0 ? a : g(b, a % b)
+        const d = g(m.width, m.height)
+        return `${m.width / d}:${m.height / d}`
+      }
+      return null
+    })) as string[],
+    workspace:  [] as string[],
+    source:     [] as string[],
+    dateAdded:  ["today", "week", "month", "year"],
   }
 
   // Media Library uses fbMedia (from Facebook ad account)
@@ -4933,6 +4974,11 @@ function LoadMediaModal({
     const matchSearch = !search || m.name.toLowerCase().includes(search.toLowerCase()) || m.fb_id?.includes(search)
     if (!matchSearch) return false
     if (filters.fileType !== "all" && m.media_type !== filters.fileType) return false
+    if (filters.status !== "all") {
+      const mStatus = typeof m.status === "object" ? (m.status as any)?.value : m.status
+      if (mStatus !== filters.status) return false
+    }
+    if (filters.dimensions !== "all" && fmtDims(m) !== filters.dimensions) return false
     if (filters.dateAdded !== "all" && m.date_added) {
       const ms = Date.now() - new Date(m.date_added).getTime()
       const day = 86400000
@@ -4948,10 +4994,13 @@ function LoadMediaModal({
     let va: any, vb: any
     switch (sortField) {
       case "name": va = a.name; vb = b.name; break
+      case "ad_id": va = a.fb_id || ""; vb = b.fb_id || ""; break
       case "dimensions": va = fmtDims(a); vb = fmtDims(b); break
       case "duration": va = a.duration || 0; vb = b.duration || 0; break
       case "date": va = a.date_added || ""; vb = b.date_added || ""; break
-      case "status": va = a.status || ""; vb = b.status || ""; break
+      case "status": va = String(a.status || ""); vb = String(b.status || ""); break
+      case "user": va = ""; vb = ""; break
+      case "workspace": va = ""; vb = ""; break
       default: va = a.date_added || ""; vb = b.date_added || ""; break
     }
     if (typeof va === "number") return sortDir === "asc" ? va - vb : vb - va
@@ -5010,6 +5059,27 @@ function LoadMediaModal({
   const toggleSort = (f: SortField) => {
     if (sortField === f) setSortDir(d => d === "asc" ? "desc" : "asc")
     else { setSortField(f); setSortDir("asc") }
+  }
+
+  const handleUpload = async (files: FileList | null) => {
+    if (!files?.length || !adAccountId) return
+    const fileArr = Array.from(files)
+    setUploading(true)
+    setUploadProgress({ current: 0, total: fileArr.length })
+    let done = 0
+    for (const file of fileArr) {
+      try {
+        await fetch(
+          `/api/creatives/upload-binary?filename=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}&size=${file.size}&ad_account_id=${encodeURIComponent(adAccountId)}`,
+          { method: "POST", body: file }
+        )
+      } catch {}
+      done++
+      setUploadProgress({ current: done, total: fileArr.length })
+    }
+    setUploading(false)
+    setUploadProgress(null)
+    fetchFbMedia()
   }
 
   const TABS: { id: MediaTab; label: string; Icon: React.ElementType; beta?: boolean }[] = [
@@ -5125,7 +5195,7 @@ function LoadMediaModal({
             </div>
 
             {/* Filter chips */}
-            <div className="flex items-center gap-2 px-6 py-2 border-b shrink-0 overflow-x-auto">
+            <div className="flex flex-wrap items-center gap-2 px-6 py-2 border-b shrink-0">
               <FilterChip id="uploader" label="Uploader" />
               <FilterChip id="status" label="Status" />
               <FilterChip id="channels" label="Channels" />
@@ -5154,18 +5224,30 @@ function LoadMediaModal({
                   </div>
                 )}
               </div>
+              {Object.entries(filters).some(([k, v]) => v !== "all") && (
+                <button
+                  onClick={() => setFilters({ uploader: "all", status: "all", channels: "all", fileType: "all", dimensions: "all", workspace: "all", source: "all", dateAdded: "all" })}
+                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 rounded-lg border border-dashed transition-colors"
+                >
+                  <IconX className="size-3" />
+                  Clear filters
+                </button>
+              )}
             </div>
 
             {/* Toolbar actions */}
             <div className="flex items-center justify-end gap-2 px-6 py-2 border-b shrink-0">
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <IconUpload className="size-3.5" />Upload New Media
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => uploadFileRef.current?.click()} disabled={uploading}>
+                {uploading && uploadProgress
+                  ? <><IconLoader2 className="size-3.5 animate-spin" />{uploadProgress.current}/{uploadProgress.total}</>
+                  : <><IconUpload className="size-3.5" />Upload New Media</>
+                }
               </Button>
-              <Button variant="outline" size="sm" className="gap-1.5">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => uploadFolderRef.current?.click()} disabled={uploading}>
                 <IconFolder className="size-3.5" />Upload Folder
               </Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={fetchCreatives} disabled={loading}>
-                <IconRefresh className={cn("size-3.5", loading && "animate-spin")} />Refresh list
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => fetchFbMedia()} disabled={fbMediaLoading}>
+                <IconRefresh className={cn("size-3.5", fbMediaLoading && "animate-spin")} />Refresh list
               </Button>
               <div className="relative">
                 <Button variant="outline" size="icon" className="size-8" onClick={() => setMoreOpen(o => !o)}>
@@ -5184,9 +5266,10 @@ function LoadMediaModal({
             {/* Table header */}
             <div className="grid items-center text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wide border-b px-6 py-2 shrink-0"
               style={{ gridTemplateColumns: "28px 2.5fr 80px 100px 80px 120px 1.6fr 120px 120px" }}>
-              <button onClick={toggleAll} className={cn("size-4 rounded border-2 flex items-center justify-center",
-                selected.size > 0 && selected.size === sorted.length ? "bg-primary border-primary" : "border-muted-foreground/30")}>
+              <button onClick={toggleAll} className={cn("size-4 rounded border-2 flex items-center justify-center transition-colors",
+                selected.size > 0 ? "bg-primary border-primary" : "border-muted-foreground/30 hover:border-muted-foreground/60")}>
                 {selected.size > 0 && selected.size === sorted.length && <IconCheck className="size-2.5 text-primary-foreground" />}
+                {selected.size > 0 && selected.size < sorted.length && <IconMinus className="size-2.5 text-primary-foreground" />}
               </button>
               <button onClick={() => toggleSort("name")} className="flex items-center text-left hover:text-foreground">Name<SortIcon field="name" /></button>
               <button onClick={() => toggleSort("ad_id")} className="flex items-center hover:text-foreground">AD ID<SortIcon field="ad_id" /></button>
@@ -5218,7 +5301,17 @@ function LoadMediaModal({
               ) : (
                 sorted.map(m => {
                   const isSelected = selected.has(m.id)
-                  const statusLabel = m.status ? String(m.status).replace(/_/g, " ") : "Active"
+                  const statusRaw = String(m.status || "active").toLowerCase()
+                  const statusLabel = statusRaw.replace(/_/g, " ")
+                  const statusColor = statusRaw === "active" || statusRaw === "ready"
+                    ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
+                    : statusRaw === "paused"
+                    ? "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                    : statusRaw.includes("disapprove") || statusRaw.includes("reject")
+                    ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                    : statusRaw.includes("process") || statusRaw.includes("pending")
+                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
+                    : "bg-muted/60 text-muted-foreground"
                   return (
                     <div key={m.id} onClick={() => toggle(m.id)}
                       className={cn("grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors",
@@ -5248,9 +5341,8 @@ function LoadMediaModal({
                       <span className="text-xs text-muted-foreground">
                         {m.date_added ? new Date(m.date_added).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                       </span>
-                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 w-fit max-w-full">
-                        <IconBrandMeta className="size-3 shrink-0 text-[#0064E0]" />
-                        <span className="truncate capitalize">{statusLabel.toLowerCase()}</span>
+                      <span className={cn("inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full w-fit max-w-full", statusColor)}>
+                        <span className="truncate capitalize">{statusLabel}</span>
                       </span>
                       <span className="text-xs text-muted-foreground">—</span>
                       <span className="text-xs text-muted-foreground truncate font-mono">{adAccountId.replace("act_", "").slice(0, 12)}</span>
@@ -5263,7 +5355,11 @@ function LoadMediaModal({
             {/* Footer */}
             <div className="border-t shrink-0">
               <div className="px-6 pt-2 pb-1 flex items-center justify-between">
-                <span className="text-xs text-muted-foreground">{fbMedia.length} row(s){fbMediaHasMore ? "+" : ""}.</span>
+                <span className="text-xs text-muted-foreground">
+                  {filtered.length !== fbMedia.length
+                    ? `${filtered.length} of ${fbMedia.length}${fbMediaHasMore ? "+" : ""} row(s)`
+                    : `${fbMedia.length}${fbMediaHasMore ? "+" : ""} row(s)`}
+                </span>
                 {fbMediaHasMore && (
                   <Button size="sm" variant="ghost" className="text-xs h-6 px-2" onClick={() => fetchFbMedia(true)} disabled={fbMediaLoading}>
                     {fbMediaLoading ? <IconLoader2 className="size-3 animate-spin mr-1" /> : null}
@@ -5701,6 +5797,26 @@ function LoadMediaModal({
             </div>
           </div>
         )}
+
+        {/* Hidden file inputs for upload */}
+        <input
+          ref={uploadFileRef}
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          className="hidden"
+          onChange={e => { handleUpload(e.target.files); e.target.value = "" }}
+        />
+        <input
+          ref={uploadFolderRef}
+          type="file"
+          accept="image/*,video/*"
+          multiple
+          // @ts-ignore
+          webkitdirectory=""
+          className="hidden"
+          onChange={e => { handleUpload(e.target.files); e.target.value = "" }}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -12107,9 +12223,9 @@ export default function LaunchPage() {
     }))
     setUploads(prev => [...prev, ...items])
 
-    // Upload sequentially in background; swap temp creative → real creative when done
+    // Upload all files in parallel; swap temp creative → real creative when done
     let anyUploaded = false
-    for (const item of items) {
+    await Promise.allSettled(items.map(async (item) => {
       const real = await uploadOneFile(item)
       if (real) {
         anyUploaded = true
@@ -12169,7 +12285,7 @@ export default function LaunchPage() {
         setSelectedCreatives(prev => prev.filter(c => c.id !== item.id))
         setSelectedMediaIds(prev => { const s = new Set(prev); s.delete(item.id); return s })
       }
-    }
+    }))
     // Refresh Library tab so freshly uploaded items appear with thumbnails
     if (anyUploaded) setMediaRefreshSignal(s => s + 1)
   }
@@ -12741,17 +12857,6 @@ export default function LaunchPage() {
               <IconChevronDown className="size-3.5 text-muted-foreground shrink-0" />
             </button>
           </div>
-
-          {/* Load Media */}
-          <Button size="sm" className="gap-1.5 h-8" onClick={() => setMediaModalOpen(true)}>
-            <IconUpload className="size-3.5" />
-            Load Media
-            {selectedMediaIds.size > 0 && (
-              <span className="ml-0.5 bg-primary-foreground/20 text-primary-foreground text-[10px] px-1.5 rounded-full font-bold">
-                {selectedMediaIds.size}
-              </span>
-            )}
-          </Button>
 
           {/* Right: mode toggle */}
           <div className="ml-auto">
