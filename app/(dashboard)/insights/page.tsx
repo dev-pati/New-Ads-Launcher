@@ -410,6 +410,15 @@ export default function InsightsPage() {
       <aside className="w-52 border-r flex flex-col shrink-0 overflow-y-auto bg-sidebar">
         <div className="p-3 space-y-0.5">
 
+          {/* Custom Dashboard */}
+          <button onClick={() => setSection("dashboard")}
+            className={cn("flex items-center gap-2.5 w-full px-2.5 py-2 text-sm rounded-md transition-colors",
+              section === "dashboard" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+            )}>
+            <IconLayoutDashboard className="size-4 shrink-0" />
+            <span className="flex-1 text-left">Custom Dashboard</span>
+          </button>
+
           {/* Statistics */}
           <div>
             <button onClick={() => setSection("statistics")}
