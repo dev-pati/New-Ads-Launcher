@@ -1319,6 +1319,19 @@ export async function getCatalogProducts(catalogId: string, accessToken: string,
   return data.data || []
 }
 
+// Set a single ad's status (ACTIVE | PAUSED)
+export async function setAdStatus(adId: string, accessToken: string, status: "ACTIVE" | "PAUSED"): Promise<void> {
+  const res = await fetch(`${GRAPH_API_BASE}/${adId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status, access_token: accessToken }),
+  })
+  if (!res.ok) {
+    const data = await res.json()
+    throw new Error(data.error?.message || `Failed to set ad ${adId} to ${status}`)
+  }
+}
+
 // Campaign insights
 export async function getCampaignInsights(
   campaignId: string,
@@ -1334,4 +1347,61 @@ export async function getCampaignInsights(
   }
   const data = await res.json()
   return data.data || []
+}
+
+// Update a node (Campaign, AdSet, or Ad)
+export async function updateNode(
+  nodeId: string,
+  accessToken: string,
+  params: {
+    name?: string
+    status?: string
+    daily_budget?: number
+    lifetime_budget?: number
+    start_time?: string
+    end_time?: string
+  }
+): Promise<{ success: boolean }> {
+  const body = new URLSearchParams({ access_token: accessToken })
+  if (params.name) body.set("name", params.name)
+  if (params.status) body.set("status", params.status)
+  if (params.daily_budget !== undefined) body.set("daily_budget", String(Math.round(params.daily_budget * 100)))
+  if (params.lifetime_budget !== undefined) body.set("lifetime_budget", String(Math.round(params.lifetime_budget * 100)))
+  if (params.start_time) body.set("start_time", params.start_time)
+  if (params.end_time) body.set("end_time", params.end_time)
+
+  const res = await fetch(`${GRAPH_API_BASE}/${nodeId}`, { method: "POST", body })
+  if (!res.ok) {
+    const error = await res.json()
+    const fb = error.error
+    const detail = fb?.error_user_msg || fb?.error_user_title || ""
+    throw new Error([fb?.message || "Failed to update node", detail].filter(Boolean).join(" — "))
+  }
+  return { success: true }
+}
+
+// Duplicate a node (Campaign, AdSet, or Ad)
+export async function duplicateNode(
+  nodeId: string,
+  accessToken: string,
+  params: {
+    name?: string
+    deep_copy?: boolean
+    status_option?: "ACTIVE" | "PAUSED" | "INHERITED"
+  }
+): Promise<{ id: string }> {
+  const body = new URLSearchParams({ access_token: accessToken })
+  if (params.name) body.set("rename_strategy", JSON.stringify({ strategy: "NEW_NAME", new_name: params.name }))
+  if (params.deep_copy !== undefined) body.set("deep_copy", String(params.deep_copy))
+  if (params.status_option) body.set("status_option", params.status_option)
+
+  const res = await fetch(`${GRAPH_API_BASE}/${nodeId}/copies`, { method: "POST", body })
+  if (!res.ok) {
+    const error = await res.json()
+    const fb = error.error
+    const detail = fb?.error_user_msg || fb?.error_user_title || ""
+    throw new Error([fb?.message || "Failed to duplicate node", detail].filter(Boolean).join(" — "))
+  }
+  const data = await res.json()
+  return { id: data.copied_node_id || data.copied_campaign_id || data.copied_adset_id || data.copied_ad_id || data.id }
 }

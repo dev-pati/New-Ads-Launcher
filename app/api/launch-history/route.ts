@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const status = url.searchParams.get("status")
     const limit = parseInt(url.searchParams.get("limit") || "50")
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     let query = supabase
       .from("launch_batches")
       .select("*")

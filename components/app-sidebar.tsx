@@ -52,8 +52,6 @@ const navSections: NavSection[] = [
     icon: IconPhoto,
     subItems: [
       { label: "All Assets", href: "/assets" },
-      { label: "Boards", href: "/assets/boards" },
-      { label: "My Uploads", href: "/assets/my-uploads" },
     ],
   },
   {
@@ -61,9 +59,7 @@ const navSections: NavSection[] = [
     label: "Insights",
     icon: IconChartBar,
     subItems: [
-      { label: "Top Ads", href: "/insights" },
-      { label: "Statistics", href: "/insights/statistics" },
-      { label: "Comments", href: "/insights/comments" },
+      { label: "Insights", href: "/insights" },
     ],
   },
   {
@@ -234,8 +230,8 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
                 <span>{section.label}</span>
               </Link>
 
-              {/* Sub-items */}
-              {isActive && (
+              {/* Sub-items — only show when there are multiple sub-items */}
+              {isActive && section.subItems.length > 1 && (
                 <div className="ml-5 mt-0.5 mb-1">
                   {/* Launch stats widget */}
                   {section.id === "launch" && (

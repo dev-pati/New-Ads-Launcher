@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
         user_id: ctx.user.id,
         ad_account_id: adAccountId,
         file_name: fileName,
-        file_url: fbThumbnailUrl || fbImageUrl || "",
+        file_url: (fbThumbnailUrl || fbImageUrl || "") + "#gdrive",
         media_type: isVideo ? "video" : "image",
         file_size: fileBuffer.byteLength,
         fb_image_hash: fbImageHash,

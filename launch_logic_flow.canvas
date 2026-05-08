@@ -1,0 +1,404 @@
+{
+  "nodes": [
+
+    {
+      "id": "title",
+      "type": "text",
+      "x": -260, "y": -700,
+      "width": 520, "height": 70,
+      "color": "6",
+      "text": "# 🚀 admanage.ai — Launch Logic Flow\n*Luồng thực tế người dùng thao tác*"
+    },
+
+    {
+      "id": "step0_account",
+      "type": "text",
+      "x": -260, "y": -580,
+      "width": 520, "height": 120,
+      "color": "5",
+      "text": "## 1️⃣ Chọn Ad Account\n**Meta Business Account** nào sẽ nhận ads này?\n→ `GEC-JORDY 01` / `GEC-KEVIN 1` / ..."
+    },
+
+    {
+      "id": "settings_global",
+      "type": "text",
+      "x": 360, "y": -580,
+      "width": 480, "height": 120,
+      "color": "6",
+      "text": "## ⚙️ Global Settings *(optional, 1 lần set)*\n- **Naming Convention** — đặt tên ad tự động\n- **Launch Settings** — objective, bidding, pixel\n- **Ad Copy Defaults** — copy mặc định cho tất cả ads\n- **Web & App Links** — default URL\n- **Creative Enhancements** — hiệu ứng Meta AI"
+    },
+
+    {
+      "id": "step1_media",
+      "type": "text",
+      "x": -260, "y": -400,
+      "width": 520, "height": 130,
+      "color": "4",
+      "text": "## 2️⃣ Load Media — Nạp Creative\nChọn nguồn:\n- 📁 Media Library *(đã upload sẵn)*\n- 📸 Existing Ads *(tái dùng từ launch trước)*\n- ☁️ Google Drive / Drive Browser / Drive Link\n→ Media được kéo vào **gallery cards** hoặc **table rows**"
+    },
+
+    {
+      "id": "media_sources",
+      "type": "text",
+      "x": 360, "y": -400,
+      "width": 480, "height": 130,
+      "color": "4",
+      "text": "## 📦 Mỗi Creative tạo ra 1 Row/Card\n**Format có thể chọn:**\n- `SINGLE` — 1 ảnh/video\n- `CAROUSEL` — nhiều cards tuần tự\n- `FLEXIBLE` — Meta tự chọn tốt nhất trong nhóm\n- `MULTI-PLACEMENT` — ghép Feed (1:1) + Stories (9:16)"
+    },
+
+    {
+      "id": "step2_configure",
+      "type": "text",
+      "x": -260, "y": -210,
+      "width": 520, "height": 80,
+      "color": "5",
+      "text": "## 3️⃣ Cấu hình Ads\nChọn view để làm việc:"
+    },
+
+    {
+      "id": "view_gallery",
+      "type": "text",
+      "x": -600, "y": -80,
+      "width": 320, "height": 200,
+      "color": "5",
+      "text": "### 🖼 Gallery Mode\n*(visual, từng card)*\n\n- Thấy preview trực quan\n- Thích hợp review từng ad\n- Dễ so sánh creative\n- Mỗi card = 1 ad variant"
+    },
+
+    {
+      "id": "view_table",
+      "type": "text",
+      "x": 280, "y": -80,
+      "width": 320, "height": 200,
+      "color": "6",
+      "text": "### 📊 Table Mode\n*(spreadsheet, bulk)*\n\n- Chỉnh sửa nhiều ads cùng lúc\n- Copy/paste nhanh\n- Sort, filter, search\n- Mỗi row = 1 ad variant"
+    },
+
+    {
+      "id": "same_data",
+      "type": "text",
+      "x": -260, "y": -80,
+      "width": 520, "height": 50,
+      "color": "3",
+      "text": "⟵ Cùng 1 data — chỉ khác cách hiển thị ⟶"
+    },
+
+    {
+      "id": "step3_addata",
+      "type": "text",
+      "x": -260, "y": 170,
+      "width": 520, "height": 380,
+      "color": "5",
+      "text": "## 4️⃣ Điền thông tin cho mỗi Ad\n\n| Trường | Ý nghĩa |\n|--------|----------|\n| **Primary Text** | Body copy chính |\n| **Headline** | Tiêu đề nổi bật |\n| **Description** | Mô tả phụ |\n| **CTA** | Learn More / Shop Now / ... |\n| **Link** | URL đích |\n| **UTM Tags** | tracking params |\n\n**Công cụ hỗ trợ:**\n- 🤖 AI Variations → tạo biến thể copy\n- 📋 Load Copy → dùng lại copy cũ\n- 🔀 Sync → đồng bộ từ gallery defaults\n- 🔍 Find & Replace → đổi hàng loạt"
+    },
+
+    {
+      "id": "ai_tools",
+      "type": "text",
+      "x": 360, "y": 170,
+      "width": 480, "height": 380,
+      "color": "6",
+      "text": "## 🤖 AI & Advanced Tools\n\n**AI Variations**\n→ Nhập copy → AI tạo ra nhiều biến thể\n→ Chọn variant muốn dùng\n\n**AI Group**\n→ Tự nhóm các creatives tương tự nhau\n→ Hữu ích khi có nhiều video cùng theme\n\n**Load Copy**\n→ Tìm kiếm copy đã dùng trong quá khứ\n→ Import lại với 1 click\n\n**Bulk Edit** *(Table Mode)*\n→ Chọn nhiều rows → sửa cùng 1 lúc\n\n**Sync Gallery Data**\n→ Đồng bộ copy defaults vào tất cả rows"
+    },
+
+    {
+      "id": "step4_adsets",
+      "type": "text",
+      "x": -260, "y": 610,
+      "width": 520, "height": 160,
+      "color": "2",
+      "text": "## 5️⃣ Gán Ad Sets ⚠️ BẮT BUỘC\nMỗi ad phải được gán vào ít nhất 1 Meta Ad Set\n\n**Ad Set = nơi chứa:** Audience + Budget + Placement + Schedule trong Meta\n\n→ Nếu chưa gán Ad Sets: nút **Launch Ads** bị disabled"
+    },
+
+    {
+      "id": "meta_structure",
+      "type": "text",
+      "x": 360, "y": 610,
+      "width": 480, "height": 160,
+      "color": "2",
+      "text": "## 🏗️ Cấu trúc Meta Ads\n```\nCampaign (objective)\n  └─ Ad Set (audience + budget)\n        └─ Ad ← admanage tạo ra đây\n              = Creative + Copy + Link\n```\n*admanage.ai không tạo Campaign/Ad Set,\nchỉ tạo Ads vào các Ad Sets có sẵn*"
+    },
+
+    {
+      "id": "step5_advanced",
+      "type": "text",
+      "x": -260, "y": 840,
+      "width": 520, "height": 180,
+      "color": "5",
+      "text": "## 6️⃣ Tuỳ chọn nâng cao *(optional)*\n\n- 🤝 **Partnership Ads** — co-branded với partner account\n- 🌐 **Multi-Language** — thêm ngôn ngữ khác cho ad\n- 🛒 **Catalog / Commerce** — gắn product catalog\n- ⏰ **META Schedule** — đặt lịch bật/tắt ad\n- 🏷️ **Promo Code** — gắn mã khuyến mãi\n- 🔗 **Sitelinks** — thêm link phụ"
+    },
+
+    {
+      "id": "step6_preview",
+      "type": "text",
+      "x": -260, "y": 1090,
+      "width": 520, "height": 100,
+      "color": "3",
+      "text": "## 7️⃣ Preview & Kiểm tra\n`👁 Preview Ads` → xem trước ad trên Desktop / Mobile\n→ Kiểm tra copy, creative, link trước khi launch"
+    },
+
+    {
+      "id": "decision",
+      "type": "text",
+      "x": -260, "y": 1260,
+      "width": 520, "height": 80,
+      "color": "3",
+      "text": "## 8️⃣ Chọn hành động cuối cùng:"
+    },
+
+    {
+      "id": "action_launch",
+      "type": "text",
+      "x": -780, "y": 1420,
+      "width": 340, "height": 180,
+      "color": "2",
+      "text": "## 🚀 Launch Ads\n*Ngay lập tức*\n\n→ admanage gọi Meta API\n→ Tạo ads trong Ad Sets\n→ Trả về Ad IDs\n→ Tạo BATCH record\n→ Hiển thị kết quả"
+    },
+
+    {
+      "id": "action_schedule",
+      "type": "text",
+      "x": -260, "y": 1420,
+      "width": 340, "height": 180,
+      "color": "3",
+      "text": "## 📅 Schedule\n*Đặt lịch tương lai*\n\n→ Chọn ngày + giờ\n→ Lưu vào queue\n→ Tự động launch\n   đúng giờ đã chọn\n→ Track ở Scheduled Ads tab"
+    },
+
+    {
+      "id": "action_save",
+      "type": "text",
+      "x": 260, "y": 1420,
+      "width": 340, "height": 180,
+      "color": "5",
+      "text": "## 💾 Save Draft\n*Lưu để dùng lại*\n\n→ Lưu toàn bộ state\n   (copy, media, settings)\n→ Track ở Launch Drafts tab\n→ Load lại bất kỳ lúc nào\n→ Chia sẻ với team"
+    },
+
+    {
+      "id": "result_batch",
+      "type": "text",
+      "x": -780, "y": 1680,
+      "width": 340, "height": 260,
+      "color": "2",
+      "text": "## 📋 Kết quả — Ad Launches Tab\n\n**Batch record gồm:**\n- BATCH #ID (copy được)\n- Số ads: XX/XX succeeded\n- Thời gian tạo\n- Ad Account\n- Người launch\n- Thời gian hoàn thành (e.g. 35.9s)\n\n**Mỗi ad có:**\n- Meta Ad ID\n- Status: ✅ Success / ❌ Error\n- Link preview trực tiếp\n- Ad Set + Campaign name"
+    },
+
+    {
+      "id": "result_details",
+      "type": "text",
+      "x": -780, "y": 2020,
+      "width": 340, "height": 220,
+      "color": "1",
+      "text": "## 🔍 View Details Modal\n\n**Tab Launched:**\n- Danh sách tất cả ads trong batch\n- Expand từng ad: CTA, URL, Media, Page\n- Preview ad ngay trong modal\n- Load Status → cập nhật từ Meta\n- Copy Preview Links\n\n**Tab Performance:**\n- Metrics thực tế từ Meta\n- Reach, Impressions, CTR, Spend"
+    },
+
+    {
+      "id": "result_scheduled",
+      "type": "text",
+      "x": -260, "y": 1680,
+      "width": 340, "height": 260,
+      "color": "3",
+      "text": "## ⏰ Scheduled Ads Tab\n\nDanh sách jobs đang chờ:\n- 🕐 Pending → sẽ launch\n- ✅ Completed\n- ❌ Cancelled\n\nCó thể:\n- Cancel trước giờ launch\n- Edit thời gian\n- Xem chi tiết settings"
+    },
+
+    {
+      "id": "result_drafts",
+      "type": "text",
+      "x": 260, "y": 1680,
+      "width": 340, "height": 260,
+      "color": "5",
+      "text": "## 📝 Launch Drafts Tab\n\nDanh sách drafts đã save:\n- Tên + ngày tạo\n- Ad Account\n- Batch info\n\nCó thể:\n- Load → khôi phục\n  toàn bộ session\n- Delete\n- Đổi tên"
+    },
+
+    {
+      "id": "note_adprofile",
+      "type": "text",
+      "x": 360, "y": 840,
+      "width": 480, "height": 180,
+      "color": "4",
+      "text": "## 👤 Ad Profile = Facebook Page + Instagram\nMỗi ad cần chọn:\n- **Facebook Page** (e.g. Her Health Journal)\n- **Instagram Account** (e.g. @17841479939485338)\n\n→ Là danh tính hiển thị của ad trên Meta\n→ Nhiều profiles → nhiều ads từ cùng 1 creative\n→ Lưu sẵn trong Settings để reuse"
+    },
+
+    {
+      "id": "note_bulklogic",
+      "type": "text",
+      "x": 360, "y": 1090,
+      "width": 480, "height": 250,
+      "color": "6",
+      "text": "## 💡 Logic Bulk Launch\n\n**1 creative × N ad sets = N ads**\n\nVí dụ:\n- 3 videos × 2 ad sets = **6 ads** được tạo\n- 10 videos × 1 ad set = **10 ads**\n\n**Mỗi row/card = 1 Ad template**\nKhi launch, admanage nhân bản ad template\nvào từng ad set được chọn.\n\n→ Đây là core value: tiết kiệm thời gian\n  so với tạo tay từng ad trong Meta Ads Manager"
+    },
+
+    {
+      "id": "note_stats",
+      "type": "text",
+      "x": 360, "y": 1420,
+      "width": 480, "height": 120,
+      "color": "4",
+      "text": "## 📊 Team Stats *(sidebar)*\n`Your team's last 30d`\n- 🚀 **Ads** launched\n- 📦 **Batches** created\n- ⏱ **Time saved** (vs tạo tay)\n→ Link tới `/data/ads` analytics"
+    }
+
+  ],
+
+  "edges": [
+    {
+      "id": "e01",
+      "fromNode": "step0_account", "fromSide": "bottom",
+      "toNode": "step1_media",    "toSide": "top",
+      "color": "5", "label": "account đã chọn"
+    },
+    {
+      "id": "e02",
+      "fromNode": "step0_account", "fromSide": "right",
+      "toNode": "settings_global", "toSide": "left",
+      "color": "6", "label": "setup 1 lần"
+    },
+    {
+      "id": "e03",
+      "fromNode": "step1_media",   "fromSide": "right",
+      "toNode": "media_sources",   "toSide": "left",
+      "color": "4", "label": "mỗi media → 1 row/card"
+    },
+    {
+      "id": "e04",
+      "fromNode": "step1_media",   "fromSide": "bottom",
+      "toNode": "step2_configure", "toSide": "top",
+      "color": "5"
+    },
+    {
+      "id": "e05",
+      "fromNode": "step2_configure","fromSide": "bottom",
+      "toNode": "same_data",       "toSide": "top",
+      "color": "5"
+    },
+    {
+      "id": "e06",
+      "fromNode": "same_data",     "fromSide": "left",
+      "toNode": "view_gallery",    "toSide": "right",
+      "color": "5"
+    },
+    {
+      "id": "e07",
+      "fromNode": "same_data",     "fromSide": "right",
+      "toNode": "view_table",      "toSide": "left",
+      "color": "6"
+    },
+    {
+      "id": "e08",
+      "fromNode": "view_gallery",  "fromSide": "bottom",
+      "toNode": "step3_addata",    "toSide": "top",
+      "color": "5"
+    },
+    {
+      "id": "e09",
+      "fromNode": "view_table",    "fromSide": "bottom",
+      "toNode": "step3_addata",    "toSide": "top",
+      "color": "6"
+    },
+    {
+      "id": "e10",
+      "fromNode": "step3_addata",  "fromSide": "right",
+      "toNode": "ai_tools",        "toSide": "left",
+      "color": "6", "label": "AI hỗ trợ"
+    },
+    {
+      "id": "e11",
+      "fromNode": "step3_addata",  "fromSide": "bottom",
+      "toNode": "step4_adsets",    "toSide": "top",
+      "color": "2"
+    },
+    {
+      "id": "e12",
+      "fromNode": "step4_adsets",  "fromSide": "right",
+      "toNode": "meta_structure",  "toSide": "left",
+      "color": "2", "label": "chọn từ Meta"
+    },
+    {
+      "id": "e13",
+      "fromNode": "step4_adsets",  "fromSide": "bottom",
+      "toNode": "step5_advanced",  "toSide": "top",
+      "color": "5"
+    },
+    {
+      "id": "e14",
+      "fromNode": "step5_advanced","fromSide": "right",
+      "toNode": "note_adprofile",  "toSide": "left",
+      "color": "4"
+    },
+    {
+      "id": "e15",
+      "fromNode": "step5_advanced","fromSide": "bottom",
+      "toNode": "step6_preview",   "toSide": "top",
+      "color": "3"
+    },
+    {
+      "id": "e16",
+      "fromNode": "step6_preview", "fromSide": "right",
+      "toNode": "note_bulklogic",  "toSide": "left",
+      "color": "6"
+    },
+    {
+      "id": "e17",
+      "fromNode": "step6_preview", "fromSide": "bottom",
+      "toNode": "decision",        "toSide": "top",
+      "color": "3"
+    },
+    {
+      "id": "e18",
+      "fromNode": "decision",      "fromSide": "bottom",
+      "toNode": "action_launch",   "toSide": "top",
+      "color": "2", "label": "ngay lập tức"
+    },
+    {
+      "id": "e19",
+      "fromNode": "decision",      "fromSide": "bottom",
+      "toNode": "action_schedule", "toSide": "top",
+      "color": "3", "label": "đặt lịch"
+    },
+    {
+      "id": "e20",
+      "fromNode": "decision",      "fromSide": "bottom",
+      "toNode": "action_save",     "toSide": "top",
+      "color": "5", "label": "lưu lại"
+    },
+    {
+      "id": "e21",
+      "fromNode": "action_launch", "fromSide": "bottom",
+      "toNode": "result_batch",    "toSide": "top",
+      "color": "2"
+    },
+    {
+      "id": "e22",
+      "fromNode": "result_batch",  "fromSide": "bottom",
+      "toNode": "result_details",  "toSide": "top",
+      "color": "1", "label": "View Details →"
+    },
+    {
+      "id": "e23",
+      "fromNode": "action_schedule","fromSide": "bottom",
+      "toNode": "result_scheduled","toSide": "top",
+      "color": "3"
+    },
+    {
+      "id": "e24",
+      "fromNode": "action_save",   "fromSide": "bottom",
+      "toNode": "result_drafts",   "toSide": "top",
+      "color": "5"
+    },
+    {
+      "id": "e25",
+      "fromNode": "result_drafts", "fromSide": "left",
+      "toNode": "step1_media",     "toSide": "bottom",
+      "color": "4", "label": "Load draft → quay lại bước 2"
+    },
+    {
+      "id": "e26",
+      "fromNode": "decision",      "fromSide": "right",
+      "toNode": "note_stats",      "toSide": "left",
+      "color": "4"
+    },
+    {
+      "id": "e27",
+      "fromNode": "settings_global","fromSide": "bottom",
+      "toNode": "step3_addata",    "toSide": "right",
+      "color": "6", "label": "defaults áp vào ads"
+    }
+  ]
+}

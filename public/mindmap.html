@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>AdLauncher — Mind Map</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0d14;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+canvas{display:block}
+.controls{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:10}
+.btn{background:#1e2433;border:1px solid #2a2f3e;color:#9ca3af;padding:7px 16px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit}
+.btn:hover{background:#2a2f3e;color:#fff}
+.hint{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:rgba(30,36,51,.9);border:1px solid #2a2f3e;border-radius:8px;padding:7px 18px;font-size:11px;color:#6b7280}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hint">🖱 Kéo để di chuyển &nbsp;·&nbsp; Scroll để zoom &nbsp;·&nbsp; Double-click để reset</div>
+<div class="controls">
+  <div class="btn" id="zIn">＋ Zoom In</div>
+  <div class="btn" id="zOut">－ Zoom Out</div>
+  <div class="btn" id="rst">⟳ Reset</div>
+</div>
+
+<script>
+const cv = document.getElementById('c')
+const ctx = cv.getContext('2d')
+let W, H
+
+// pan/zoom state
+let ox = 0, oy = 0, zoom = 1
+let dragging = false, lastX, lastY
+
+function resize(){
+  W = window.innerWidth; H = window.innerHeight
+  cv.width = W * devicePixelRatio; cv.height = H * devicePixelRatio
+  cv.style.width = W+'px'; cv.style.height = H+'px'
+  ctx.scale(devicePixelRatio, devicePixelRatio)
+  draw()
+}
+
+// ── Tree data ─────────────────────────────────
+const ROOT = {
+  label: '🚀 AdLauncher', color: '#2563eb', textColor: '#fff',
+  children: [
+    {
+      label: '🔗 Onboarding', color: '#7c3aed', textColor: '#fff',
+      children: [
+        { label: '▸ Kết nối nền tảng', color: '#4c1d95', children: [
+          { label: 'Meta / Facebook' }, { label: 'TikTok Ads' },
+          { label: 'Google Ads' }, { label: 'Snapchat' },
+          { label: 'Pinterest' }, { label: 'Taboola' },
+        ]},
+        { label: '▸ Billing & Payment', color: '#4c1d95', children: [
+          { label: 'Gói Essential £99/mo' },
+          { label: 'Gói In-House £499/mo' },
+          { label: 'Gói Agency £999/mo' },
+          { label: 'Enterprise (Custom)' },
+        ]},
+        { label: '▸ Test Launch', color: '#4c1d95', children: [
+          { label: 'Chạy thử 1 quảng cáo' },
+          { label: 'Xác nhận kết nối OK' },
+        ]},
+      ]
+    },
+    {
+      label: '📊 Dashboard', color: '#0891b2', textColor: '#fff',
+      children: [
+        { label: '▸ KPI tổng quan', color: '#164e63', children: [
+          { label: 'Ads launched hôm nay' },
+          { label: 'Active campaigns' },
+          { label: 'Total spend' },
+          { label: 'Avg ROAS' },
+        ]},
+        { label: '▸ Biểu đồ Spend/ROAS', color: '#164e63', children: [
+          { label: 'Theo ngày/tuần/tháng' },
+          { label: 'So sánh kỳ trước' },
+        ]},
+        { label: '▸ Team Activity', color: '#164e63', children: [
+          { label: 'Ai launch bao nhiêu ads' },
+          { label: 'Batch history' },
+        ]},
+      ]
+    },
+    {
+      label: '🚀 Bulk Launch', color: '#16a34a', textColor: '#fff',
+      children: [
+        { label: '▸ Upload Creative', color: '#14532d', children: [
+          { label: 'Drag & drop file' },
+          { label: 'Google Drive / Dropbox' },
+          { label: 'Frame.io / Box' },
+          { label: 'Hỗ trợ ảnh & video' },
+        ]},
+        { label: '▸ Cấu hình Campaign', color: '#14532d', children: [
+          { label: 'Chọn nền tảng' },
+          { label: 'Tạo mới / dùng existing' },
+          { label: 'Tạo nhiều campaign' },
+          { label: 'Budget & Objective' },
+        ]},
+        { label: '▸ Cấu hình Ad Set', color: '#14532d', children: [
+          { label: '1 Ad Set chung' },
+          { label: 'Per Creative (1:1)' },
+          { label: 'Auto-divide (N ads/set)' },
+          { label: 'Custom (kéo thả)' },
+        ]},
+        { label: '▸ Nội dung & Text', color: '#14532d', children: [
+          { label: 'Headline / Primary Text' },
+          { label: 'CTA Button' },
+          { label: 'Website URL' },
+          { label: 'UTM Parameters' },
+          { label: 'Unique text per creative' },
+        ]},
+        { label: '▸ Xuất bản', color: '#14532d', children: [
+          { label: 'Publish ngay / Paused' },
+          { label: 'Lên lịch thời gian' },
+          { label: 'Chọn Facebook Page' },
+          { label: 'Pixel & Conversion event' },
+        ]},
+      ]
+    },
+    {
+      label: '🖼️ Assets / Creative', color: '#d97706', textColor: '#fff',
+      children: [
+        { label: '▸ Thư viện creative', color: '#78350f', children: [
+          { label: 'Grid view ảnh & video' },
+          { label: 'Lọc theo loại / trạng thái' },
+          { label: 'Tìm kiếm theo tên' },
+        ]},
+        { label: '▸ Top Performers', color: '#78350f', children: [
+          { label: 'Creative ROAS cao nhất' },
+          { label: 'CTR tốt nhất' },
+          { label: 'Spend hiệu quả nhất' },
+        ]},
+        { label: '▸ Cloud Storage', color: '#78350f', children: [
+          { label: 'Google Drive' },
+          { label: 'Dropbox' },
+          { label: 'Frame.io' },
+          { label: 'Box / Air.inc' },
+        ]},
+      ]
+    },
+    {
+      label: '📋 Ads Manager', color: '#dc2626', textColor: '#fff',
+      children: [
+        { label: '▸ Bảng tính', color: '#7f1d1d', children: [
+          { label: 'Chỉnh sửa inline' },
+          { label: 'Paste từ Excel/CSV' },
+          { label: 'Undo / Redo' },
+          { label: 'Auto-save' },
+        ]},
+        { label: '▸ Bulk Actions', color: '#7f1d1d', children: [
+          { label: 'Duplicate creative' },
+          { label: 'Delete hàng loạt' },
+          { label: 'Clear nội dung' },
+          { label: 'Launch selected' },
+        ]},
+        { label: '▸ Cột dữ liệu', color: '#7f1d1d', children: [
+          { label: 'Campaign / Ad Set' },
+          { label: 'Headline / Primary Text' },
+          { label: 'CTA / URL / Status' },
+        ]},
+        { label: '▸ Cộng tác', color: '#7f1d1d', children: [
+          { label: 'Real-time multi-user' },
+          { label: 'Thấy ai đang sửa ô nào' },
+          { label: 'Presence indicators' },
+        ]},
+      ]
+    },
+    {
+      label: '📈 Analytics', color: '#8b5cf6', textColor: '#fff',
+      children: [
+        { label: '▸ Creative Performance', color: '#4c1d95', children: [
+          { label: 'Impressions / Clicks' },
+          { label: 'CTR / CPM / CPA' },
+          { label: 'ROAS từng creative' },
+        ]},
+        { label: '▸ Spend Analysis', color: '#4c1d95', children: [
+          { label: 'Theo nền tảng' },
+          { label: 'Theo campaign' },
+          { label: 'Theo thời gian' },
+        ]},
+        { label: '▸ AI Insights', color: '#4c1d95', children: [
+          { label: 'Comment sentiment' },
+          { label: 'Competitor research' },
+          { label: 'Benchmark ngành' },
+        ]},
+      ]
+    },
+    {
+      label: '⚡ Automation', color: '#f59e0b', textColor: '#111',
+      children: [
+        { label: '▸ Rules Engine', color: '#78350f', textColor:'#fff', children: [
+          { label: 'Pause low ROAS ads' },
+          { label: 'Scale winning ads 20%' },
+          { label: 'Daily budget cap' },
+          { label: 'CPA threshold alert' },
+        ]},
+        { label: '▸ Triggers', color: '#78350f', textColor:'#fff', children: [
+          { label: 'IF condition...' },
+          { label: 'THEN action...' },
+          { label: 'FOR N consecutive days' },
+        ]},
+        { label: '▸ Thông báo', color: '#78350f', textColor:'#fff', children: [
+          { label: 'Slack notification' },
+          { label: 'Email alert' },
+          { label: 'In-app notification' },
+        ]},
+      ]
+    },
+    {
+      label: '👥 Team & Quyền', color: '#06b6d4', textColor: '#fff',
+      children: [
+        { label: '▸ Role-based Access', color: '#164e63', children: [
+          { label: 'Full Access' },
+          { label: 'Launch Only' },
+          { label: 'Analytics View' },
+          { label: 'Edit Only' },
+        ]},
+        { label: '▸ Workspace', color: '#164e63', children: [
+          { label: 'Multi-workspace' },
+          { label: 'Gán ad account' },
+          { label: 'Phân chia theo client' },
+        ]},
+        { label: '▸ Activity Log', color: '#164e63', children: [
+          { label: 'Lịch sử hành động' },
+          { label: 'Ai launch gì, khi nào' },
+        ]},
+      ]
+    },
+  ]
+}
+
+// ── Layout ────────────────────────────────────
+// Radial tree: root center, children fan out
+
+const NODE_W = 148, NODE_H = 32, NODE_R = 6
+const LEVEL_GAP = [0, 200, 170, 140] // gap between levels
+const DEFAULT_COLOR = '#1e2433'
+const DEFAULT_BORDER = '#2a2f3e'
+const DEFAULT_TEXT = '#e5e7eb'
+
+let nodes = [] // flat list with computed x,y
+
+function buildTree(node, x, y, level, angleStart, angleEnd) {
+  // compute node size
+  const w = level === 0 ? 180 : level === 1 ? 160 : level === 2 ? 148 : 138
+  const h = level === 0 ? 42 : 34
+
+  node._x = x - w/2
+  node._y = y - h/2
+  node._w = w
+  node._h = h
+  node._cx = x
+  node._cy = y
+  node._level = level
+  nodes.push(node)
+
+  if (!node.children || !node.children.length) return
+
+  const n = node.children.length
+  const gap = LEVEL_GAP[Math.min(level, LEVEL_GAP.length-1)] || 150
+  const r = gap
+
+  // spread angle
+  const spreadAngle = angleEnd - angleStart
+  const step = spreadAngle / (n > 1 ? n-1 : 1)
+
+  node.children.forEach((child, i) => {
+    const angle = n === 1
+      ? (angleStart + angleEnd) / 2
+      : angleStart + i * step
+    const cx2 = x + Math.cos(angle) * r
+    const cy2 = y + Math.sin(angle) * r
+    child._parentX = x
+    child._parentY = y
+    buildTree(child, cx2, cy2, level+1, angle - 0.4, angle + 0.4)
+  })
+}
+
+function initTree() {
+  nodes = []
+  const cx = W/2, cy = H/2
+  const n = ROOT.children.length
+  const step = (Math.PI * 2) / n
+
+  // place root
+  buildTree(ROOT, cx, cy, 0, 0, Math.PI*2)
+
+  // re-layout children of root in circle
+  ROOT.children.forEach((child, i) => {
+    const angle = -Math.PI/2 + i * step
+    const r = 240
+    const cx2 = cx + Math.cos(angle) * r
+    const cy2 = cy + Math.sin(angle) * r
+    const spreadA = angle - 0.7, spreadB = angle + 0.7
+    // rebuild subtree
+    child._parentX = cx
+    child._parentY = cy
+    buildTree(child, cx2, cy2, 1, spreadA, spreadB)
+  })
+}
+
+// ── Draw helpers ──────────────────────────────
+function drawRoundRect(x, y, w, h, r2, fill, stroke, sw2) {
+  ctx.beginPath()
+  ctx.roundRect(x, y, w, h, r2)
+  if (fill) { ctx.fillStyle = fill; ctx.fill() }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = sw2||1; ctx.stroke() }
+}
+
+function drawNode(node) {
+  const { _x:x, _y:y, _w:w, _h:h, _level:lv } = node
+  const fill = node.color || DEFAULT_COLOR
+  const border = node.color ? node.color : DEFAULT_BORDER
+  const tcolor = node.textColor || DEFAULT_TEXT
+  const shadow = node.color ? node.color + '44' : '#00000066'
+
+  // glow / shadow
+  ctx.shadowColor = shadow
+  ctx.shadowBlur = lv === 0 ? 24 : lv === 1 ? 16 : 8
+
+  drawRoundRect(x, y, w, h, NODE_R, fill, border, lv < 2 ? 1.5 : 1)
+
+  ctx.shadowBlur = 0
+
+  // text
+  const fs = lv === 0 ? 14 : lv === 1 ? 11.5 : lv === 2 ? 10.5 : 9.5
+  ctx.font = `${lv<2?'700':'500'} ${fs}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`
+  ctx.fillStyle = tcolor
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  // truncate
+  let label = node.label
+  const maxW = w - 16
+  while (ctx.measureText(label).width > maxW && label.length > 4) {
+    label = label.slice(0, -2) + '…'
+  }
+  ctx.fillText(label, x + w/2, y + h/2)
+}
+
+function drawEdge(child) {
+  if (child._parentX === undefined) return
+  const px2 = child._parentX, py2 = child._parentY
+  const cx2 = child._cx, cy2 = child._cy
+
+  // curved line
+  const dx = cx2 - px2, dy = cy2 - py2
+  const mx = px2 + dx * 0.5, my = py2 + dy * 0.5
+
+  const lv = child._level
+  const col = lv === 1
+    ? (child.color || '#374151') + 'cc'
+    : lv === 2
+    ? (child.color || '#374151') + '88'
+    : '#374151'
+
+  ctx.beginPath()
+  ctx.moveTo(px2, py2)
+  ctx.quadraticCurveTo(mx, py2, cx2, cy2)
+  ctx.strokeStyle = col
+  ctx.lineWidth = lv === 1 ? 1.5 : 1
+  ctx.stroke()
+}
+
+// ── Main draw ─────────────────────────────────
+function draw() {
+  ctx.clearRect(0, 0, W, H)
+
+  // background grid
+  ctx.save()
+  ctx.translate(ox, oy)
+  ctx.scale(zoom, zoom)
+
+  // subtle dot grid
+  const gs = 40, gox = (-ox/zoom) % gs, goy = (-oy/zoom) % gs
+  ctx.fillStyle = '#ffffff08'
+  for (let gx = -gs + gox; gx < W/zoom + gs; gx += gs) {
+    for (let gy = -gs + goy; gy < H/zoom + gs; gy += gs) {
+      ctx.beginPath()
+      ctx.arc(gx, gy, 1, 0, Math.PI*2)
+      ctx.fill()
+    }
+  }
+
+  // draw edges first (behind nodes)
+  ctx.setLineDash([3, 3])
+  nodes.forEach(n => { if (n._level > 0) drawEdge(n) })
+  ctx.setLineDash([])
+
+  // draw nodes
+  nodes.forEach(n => drawNode(n))
+
+  ctx.restore()
+
+  // title
+  ctx.font = '700 13px -apple-system,sans-serif'
+  ctx.fillStyle = '#374151'
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
+  ctx.fillText('AdLauncher — Sơ đồ tư duy', 16, 16)
+}
+
+// ── Pan / Zoom ────────────────────────────────
+cv.addEventListener('mousedown', e => {
+  dragging = true; lastX = e.clientX; lastY = e.clientY
+  cv.style.cursor = 'grabbing'
+})
+cv.addEventListener('mousemove', e => {
+  if (!dragging) return
+  ox += e.clientX - lastX; oy += e.clientY - lastY
+  lastX = e.clientX; lastY = e.clientY
+  draw()
+})
+cv.addEventListener('mouseup', () => { dragging = false; cv.style.cursor = 'grab' })
+cv.addEventListener('mouseleave', () => { dragging = false; cv.style.cursor = 'grab' })
+
+cv.addEventListener('wheel', e => {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? 0.9 : 1.1
+  const mx = e.clientX, my = e.clientY
+  ox = mx - (mx - ox) * delta
+  oy = my - (my - oy) * delta
+  zoom = Math.max(0.2, Math.min(3, zoom * delta))
+  draw()
+}, {passive: false})
+
+cv.addEventListener('dblclick', () => {
+  ox = 0; oy = 0; zoom = 1; draw()
+})
+
+// touch
+let lastDist = 0
+cv.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) { lastX = e.touches[0].clientX; lastY = e.touches[0].clientY }
+  if (e.touches.length === 2) {
+    lastDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY)
+  }
+})
+cv.addEventListener('touchmove', e => {
+  e.preventDefault()
+  if (e.touches.length === 1) {
+    ox += e.touches[0].clientX - lastX; oy += e.touches[0].clientY - lastY
+    lastX = e.touches[0].clientX; lastY = e.touches[0].clientY
+    draw()
+  }
+  if (e.touches.length === 2) {
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY)
+    const scale2 = d / lastDist; lastDist = d
+    zoom = Math.max(0.2, Math.min(3, zoom * scale2))
+    draw()
+  }
+}, {passive: false})
+
+document.getElementById('zIn').onclick = () => { zoom = Math.min(3, zoom*1.2); draw() }
+document.getElementById('zOut').onclick = () => { zoom = Math.max(0.2, zoom*0.8); draw() }
+document.getElementById('rst').onclick = () => { ox=0; oy=0; zoom=1; draw() }
+
+cv.style.cursor = 'grab'
+
+window.addEventListener('resize', () => { resize() })
+
+function init() {
+  W = window.innerWidth; H = window.innerHeight
+  cv.width = W * devicePixelRatio; cv.height = H * devicePixelRatio
+  cv.style.width = W+'px'; cv.style.height = H+'px'
+  ctx.scale(devicePixelRatio, devicePixelRatio)
+  initTree()
+  draw()
+}
+
+init()
+</script>
+</body>
+</html>

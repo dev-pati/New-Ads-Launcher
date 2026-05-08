@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createAd, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
 
 // Simple launch: create ads directly in existing ad sets.
@@ -32,6 +33,7 @@ export async function POST(request: NextRequest) {
       webLink,
       createPaused,
       startTime: scheduledStart,
+      endTime: scheduledEnd,
       partnerPageId,
       partnershipDisplayMode,
       multilanguage,
@@ -86,9 +88,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Creatives not found" }, { status: 400 })
     }
 
-    const adStatus = createPaused === false ? "ACTIVE" : "PAUSED"
+    // Scheduled ads must start PAUSED — cron job activates them at scheduled_at
+    const adStatus = scheduledStart ? "PAUSED" : (createPaused === false ? "ACTIVE" : "PAUSED")
     const created: any[] = []
     const errors: any[] = []
+
+    // Quick lookup: adSetId → adSetName (for enriching created[] entries)
+    const adSetNameMap = new Map<string, string>(
+      (adSetIds || []).map((id: string, i: number) => [id, (adSetNames || [])[i] || id])
+    )
 
     // Skip polling for videos that already have a fb_thumbnail_url (proxy: thumbnail only exists
     // after Meta finishes processing). Only poll the recently-uploaded ones.
@@ -205,7 +213,7 @@ export async function POST(request: NextRequest) {
                 customRules,
               },
             })
-            created.push({ adId: ad.id, adSetId, multiGroup: grp.name, mediaCount: imageHashes.length + videos.length })
+            created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, multiGroup: grp.name, mediaCount: imageHashes.length + videos.length })
           } catch (err: any) {
             errors.push({ adSetId, multiGroup: grp.name, error: err.message || "Multi-placement ad failed" })
           }
@@ -262,7 +270,7 @@ export async function POST(request: NextRequest) {
                 group_asset_indices: groupAssetIndex,
               },
             })
-            created.push({ adId: ad.id, adSetId, flexibleAd: fa.name, groups: fa.groups.length })
+            created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, flexibleAd: fa.name, groups: fa.groups.length })
           } catch (err: any) {
             errors.push({ adSetId, flexibleAd: fa.name, error: err.message || "Flexible ad failed" })
           }
@@ -310,7 +318,7 @@ export async function POST(request: NextRequest) {
               carousel_show_collection_tiles: !!carousel.showAsCollectionTiles,
               carousel_show_single_media: !!carousel.showAsSingleMedia,
             })
-            created.push({ adId: ad.id, adSetId, carousel: carousel.name, cards: childCards.length })
+            created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, carousel: carousel.name, cards: childCards.length })
           } catch (err: any) {
             errors.push({ adSetId, carousel: carousel.name, error: err.message || "Carousel ad failed" })
           }
@@ -346,7 +354,7 @@ export async function POST(request: NextRequest) {
               status: adStatus,
             })
             await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
-            created.push({ adId: ad.id, adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "post_id" })
+            created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "post_id" })
           } catch (err: any) {
             errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (post_id mode)" })
           }
@@ -365,7 +373,7 @@ export async function POST(request: NextRequest) {
               status: adStatus,
             })
             await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
-            created.push({ adId: ad.id, adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "creative_id" })
+            created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "creative_id" })
           } catch (err: any) {
             errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (creative_id mode)" })
           }
@@ -418,8 +426,11 @@ export async function POST(request: NextRequest) {
           created.push({
             adId: ad.id,
             adSetId,
+            adSetName: adSetNameMap.get(adSetId) || adSetId,
             creativeId: creative.id,
             fileName: creative.file_name,
+            thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || null,
+            mediaType: creative.media_type || "image",
           })
         } catch (err: any) {
           errors.push({
@@ -447,8 +458,8 @@ export async function POST(request: NextRequest) {
       || profile?.user?.email?.split("@")[0]
       || "Unknown"
 
-    // Save launch batch to DB
-    await supabase.from("launch_batches").insert({
+    const adminDb = createAdminClient()
+    const { data: batchRecord, error: batchErr } = await adminDb.from("launch_batches").insert({
       org_id: ctx.orgId,
       user_id: ctx.user.id,
       user_name: userName,
@@ -468,15 +479,42 @@ export async function POST(request: NextRequest) {
       failed_ads: errors.length,
       duration_ms: durationMs,
       errors: errors,
-    })
+      created_ads: created,
+    }).select("id").single()
+    if (batchErr) {
+      console.error("[launch-direct] Failed to save launch batch:", batchErr)
+    }
+    const batchId: string | null = batchRecord?.id || null
+
+    // Save scheduled activation record so cron job can activate at the right time
+    if (scheduledStart && created.length > 0) {
+      const adIds = created
+        .map((c: any) => c.adId)
+        .filter(Boolean) as string[]
+      if (adIds.length > 0) {
+        const adminDb = createAdminClient()
+        await adminDb.from("scheduled_activations").insert({
+          org_id: ctx.orgId,
+          ad_account_id: adAccountId,
+          ad_ids: adIds,
+          scheduled_at: scheduledStart,
+          end_time: scheduledEnd || null,
+          status: "pending",
+        })
+      }
+    }
 
     return NextResponse.json({
       success: true,
+      batchId,
       created,
       errors,
       totalAds: created.length,
       durationMs,
-      summary: `${created.length} ads created${errors.length ? `, ${errors.length} failed` : ""}`,
+      scheduled: scheduledStart ? { at: scheduledStart, end: scheduledEnd || null } : null,
+      summary: scheduledStart
+        ? `${created.length} ads scheduled for ${new Date(scheduledStart).toLocaleString()}${errors.length ? `, ${errors.length} failed` : ""}`
+        : `${created.length} ads created${errors.length ? `, ${errors.length} failed` : ""}`,
     })
   } catch (err: any) {
     console.error("[launch-direct] error:", err)

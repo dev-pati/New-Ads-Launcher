@@ -1,24 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LaunchAdsDialog } from "@/components/launch-ads-dialog"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   IconPhoto,
-  IconVideo,
   IconCheck,
-  IconRocket,
-  IconLoader2,
+  IconBrandGoogleDrive, IconLoader2, IconRocket,
 } from "@tabler/icons-react"
 import { CreativeCardMedia } from "@/components/creative-card-media"
 
@@ -44,6 +36,10 @@ export default function UploadAdsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [launchOpen, setLaunchOpen] = useState(false)
+  
+  const [gdriveImporting, setGdriveImporting] = useState(false)
+  const gdriveScriptsReady = useRef(false)
+  const gdriveTokenRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!adAccountId) return
@@ -99,6 +95,107 @@ export default function UploadAdsPage() {
     fetch_()
   }, [adAccountId])
 
+  // ── Google Drive Picker ──────────────────────────────────────────
+  const loadGoogleScript = (src: string) => new Promise<void>((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+    const s = document.createElement("script")
+    s.src = src; s.async = true
+    s.onload = () => resolve(); s.onerror = reject
+    document.head.appendChild(s)
+  })
+
+  const openGoogleDrivePicker = async () => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""
+    if (!clientId) {
+      alert("Missing Google Client ID in environment variables")
+      return
+    }
+
+    if (!gdriveScriptsReady.current) {
+      setGdriveImporting(true)
+      try {
+        await Promise.all([
+          loadGoogleScript("https://apis.google.com/js/api.js"),
+          loadGoogleScript("https://accounts.google.com/gsi/client"),
+        ])
+        gdriveScriptsReady.current = true
+      } catch (e) {
+        setGdriveImporting(false)
+        alert("Failed to load Google API scripts")
+        return
+      }
+      setGdriveImporting(false)
+    }
+
+    try {
+      const getToken = () => new Promise<string>((resolve, reject) => {
+        const tc = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: "https://www.googleapis.com/auth/drive.readonly",
+          callback: (resp: any) => {
+            if (resp.error) { reject(new Error(resp.error)); return }
+            gdriveTokenRef.current = resp.access_token
+            resolve(resp.access_token)
+          },
+        })
+        tc.requestAccessToken({ prompt: gdriveTokenRef.current ? "" : "consent" })
+      })
+
+      const token = gdriveTokenRef.current || await getToken()
+
+      await new Promise<void>(resolve => (window as any).gapi.load("picker", resolve))
+
+      const P = (window as any).google.picker
+      const picker = new P.PickerBuilder()
+        .addView(
+          new P.DocsView()
+            .setIncludeFolders(true)
+            .setMimeTypes("image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/x-msvideo")
+        )
+        .addView(new P.DocsView(P.ViewId.DOCS_IMAGES_AND_VIDEOS))
+        .setOAuthToken(token)
+        .enableFeature(P.Feature.MULTISELECT_ENABLED)
+        .setCallback(async (data: any) => {
+          if (data.action !== P.Action.PICKED) return
+          const files = data.docs as { id: string; name: string; mimeType: string }[]
+          
+          setGdriveImporting(true)
+          for (const f of files) {
+            try {
+              const res = await fetch("/api/google/import-drive", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  accessToken: gdriveTokenRef.current,
+                  fileId: f.id,
+                  fileName: f.name,
+                  mimeType: f.mimeType,
+                  adAccountId,
+                }),
+              })
+              if (res.ok) {
+                const d = await res.json()
+                // Auto-add to grid and select it!
+                setCreatives(prev => [d.creative, ...prev])
+                setSelected(prev => new Set([...prev, d.creative.id]))
+              } else {
+                const errData = await res.json()
+                console.error("Drive import failed for", f.name, errData)
+              }
+            } catch (err: any) {
+              console.error("Drive import error for", f.name, err)
+            }
+          }
+          setGdriveImporting(false)
+        })
+        .build()
+      picker.setVisible(true)
+    } catch (err: any) {
+      console.error("Google Drive connection failed", err)
+      setGdriveImporting(false)
+    }
+  }
+
   const toggleSelect = (id: string) => {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -127,6 +224,14 @@ export default function UploadAdsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <Button size="sm" variant="outline" onClick={openGoogleDrivePicker} disabled={gdriveImporting}>
+            {gdriveImporting ? (
+              <IconLoader2 className="size-4 animate-spin" />
+            ) : (
+              <IconBrandGoogleDrive className="size-4 text-[#4285F4]" />
+            )}
+            Import from Drive
+          </Button>
           {selected.size > 0 && (
             <span className="text-sm text-muted-foreground">
               {selected.size} selected

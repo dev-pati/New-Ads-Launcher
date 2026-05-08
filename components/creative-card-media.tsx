@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { IconPhoto, IconVideo, IconLoader2 } from "@tabler/icons-react"
+import { IconPhoto, IconVideo, IconLoader2, IconBrandGoogleDrive } from "@tabler/icons-react"
 
 interface Creative {
   id: string
@@ -24,6 +24,8 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   }
 
   const videoSrc = creative.file_url || ""
+  const isGDrive = videoSrc.includes("#gdrive")
+  const cleanVideoSrc = videoSrc.replace("#gdrive", "")
   const metaThumb = (creative.fb_thumbnail_url && /^https?:/.test(creative.fb_thumbnail_url) && !creative.fb_thumbnail_url.includes("rsrc.php")) 
     ? creative.fb_thumbnail_url 
     : (creative.fb_image_url && /^https?:/.test(creative.fb_image_url)) 
@@ -33,17 +35,26 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
         : null
 
   if (!isVideo) {
-    const imgSrc = creative.fb_image_url || creative.fb_thumbnail_url || videoSrc
-    return imgSrc && !imgFailed ? (
-      <img src={imgSrc} alt={creative.file_name} className={className} onError={() => setImgFailed(true)} />
-    ) : (
-      <div className={`${className} flex items-center justify-center bg-muted`}>
-        <IconPhoto className="size-6 text-muted-foreground/40" />
+    const imgSrc = creative.fb_image_url || creative.fb_thumbnail_url || cleanVideoSrc
+    return (
+      <div className="relative h-full w-full">
+        {imgSrc && !imgFailed ? (
+          <img src={imgSrc} alt={creative.file_name} className={className} onError={() => setImgFailed(true)} />
+        ) : (
+          <div className={`${className} flex items-center justify-center bg-muted`}>
+            <IconPhoto className="size-6 text-muted-foreground/40" />
+          </div>
+        )}
+        {isGDrive && (
+          <div className="absolute bottom-1.5 right-1.5 rounded bg-white p-0.5 shadow-sm">
+            <IconBrandGoogleDrive className="size-3.5 text-[#4285F4]" />
+          </div>
+        )}
       </div>
     )
   }
 
-  const playable = videoSrc && /^(blob|data|https?):/.test(videoSrc) && isVideoFile(videoSrc)
+  const playable = cleanVideoSrc && /^(blob|data|https?):/.test(cleanVideoSrc) && isVideoFile(cleanVideoSrc)
 
   if (playable) {
     // Compact mode (list rows): only load first frame as poster initially.
@@ -51,58 +62,81 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
     // so 30+ rows don't all decode at once.
     if (compact) {
       return (
-        <video
-          ref={videoRef}
-          src={videoSrc + (videoSrc.includes("#t=") ? "" : "#t=0.1")}
-          muted
-          playsInline
-          loop
-          preload="metadata"
-          poster={metaThumb || undefined}
-          className={className}
-          onMouseEnter={e => {
-            const v = e.currentTarget
-            // Switch preload to auto on demand so the video can actually play
-            if (v.preload !== "auto") v.preload = "auto"
-            v.play().catch(() => {})
-          }}
-          onMouseLeave={e => {
-            const v = e.currentTarget
-            v.pause()
-            try { v.currentTime = 0 } catch {}
-          }}
-        />
+        <div className="relative h-full w-full">
+          <video
+            ref={videoRef}
+            src={cleanVideoSrc + (cleanVideoSrc.includes("#t=") ? "" : "#t=0.1")}
+            muted
+            playsInline
+            loop
+            preload="metadata"
+            poster={metaThumb || undefined}
+            className={className}
+            onMouseEnter={e => {
+              const v = e.currentTarget
+              // Switch preload to auto on demand so the video can actually play
+              if (v.preload !== "auto") v.preload = "auto"
+              v.play().catch(() => {})
+            }}
+            onMouseLeave={e => {
+              const v = e.currentTarget
+              v.pause()
+              try { v.currentTime = 0 } catch {}
+            }}
+          />
+          {isGDrive && (
+            <div className="absolute bottom-1 right-1 rounded bg-white/90 p-0.5 shadow-sm">
+              <IconBrandGoogleDrive className="size-3 text-[#4285F4]" />
+            </div>
+          )}
+        </div>
       )
     }
     return (
-      <video
-        ref={videoRef}
-        src={videoSrc ? (videoSrc + (videoSrc.includes("#t=") ? "" : "#t=0.1")) : undefined}
-        muted
-        playsInline
-        loop
-        autoPlay
-        preload="auto"
-        poster={metaThumb || undefined}
-        className={className}
-        onLoadedData={() => {
-          if (videoRef.current) {
-            try { videoRef.current.pause() } catch {}
-          }
-        }}
-        onMouseEnter={() => videoRef.current?.play().catch(() => {})}
-        onMouseLeave={() => {
-          if (videoRef.current) {
-            videoRef.current.pause()
-            try { videoRef.current.currentTime = 0 } catch {}
-          }
-        }}
-      />
+      <div className="relative h-full w-full">
+        <video
+          ref={videoRef}
+          src={cleanVideoSrc ? (cleanVideoSrc + (cleanVideoSrc.includes("#t=") ? "" : "#t=0.1")) : undefined}
+          muted
+          playsInline
+          loop
+          autoPlay
+          preload="auto"
+          poster={metaThumb || undefined}
+          className={className}
+          onLoadedData={() => {
+            if (videoRef.current) {
+              try { videoRef.current.pause() } catch {}
+            }
+          }}
+          onMouseEnter={() => videoRef.current?.play().catch(() => {})}
+          onMouseLeave={() => {
+            if (videoRef.current) {
+              videoRef.current.pause()
+              try { videoRef.current.currentTime = 0 } catch {}
+            }
+          }}
+        />
+        {isGDrive && (
+          <div className="absolute bottom-1.5 right-1.5 rounded bg-white/90 p-1 shadow-sm backdrop-blur-sm">
+            <IconBrandGoogleDrive className="size-4 text-[#4285F4]" />
+          </div>
+        )}
+      </div>
     )
   }
 
   if (metaThumb && !imgFailed) {
-    return <img src={metaThumb} alt={creative.file_name} className={className} onError={() => setImgFailed(true)} />
+    return (
+      <div className="relative h-full w-full">
+        <img src={metaThumb} alt={creative.file_name} className={className} onError={() => setImgFailed(true)} />
+        {isGDrive && (
+          <div className="absolute bottom-1.5 right-1.5 rounded bg-white/90 p-1 shadow-sm backdrop-blur-sm">
+            <IconBrandGoogleDrive className="size-4 text-[#4285F4]" />
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (creative.fb_video_id) {

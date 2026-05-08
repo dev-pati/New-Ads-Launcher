@@ -58,7 +58,9 @@ interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
 interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string }
-interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[] }
+interface CreatedAd { adId: string; adSetId: string; adSetName: string; creativeId?: string; fileName?: string; thumbnailUrl?: string | null; mediaType?: "image" | "video"; mode?: string; multiGroup?: string; flexibleAd?: string; carousel?: string }
+interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; adAccountId: string; adAccountName: string; timestamp: string }
+interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[]; scheduled?: { at: string; end: string | null } | null; createdAds: CreatedAd[]; batchId?: string | null; launchMeta?: LaunchMeta }
 interface UploadItem {
   id: string
   file: File
@@ -207,6 +209,7 @@ interface LaunchBatch {
   duration_ms: number
   created_at: string
   errors: any[]
+  created_ads?: CreatedAd[]
 }
 
 // Facebook ads-supported languages (Meta locale codes)
@@ -4769,6 +4772,9 @@ function LoadMediaModal({
         setGdriveQueue(queue)
         setGdriveImporting(true)
 
+        const newImported: Creative[] = []
+        let newAllCreatives = [...allCreatives]
+
         for (let i = 0; i < files.length; i++) {
           const f = files[i]
           setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "importing" } : q))
@@ -4787,7 +4793,10 @@ function LoadMediaModal({
             const d = await res.json()
             if (!res.ok) throw new Error(d.error || "Import failed")
             const creative: Creative = d.creative
-            setAllCreatives(prev => [creative, ...prev.filter(c => c.id !== creative.id)])
+            
+            newImported.push(creative)
+            newAllCreatives = [creative, ...newAllCreatives.filter(c => c.id !== creative.id)]
+            setAllCreatives(newAllCreatives)
             setSelected(prev => new Set([...prev, creative.id]))
             setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "done" } : q))
           } catch (err: any) {
@@ -4795,6 +4804,23 @@ function LoadMediaModal({
           }
         }
         setGdriveImporting(false)
+
+        // Auto-confirm and close the dialog if we successfully imported files,
+        // so they instantly appear in the main Ads view (mimicking competitor UX).
+        if (newImported.length > 0) {
+          setTimeout(() => {
+            setSelected(prev => {
+              const finalSelectedIds = Array.from(prev)
+              const selectedObjects = newAllCreatives.filter(c => prev.has(c.id))
+              // Call onConfirm in the next microtask to avoid side-effects in setState
+              Promise.resolve().then(() => {
+                onConfirm(finalSelectedIds, selectedObjects)
+                onClose()
+              })
+              return prev
+            })
+          }, 800) // Brief delay so user can see the "Done" state before it closes
+        }
       })
       .build()
     picker.setVisible(true)
@@ -5558,8 +5584,19 @@ function LoadMediaModal({
         ) : mediaTab === "drive_link" ? (
           <DriveLinkTab gdriveToken={gdriveToken} onRequestAuth={openGoogleDrivePicker} adAccountId={adAccountId}
             onImported={(creatives) => {
-              setAllCreatives(prev => [...creatives.filter(c => !prev.some(p => p.id === c.id)), ...prev])
-              setSelected(prev => new Set([...prev, ...creatives.map(c => c.id)]))
+              const newAllCreatives = [...creatives.filter(c => !allCreatives.some(p => p.id === c.id)), ...allCreatives]
+              setAllCreatives(newAllCreatives)
+              
+              setSelected(prev => {
+                const nextIds = new Set([...prev, ...creatives.map(c => c.id)])
+                const finalSelectedIds = Array.from(nextIds)
+                const selectedObjects = newAllCreatives.filter(c => nextIds.has(c.id))
+                Promise.resolve().then(() => {
+                  onConfirm(finalSelectedIds, selectedObjects)
+                  onClose()
+                })
+                return nextIds
+              })
             }} />
         ) : mediaTab === "gdrive" || mediaTab === "drive_browser" ? (
           <div className="flex-1 flex flex-col overflow-hidden">
@@ -5671,30 +5708,71 @@ function LoadMediaModal({
 
 // ─── Schedule Modal ───────────────────────────────────────────────────────────
 
-function ScheduleModal({ open, onClose, onConfirm }: { open: boolean; onClose: () => void; onConfirm: (dt: string) => void }) {
+function ScheduleModal({ open, onClose, onConfirm }: {
+  open: boolean
+  onClose: () => void
+  onConfirm: (start: string, end?: string) => void
+}) {
   const [date, setDate] = useState("")
   const [time, setTime] = useState("09:00")
+  const [hasEnd, setHasEnd] = useState(false)
+  const [endDate, setEndDate] = useState("")
+  const [endTime, setEndTime] = useState("23:59")
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const today = new Date().toISOString().split("T")[0]
+  const inputCls = "w-full px-3 py-2 text-sm border rounded-lg bg-muted/30 outline-none focus:ring-1 focus:ring-ring"
+
+  const handleConfirm = () => {
+    if (!date) return
+    const start = new Date(`${date}T${time}:00`).toISOString()
+    const end = hasEnd && endDate ? new Date(`${endDate}T${endTime}:00`).toISOString() : undefined
+    onConfirm(start, end)
+    onClose()
+  }
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-sm">
-        <DialogHeader><DialogTitle>Schedule Ads</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>Schedule Ads</DialogTitle>
+          <p className="text-xs text-muted-foreground mt-1">Timezone: {tz}</p>
+        </DialogHeader>
         <div className="space-y-4 pt-2">
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Start Date</label>
-            <input type="date" value={date} min={new Date().toISOString().split("T")[0]}
-              onChange={e => setDate(e.target.value)}
-              className="w-full px-3 py-2 text-sm border rounded-lg bg-muted/30 outline-none focus:ring-1 focus:ring-ring" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Start Date</label>
+              <input type="date" value={date} min={today}
+                onChange={e => setDate(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Start Time</label>
+              <input type="time" value={time} onChange={e => setTime(e.target.value)} className={inputCls} />
+            </div>
           </div>
-          <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Start Time</label>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)}
-              className="w-full px-3 py-2 text-sm border rounded-lg bg-muted/30 outline-none focus:ring-1 focus:ring-ring" />
-          </div>
+
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={hasEnd} onChange={e => setHasEnd(e.target.checked)}
+              className="rounded border-input" />
+            <span className="text-sm">Set end date (optional)</span>
+          </label>
+
+          {hasEnd && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">End Date</label>
+                <input type="date" value={endDate} min={date || today}
+                  onChange={e => setEndDate(e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">End Time</label>
+                <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} className={inputCls} />
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-2 pt-2">
             <Button variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
-            <Button className="flex-1 gap-1.5" disabled={!date}
-              onClick={() => { if (date) { onConfirm(new Date(`${date}T${time}:00`).toISOString()); onClose() } }}>
+            <Button className="flex-1 gap-1.5" disabled={!date} onClick={handleConfirm}>
               <IconCalendar className="size-4" />Schedule
             </Button>
           </div>
@@ -8789,8 +8867,9 @@ function AdCopyTemplateModal({
   currentPrimaryText: string; currentHeadline: string
   currentDescription: string; currentLink: string; currentCta: string
 }) {
-  const TEMPLATES_KEY = `ad_copy_templates_${adAccountId}`
   const [templates, setTemplates] = useState<AdCopyTemplate[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState("")
   const [sort, setSort] = useState<"newest" | "oldest">("newest")
   const [page, setPage] = useState(1)
@@ -8815,19 +8894,27 @@ function AdCopyTemplateModal({
   // Expanded rows
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(["__default__"]))
 
-  useEffect(() => {
-    if (!open) return
-    try {
-      const raw = localStorage.getItem(TEMPLATES_KEY)
-      setTemplates(raw ? JSON.parse(raw) : [])
-    } catch { setTemplates([]) }
-    setSearch(""); setPage(1)
-  }, [open, adAccountId])
+  const dbToLocal = (t: any): AdCopyTemplate => ({
+    id: t.id,
+    name: t.name,
+    primaryText: t.primary_text || "",
+    headline: t.headline || "",
+    description: t.description || "",
+    link: t.link || "",
+    cta: t.cta || "SHOP_NOW",
+    createdAt: t.created_at,
+  })
 
-  const saveTemplates = (ts: AdCopyTemplate[]) => {
-    setTemplates(ts)
-    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(ts)) } catch {}
-  }
+  useEffect(() => {
+    if (!open || !adAccountId) return
+    setSearch(""); setPage(1)
+    setLoadingTemplates(true)
+    fetch(`/api/templates?ad_account_id=${encodeURIComponent(adAccountId)}`)
+      .then(r => r.json())
+      .then(d => setTemplates((d.templates || []).map(dbToLocal)))
+      .catch(() => setTemplates([]))
+      .finally(() => setLoadingTemplates(false))
+  }, [open, adAccountId])
 
   // Read Default Settings
   const defaultCopy = useMemo(() => {
@@ -8894,32 +8981,39 @@ function AdCopyTemplateModal({
     setCreateOpen(true)
   }
 
-  const handleSaveTemplate = () => {
-    if (!formName.trim()) return
-    if (editTarget) {
-      saveTemplates(templates.map(t => t.id === editTarget.id
-        ? { ...t, name: formName, primaryText: formPrimaryText, headline: formHeadline, description: formDescription, link: formLink, cta: formCta }
-        : t
-      ))
-    } else {
-      const newT: AdCopyTemplate = {
-        id: crypto.randomUUID(),
-        name: formName.trim(),
-        primaryText: formPrimaryText,
-        headline: formHeadline,
-        description: formDescription,
-        link: formLink,
-        cta: formCta,
-        createdAt: new Date().toISOString(),
+  const handleSaveTemplate = async () => {
+    if (!formName.trim() || !adAccountId) return
+    setSaving(true)
+    try {
+      if (editTarget) {
+        const r = await fetch(`/api/templates/${editTarget.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: formName, primary_text: formPrimaryText, headline: formHeadline, description: formDescription, link: formLink, cta: formCta }),
+        })
+        if (r.ok) {
+          const d = await r.json()
+          setTemplates(prev => prev.map(t => t.id === editTarget.id ? dbToLocal(d.template) : t))
+        }
+      } else {
+        const r = await fetch("/api/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ad_account_id: adAccountId, name: formName.trim(), primary_text: formPrimaryText, headline: formHeadline, description: formDescription, link: formLink, cta: formCta }),
+        })
+        if (r.ok) {
+          const d = await r.json()
+          setTemplates(prev => [dbToLocal(d.template), ...prev])
+        }
       }
-      saveTemplates([newT, ...templates])
-    }
-    setCreateOpen(false)
+      setCreateOpen(false)
+    } finally { setSaving(false) }
   }
 
-  const deleteTemplate = (id: string) => {
+  const deleteTemplate = async (id: string) => {
     if (!confirm("Delete this template?")) return
-    saveTemplates(templates.filter(t => t.id !== id))
+    setTemplates(prev => prev.filter(t => t.id !== id))
+    await fetch(`/api/templates/${id}`, { method: "DELETE" })
   }
 
   const applyDefault = () => {
@@ -9024,6 +9118,11 @@ function AdCopyTemplateModal({
 
         {/* Template list */}
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
+          {loadingTemplates && (
+            <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground">
+              <IconLoader2 className="size-4 animate-spin" /><span className="text-sm">Loading templates...</span>
+            </div>
+          )}
           {/* Default Settings card */}
           {!search && (
             <div className="border rounded-xl overflow-hidden">
@@ -9244,8 +9343,9 @@ function AdCopyTemplateModal({
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-3 border-t shrink-0">
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveTemplate} disabled={!formName.trim()}>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving}>Cancel</Button>
+            <Button onClick={handleSaveTemplate} disabled={!formName.trim() || saving}>
+              {saving && <IconLoader2 className="size-3.5 mr-1.5 animate-spin" />}
               {editTarget ? "Save Changes" : "Create Template"}
             </Button>
           </div>
@@ -10164,45 +10264,368 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
   )
 }
 
-// ─── Launch Result Banner ─────────────────────────────────────────────────────
+// ─── Launch Result Modal ──────────────────────────────────────────────────────
 
-function LaunchResultBanner({ result, onDismiss }: { result: LaunchResult; onDismiss: () => void }) {
+function DetailItem({ label, value, copyable, mono }: { label: string; value: string; copyable?: boolean; mono?: boolean }) {
+  return (
+    <div className="flex items-start gap-2 min-w-0">
+      <span className="text-muted-foreground shrink-0 w-24 text-[11px]">{label}</span>
+      <span className={cn("flex-1 text-foreground text-[11px] truncate", mono && "font-mono text-[10px]")} title={value}>{value}</span>
+      {copyable && (
+        <button onClick={() => navigator.clipboard.writeText(value)} className="text-muted-foreground hover:text-foreground shrink-0">
+          <IconCopy className="size-3" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
+  index: number; ad: CreatedAd; status?: string; expanded: boolean; onToggle: () => void; launchMeta?: LaunchMeta
+}) {
+  const displayName = ad.fileName?.replace(/\.[^/.]+$/, "") || ad.multiGroup || ad.flexibleAd || ad.carousel || `Ad ${index}`
+  const actId = launchMeta?.adAccountId?.replace("act_", "") || ""
+  const metaUrl = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${actId}&filter_set=SEARCH_BY_AD_IDS-STRING_SET%1E${ad.adId}`
+  return (
+    <>
+      <tr className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer select-none", expanded && "bg-muted/30")} onClick={onToggle}>
+        <td className="px-2 py-1.5 text-muted-foreground w-8">
+          <div className="flex items-center gap-0.5 text-xs">{expanded ? <IconChevronDown className="size-3" /> : <IconChevronRight className="size-3" />}{index}</div>
+        </td>
+        <td className="px-1 py-1.5 w-10">
+          {ad.thumbnailUrl
+            ? <img src={ad.thumbnailUrl} className="size-8 rounded object-cover" />
+            : <div className="size-8 rounded bg-muted flex items-center justify-center">{ad.mediaType === "video" ? <IconVideo className="size-3 text-muted-foreground" /> : <IconPhoto className="size-3 text-muted-foreground" />}</div>}
+        </td>
+        <td className="px-2 py-1.5 text-xs font-medium max-w-[140px] truncate" title={displayName}>{displayName}</td>
+        <td className="px-2 py-1.5 w-28">
+          {status
+            ? <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase", status === "ACTIVE" ? "bg-green-100 text-green-700" : status === "PAUSED" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500")}>{status}</span>
+            : <span className="flex items-center gap-1 text-green-600 text-[10px] font-medium"><IconCircleCheck className="size-3" />Success</span>}
+        </td>
+        <td className="px-2 py-1.5 w-40">
+          <div className="flex items-center gap-1">
+            <span className="font-mono text-[10px] text-muted-foreground">{ad.adId.slice(0, 15)}…</span>
+            <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(ad.adId) }} className="text-muted-foreground hover:text-foreground"><IconCopy className="size-3" /></button>
+            <a href={metaUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-500 hover:text-blue-600"><IconExternalLink className="size-3" /></a>
+          </div>
+        </td>
+        <td className="px-2 py-1.5 text-xs text-muted-foreground truncate max-w-[120px]" title={ad.adSetName}>{ad.adSetName}</td>
+      </tr>
+      {expanded && (
+        <tr className="bg-muted/10 border-b">
+          <td colSpan={6} className="px-5 py-2.5">
+            <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+              {launchMeta?.adAccountName && <DetailItem label="Account" value={launchMeta.adAccountName} />}
+              <DetailItem label="Ad Set" value={ad.adSetName} />
+              {launchMeta?.cta && <DetailItem label="CTA" value={launchMeta.cta} />}
+              {launchMeta?.webLink && <DetailItem label="Web Link" value={launchMeta.webLink} copyable />}
+              <DetailItem label="Ad ID" value={ad.adId} copyable mono />
+              {ad.thumbnailUrl && <DetailItem label="Media URL" value={ad.thumbnailUrl} copyable />}
+              {launchMeta?.pageId && <DetailItem label="Page" value={launchMeta.pageId} />}
+              {launchMeta?.headline && <DetailItem label="Headline" value={launchMeta.headline} />}
+              {launchMeta?.primaryText && <DetailItem label="Primary Text" value={launchMeta.primaryText} />}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  )
+}
+
+function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose: () => void }) {
+  const [tab, setTab] = useState<"launched" | "performance">("launched")
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [adStatuses, setAdStatuses] = useState<Record<string, string>>({})
+  const [loadingStatus, setLoadingStatus] = useState(false)
+  const [insights, setInsights] = useState<any[]>([])
+  const [loadingInsights, setLoadingInsights] = useState(false)
+  const [datePreset, setDatePreset] = useState("last_30d")
+  const [fetchMs, setFetchMs] = useState<number | null>(null)
+
   const isSuccess = result.failed === 0
   const isPartial = result.created > 0 && result.failed > 0
+  const batchShort = result.batchId
+    ? result.batchId.replace(/-/g, "").slice(-6).toUpperCase()
+    : Math.floor(Math.random() * 900000 + 100000).toString()
+
+  const adIds = result.createdAds.map(a => a.adId).filter(Boolean)
+  const hasAdIds = adIds.length > 0
+
+  const loadStatus = async () => {
+    if (!hasAdIds || !result.launchMeta?.adAccountId) return
+    setLoadingStatus(true)
+    try {
+      const res = await fetch("/api/facebook/ads-insights", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adAccountId: result.launchMeta.adAccountId, adIds, statusOnly: true }),
+      })
+      const data = await res.json()
+      const map: Record<string, string> = {}
+      for (const r of data.insights || []) map[r.adId] = r.effectiveStatus
+      setAdStatuses(map)
+    } finally { setLoadingStatus(false) }
+  }
+
+  const loadInsights = async () => {
+    if (!hasAdIds || !result.launchMeta?.adAccountId) return
+    setLoadingInsights(true)
+    const t = Date.now()
+    try {
+      const res = await fetch("/api/facebook/ads-insights", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adAccountId: result.launchMeta.adAccountId, adIds, datePreset }),
+      })
+      const data = await res.json()
+      setInsights(data.insights || [])
+      setFetchMs(Date.now() - t)
+    } finally { setLoadingInsights(false) }
+  }
+
+  useEffect(() => { if (tab === "performance") loadInsights() }, [tab, datePreset])
+
+  const totals = useMemo(() => {
+    let spend = 0, impressions = 0, clicks = 0, reach = 0, actions = 0
+    for (const r of insights) { spend += r.spend; impressions += r.impressions; clicks += r.clicks; reach += r.reach; actions += r.actions }
+    return { spend, impressions, clicks, reach, actions, costPerAction: actions > 0 ? spend / actions : 0 }
+  }, [insights])
+
+  const actId = result.launchMeta?.adAccountId?.replace("act_", "") || ""
 
   return (
-    <div className={cn("mx-3 mb-3 rounded-xl border p-4",
-      isSuccess ? "bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800" :
-      isPartial ? "bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800" :
-      "bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800")}>
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-2.5">
-          {isSuccess ? <IconCircleCheck className="size-5 text-green-600 shrink-0 mt-0.5" />
-            : isPartial ? <IconAlertTriangle className="size-5 text-amber-600 shrink-0 mt-0.5" />
-            : <IconAlertCircle className="size-5 text-red-600 shrink-0 mt-0.5" />}
-          <div>
-            <p className={cn("text-sm font-semibold",
-              isSuccess ? "text-green-800 dark:text-green-300" :
-              isPartial ? "text-amber-800 dark:text-amber-300" : "text-red-800 dark:text-red-300")}>
-              {isSuccess ? `${result.created} ads launched successfully!` :
-               isPartial ? `${result.created} ads created, ${result.failed} failed` : "Launch failed"}
-              {result.durationMs > 0 && (
-                <span className="ml-2 text-xs font-normal opacity-70">({formatDuration(result.durationMs)})</span>
-              )}
+    <Dialog open onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-4xl w-[95vw] max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden [&>button:last-of-type]:hidden">
+        <DialogTitle className="sr-only">Launch Result</DialogTitle>
+
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-3.5 border-b shrink-0">
+          <div className={cn("size-8 rounded-full flex items-center justify-center shrink-0", isSuccess ? "bg-green-100" : isPartial ? "bg-amber-100" : "bg-red-100")}>
+            {isSuccess ? <IconCircleCheck className="size-5 text-green-600" /> : isPartial ? <IconAlertTriangle className="size-5 text-amber-600" /> : <IconAlertCircle className="size-5 text-red-600" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm font-semibold">{result.scheduled ? "Ads Scheduled" : "Launch completed"}</h2>
+              <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", isSuccess ? "bg-green-100 text-green-700" : isPartial ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700")}>
+                ● {result.created} of {result.created + result.failed} succeeded
+              </span>
+              <button className="flex items-center gap-1 text-xs border rounded px-2 py-0.5 hover:bg-muted font-mono" onClick={() => navigator.clipboard.writeText(batchShort)}>
+                BATCH #{batchShort}<IconCopy className="size-3 ml-0.5" />
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {result.launchMeta?.timestamp && new Date(result.launchMeta.timestamp).toLocaleString("en-US", { hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" })}
+              {result.launchMeta?.adAccountName && ` · ${result.launchMeta.adAccountName}`}
             </p>
-            {result.errors.slice(0, 3).map((e, i) => (
-              <p key={i} className="text-xs text-muted-foreground mt-1 truncate max-w-xs">{e.fileName}: {e.error}</p>
-            ))}
-            {result.errors.length > 3 && (
-              <p className="text-xs text-muted-foreground mt-0.5">...and {result.errors.length - 3} more errors</p>
-            )}
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground shrink-0 ml-2"><IconX className="size-4" /></button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b px-5 shrink-0">
+          {(["launched", "performance"] as const).map(t => (
+            <button key={t} onClick={() => setTab(t)} className={cn("pb-2 pt-2.5 px-1 mr-5 text-sm font-medium border-b-2 transition-colors capitalize", tab === t ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground")}>
+              {t === "launched" ? "Launched" : "Performance"}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+
+          {/* ── Launched tab ── */}
+          {tab === "launched" && (
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <div className="flex items-center gap-1.5 text-sm font-medium">
+                  <IconBrandMeta className="size-4 text-[#1877F2]" />
+                  Meta Ads ({result.created} succeeded)
+                </div>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                    const links = adIds.map(id => `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${actId}&filter_set=SEARCH_BY_AD_IDS-STRING_SET%1E${id}`).join("\n")
+                    navigator.clipboard.writeText(links)
+                  }}><IconEye className="size-3" />Preview Links</Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => navigator.clipboard.writeText(adIds.join("\n"))}>
+                    <IconCopy className="size-3" />Copy Ad IDs
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={loadStatus} disabled={loadingStatus || !hasAdIds} title={!hasAdIds ? "No ad IDs — launch again to enable" : undefined}>
+                    {loadingStatus ? <IconLoader2 className="size-3 animate-spin" /> : <IconRefresh className="size-3" />}Load Status
+                  </Button>
+                </div>
+              </div>
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-muted/50 border-b">
+                    <tr className="text-xs text-muted-foreground">
+                      <th className="text-left px-2 py-2 w-8">#</th>
+                      <th className="text-left px-1 py-2 w-10">Thumb</th>
+                      <th className="text-left px-2 py-2">Name</th>
+                      <th className="text-left px-2 py-2 w-28">Status</th>
+                      <th className="text-left px-2 py-2 w-40">Ad ID</th>
+                      <th className="text-left px-2 py-2 w-32">Ad Set</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.createdAds.map((ad, i) => {
+                      const rowKey = ad.adId || `row-${i}`
+                      return (
+                        <AdResultRow key={rowKey} index={i + 1} ad={ad}
+                          status={adStatuses[ad.adId]}
+                          expanded={expandedId === rowKey}
+                          onToggle={() => setExpandedId(p => p === rowKey ? null : rowKey)}
+                          launchMeta={result.launchMeta} />
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {result.errors.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  {result.errors.map((e, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs text-red-600 bg-red-50 dark:bg-red-900/20 rounded px-3 py-1.5">
+                      <IconAlertCircle className="size-3 shrink-0 mt-0.5" />
+                      <span className="font-medium truncate">{e.fileName}:</span>
+                      <span className="text-muted-foreground">{e.error}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {result.scheduled && (
+                <div className="mt-3 text-xs text-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded px-3 py-2 flex items-center gap-2">
+                  <IconClock className="size-3.5 shrink-0" />
+                  Activates: {new Date(result.scheduled.at).toLocaleString()}
+                  {result.scheduled.end && ` · Ends: ${new Date(result.scheduled.end).toLocaleString()}`}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Performance tab ── */}
+          {tab === "performance" && (
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <div className="flex items-center gap-1.5 text-sm font-medium">
+                  <IconTrendingUp className="size-4" />
+                  Performance
+                  {insights.length > 0 && <span className="text-muted-foreground font-normal text-xs">({insights.filter((r: any) => r.spend > 0).length}/{result.createdAds.length} ads with data)</span>}
+                  {fetchMs && <span className="text-muted-foreground font-normal text-xs">{(fetchMs / 1000).toFixed(1)}s</span>}
+                </div>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Select value={datePreset} onValueChange={setDatePreset}>
+                    <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="last_7d">Last 7 days</SelectItem>
+                      <SelectItem value="last_30d">Last 30 days</SelectItem>
+                      <SelectItem value="this_month">This month</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={loadInsights} disabled={loadingInsights}>
+                    {loadingInsights ? <IconLoader2 className="size-3 animate-spin" /> : <IconRefresh className="size-3" />}Refresh
+                  </Button>
+                </div>
+              </div>
+
+              {insights.length > 0 && (
+                <div className="grid grid-cols-5 gap-2 mb-4">
+                  {[
+                    { label: "Total Spend", value: `$${totals.spend.toFixed(2)}`, icon: IconCurrencyDollar },
+                    { label: "Avg Cost/Action", value: totals.actions > 0 ? `$${totals.costPerAction.toFixed(2)}` : "—", icon: IconTrendingUp },
+                    { label: "Impressions", value: totals.impressions.toLocaleString(), icon: IconEye },
+                    { label: "Clicks", value: totals.clicks.toLocaleString(), icon: IconTarget },
+                    { label: "Reach", value: totals.reach.toLocaleString(), icon: IconUsers },
+                  ].map(m => (
+                    <div key={m.label} className="bg-muted/30 rounded-lg px-3 py-2.5">
+                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1"><m.icon className="size-3" />{m.label}</div>
+                      <p className="text-base font-semibold">{m.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {loadingInsights ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground text-sm gap-2">
+                  <IconLoader2 className="size-4 animate-spin" />Loading insights…
+                </div>
+              ) : insights.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-muted-foreground text-sm gap-2">
+                  <IconTrendingUp className="size-8 opacity-20" />
+                  No performance data yet. Ads need to run first.
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50 border-b text-muted-foreground">
+                      <tr>
+                        <th className="text-left px-2 py-2 w-8">#</th>
+                        <th className="text-left px-1 py-2 w-10">Thumb</th>
+                        <th className="text-left px-2 py-2">Ad Name</th>
+                        <th className="text-left px-2 py-2 w-24">Status</th>
+                        <th className="text-right px-2 py-2 w-20">Spend</th>
+                        <th className="text-right px-2 py-2 w-20">Cost/Act.</th>
+                        <th className="text-right px-2 py-2 w-16">Actions</th>
+                        <th className="text-right px-2 py-2 w-16">CTR</th>
+                        <th className="text-right px-2 py-2 w-16">Impr.</th>
+                        <th className="text-right px-2 py-2 w-16">Clicks</th>
+                        <th className="text-right px-2 py-2 w-16">CPC</th>
+                        <th className="text-right px-2 py-2 w-16">CPM</th>
+                        <th className="text-right px-2 py-2 w-16">Reach</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {insights.map((row: any, i: number) => {
+                        const createdAd = result.createdAds.find(a => a.adId === row.adId)
+                        const ctrGood = row.ctr >= 3, ctrBad = row.ctr < 2 && row.impressions > 100
+                        return (
+                          <tr key={row.adId} className="border-b last:border-0 hover:bg-muted/20">
+                            <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
+                            <td className="px-1 py-1.5">
+                              {createdAd?.thumbnailUrl
+                                ? <img src={createdAd.thumbnailUrl} className="size-8 rounded object-cover" />
+                                : <div className="size-8 rounded bg-muted" />}
+                            </td>
+                            <td className="px-2 py-1.5 font-medium max-w-[140px] truncate" title={row.name}>{row.name}</td>
+                            <td className="px-2 py-1.5">
+                              <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase", row.effectiveStatus === "ACTIVE" ? "bg-green-100 text-green-700" : row.effectiveStatus === "PAUSED" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500")}>{row.effectiveStatus}</span>
+                            </td>
+                            <td className="px-2 py-1.5 text-right">${row.spend.toFixed(2)}</td>
+                            <td className="px-2 py-1.5 text-right">{row.costPerAction > 0 ? `$${row.costPerAction.toFixed(2)}` : "—"}</td>
+                            <td className="px-2 py-1.5 text-right">{row.actions || 0}</td>
+                            <td className={cn("px-2 py-1.5 text-right font-medium", ctrGood ? "text-green-600 bg-green-50 dark:bg-green-900/20" : ctrBad ? "text-red-600 bg-red-50 dark:bg-red-900/20" : "")}>
+                              {row.impressions > 0 ? `${row.ctr.toFixed(2)}%` : "—"}
+                            </td>
+                            <td className="px-2 py-1.5 text-right">{row.impressions.toLocaleString()}</td>
+                            <td className="px-2 py-1.5 text-right">{row.clicks}</td>
+                            <td className="px-2 py-1.5 text-right">{row.cpc > 0 ? `$${row.cpc.toFixed(2)}` : "—"}</td>
+                            <td className={cn("px-2 py-1.5 text-right", row.cpm > 80 ? "text-red-500" : row.cpm > 0 && row.cpm < 40 ? "text-green-600" : "")}>{row.cpm > 0 ? `$${row.cpm.toFixed(2)}` : "—"}</td>
+                            <td className="px-2 py-1.5 text-right">{row.reach.toLocaleString()}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between px-5 py-3 border-t shrink-0">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <IconClock className="size-3.5" />Completed in {formatDuration(result.durationMs)}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="text-xs">Load as Draft</Button>
+            <a href={`https://adsmanager.facebook.com/adsmanager/manage/ads?act=${actId}`} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" className="text-xs gap-1.5 bg-[#1877F2] hover:bg-[#1877F2]/90">
+                View Meta Ads Manager<IconBrandMeta className="size-3.5" />
+              </Button>
+            </a>
           </div>
         </div>
-        <button onClick={onDismiss} className="text-muted-foreground hover:text-foreground">
-          <IconX className="size-4" />
-        </button>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -10415,8 +10838,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch }: { reloadTrigger: nu
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedBatch, setSelectedBatch] = useState<LaunchBatch | null>(null)
-  const [detailOpen, setDetailOpen] = useState(false)
+  const [resultModal, setResultModal] = useState<LaunchResult | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -10447,14 +10869,43 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch }: { reloadTrigger: nu
     { key: "scheduled" as const, label: "Scheduled Ads", Icon: IconCalendar },
   ]
 
+  const openDetails = (b: LaunchBatch) => {
+    // For old batches without per-ad data, synthesise CreatedAd[] from thumbs × adsets
+    const createdAds: CreatedAd[] = b.created_ads?.length
+      ? b.created_ads
+      : (b.creative_thumbs || []).flatMap((thumb, _ci) =>
+          (b.adset_ids || []).map((adSetId, ai) => ({
+            adId: "",
+            adSetId,
+            adSetName: b.adset_names?.[ai] || adSetId,
+            thumbnailUrl: thumb || null,
+            mediaType: "image" as const,
+          }))
+        ).slice(0, b.total_ads || 1)
+
+    setResultModal({
+      created: b.total_ads,
+      failed: b.failed_ads,
+      durationMs: b.duration_ms,
+      errors: b.errors || [],
+      createdAds,
+      batchId: b.id,
+      launchMeta: {
+        cta: b.cta || "",
+        webLink: b.web_link || "",
+        headline: b.headline || "",
+        primaryText: b.primary_text || "",
+        pageId: b.page_id || "",
+        adAccountId: b.ad_account_id,
+        adAccountName: b.ad_account_name,
+        timestamp: b.created_at,
+      },
+    })
+  }
+
   return (
     <div className="border-t flex flex-col">
-      <BatchDetailModal
-        batch={selectedBatch}
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        onRelaunch={onRelaunch}
-      />
+      {resultModal && <LaunchResultModal result={resultModal} onClose={() => setResultModal(null)} />}
       <div className="flex items-center border-b px-4 shrink-0 gap-0">
         {TABS.map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setTab(key)}
@@ -10564,7 +11015,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch }: { reloadTrigger: nu
               <Button
                 variant="ghost" size="sm"
                 className="h-6 text-xs gap-0.5 px-2"
-                onClick={() => { setSelectedBatch(b); setDetailOpen(true) }}
+                onClick={() => openDetails(b)}
               >
                 Details
               </Button>
@@ -11851,7 +12302,7 @@ export default function LaunchPage() {
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const doLaunch = async (scheduledTime?: string) => {
+  const doLaunch = async (scheduledTime?: string, scheduleEndTime?: string) => {
     if (!validate()) return
     setLaunching(true)
     setLaunchResult(null)
@@ -11890,6 +12341,7 @@ export default function LaunchPage() {
           displayLink: displayLink.trim() || undefined,
           createPaused: !launchAsActive,
           startTime: scheduledTime,
+          endTime: scheduleEndTime,
           partnerPageId: partnership.enabled && partnership.partnerPageId ? partnership.partnerPageId : undefined,
           partnershipDisplayMode: partnership.enabled && partnership.partnerPageId ? partnership.displayMode : undefined,
           multilanguage: multilanguage.enabled && multilanguage.translations.length > 0
@@ -11961,6 +12413,19 @@ export default function LaunchPage() {
         failed: data.errors?.length ?? 0,
         durationMs: data.durationMs ?? 0,
         errors: data.errors || [],
+        scheduled: data.scheduled ?? null,
+        createdAds: data.created || [],
+        batchId: data.batchId || null,
+        launchMeta: {
+          cta,
+          webLink: webLink.trim(),
+          headline: headlines.find((h: string) => h.trim()) || "",
+          primaryText: primaryTexts.find((t: string) => t.trim()) || "",
+          pageId: selectedPageId || "",
+          adAccountId: selectedAccountId || "",
+          adAccountName: selectedAccount?.name || selectedAccountId || "",
+          timestamp: new Date().toISOString(),
+        },
       }
       setLaunchResult(result)
       setHistoryReload(n => n + 1)
@@ -12085,7 +12550,7 @@ export default function LaunchPage() {
           }
         }} />
       <ScheduleModal open={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)}
-        onConfirm={dt => doLaunch(dt)} />
+        onConfirm={(start, end) => doLaunch(start, end)} />
       <AdProfilesModal
         open={adProfilesOpen}
         onClose={() => setAdProfilesOpen(false)}
@@ -12470,7 +12935,7 @@ export default function LaunchPage() {
               </div>
 
               {launchResult && (
-                <LaunchResultBanner result={launchResult} onDismiss={() => setLaunchResult(null)} />
+                <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} />
               )}
 
               <GalleryMediaPanel
