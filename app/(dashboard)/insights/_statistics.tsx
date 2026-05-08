@@ -909,8 +909,8 @@ export function DemographicView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {campaigns.map((c: any) => (
-                      <tr key={c.name} className="border-b hover:bg-muted/20 transition-colors">
+                    {campaigns.map((c: any, i: number) => (
+                      <tr key={`${c.name}-${i}`} className="border-b hover:bg-muted/20 transition-colors">
                         <td className="px-5 py-3">
                           <p className="font-medium max-w-xs truncate">{c.name}</p>
                         </td>
