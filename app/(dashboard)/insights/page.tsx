@@ -19,6 +19,8 @@ import {
   BarChart,
 } from "recharts"
 import { AllAccountsView, SpendView, DemographicView, CountryView, AdHistoryView, PlacementsView, DeviceView, ReachView, CreativeAuditView, UploadStatsView } from "./_statistics"
+import { CommentsView } from "./_comments"
+import { ReportsView, ReportSection } from "./_reports"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -197,7 +199,7 @@ function MetricCard({ label, value, sparkData }: { label: string; value: string;
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Section = "top-creatives" | "dashboard" | "statistics" | "comments"
+type Section = "dashboard" | "statistics" | "comments" | ReportSection
 type StatTab = "all-accounts" | "spend" | "demographic" | "country" | "ad-history" | "placements" | "device" | "reach" | "creative-audit" | "upload-stats"
 
 export default function InsightsPage() {
@@ -407,60 +409,125 @@ export default function InsightsPage() {
       {/* ── Inner Left Sidebar ──────────────────────────────────────── */}
       <aside className="w-52 border-r flex flex-col shrink-0 overflow-y-auto bg-sidebar">
         <div className="p-3 space-y-0.5">
-          {([
-            { id: "top-creatives", icon: IconTrendingUp,      label: "Top Creatives" },
-            { id: "dashboard",     icon: IconLayoutDashboard, label: "Custom Dashboard" },
-            { id: "statistics",    icon: IconChartBar,        label: "Statistics" },
-            { id: "comments",      icon: IconMessageCircle,   label: "Comments" },
-          ] as { id: Section; icon: any; label: string }[]).map(item => (
-            <div key={item.id}>
-              <button onClick={() => setSection(item.id)}
-                className={cn("flex items-center gap-2.5 w-full px-2.5 py-2 text-sm rounded-md transition-colors",
-                  section === item.id ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                )}
-              >
-                <item.icon className="size-4 shrink-0" />{item.label}
-              </button>
-              {item.id === "statistics" && section === "statistics" && (
-                <div className="ml-3 mt-0.5 mb-1 space-y-0.5">
-                  {([
-                    { id: "all-accounts"   as StatTab, label: "All Accounts" },
-                    { id: "spend"          as StatTab, label: "Spend" },
-                    { id: "demographic"    as StatTab, label: "Demographic" },
-                    { id: "country"        as StatTab, label: "Country" },
-                    { id: "ad-history"     as StatTab, label: "Ad History" },
-                    { id: "placements"     as StatTab, label: "Placements" },
-                    { id: "upload-stats"   as StatTab, label: "Upload Stats" },
-                    { id: "creative-audit" as StatTab, label: "Creative Audit" },
-                    { id: "reach"          as StatTab, label: "Reach" },
-                    { id: "device"         as StatTab, label: "Device" },
-                  ]).map(sub => (
-                    <button key={sub.id} onClick={() => setStatTab(sub.id)}
-                      className={cn("flex items-center h-7 px-2.5 rounded-md text-xs w-full transition-colors",
-                        statTab === sub.id
-                          ? "bg-primary/10 text-primary font-medium"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                      )}
-                    >
-                      {sub.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+
+          {/* Statistics */}
+          <div>
+            <button onClick={() => setSection("statistics")}
+              className={cn("flex items-center gap-2.5 w-full px-2.5 py-2 text-sm rounded-md transition-colors",
+                section === "statistics" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}>
+              <IconChartBar className="size-4 shrink-0" />
+              <span className="flex-1 text-left">Statistics</span>
+              <IconChevronDown className={cn("size-3.5 transition-transform", section === "statistics" && "rotate-180")} />
+            </button>
+            {section === "statistics" && (
+              <div className="ml-3 mt-0.5 mb-1 space-y-0.5">
+                {([
+                  { id: "all-accounts"   as StatTab, label: "All Accounts" },
+                  { id: "spend"          as StatTab, label: "Spend" },
+                  { id: "demographic"    as StatTab, label: "Demographic" },
+                  { id: "country"        as StatTab, label: "Country" },
+                  { id: "ad-history"     as StatTab, label: "Ad History" },
+                  { id: "placements"     as StatTab, label: "Placements" },
+                  { id: "upload-stats"   as StatTab, label: "Upload Stats" },
+                  { id: "creative-audit" as StatTab, label: "Creative Audit" },
+                  { id: "reach"          as StatTab, label: "Reach" },
+                  { id: "device"         as StatTab, label: "Device" },
+                ]).map(sub => (
+                  <button key={sub.id} onClick={() => setStatTab(sub.id)}
+                    className={cn("flex items-center h-7 px-2.5 rounded-md text-xs w-full transition-colors",
+                      statTab === sub.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    )}>
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Comments */}
+          <div>
+            <button onClick={() => setSection("comments")}
+              className={cn("flex items-center gap-2.5 w-full px-2.5 py-2 text-sm rounded-md transition-colors",
+                section === "comments" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}>
+              <IconMessageCircle className="size-4 shrink-0" />
+              <span className="flex-1 text-left">Comments</span>
+              <IconChevronDown className={cn("size-3.5 transition-transform", section === "comments" && "rotate-180")} />
+            </button>
+            {section === "comments" && (
+              <div className="ml-3 mt-0.5 mb-1 space-y-0.5">
+                {([
+                  { label: "All",        dot: "#94a3b8" },
+                  { label: "Unreplied",  dot: "#3b82f6" },
+                  { label: "Positive",   dot: "#22c55e" },
+                  { label: "Neutral",    dot: "#94a3b8" },
+                  { label: "Negative",   dot: "#ef4444" },
+                  { label: "Analytics",  dot: null },
+                  { label: "Automation", dot: null },
+                  { label: "History",    dot: null },
+                ]).map(sub => (
+                  <div key={sub.label}
+                    className="flex items-center h-7 px-2.5 rounded-md text-xs w-full text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-default">
+                    {sub.dot
+                      ? <span className="size-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: sub.dot }} />
+                      : <span className="size-2 mr-2 shrink-0" />}
+                    {sub.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         </div>
-        <div className="px-4 mt-4">
-          <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">Reports</p>
-          <p className="text-xs text-muted-foreground/40 py-1 italic">No saved reports yet.</p>
+
+        {/* FOLDERS section */}
+        <div className="px-3 mt-3">
+          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider px-2 mb-1.5">Folders</p>
+
+          {/* REPORTS sub-folder */}
+          <div className="mb-2">
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-2.5 py-1">Reports</p>
+            <div className="space-y-0.5">
+              {([
+                { id: "top-creatives" as ReportSection, label: "Top Creatives",  dot: "🏆" },
+                { id: "admanage-ads"  as ReportSection, label: "AdManage Ads",   dot: "📊" },
+                { id: "all-active-ads"as ReportSection, label: "All Active Ads", dot: "🟢" },
+                { id: "vs-mode"       as ReportSection, label: "VS Mode",        dot: "✕" },
+                { id: "fatigued-ads"  as ReportSection, label: "Fatigued Ads",   dot: "😤" },
+                { id: "landing-pages" as ReportSection, label: "Landing Pages",  dot: "🏞" },
+                { id: "ads-l90d"      as ReportSection, label: "Ads L90D",       dot: "📅" },
+              ]).map(item => (
+                <button key={item.id} onClick={() => setSection(item.id)}
+                  className={cn("flex items-center gap-2 w-full px-2.5 py-1.5 text-xs rounded-md transition-colors",
+                    section === item.id ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                  )}>
+                  <span className="text-[13px] shrink-0 w-4 text-center">{item.dot}</span>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* SAVED REPORTS */}
+          <div>
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-2.5 py-1">Saved Reports</p>
+            <p className="text-xs text-muted-foreground/40 px-2.5 py-1 italic">No saved reports yet.</p>
+          </div>
         </div>
       </aside>
 
       {/* ── Main Content ─────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
-        {/* ════════════════ TOP CREATIVES ═════════════════════════════ */}
-        {section === "top-creatives" && (
+        {/* ════════════════ REPORT SECTIONS ═══════════════════════════ */}
+        {(section === "top-creatives" || section === "admanage-ads" || section === "all-active-ads" ||
+          section === "vs-mode" || section === "fatigued-ads" || section === "landing-pages" || section === "ads-l90d") && (
+          <ReportsView type={section as ReportSection} />
+        )}
+
+        {/* ════════════════ TOP CREATIVES (removed, handled by ReportsView) */}
+        {false && false && (
           <>
             <div className="flex items-center justify-between px-6 py-3 border-b shrink-0">
               <div className="flex items-center gap-3">
@@ -598,23 +665,23 @@ export default function InsightsPage() {
                             className="text-muted-foreground hover:text-foreground">
                             <IconArrowsUpDown className="size-3.5 rotate-90" />
                           </button>
-                          <span className="text-sm font-medium">{pendingField.label}</span>
+                          <span className="text-sm font-medium">{pendingField!.label}</span>
                         </div>
 
-                        {pendingField.type === "dynamic" ? (
+                        {pendingField!.type === "dynamic" ? (
                           <>
                             <div className="p-2 border-b">
                               <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-1.5 px-1">Values</p>
                               <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40">
                                 <IconSearch className="size-3.5 text-muted-foreground/50 shrink-0" />
                                 <input value={valueSearch} onChange={e => setValueSearch(e.target.value)}
-                                  placeholder={`Select ${pendingField.label.toLowerCase()}...`} autoFocus
+                                  placeholder={`Select ${pendingField!.label.toLowerCase()}...`} autoFocus
                                   className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/40"
                                 />
                               </div>
                             </div>
                             <div className="py-1 max-h-56 overflow-y-auto">
-                              {(dynamicValues[pendingField.key as keyof typeof dynamicValues] || [])
+                              {(dynamicValues[pendingField!.key as keyof typeof dynamicValues] || [])
                                 .filter(v => v.toLowerCase().includes(valueSearch.toLowerCase()))
                                 .map(v => (
                                   <button key={v}
@@ -624,21 +691,21 @@ export default function InsightsPage() {
                                   </button>
                                 ))
                               }
-                              {(dynamicValues[pendingField.key as keyof typeof dynamicValues] || []).filter(v => v.toLowerCase().includes(valueSearch.toLowerCase())).length === 0 && (
+                              {(dynamicValues[pendingField!.key as keyof typeof dynamicValues] || []).filter(v => v.toLowerCase().includes(valueSearch.toLowerCase())).length === 0 && (
                                 <p className="px-3 py-4 text-sm text-muted-foreground/50 text-center">No values found</p>
                               )}
                             </div>
                           </>
                         ) : (
                           <div className="p-3 space-y-3">
-                            {pendingField.type === "text" && (
+                            {pendingField!.type === "text" && (
                               <input value={pendingValue} onChange={e => setPendingValue(e.target.value)}
                                 onKeyDown={e => e.key === "Enter" && addFilter()}
-                                placeholder={`Filter by ${pendingField.label.toLowerCase()}...`} autoFocus
+                                placeholder={`Filter by ${pendingField!.label.toLowerCase()}...`} autoFocus
                                 className="w-full px-3 py-2 text-sm border rounded-lg bg-background outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
                               />
                             )}
-                            {pendingField.type === "select" && (
+                            {pendingField!.type === "select" && (
                               <div className="space-y-1">
                                 {(pendingField as any).options?.map((opt: any) => (
                                   <button key={opt.value} onClick={() => setPendingValue(opt.value)}
@@ -751,6 +818,7 @@ export default function InsightsPage() {
             </div>
           </>
         )}
+        {/* ─────────────────────────────────────────────────────────── */}
 
         {/* ════════════════ CUSTOM DASHBOARD ══════════════════════════ */}
         {section === "dashboard" && (
@@ -943,9 +1011,7 @@ export default function InsightsPage() {
         )}
 
         {section === "comments" && (
-          <div className="flex-1 flex items-center justify-center">
-            <EmptyState icon={IconMessageCircle} title="Comments" desc="This section is coming soon." />
-          </div>
+          <CommentsView />
         )}
       </div>
 
