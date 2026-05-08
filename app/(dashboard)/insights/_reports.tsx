@@ -296,13 +296,26 @@ function ReportAdCard({ ad, metricKeys }: { ad: ReportAd; metricKeys: string[] }
 
 function TableView({
   ads, metricKeys, onSort, sortKey, sortDir,
+  selectedIds, onToggle, onToggleAll,
 }: {
   ads: ReportAd[]
   metricKeys: string[]
   onSort: (key: string) => void
   sortKey: string
   sortDir: SortDir
+  selectedIds?: Set<string>
+  onToggle?: (id: string) => void
+  onToggleAll?: (ids: string[], allChecked: boolean) => void
 }) {
+  const selectable  = !!onToggle
+  const allChecked  = selectable && ads.length > 0 && ads.every(a => selectedIds!.has(a.adId))
+  const someChecked = selectable && ads.some(a => selectedIds!.has(a.adId))
+  const headerRef   = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (headerRef.current) headerRef.current.indeterminate = someChecked && !allChecked
+  }, [someChecked, allChecked])
+
   const defs = metricKeys.map(k => ALL_METRICS.find(m => m.key === k)).filter(Boolean) as MetricDef[]
 
   // Build column value arrays for heatmap
@@ -355,7 +368,13 @@ function TableView({
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b">
-            <th className="text-left py-2 px-3 font-medium text-muted-foreground w-8">#</th>
+            <th className="text-left py-2 px-3 font-medium text-muted-foreground w-10">
+              {selectable
+                ? <input ref={headerRef} type="checkbox" className="size-3.5 rounded cursor-pointer"
+                    checked={allChecked}
+                    onChange={e => onToggleAll?.(ads.map(a => a.adId), e.target.checked)} />
+                : "#"}
+            </th>
             <th className="text-left py-2 px-3 font-medium text-muted-foreground min-w-[200px]">Ad Name</th>
             {defs.map((d, i) => (
               <th key={d.key} className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap cursor-pointer select-none"
@@ -373,12 +392,22 @@ function TableView({
           </tr>
         </thead>
         <tbody>
-          {ads.map(ad => (
-            <tr key={ad.adId} className="border-b hover:bg-muted/20 transition-colors group">
-              <td className="py-2 px-3 text-muted-foreground">
+          {ads.map(ad => {
+            const isSelected = selectedIds?.has(ad.adId) ?? false
+            return (
+            <tr key={ad.adId}
+              className={cn("border-b transition-colors group",
+                isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "hover:bg-muted/20")}
+              onClick={selectable ? () => onToggle?.(ad.adId) : undefined}
+              style={selectable ? { cursor: "pointer" } : undefined}>
+              <td className="py-2 px-3 text-muted-foreground" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-1">
-                  <input type="checkbox" className="size-3 rounded" />
-                  <span className="ml-1">{ad.rank}</span>
+                  {selectable
+                    ? <input type="checkbox" className="size-3.5 rounded cursor-pointer"
+                        checked={isSelected}
+                        onChange={() => onToggle?.(ad.adId)} />
+                    : null}
+                  <span className={selectable ? "ml-1" : ""}>{ad.rank}</span>
                 </div>
               </td>
               <td className="py-2 px-3">
@@ -413,12 +442,18 @@ function TableView({
                 )
               })}
             </tr>
-          ))}
+          )})}
         </tbody>
         <tfoot>
           <tr className="border-t bg-muted/20 font-semibold">
-            <td className="py-2 px-3 text-muted-foreground/60">#</td>
-            <td className="py-2 px-3 text-muted-foreground text-[11px]">Total: {ads.length} ads</td>
+            <td className="py-2 px-3 text-muted-foreground/60">
+              {selectable && <span className="size-3.5 inline-block" />}
+            </td>
+            <td className="py-2 px-3 text-muted-foreground text-[11px]">
+              {selectable && someChecked
+                ? <span className="text-primary font-semibold">{ads.filter(a => selectedIds!.has(a.adId)).length} of {ads.length} selected</span>
+                : `Total: ${ads.length} ads`}
+            </td>
             {defs.map(d => {
               const tv = totals[d.key]
               const display = tv !== undefined
@@ -1148,6 +1183,9 @@ function VSModeView() {
   const [metricOpen, setMetricOpen] = useState(false)
   const metricRef = useRef<HTMLDivElement>(null)
 
+  const [sel1, setSel1] = useState<Set<string>>(new Set())
+  const [sel2, setSel2] = useState<Set<string>>(new Set())
+
   const [seg1Filters, setSeg1Filters] = useState<ActiveFilter[]>([])
   const [f1Open, setF1Open]           = useState(false)
   const [p1Field, setP1Field]         = useState<VsFilterField | null>(null)
@@ -1204,8 +1242,27 @@ function VSModeView() {
     return seg2Filters.length ? applyVsFilters(allAds, seg2Filters) : allAds.slice(mid)
   }, [allAds, seg2Filters])
 
-  const m1   = aggregateAds(seg1Ads)
-  const m2   = aggregateAds(seg2Ads)
+  // Clear selections when segment content changes
+  useEffect(() => { setSel1(new Set()) }, [seg1Ads])
+  useEffect(() => { setSel2(new Set()) }, [seg2Ads])
+
+  // Effective ads for KPI: selected subset, or all if nothing checked
+  const eff1 = useMemo(
+    () => sel1.size > 0 ? seg1Ads.filter(a => sel1.has(a.adId)) : seg1Ads,
+    [seg1Ads, sel1]
+  )
+  const eff2 = useMemo(
+    () => sel2.size > 0 ? seg2Ads.filter(a => sel2.has(a.adId)) : seg2Ads,
+    [seg2Ads, sel2]
+  )
+
+  const toggle1     = (id: string) => setSel1(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll1  = (ids: string[], checked: boolean) => setSel1(checked ? new Set(ids) : new Set())
+  const toggle2     = (id: string) => setSel2(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAll2  = (ids: string[], checked: boolean) => setSel2(checked ? new Set(ids) : new Set())
+
+  const m1   = aggregateAds(eff1)
+  const m2   = aggregateAds(eff2)
   const defs = metricKeys.map(k => ALL_METRICS.find(m => m.key === k)).filter(Boolean) as MetricDef[]
 
   const winner = (key: string) => {
@@ -1391,14 +1448,16 @@ function VSModeView() {
             {/* KPI cards */}
             <div className="grid grid-cols-2 gap-4">
               {([
-                { ads: seg1Ads, metrics: m1, label: "Segment 1" },
-                { ads: seg2Ads, metrics: m2, label: "Segment 2" },
+                { ads: seg1Ads, eff: eff1, sel: sel1, metrics: m1, label: "Segment 1" },
+                { ads: seg2Ads, eff: eff2, sel: sel2, metrics: m2, label: "Segment 2" },
               ] as const).map((seg, si) => (
                 <div key={si} className="rounded-xl border bg-card p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <p className="font-semibold text-sm">{seg.label}</p>
-                      <p className="text-xs text-muted-foreground">{seg.ads.length} ad{seg.ads.length !== 1 ? "s" : ""}</p>
+                      {seg.sel.size > 0
+                        ? <p className="text-xs text-primary font-medium">{seg.sel.size} of {seg.ads.length} selected</p>
+                        : <p className="text-xs text-muted-foreground">{seg.ads.length} ad{seg.ads.length !== 1 ? "s" : ""}</p>}
                     </div>
                     {si === 1 && (
                       <div className="size-8 rounded-full border-2 border-border flex items-center justify-center text-xs font-bold text-muted-foreground">VS</div>
@@ -1452,7 +1511,10 @@ function VSModeView() {
 
             {/* Tables */}
             <div className="grid grid-cols-2 gap-4">
-              {[{ ads: seg1Ads, label: "Segment 1" }, { ads: seg2Ads, label: "Segment 2" }].map((seg, si) => (
+              {[
+                { ads: seg1Ads, label: "Segment 1", sel: sel1, onToggle: toggle1, onToggleAll: toggleAll1 },
+                { ads: seg2Ads, label: "Segment 2", sel: sel2, onToggle: toggle2, onToggleAll: toggleAll2 },
+              ].map((seg, si) => (
                 <div key={si} className="rounded-xl border bg-card overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-2.5 border-b">
                     <p className="font-semibold text-sm">{seg.label}</p>
@@ -1461,7 +1523,14 @@ function VSModeView() {
                     </Button>
                   </div>
                   {seg.ads.length > 0
-                    ? <TableView ads={seg.ads.slice(0, 10)} metricKeys={metricKeys.slice(0, 4)} onSort={() => {}} sortKey={sortKey} sortDir={sortDir} />
+                    ? <TableView
+                        ads={seg.ads.slice(0, 10)}
+                        metricKeys={metricKeys.slice(0, 4)}
+                        onSort={() => {}} sortKey={sortKey} sortDir={sortDir}
+                        selectedIds={seg.sel}
+                        onToggle={seg.onToggle}
+                        onToggleAll={seg.onToggleAll}
+                      />
                     : <div className="py-8 text-center text-sm text-muted-foreground">No ads in this segment</div>}
                   <div className="px-4 py-2 border-t bg-muted/5 text-xs text-muted-foreground">
                     Showing {Math.min(seg.ads.length, 10)} of {seg.ads.length}
