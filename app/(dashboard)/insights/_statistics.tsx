@@ -11,7 +11,8 @@ import {
   IconLoader2, IconAlertCircle, IconRefresh, IconChevronDown, IconChevronRight,
   IconFilter, IconUsers, IconChartBar, IconMoodEmpty, IconCheck, IconSearch,
   IconDownload, IconWorld, IconHistory, IconLayout, IconPhoto, IconVideo,
-  IconX,
+  IconX, IconSparkles, IconDeviceLaptop, IconDeviceMobile, IconDeviceTablet,
+  IconDeviceDesktop, IconDeviceTv, IconDeviceUnknown,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { useAdAccount } from "@/lib/ad-account-context"
@@ -2075,25 +2076,42 @@ export function PlacementsView() {
 // ─── DEVICE ───────────────────────────────────────────────────────────────────
 
 const DEVICE_COLORS: Record<string, string> = {
-  "Desktop":      "#3b82f6",
-  "Mobile App":   "#10b981",
-  "Mobile Web":   "#f59e0b",
-  "Tablet":       "#8b5cf6",
-  "Connected TV": "#ec4899",
-  "Unknown":      "#9ca3af",
+  "Desktop":            "#3b82f6",
+  "Mobile App":         "#10b981",
+  "Mobile Web":         "#f59e0b",
+  "Tablet":             "#8b5cf6",
+  "Connected TV":       "#ec4899",
+  "Unknown":            "#9ca3af",
+  "iPhone":             "#1d4ed8",
+  "iPad":               "#7c3aed",
+  "iPod":               "#6366f1",
+  "Android Smartphone": "#16a34a",
+  "Android Tablet":     "#ca8a04",
+  "Other":              "#64748b",
+}
+
+function DeviceIconEl({ type, className = "size-3.5 text-muted-foreground" }: { type: string; className?: string }) {
+  const t = type?.toLowerCase()
+  if (t === "iphone" || t === "android_smartphone" || t === "mobile_app" || t === "mobile_web") return <IconDeviceMobile className={className} />
+  if (t === "ipad" || t === "android_tablet" || t === "tablet") return <IconDeviceTablet className={className} />
+  if (t === "desktop") return <IconDeviceDesktop className={className} />
+  if (t === "connected_tv") return <IconDeviceTv className={className} />
+  return <IconDeviceUnknown className={className} />
 }
 
 export function DeviceView() {
   const { selectedAccountId } = useAdAccount()
   const accountId = selectedAccountId || ""
   const [datePreset, setDatePreset] = useState("last_30d")
-  const [data,    setData]    = useState<any>(null)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState("")
+  const [data,      setData]      = useState<any>(null)
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState("")
+  const [aiText,    setAiText]    = useState("")
+  const [aiLoading, setAiLoading] = useState(false)
 
   const load = useCallback(() => {
     if (!accountId) return
-    setLoading(true); setError("")
+    setLoading(true); setError(""); setAiText("")
     fetch(`/api/insights/statistics/device?adAccountId=${accountId}&datePreset=${datePreset}`)
       .then(r => r.json())
       .then(d => { if (d.error) { setError(d.error); return }; setData(d) })
@@ -2103,82 +2121,145 @@ export function DeviceView() {
 
   useEffect(() => { load() }, [load])
 
+  const dateRangeLabel = useMemo(() => {
+    const today = new Date()
+    const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    const days = datePreset === "last_7d" ? 7 : datePreset === "last_30d" ? 30 : 90
+    const start = new Date(today); start.setDate(start.getDate() - days)
+    return `Showing data from ${fmt(start)} to ${fmt(today)}`
+  }, [datePreset])
+
+  const askAI = useCallback(async () => {
+    if (!data) return
+    setAiLoading(true)
+    try {
+      const res = await fetch("/api/insights/device/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ devices: data.devices, summary: data.summary, datePreset }),
+      })
+      const j = await res.json()
+      if (j.insight) setAiText(j.insight)
+    } catch {}
+    setAiLoading(false)
+  }, [data, datePreset])
+
   const devices: any[] = data?.devices || []
   const daily:   any[] = data?.daily   || []
   const s              = data?.summary  || {}
   const totalSpend     = s.totalSpend  || 0
   const deviceKeys: string[] = [...new Set(devices.map((d: any) => d.label))] as string[]
-
   const pieData = devices.map((d: any) => ({ name: d.label, value: d.spend }))
+  const bestCpa = devices.filter(d => d.cpa > 0).map(d => d.cpa)
+  const bestCpaVal = bestCpa.length > 0 ? Math.min(...bestCpa) : 0
 
   return (
     <div className="space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-bold">Device Performance</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Spend and engagement broken down by device type</p>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <IconDeviceLaptop className="size-5" />
+            Meta Device Analytics
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">{dateRangeLabel}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={askAI} disabled={!data || aiLoading}
+            className="h-8 px-3 text-sm rounded-lg border bg-violet-500/10 border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/20 transition-colors flex items-center gap-1.5 font-medium disabled:opacity-40">
+            {aiLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSparkles className="size-3.5" />}
+            Ask AI
+          </button>
           <AccountPicker />
-          <DatePicker value={datePreset} onChange={v => { setDatePreset(v) }} />
+          <DatePicker value={datePreset} onChange={v => setDatePreset(v)} />
           <button onClick={load} className="h-8 px-3 text-sm rounded-lg border hover:bg-muted/50 transition-colors flex items-center gap-1.5">
             <IconRefresh className="size-3.5" />Refresh
           </button>
         </div>
       </div>
 
+      {/* AI Insight Bar */}
+      {aiText && (
+        <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 px-4 py-3 text-sm leading-relaxed">
+          <div className="flex items-center gap-1.5 text-violet-600 dark:text-violet-400 font-semibold text-xs mb-1">
+            <IconSparkles className="size-3" /> AI Analysis
+          </div>
+          <p className="text-foreground/80">{aiText}</p>
+        </div>
+      )}
+
       {loading && <LoadingState />}
       {error   && <ErrorMsg message={error} onRetry={load} />}
+
       {!loading && !error && data && (
         <>
+          {/* KPI Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KpiCard label="Total Spend"       value={fmt$(totalSpend)}          sub={`${devices.length} device types`} />
-            <KpiCard label="Top Device"        value={s.topDevice?.label || "—"} sub={s.topDevice ? `${s.topDevice.pct.toFixed(1)}% of spend` : undefined} />
-            <KpiCard label="Total Impressions" value={fmtK(s.totalImpr || 0)}    sub="across all devices" />
-            <KpiCard label="Avg CPA"           value={s.avgCpa > 0 ? fmt$(s.avgCpa) : "—"} sub="cost per purchase" />
+            <KpiCard label="Total Spend"   value={fmt$(totalSpend)}                      sub={`${devices.length} device types`} />
+            <KpiCard label="Top Device"    value={s.topDevice?.label || "—"}             sub={s.topDevice ? `${s.topDevice.pct.toFixed(1)}% of spend` : undefined} />
+            <KpiCard label="Total Results" value={fmtK(s.totalPurchases || 0)}           sub="Purchases" />
+            <KpiCard label="Average CPA"   value={s.avgCpa > 0 ? fmt$(s.avgCpa) : "—"}  sub={`Best CPA: ${bestCpaVal > 0 ? fmt$(bestCpaVal) : "N/A"}`} />
           </div>
 
-          <div className="grid lg:grid-cols-5 gap-4">
-            <div className="lg:col-span-3 rounded-xl border bg-card p-4">
-              <h2 className="text-sm font-semibold mb-3">Spend by Device</h2>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={devices} layout="vertical" margin={{ top: 0, right: 24, left: 80, bottom: 0 }}>
-                  <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={v => "$" + fmtK(v)} />
-                  <YAxis type="category" dataKey="label" tick={{ fontSize: 11 }} width={80} />
-                  <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(v: any) => fmt$(v)} />
-                  <Bar dataKey="spend" radius={[0, 3, 3, 0]}>
-                    {devices.map((d: any) => <Cell key={d.device} fill={DEVICE_COLORS[d.label] || "#64748b"} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="lg:col-span-2 rounded-xl border bg-card p-4 flex flex-col">
-              <h2 className="text-sm font-semibold mb-3">Spend Share</h2>
-              <div className="flex-1 flex items-center justify-center">
-                <ResponsiveContainer width="100%" height={180}>
-                  <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
-                      {pieData.map((entry, i) => <Cell key={entry.name} fill={DEVICE_COLORS[entry.name] || ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(v: any) => fmt$(v)} />
-                  </PieChart>
+          {/* Spend by Device: vertical bar + donut */}
+          <div className="rounded-xl border bg-card p-4">
+            <h2 className="text-sm font-semibold">Spend by Device</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 mb-4">
+              {devices.length} devices in this selection. Top device spend share: {s.topDevice ? s.topDevice.pct.toFixed(1) + "%" : "—"}.
+            </p>
+            <div className="grid lg:grid-cols-3 gap-4">
+              {/* Vertical bar chart */}
+              <div className="lg:col-span-2">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={devices} margin={{ top: 4, right: 8, left: 0, bottom: 64 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 10 }} tickFormatter={v => "$" + fmtK(v)} width={56} />
+                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(v: any) => [fmt$(v), "Spend"]} />
+                    <Bar dataKey="spend" radius={[4, 4, 0, 0]} maxBarSize={56}>
+                      {devices.map((d: any, i: number) => (
+                        <Cell key={d.device} fill={DEVICE_COLORS[d.label] || ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-1 mt-1">
-                {devices.slice(0, 5).map((d: any) => (
-                  <div key={d.device} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: DEVICE_COLORS[d.label] || "#64748b" }} />
-                      <span className="text-muted-foreground">{d.label}</span>
-                    </div>
-                    <span className="font-medium">{totalSpend > 0 ? ((d.spend / totalSpend) * 100).toFixed(1) + "%" : "—"}</span>
+
+              {/* Donut + scrollable legend */}
+              <div className="flex flex-col">
+                <ResponsiveContainer width="100%" height={170}>
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={78} paddingAngle={2} dataKey="value">
+                      {pieData.map((entry, i) => (
+                        <Cell key={entry.name} fill={DEVICE_COLORS[entry.name] || ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(v: any) => [fmt$(v), "Spend"]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="text-xs border rounded-lg overflow-hidden mt-2">
+                  <div className="px-3 py-1.5 border-b bg-muted/30 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Legend</div>
+                  <div className="overflow-y-auto max-h-40">
+                    {devices.map((d: any, i: number) => (
+                      <div key={d.device} className="flex items-center justify-between px-3 py-1.5 border-b last:border-0 hover:bg-muted/20">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="size-2 rounded-full shrink-0"
+                            style={{ backgroundColor: DEVICE_COLORS[d.label] || ACCOUNT_COLORS[i % ACCOUNT_COLORS.length] }} />
+                          <DeviceIconEl type={d.device} />
+                          <span className="text-muted-foreground truncate">{d.label}</span>
+                        </div>
+                        <span className="font-semibold tabular-nums ml-2 shrink-0">
+                          {totalSpend > 0 ? ((d.spend / totalSpend) * 100).toFixed(1) + "%" : "—"}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             </div>
           </div>
 
+          {/* Daily trend */}
           {daily.length > 1 && (
             <div className="rounded-xl border bg-card p-4">
               <h2 className="text-sm font-semibold mb-3">Daily Spend by Device</h2>
@@ -2200,6 +2281,7 @@ export function DeviceView() {
             </div>
           )}
 
+          {/* Performance table */}
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="px-5 py-3 border-b flex items-center justify-between">
               <h2 className="text-sm font-semibold">Device Performance</h2>
@@ -2223,11 +2305,13 @@ export function DeviceView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {devices.map((d: any) => (
+                  {devices.map((d: any, i: number) => (
                     <tr key={d.device} className="border-b hover:bg-muted/20 transition-colors">
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
-                          <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: DEVICE_COLORS[d.label] || "#64748b" }} />
+                          <span className="size-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: DEVICE_COLORS[d.label] || ACCOUNT_COLORS[i % ACCOUNT_COLORS.length] }} />
+                          <DeviceIconEl type={d.device} />
                           <span className="font-medium">{d.label}</span>
                         </div>
                       </td>

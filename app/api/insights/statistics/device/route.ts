@@ -30,14 +30,20 @@ async function fetchAllPages(url: string): Promise<any[]> {
 
 function deviceLabel(d: string) {
   const map: Record<string, string> = {
-    desktop:      "Desktop",
-    mobile_app:   "Mobile App",
-    mobile_web:   "Mobile Web",
-    tablet:       "Tablet",
-    connected_tv: "Connected TV",
-    unknown:      "Unknown",
+    desktop:            "Desktop",
+    mobile_app:         "Mobile App",
+    mobile_web:         "Mobile Web",
+    tablet:             "Tablet",
+    connected_tv:       "Connected TV",
+    unknown:            "Unknown",
+    iphone:             "iPhone",
+    ipad:               "iPad",
+    ipod:               "iPod",
+    android_smartphone: "Android Smartphone",
+    android_tablet:     "Android Tablet",
+    other:              "Other",
   }
-  return map[d?.toLowerCase()] || (d ? d.replace(/_/g, " ") : "Unknown")
+  return map[d?.toLowerCase()] || (d ? d.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) : "Unknown")
 }
 
 function deviceIcon(d: string) {
