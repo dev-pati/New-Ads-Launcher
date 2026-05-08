@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     const insightParams = new URLSearchParams({
       level:        "ad",
-      fields:       "ad_id,ad_name,adset_name,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,frequency,reach,cpm,actions,action_values,date_start,date_stop",
+      fields:       "ad_id,ad_name,adset_name,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,frequency,reach,cpm,actions,action_values,video_thruplay_watched_actions,date_start,date_stop",
       date_preset:  datePreset,
       sort:         "spend_descending",
       limit:        String(limit),
@@ -155,6 +155,13 @@ export async function GET(request: NextRequest) {
       const avgPV         = purchases > 0 ? purchaseValue / purchases : 0
       const purchaseCR    = impressions > 0 ? (purchases / impressions) * 100 : 0
       const thumbnail     = (info?.creativeId && sizedThumbs[info.creativeId]) || info?.imageUrl || info?.thumbUrl || null
+      const video3sViews  = ((r.actions || []) as { action_type: string; value: string }[])
+        .filter(a => a.action_type === "video_view")
+        .reduce((s, a) => s + parseInt(a.value || "0"), 0)
+      const thruplayViews = ((r.video_thruplay_watched_actions || []) as { action_type: string; value: string }[])
+        .reduce((s, a) => s + parseInt(a.value || "0"), 0)
+      const thumbstopRate = impressions > 0 ? (video3sViews / impressions) * 100 : 0
+      const holdRate      = video3sViews > 0 ? (thruplayViews / video3sViews) * 100 : 0
 
       return {
         adId:            r.ad_id,
@@ -180,6 +187,8 @@ export async function GET(request: NextRequest) {
         thumbnail,
         isVideo:         info?.objectType === "VIDEO",
         effectiveStatus: info?.effectiveStatus || "UNKNOWN",
+        thumbstopRate,
+        holdRate,
       }
     })
 
@@ -207,6 +216,8 @@ export async function GET(request: NextRequest) {
           g.costPerResult  = g.results > 0 ? g.spend / g.results : 0
           g.roas           = g.spend > 0 ? g.purchaseValue / g.spend : 0
           g.ctr            = g.impressions > 0 ? (g.linkClicks / g.impressions) * 100 : 0
+          g.thumbstopRate  = (g.thumbstopRate * (g._cnt - 1) + ad.thumbstopRate) / g._cnt
+          g.holdRate       = (g.holdRate * (g._cnt - 1) + ad.holdRate) / g._cnt
           g.adsetName      = `${g._cnt} ads`
         }
       }

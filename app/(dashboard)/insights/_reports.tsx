@@ -52,6 +52,8 @@ interface ReportAd {
   thumbnail?:       string | null
   isVideo:          boolean
   effectiveStatus?: string
+  thumbstopRate:    number
+  holdRate:         number
 }
 
 interface ActiveFilter { id: string; field: string; value: string; label: string }
@@ -89,6 +91,8 @@ const ALL_METRICS: MetricDef[] = [
   { key: "avgPurchaseValue", label: "Average Purchase Value",   color: "#06b6d4", fmt: (v) => v > 0 ? fmt$(v) : "—",         higherIsBetter: true  },
   { key: "purchaseCR",       label: "Purchase Conversion Rate", color: "#a855f7", fmt: (v) => v.toFixed(2) + "%",             higherIsBetter: true  },
   { key: "createdTime",      label: "Earliest ad created date", color: "#60a5fa", fmt: fmtDate,                              higherIsBetter: true  },
+  { key: "holdRate",         label: "Hold Rate",                color: "#0ea5e9", fmt: (v) => v.toFixed(2) + "%",             higherIsBetter: true  },
+  { key: "thumbstopRate",    label: "Thumbstop (Hook Rate)",    color: "#d946ef", fmt: (v) => v.toFixed(2) + "%",             higherIsBetter: true  },
 ]
 
 // ─── Report Configurations ────────────────────────────────────────────────────
@@ -976,78 +980,232 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
 
 // ─── VS Mode ─────────────────────────────────────────────────────────────────
 
+const VS_FILTER_FIELDS = [
+  { key: "ad_name",         label: "Ad",              type: "text" },
+  { key: "headline",        label: "Headline",         type: "text" },
+  { key: "call_to_action",  label: "Call to action",   type: "text" },
+  { key: "ad_status",       label: "Ad status",        type: "select",
+    options: [{ label: "Active", value: "ACTIVE" }, { label: "Paused", value: "PAUSED" }, { label: "Archived", value: "ARCHIVED" }] },
+  { key: "created_date",    label: "Ad created date",  type: "text" },
+  { key: "spend_gte",       label: "Amount Spent ≥",   type: "text" },
+  { key: "impressions_gte", label: "Impressions ≥",    type: "text" },
+  { key: "active_status",   label: "Active status",    type: "select",
+    options: [{ label: "Active", value: "ACTIVE" }, { label: "Inactive", value: "INACTIVE" }] },
+  { key: "clicks_gte",      label: "Clicks ≥",         type: "text" },
+] as const
+
+type VsFilterField = { key: string; label: string; type: string; options?: Array<{ label: string; value: string }> }
+
+function applyVsFilters(ads: ReportAd[], filters: ActiveFilter[]): ReportAd[] {
+  let list = [...ads]
+  for (const f of filters) {
+    if (f.field === "ad_name" || f.field === "headline" || f.field === "call_to_action") {
+      list = list.filter(a => a.adName.toLowerCase().includes(f.value.toLowerCase()))
+    } else if (f.field === "ad_status") {
+      list = list.filter(a => a.effectiveStatus === f.value)
+    } else if (f.field === "active_status") {
+      list = f.value === "ACTIVE"
+        ? list.filter(a => a.effectiveStatus === "ACTIVE")
+        : list.filter(a => a.effectiveStatus !== "ACTIVE")
+    } else if (f.field === "spend_gte") {
+      const n = parseFloat(f.value); if (!isNaN(n)) list = list.filter(a => a.spend >= n)
+    } else if (f.field === "impressions_gte") {
+      const n = parseInt(f.value); if (!isNaN(n)) list = list.filter(a => a.impressions >= n)
+    } else if (f.field === "clicks_gte") {
+      const n = parseInt(f.value); if (!isNaN(n)) list = list.filter(a => a.linkClicks >= n)
+    }
+  }
+  return list
+}
+
+function aggregateAds(ads: ReportAd[]) {
+  if (!ads.length) return {} as Record<string, number>
+  const spend         = ads.reduce((s, a) => s + a.spend, 0)
+  const impressions   = ads.reduce((s, a) => s + a.impressions, 0)
+  const linkClicks    = ads.reduce((s, a) => s + a.linkClicks, 0)
+  const purchaseValue = ads.reduce((s, a) => s + a.purchaseValue, 0)
+  const results       = ads.reduce((s, a) => s + a.results, 0)
+  const reach         = ads.reduce((s, a) => s + a.reach, 0)
+  return {
+    spend, impressions, linkClicks, purchaseValue, results, reach,
+    ctr:           impressions > 0 ? (linkClicks / impressions) * 100 : 0,
+    cpm:           impressions > 0 ? (spend / impressions) * 1000 : 0,
+    costPerResult: results > 0 ? spend / results : 0,
+    roas:          spend > 0 ? purchaseValue / spend : 0,
+    frequency:     ads.reduce((s, a) => s + a.frequency, 0) / ads.length,
+    holdRate:      ads.reduce((s, a) => s + (a.holdRate || 0), 0) / ads.length,
+    thumbstopRate: ads.reduce((s, a) => s + (a.thumbstopRate || 0), 0) / ads.length,
+  }
+}
+
+function FilterDropdown({
+  open, onToggle, filters, onRemove, onClear, dropRef,
+  pendingField, setPendingField, pendingValue, setPendingValue,
+  fieldSearch, setFieldSearch, onApply, segColor,
+}: {
+  open: boolean; onToggle: () => void
+  filters: ActiveFilter[]; onRemove: (id: string) => void; onClear: () => void
+  dropRef: React.RefObject<HTMLDivElement>
+  pendingField: VsFilterField | null; setPendingField: (f: VsFilterField | null) => void
+  pendingValue: string; setPendingValue: (v: string) => void
+  fieldSearch: string; setFieldSearch: (s: string) => void
+  onApply: (field: string, value: string, label: string) => void
+  segColor: "blue" | "orange"
+}) {
+  const chipCls = segColor === "blue"
+    ? "border-blue-300/60 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300"
+    : "border-orange-300/60 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300"
+
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {filters.map(f => (
+        <div key={f.id} className={cn("flex items-center gap-1 h-7 px-2.5 rounded-full border text-xs font-medium", chipCls)}>
+          {f.label}
+          <button onClick={() => onRemove(f.id)} className="ml-0.5 hover:text-destructive"><IconX className="size-3" /></button>
+        </div>
+      ))}
+      <div className="relative" ref={dropRef}>
+        <button onClick={onToggle}
+          className={cn("flex items-center gap-1 h-7 px-2.5 text-xs rounded-full border transition-colors",
+            open ? "border-primary bg-primary/5 text-primary" : "border-dashed border-muted-foreground/40 text-muted-foreground hover:border-primary/50 hover:text-primary")}>
+          <IconPlus className="size-3" /> Add filter
+        </button>
+        {open && (
+          <div className="absolute top-full left-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl w-64">
+            {!pendingField ? (
+              <>
+                <div className="p-2 border-b">
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40">
+                    <IconSearch className="size-3.5 text-muted-foreground/50 shrink-0" />
+                    <input value={fieldSearch} onChange={e => setFieldSearch(e.target.value)}
+                      placeholder="Search fields..." autoFocus
+                      className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/40" />
+                  </div>
+                </div>
+                <div className="py-1 max-h-56 overflow-y-auto">
+                  {VS_FILTER_FIELDS.filter(f => f.label.toLowerCase().includes(fieldSearch.toLowerCase())).map(f => (
+                    <button key={f.key} onClick={() => { setPendingField(f as VsFilterField); setPendingValue("") }}
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50">{f.label}</button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 p-3 border-b">
+                  <button onClick={() => setPendingField(null)} className="text-muted-foreground hover:text-foreground">
+                    <IconArrowsUpDown className="size-3.5 rotate-90" />
+                  </button>
+                  <span className="text-sm font-medium">{pendingField.label}</span>
+                </div>
+                {pendingField.type === "select" ? (
+                  <div className="py-1">
+                    {(pendingField as any).options?.map((opt: any) => (
+                      <button key={opt.value} onClick={() => onApply(pendingField.key, opt.value, pendingField.label)}
+                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50">{opt.label}</button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 space-y-2">
+                    <input value={pendingValue} onChange={e => setPendingValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && pendingValue.trim()) onApply(pendingField.key, pendingValue.trim(), pendingField.label) }}
+                      placeholder="Filter value..." autoFocus
+                      className="w-full px-3 py-2 text-sm border rounded-lg bg-background outline-none focus:ring-1 focus:ring-ring" />
+                    <div className="flex gap-2">
+                      <Button size="sm" className="flex-1 h-8"
+                        onClick={() => pendingValue.trim() && onApply(pendingField.key, pendingValue.trim(), pendingField.label)}
+                        disabled={!pendingValue.trim()}>Apply</Button>
+                      <Button size="sm" variant="outline" className="h-8" onClick={() => setPendingField(null)}>Back</Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      {filters.length > 0 && (
+        <button onClick={onClear} className="text-[10px] text-muted-foreground hover:text-destructive px-1">Clear</button>
+      )}
+    </div>
+  )
+}
+
 function VSModeView() {
   const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
 
-  const [seg1Ads, setSeg1Ads]   = useState<ReportAd[]>([])
-  const [seg2Ads, setSeg2Ads]   = useState<ReportAd[]>([])
-  const [loading1, setLoading1] = useState(false)
-  const [loading2, setLoading2] = useState(false)
-  const [seg1Filter, setSeg1Filter] = useState("")
-  const [seg2Filter, setSeg2Filter] = useState("")
+  const [allAds, setAllAds]     = useState<ReportAd[]>([])
+  const [loading, setLoading]   = useState(false)
+  const [loadTime, setLoadTime] = useState<number | null>(null)
   const [datePreset, setDatePreset] = useState("last_90d")
   const [dateOpen, setDateOpen]     = useState(false)
-  const [metricKeys] = useState(["spend", "cpm", "ctr", "frequency", "costPerResult", "roas"])
-  const [loadTime, setLoadTime] = useState<number | null>(null)
   const dateRef = useRef<HTMLDivElement>(null)
+
+  const [metricKeys, setMetricKeys] = useState<string[]>([
+    "spend", "results", "costPerResult", "createdTime", "cpm", "ctr", "frequency", "holdRate", "thumbstopRate",
+  ])
+  const [sortKey, setSortKey] = useState("spend")
+  const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [metricOpen, setMetricOpen] = useState(false)
+  const metricRef = useRef<HTMLDivElement>(null)
+
+  const [seg1Filters, setSeg1Filters] = useState<ActiveFilter[]>([])
+  const [f1Open, setF1Open]           = useState(false)
+  const [p1Field, setP1Field]         = useState<VsFilterField | null>(null)
+  const [p1Value, setP1Value]         = useState("")
+  const [f1Search, setF1Search]       = useState("")
+  const f1Ref = useRef<HTMLDivElement>(null)
+
+  const [seg2Filters, setSeg2Filters] = useState<ActiveFilter[]>([])
+  const [f2Open, setF2Open]           = useState(false)
+  const [p2Field, setP2Field]         = useState<VsFilterField | null>(null)
+  const [p2Value, setP2Value]         = useState("")
+  const [f2Search, setF2Search]       = useState("")
+  const f2Ref = useRef<HTMLDivElement>(null)
+
   const acctRef = useRef<HTMLDivElement>(null)
   const [acctOpen, setAcctOpen] = useState(false)
-
   const accountName = adAccounts?.find((a: any) => a.id === selectedAccountId)?.name || "—"
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (dateRef.current && !dateRef.current.contains(e.target as Node)) setDateOpen(false)
-      if (acctRef.current && !acctRef.current.contains(e.target as Node)) setAcctOpen(false)
+      if (dateRef.current   && !dateRef.current.contains(e.target as Node))   setDateOpen(false)
+      if (acctRef.current   && !acctRef.current.contains(e.target as Node))   setAcctOpen(false)
+      if (metricRef.current && !metricRef.current.contains(e.target as Node)) setMetricOpen(false)
+      if (f1Ref.current && !f1Ref.current.contains(e.target as Node)) {
+        setF1Open(false); setP1Field(null); setP1Value(""); setF1Search("")
+      }
+      if (f2Ref.current && !f2Ref.current.contains(e.target as Node)) {
+        setF2Open(false); setP2Field(null); setP2Value(""); setF2Search("")
+      }
     }
     document.addEventListener("mousedown", h)
     return () => document.removeEventListener("mousedown", h)
   }, [])
 
-  const loadBoth = useCallback(() => {
+  const load = useCallback(() => {
     if (!selectedAccountId) return
-    const base = `/api/insights/report?adAccountId=${encodeURIComponent(selectedAccountId)}&datePreset=${datePreset}&limit=50`
     const t0 = performance.now()
-    setLoading1(true); setLoading2(true)
-    fetch(base).then(r => r.json()).then(d => {
-      const all: ReportAd[] = d.ads || []
-      const s1 = seg1Filter ? all.filter(a => a.adName.toLowerCase().includes(seg1Filter.toLowerCase())) : all.slice(0, 1)
-      const s2 = seg2Filter ? all.filter(a => a.adName.toLowerCase().includes(seg2Filter.toLowerCase())) : all.slice(1, 2)
-      setSeg1Ads(s1)
-      setSeg2Ads(s2)
-      setLoadTime(Math.round((performance.now() - t0) / 100) / 10)
-    }).finally(() => { setLoading1(false); setLoading2(false) })
-  }, [selectedAccountId, datePreset, seg1Filter, seg2Filter])
+    setLoading(true)
+    fetch(`/api/insights/report?adAccountId=${encodeURIComponent(selectedAccountId)}&datePreset=${datePreset}&limit=50`)
+      .then(r => r.json())
+      .then(d => { setAllAds(d.ads || []); setLoadTime(Math.round((performance.now() - t0) / 100) / 10) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [selectedAccountId, datePreset])
 
-  useEffect(() => { loadBoth() }, [loadBoth])
+  useEffect(() => { load() }, [load])
 
-  // Sum metrics across a segment
-  const sumMetrics = (ads: ReportAd[]): Partial<ReportAd> => {
-    if (!ads.length) return {}
-    const spend       = ads.reduce((s, a) => s + a.spend, 0)
-    const impressions = ads.reduce((s, a) => s + a.impressions, 0)
-    const linkClicks  = ads.reduce((s, a) => s + a.linkClicks, 0)
-    const purchaseValue = ads.reduce((s, a) => s + a.purchaseValue, 0)
-    const results     = ads.reduce((s, a) => s + a.results, 0)
-    const reach       = ads.reduce((s, a) => s + a.reach, 0)
-    const avgFreq     = ads.reduce((s, a) => s + a.frequency, 0) / ads.length
-    return {
-      spend,
-      impressions,
-      linkClicks,
-      purchaseValue,
-      results,
-      reach,
-      ctr:           impressions > 0 ? (linkClicks / impressions) * 100 : 0,
-      cpm:           impressions > 0 ? (spend / impressions) * 1000 : 0,
-      costPerResult: results > 0 ? spend / results : 0,
-      roas:          spend > 0 ? purchaseValue / spend : 0,
-      frequency:     avgFreq,
-    }
-  }
+  const seg1Ads = useMemo(() => {
+    const mid = Math.max(1, Math.ceil(allAds.length / 2))
+    return seg1Filters.length ? applyVsFilters(allAds, seg1Filters) : allAds.slice(0, mid)
+  }, [allAds, seg1Filters])
+  const seg2Ads = useMemo(() => {
+    const mid = Math.max(1, Math.ceil(allAds.length / 2))
+    return seg2Filters.length ? applyVsFilters(allAds, seg2Filters) : allAds.slice(mid)
+  }, [allAds, seg2Filters])
 
-  const m1 = sumMetrics(seg1Ads)
-  const m2 = sumMetrics(seg2Ads)
+  const m1   = aggregateAds(seg1Ads)
+  const m2   = aggregateAds(seg2Ads)
   const defs = metricKeys.map(k => ALL_METRICS.find(m => m.key === k)).filter(Boolean) as MetricDef[]
 
   const winner = (key: string) => {
@@ -1058,7 +1216,22 @@ function VSModeView() {
     return (hib ? v1 > v2 : v1 < v2) ? 1 : 2
   }
 
-  const dateLabel = DATE_PRESETS.find(p => p.value === datePreset)?.label || datePreset
+  const handleSort = (key: string) => {
+    if (sortKey === key) setSortDir(d => d === "desc" ? "asc" : "desc")
+    else { setSortKey(key); setSortDir("desc") }
+  }
+
+  const addF1 = (field: string, value: string, label: string) => {
+    setSeg1Filters(p => [...p, { id: Date.now().toString(), field, value, label: `${label} = ${value}` }])
+    setF1Open(false); setP1Field(null); setP1Value(""); setF1Search("")
+  }
+  const addF2 = (field: string, value: string, label: string) => {
+    setSeg2Filters(p => [...p, { id: Date.now().toString(), field, value, label: `${label} = ${value}` }])
+    setF2Open(false); setP2Field(null); setP2Value(""); setF2Search("")
+  }
+
+  const dateLabel    = DATE_PRESETS.find(p => p.value === datePreset)?.label || datePreset
+  const availMetrics = ALL_METRICS.filter(m => !metricKeys.includes(m.key))
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1094,9 +1267,9 @@ function VSModeView() {
               </div>
             )}
           </div>
-          {loadTime !== null && <span className="text-xs text-muted-foreground/60">{loadTime}s</span>}
-          <Button size="sm" variant="ghost" className="h-8 gap-1.5" onClick={loadBoth} disabled={loading1}>
-            <IconRefresh className={cn("size-3.5", loading1 && "animate-spin")} />
+          {loadTime !== null && !loading && <span className="text-xs text-muted-foreground/60">{loadTime}s</span>}
+          <Button size="sm" variant="ghost" className="h-8 gap-1.5" onClick={load} disabled={loading}>
+            <IconRefresh className={cn("size-3.5", loading && "animate-spin")} />
           </Button>
           <Button size="sm" variant="ghost" className="h-8 gap-1.5"><IconSparkles className="size-3.5" /> Ask AI</Button>
           <Button size="sm" variant="ghost" className="h-8 gap-1.5"><IconBookmark className="size-3.5" /> Save as New</Button>
@@ -1104,8 +1277,8 @@ function VSModeView() {
         </div>
       </div>
 
-      {/* Filter rows */}
-      <div className="flex items-center gap-3 px-6 py-2.5 border-b shrink-0 flex-wrap">
+      {/* Date / group bar */}
+      <div className="flex items-center gap-2 px-6 py-2.5 border-b shrink-0">
         <div className="relative" ref={dateRef}>
           <button onClick={() => setDateOpen(v => !v)}
             className="flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border bg-background hover:bg-muted/50 transition-colors">
@@ -1125,117 +1298,179 @@ function VSModeView() {
           )}
         </div>
         <button className="flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border bg-background hover:bg-muted/50 transition-colors">
-          Group by <span className="font-semibold">Unique Ad</span><IconChevronDown className="size-3.5 text-muted-foreground" />
+          Group by <span className="font-semibold ml-1">Unique Ad</span>
+          <IconChevronDown className="size-3.5 text-muted-foreground ml-1" />
         </button>
       </div>
 
-      {/* Segment headers */}
-      <div className="grid grid-cols-2 gap-4 px-6 py-3 border-b shrink-0">
-        <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5 bg-background">
-          <span className="text-xs font-semibold text-muted-foreground">Segment 1</span>
-          <div className="h-4 w-px bg-border mx-1" />
-          <input value={seg1Filter} onChange={e => setSeg1Filter(e.target.value)}
-            placeholder="Ad = filter by name..."
-            className="flex-1 text-xs bg-transparent outline-none placeholder:text-muted-foreground/40" />
-          {seg1Filter && <button onClick={() => setSeg1Filter("")}><IconX className="size-3.5 text-muted-foreground" /></button>}
-          <button className="text-xs text-primary flex items-center gap-0.5 ml-1"><IconPlus className="size-3" /> Add filter</button>
+      {/* Segment filter rows */}
+      <div className="grid grid-cols-2 divide-x border-b shrink-0">
+        <div className="flex items-start gap-1.5 px-4 py-2.5 flex-wrap">
+          <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap mt-1">Segment 1</span>
+          <div className="h-4 w-px bg-border mx-0.5 mt-1.5" />
+          <FilterDropdown
+            open={f1Open} onToggle={() => { setF1Open(v => !v); setP1Field(null); setP1Value("") }}
+            filters={seg1Filters} onRemove={id => setSeg1Filters(p => p.filter(x => x.id !== id))}
+            onClear={() => setSeg1Filters([])} dropRef={f1Ref as React.RefObject<HTMLDivElement>}
+            pendingField={p1Field} setPendingField={setP1Field}
+            pendingValue={p1Value} setPendingValue={setP1Value}
+            fieldSearch={f1Search} setFieldSearch={setF1Search}
+            onApply={addF1} segColor="blue"
+          />
         </div>
-        <div className="flex items-center gap-2 rounded-lg border px-3 py-1.5 bg-background">
-          <span className="text-xs font-semibold text-muted-foreground">Segment 2</span>
-          <div className="h-4 w-px bg-border mx-1" />
-          <input value={seg2Filter} onChange={e => setSeg2Filter(e.target.value)}
-            placeholder="Ad = filter by name..."
-            className="flex-1 text-xs bg-transparent outline-none placeholder:text-muted-foreground/40" />
-          {seg2Filter && <button onClick={() => setSeg2Filter("")}><IconX className="size-3.5 text-muted-foreground" /></button>}
-          <button className="text-xs text-primary flex items-center gap-0.5 ml-1"><IconPlus className="size-3" /> Add filter</button>
+        <div className="flex items-start gap-1.5 px-4 py-2.5 flex-wrap">
+          <span className="text-xs font-semibold text-muted-foreground whitespace-nowrap mt-1">Segment 2</span>
+          <div className="h-4 w-px bg-border mx-0.5 mt-1.5" />
+          <FilterDropdown
+            open={f2Open} onToggle={() => { setF2Open(v => !v); setP2Field(null); setP2Value("") }}
+            filters={seg2Filters} onRemove={id => setSeg2Filters(p => p.filter(x => x.id !== id))}
+            onClear={() => setSeg2Filters([])} dropRef={f2Ref as React.RefObject<HTMLDivElement>}
+            pendingField={p2Field} setPendingField={setP2Field}
+            pendingValue={p2Value} setPendingValue={setP2Value}
+            fieldSearch={f2Search} setFieldSearch={setF2Search}
+            onApply={addF2} segColor="orange"
+          />
         </div>
+      </div>
+
+      {/* Metrics bar */}
+      <div className="flex items-center gap-2 px-6 py-2 border-b shrink-0 flex-wrap bg-muted/5">
+        {metricKeys.map((key, idx) => {
+          const def = ALL_METRICS.find(m => m.key === key)!
+          if (!def) return null
+          const isActive = sortKey === key
+          const SortIcon = isActive ? (sortDir === "desc" ? IconArrowDown : IconArrowUp) : IconArrowsUpDown
+          return (
+            <div key={key}
+              className={cn("flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-xs font-medium select-none transition-colors",
+                isActive ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted/50")}>
+              <span className="size-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                style={{ backgroundColor: def.color }}>{idx + 1}</span>
+              <button onClick={() => handleSort(key)} className="flex items-center gap-1">
+                {def.label}
+                <SortIcon className={cn("size-3", isActive ? "text-primary" : "text-muted-foreground/50")} />
+              </button>
+              <button onClick={() => { setMetricKeys(p => p.filter(k => k !== key)); if (sortKey === key) setSortKey("spend") }}
+                className="ml-0.5 text-muted-foreground hover:text-foreground">
+                <IconX className="size-3" />
+              </button>
+            </div>
+          )
+        })}
+        {availMetrics.length > 0 && (
+          <div className="relative" ref={metricRef}>
+            <button onClick={() => setMetricOpen(v => !v)}
+              className="flex items-center gap-1 h-7 px-2.5 rounded-full border text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors bg-background">
+              <IconPlus className="size-3" /> Add metric
+            </button>
+            {metricOpen && (
+              <div className="absolute top-full left-0 mt-1 z-30 bg-popover border rounded-lg shadow-md py-1 min-w-[200px] max-h-56 overflow-y-auto">
+                {availMetrics.map(m => (
+                  <button key={m.key} onClick={() => { setMetricKeys(p => [...p, m.key]); setMetricOpen(false) }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center gap-2">
+                    <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 py-4 space-y-6">
-        {/* KPI comparison */}
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { ads: seg1Ads, metrics: m1, loading: loading1, label: "Segment 1" },
-            { ads: seg2Ads, metrics: m2, loading: loading2, label: "Segment 2" },
-          ].map((seg, si) => (
-            <div key={si} className="rounded-xl border bg-card p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="font-semibold text-sm">{seg.label}</p>
-                  <p className="text-xs text-muted-foreground">{seg.ads.length} ad{seg.ads.length !== 1 ? "s" : ""}</p>
-                </div>
-                {si === 1 && <div className="size-8 rounded-full border-2 border-border flex items-center justify-center text-xs font-bold text-muted-foreground">VS</div>}
-              </div>
-              {seg.loading ? (
-                <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground justify-center">
-                  <IconLoader2 className="size-4 animate-spin" /> Loading…
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {defs.map(d => {
-                    const v = (seg.metrics as any)[d.key] ?? 0
-                    const w = winner(d.key)
-                    const isWinner = w === si + 1
-                    return (
-                      <div key={d.key} className={cn("rounded-lg p-2.5 border", isWinner ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20" : "border-border")}>
-                        <p className="text-[10px] text-muted-foreground mb-1">{d.label}</p>
-                        <div className="flex items-center gap-1">
-                          {isWinner && <IconArrowUp className="size-3 text-emerald-500 shrink-0" />}
-                          <p className={cn("text-sm font-bold tabular-nums", isWinner ? "text-emerald-600" : "")}>
-                            {d.key === "createdTime"
-                              ? (seg.ads[0]?.createdTime ? new Date(seg.ads[0].createdTime).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—")
-                              : d.fmt(v, v)}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Ad thumbnails */}
-        <div className="grid grid-cols-2 gap-4">
-          {[{ ads: seg1Ads, label: "Segment 1" }, { ads: seg2Ads, label: "Segment 2" }].map((seg, si) => (
-            <div key={si}>
-              <p className="text-sm font-semibold mb-2">{seg.label} ({seg.ads.length} of {seg.ads.length} selected)</p>
-              <div className="grid grid-cols-2 gap-3">
-                {seg.ads.slice(0, 2).map(ad => (
-                  <ReportAdCard key={ad.adId} ad={ad} metricKeys={["spend", "results", "costPerResult"]} />
-                ))}
-                {seg.ads.length === 0 && (
-                  <div className="col-span-2 rounded-xl border bg-muted/20 h-32 flex items-center justify-center text-xs text-muted-foreground">
-                    No ads in this segment
+        {!selectedAccountId ? (
+          <EmptyState icon={IconAlertCircle} title="No ad account selected" desc="Select an ad account from the sidebar." />
+        ) : loading ? (
+          <div className="flex items-center justify-center h-48 gap-2 text-sm text-muted-foreground">
+            <IconLoader2 className="size-4 animate-spin" /> Loading…
+          </div>
+        ) : (
+          <>
+            {/* KPI cards */}
+            <div className="grid grid-cols-2 gap-4">
+              {([
+                { ads: seg1Ads, metrics: m1, label: "Segment 1" },
+                { ads: seg2Ads, metrics: m2, label: "Segment 2" },
+              ] as const).map((seg, si) => (
+                <div key={si} className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="font-semibold text-sm">{seg.label}</p>
+                      <p className="text-xs text-muted-foreground">{seg.ads.length} ad{seg.ads.length !== 1 ? "s" : ""}</p>
+                    </div>
+                    {si === 1 && (
+                      <div className="size-8 rounded-full border-2 border-border flex items-center justify-center text-xs font-bold text-muted-foreground">VS</div>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Tables */}
-        <div className="grid grid-cols-2 gap-4">
-          {[{ ads: seg1Ads, label: "Segment 1 Table" }, { ads: seg2Ads, label: "Segment 2 Table" }].map((seg, si) => (
-            <div key={si} className="rounded-xl border bg-card overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2.5 border-b">
-                <p className="font-semibold text-sm">{seg.label}</p>
-                <div className="flex items-center gap-1.5">
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1">Rank <IconArrowUp className="size-3" /></Button>
-                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1"><IconDownload className="size-3" /> Export</Button>
+                  <div className="grid grid-cols-3 gap-2">
+                    {defs.map(d => {
+                      const v = (seg.metrics as any)[d.key] ?? 0
+                      const w = winner(d.key)
+                      const isWinner = w === si + 1
+                      return (
+                        <div key={d.key} className={cn("rounded-lg p-2.5 border", isWinner ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20" : "border-border")}>
+                          <p className="text-[10px] text-muted-foreground mb-1 line-clamp-1">{d.label}</p>
+                          <div className="flex items-center gap-1">
+                            {isWinner && <IconArrowUp className="size-3 text-emerald-500 shrink-0" />}
+                            <p className={cn("text-sm font-bold tabular-nums", isWinner ? "text-emerald-600" : "")}>
+                              {d.key === "createdTime"
+                                ? (seg.ads[0]?.createdTime ? new Date(seg.ads[0].createdTime).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—")
+                                : d.fmt(v, v)}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-              {seg.ads.length > 0
-                ? <TableView ads={seg.ads.slice(0, 10)} metricKeys={["spend", "results"]} onSort={() => {}} sortKey="spend" sortDir="desc" />
-                : <div className="py-8 text-center text-sm text-muted-foreground">No ads in this segment</div>}
-              <div className="px-4 py-2 border-t bg-muted/5 text-xs text-muted-foreground">
-                Showing {Math.min(seg.ads.length, 10)} results &nbsp; Per page: 25
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+
+            {/* Thumbnails */}
+            <div className="grid grid-cols-2 gap-4">
+              {[{ ads: seg1Ads, label: "Segment 1" }, { ads: seg2Ads, label: "Segment 2" }].map((seg, si) => (
+                <div key={si}>
+                  <p className="text-sm font-semibold mb-2">
+                    {seg.label} <span className="text-muted-foreground font-normal text-xs">({seg.ads.length} ads)</span>
+                  </p>
+                  {seg.ads.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3">
+                      {seg.ads.slice(0, 2).map(ad => (
+                        <ReportAdCard key={ad.adId} ad={ad} metricKeys={["spend", "results", "costPerResult"]} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border bg-muted/20 h-32 flex items-center justify-center text-xs text-muted-foreground">
+                      No ads in this segment
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Tables */}
+            <div className="grid grid-cols-2 gap-4">
+              {[{ ads: seg1Ads, label: "Segment 1" }, { ads: seg2Ads, label: "Segment 2" }].map((seg, si) => (
+                <div key={si} className="rounded-xl border bg-card overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b">
+                    <p className="font-semibold text-sm">{seg.label}</p>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
+                      <IconDownload className="size-3" /> Export
+                    </Button>
+                  </div>
+                  {seg.ads.length > 0
+                    ? <TableView ads={seg.ads.slice(0, 10)} metricKeys={metricKeys.slice(0, 4)} onSort={() => {}} sortKey={sortKey} sortDir={sortDir} />
+                    : <div className="py-8 text-center text-sm text-muted-foreground">No ads in this segment</div>}
+                  <div className="px-4 py-2 border-t bg-muted/5 text-xs text-muted-foreground">
+                    Showing {Math.min(seg.ads.length, 10)} of {seg.ads.length}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
