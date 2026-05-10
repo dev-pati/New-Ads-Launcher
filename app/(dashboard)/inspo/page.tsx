@@ -37,6 +37,17 @@ import {
 
 type SubTab = "adscan" | "ai" | "create" | "brand-spy" | "saved"
 type AiMode = "text" | "url" | "video"
+type AiSubMode = "analyze" | "generate"
+type GenMode = "url" | "video"
+
+interface Generated {
+  product_name: string
+  target_audience: string
+  primary_texts: Array<{ angle: string; text: string }>
+  headlines: string[]
+  descriptions: string[]
+  cta: string
+}
 
 interface Creative {
   id: string
@@ -252,6 +263,70 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
+function GenerateResult({ generated, onReset }: { generated: Generated; onReset: () => void }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold">{generated.product_name}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{generated.target_audience}</p>
+        </div>
+        <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={onReset}>
+          <IconRefresh className="size-3.5" />Generate another
+        </Button>
+      </div>
+
+      {/* Primary Texts */}
+      <AnalysisCard title="Primary Texts — 3 variations" icon={<IconFileText className="size-4" />}>
+        <div className="space-y-3">
+          {generated.primary_texts.map((pt, i) => (
+            <div key={i} className="rounded-lg bg-muted/40 border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">V{i + 1} · {pt.angle}</span>
+                <CopyButton text={pt.text} />
+              </div>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{pt.text}</p>
+            </div>
+          ))}
+        </div>
+      </AnalysisCard>
+
+      {/* Headlines + Descriptions + CTA */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <AnalysisCard title="Headlines" icon={<IconQuote className="size-4" />}>
+          <div className="space-y-2">
+            {generated.headlines.map((h, i) => (
+              <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border">
+                <p className="text-sm font-medium flex-1">{h}</p>
+                <CopyButton text={h} />
+              </div>
+            ))}
+          </div>
+        </AnalysisCard>
+
+        <AnalysisCard title="Descriptions" icon={<IconBulb className="size-4" />}>
+          <div className="space-y-2">
+            {generated.descriptions.map((d, i) => (
+              <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/40 border">
+                <p className="text-sm flex-1">{d}</p>
+                <CopyButton text={d} />
+              </div>
+            ))}
+          </div>
+        </AnalysisCard>
+
+        <AnalysisCard title="Call to Action" icon={<IconTarget className="size-4" />}>
+          <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <p className="text-sm font-bold tracking-wide text-primary">{generated.cta}</p>
+            <CopyButton text={generated.cta} />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Recommended CTA based on your content</p>
+        </AnalysisCard>
+      </div>
+    </div>
+  )
+}
+
 function AnalysisResult({ analysis, onReset }: { analysis: Analysis; onReset: () => void }) {
   const hookMeta = HOOK_TYPES[analysis.hook.type] ?? { label: analysis.hook.type, color: "bg-muted text-muted-foreground" }
   const frameworkColor = FRAMEWORK_COLORS[analysis.framework.name] ?? "bg-muted text-muted-foreground"
@@ -389,6 +464,7 @@ export default function InspoPage() {
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
 
   // AI tab state
+  const [aiSubMode, setAiSubMode] = useState<AiSubMode>("analyze")
   const [aiMode, setAiMode] = useState<AiMode>("text")
   const [aiBody, setAiBody] = useState("")
   const [aiTitle, setAiTitle] = useState("")
@@ -400,6 +476,15 @@ export default function InspoPage() {
   const [analyzeStep, setAnalyzeStep] = useState("")
   const [aiError, setAiError] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
+
+  // Generate tab state
+  const [genMode, setGenMode] = useState<GenMode>("url")
+  const [genUrl, setGenUrl] = useState("")
+  const [genCreative, setGenCreative] = useState<Creative | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [generateStep, setGenerateStep] = useState("")
+  const [generateError, setGenerateError] = useState<string | null>(null)
+  const [generated, setGenerated] = useState<Generated | null>(null)
 
   const loadSavedAds = useCallback(async () => {
     setLoadingSaved(true)
@@ -427,8 +512,10 @@ export default function InspoPage() {
   }, [])
 
   useEffect(() => {
-    if (aiMode === "video") loadCreatives()
-  }, [aiMode, loadCreatives])
+    if ((aiSubMode === "analyze" && aiMode === "video") || (aiSubMode === "generate" && genMode === "video")) {
+      loadCreatives()
+    }
+  }, [aiMode, aiSubMode, genMode, loadCreatives])
 
   const handleSearch = async () => {
     if (!query.trim()) return
@@ -529,6 +616,40 @@ export default function InspoPage() {
       }
     } catch { setAiError("Network error. Please try again.") }
     finally { setAnalyzing(false); setAnalyzeStep("") }
+  }
+
+  const handleGenerate = async () => {
+    setGenerating(true)
+    setGenerateError(null)
+    setGenerated(null)
+    try {
+      if (genMode === "url") {
+        if (!genUrl.trim()) { setGenerateError("Please enter a URL"); return }
+        setGenerateStep("Fetching page...")
+        const res = await fetch("/api/inspo/ai/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "url", url: genUrl.trim() }),
+        })
+        setGenerateStep("Generating ad copy...")
+        const data = await res.json()
+        if (data.error) setGenerateError(data.error)
+        else setGenerated(data.generated)
+      } else {
+        if (!genCreative) { setGenerateError("Please select a video"); return }
+        setGenerateStep("Uploading video to AI...")
+        const res = await fetch("/api/inspo/ai/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "video", url: genCreative.file_url }),
+        })
+        setGenerateStep("Generating ad copy...")
+        const data = await res.json()
+        if (data.error) setGenerateError(data.error)
+        else setGenerated(data.generated)
+      }
+    } catch { setGenerateError("Network error. Please try again.") }
+    finally { setGenerating(false); setGenerateStep("") }
   }
 
   const isPermissionError = (err: string) => err.toLowerCase().includes("permission")
@@ -679,136 +800,251 @@ export default function InspoPage() {
           </div>
         )}
 
-        {/* ── AI Analysis ── */}
+        {/* ── AI Tab ── */}
         {subTab === "ai" && (
           <div className="h-full flex flex-col overflow-y-auto">
             <div className="flex-1 p-6 space-y-6 max-w-5xl mx-auto w-full">
-              {!analysis ? (
-                <>
-                  {/* Mode switcher */}
-                  <div className="flex gap-1 p-1 rounded-xl bg-muted w-fit">
-                    {([
-                      { id: "text",  label: "Ad Copy",  icon: IconFileText },
-                      { id: "url",   label: "Website",  icon: IconWorld },
-                      { id: "video", label: "Video",    icon: IconVideo },
-                    ] as const).map(m => (
-                      <button key={m.id} onClick={() => { setAiMode(m.id); setAiError(null); setAnalysis(null) }}
-                        className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                          aiMode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                        )}>
-                        <m.icon className="size-3.5" />{m.label}
-                      </button>
-                    ))}
-                  </div>
 
-                  {/* Input area */}
-                  <div className="border rounded-xl bg-card p-5 space-y-4">
-                    {/* Text mode */}
-                    {aiMode === "text" && (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Ad copy / body text <span className="text-destructive">*</span></label>
-                          <textarea value={aiBody} onChange={e => setAiBody(e.target.value)}
-                            placeholder="Paste the ad body copy here..."
-                            rows={6}
-                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50" />
-                        </div>
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Headline <span className="font-normal">(optional)</span></label>
-                          <Input value={aiTitle} onChange={e => setAiTitle(e.target.value)} placeholder="Ad headline..." />
-                        </div>
-                      </div>
-                    )}
+              {/* Analyze / Generate top switcher */}
+              <div className="flex gap-1 p-1 rounded-xl bg-muted w-fit">
+                {([
+                  { id: "analyze",  label: "Analyze",  icon: IconSparkles },
+                  { id: "generate", label: "Generate", icon: IconBulb },
+                ] as const).map(m => (
+                  <button key={m.id}
+                    onClick={() => { setAiSubMode(m.id); setAiError(null); setAnalysis(null); setGenerateError(null); setGenerated(null) }}
+                    className={cn("flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-all",
+                      aiSubMode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                    )}>
+                    <m.icon className="size-3.5" />{m.label}
+                  </button>
+                ))}
+              </div>
 
-                    {/* URL mode */}
-                    {aiMode === "url" && (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Landing page / product URL <span className="text-destructive">*</span></label>
-                          <Input value={aiUrl} onChange={e => setAiUrl(e.target.value)}
-                            placeholder="https://example.com/product"
-                            type="url" />
-                        </div>
-                        <p className="text-xs text-muted-foreground">AI sẽ đọc nội dung trang web và phân tích value proposition, messaging, CTA.</p>
-                      </div>
-                    )}
-
-                    {/* Video mode */}
-                    {aiMode === "video" && (
-                      <div className="space-y-3">
-                        <label className="text-xs font-medium text-muted-foreground block">Chọn video từ Assets <span className="text-destructive">*</span></label>
-                        {loadingCreatives ? (
-                          <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
-                            <IconLoader2 className="size-4 animate-spin" />Loading videos...
-                          </div>
-                        ) : creatives.length === 0 ? (
-                          <div className="py-6 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
-                            No videos found. Upload videos in Assets first.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
-                            {creatives.map(c => (
-                              <button key={c.id} onClick={() => setSelectedCreative(c)}
-                                className={cn("relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-muted",
-                                  selectedCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
-                                )}>
-                                {c.fb_thumbnail_url
-                                  ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" />
-                                  : <div className="w-full h-full flex items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
-                                }
-                                {selectedCreative?.id === c.id && (
-                                  <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                                    <IconCheck className="size-5 text-primary" />
-                                  </div>
-                                )}
-                                <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {selectedCreative && (
-                          <p className="text-xs text-muted-foreground">Selected: <strong className="text-foreground">{selectedCreative.file_name}</strong></p>
-                        )}
-                        <p className="text-xs text-muted-foreground">AI xem từng frame và audio để phân tích hook, messaging, và hiệu quả của video ad.</p>
-                      </div>
-                    )}
-
-                    {aiError && (
-                      <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-                        <IconAlertCircle className="size-4 shrink-0" />{aiError}
-                      </div>
-                    )}
-
-                    <Button onClick={handleAnalyze} disabled={analyzing ||
-                      (aiMode === "text" && !aiBody.trim()) ||
-                      (aiMode === "url" && !aiUrl.trim()) ||
-                      (aiMode === "video" && !selectedCreative)
-                    } className="gap-2">
-                      {analyzing
-                        ? <><IconLoader2 className="size-4 animate-spin" />{analyzeStep || "Analyzing..."}</>
-                        : <><IconSparkles className="size-4" />Analyze with AI</>
-                      }
-                    </Button>
-                  </div>
-
-                  {/* Quick analyze from saved */}
-                  {aiMode === "text" && savedAds.length > 0 && (
-                    <div className="border rounded-xl p-4 space-y-3">
-                      <p className="text-sm font-semibold">Quick analyze from Saved Ads</p>
-                      <div className="flex flex-wrap gap-2">
-                        {savedAds.slice(0, 5).filter(a => a.ad_body).map(ad => (
-                          <button key={ad.id} onClick={() => handleAnalyzeAd(ad.ad_body, ad.ad_title)}
-                            className="text-xs px-3 py-1.5 rounded-full border bg-background hover:bg-muted transition-colors truncate max-w-[200px]">
-                            {ad.page_name}
-                          </button>
-                        ))}
-                      </div>
+              {/* ── Analyze sub-tab ── */}
+              {aiSubMode === "analyze" && (
+                !analysis ? (
+                  <>
+                    <div className="flex gap-1 p-1 rounded-xl bg-muted/60 w-fit border">
+                      {([
+                        { id: "text",  label: "Ad Copy",  icon: IconFileText },
+                        { id: "url",   label: "Website",  icon: IconWorld },
+                        { id: "video", label: "Video",    icon: IconVideo },
+                      ] as const).map(m => (
+                        <button key={m.id} onClick={() => { setAiMode(m.id); setAiError(null) }}
+                          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                            aiMode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                          )}>
+                          <m.icon className="size-3.5" />{m.label}
+                        </button>
+                      ))}
                     </div>
-                  )}
-                </>
-              ) : (
-                <AnalysisResult analysis={analysis} onReset={() => { setAnalysis(null); setAiBody(""); setAiTitle("") }} />
+
+                    <div className="border rounded-xl bg-card p-5 space-y-4">
+                      {aiMode === "text" && (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Ad copy / body text <span className="text-destructive">*</span></label>
+                            <textarea value={aiBody} onChange={e => setAiBody(e.target.value)}
+                              placeholder="Paste the ad body copy here..."
+                              rows={6}
+                              className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50" />
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Headline <span className="font-normal">(optional)</span></label>
+                            <Input value={aiTitle} onChange={e => setAiTitle(e.target.value)} placeholder="Ad headline..." />
+                          </div>
+                        </div>
+                      )}
+
+                      {aiMode === "url" && (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Landing page / product URL <span className="text-destructive">*</span></label>
+                            <Input value={aiUrl} onChange={e => setAiUrl(e.target.value)}
+                              placeholder="https://example.com/product" type="url" />
+                          </div>
+                          <p className="text-xs text-muted-foreground">AI đọc nội dung trang web và phân tích value proposition, messaging, CTA.</p>
+                        </div>
+                      )}
+
+                      {aiMode === "video" && (
+                        <div className="space-y-3">
+                          <label className="text-xs font-medium text-muted-foreground block">Chọn video từ Assets <span className="text-destructive">*</span></label>
+                          {loadingCreatives ? (
+                            <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
+                              <IconLoader2 className="size-4 animate-spin" />Loading videos...
+                            </div>
+                          ) : creatives.length === 0 ? (
+                            <div className="py-6 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
+                              No videos found. Upload videos in Assets first.
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
+                              {creatives.map(c => (
+                                <button key={c.id} onClick={() => setSelectedCreative(c)}
+                                  className={cn("relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-muted",
+                                    selectedCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
+                                  )}>
+                                  {c.fb_thumbnail_url
+                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" />
+                                    : <div className="w-full h-full flex items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
+                                  }
+                                  {selectedCreative?.id === c.id && (
+                                    <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                                      <IconCheck className="size-5 text-primary" />
+                                    </div>
+                                  )}
+                                  <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {selectedCreative && (
+                            <p className="text-xs text-muted-foreground">Selected: <strong className="text-foreground">{selectedCreative.file_name}</strong></p>
+                          )}
+                          <p className="text-xs text-muted-foreground">AI xem từng frame và audio để phân tích hook, messaging, và hiệu quả của video ad.</p>
+                        </div>
+                      )}
+
+                      {aiError && (
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+                          <IconAlertCircle className="size-4 shrink-0" />{aiError}
+                        </div>
+                      )}
+
+                      <Button onClick={handleAnalyze} disabled={analyzing ||
+                        (aiMode === "text" && !aiBody.trim()) ||
+                        (aiMode === "url" && !aiUrl.trim()) ||
+                        (aiMode === "video" && !selectedCreative)
+                      } className="gap-2">
+                        {analyzing
+                          ? <><IconLoader2 className="size-4 animate-spin" />{analyzeStep || "Analyzing..."}</>
+                          : <><IconSparkles className="size-4" />Analyze with AI</>
+                        }
+                      </Button>
+                    </div>
+
+                    {aiMode === "text" && savedAds.length > 0 && (
+                      <div className="border rounded-xl p-4 space-y-3">
+                        <p className="text-sm font-semibold">Quick analyze from Saved Ads</p>
+                        <div className="flex flex-wrap gap-2">
+                          {savedAds.slice(0, 5).filter(a => a.ad_body).map(ad => (
+                            <button key={ad.id} onClick={() => handleAnalyzeAd(ad.ad_body, ad.ad_title)}
+                              className="text-xs px-3 py-1.5 rounded-full border bg-background hover:bg-muted transition-colors truncate max-w-[200px]">
+                              {ad.page_name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <AnalysisResult analysis={analysis} onReset={() => { setAnalysis(null); setAiBody(""); setAiTitle("") }} />
+                )
               )}
+
+              {/* ── Generate sub-tab ── */}
+              {aiSubMode === "generate" && (
+                !generated ? (
+                  <>
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">AI viết primary text, headline, description và CTA hoàn chỉnh từ landing page hoặc video của bạn.</p>
+                    </div>
+
+                    <div className="flex gap-1 p-1 rounded-xl bg-muted/60 w-fit border">
+                      {([
+                        { id: "url",   label: "Landing Page",  icon: IconWorld },
+                        { id: "video", label: "Video",         icon: IconVideo },
+                      ] as const).map(m => (
+                        <button key={m.id} onClick={() => { setGenMode(m.id); setGenerateError(null) }}
+                          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                            genMode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                          )}>
+                          <m.icon className="size-3.5" />{m.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="border rounded-xl bg-card p-5 space-y-4">
+                      {genMode === "url" && (
+                        <div className="space-y-3">
+                          <div>
+                            <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                              Landing page URL <span className="text-destructive">*</span>
+                            </label>
+                            <Input value={genUrl} onChange={e => setGenUrl(e.target.value)}
+                              placeholder="https://example.com/product" type="url" />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            AI đọc landing page và tạo ra 3 primary text, 3 headlines, 2 descriptions và CTA phù hợp với ngôn ngữ của trang.
+                          </p>
+                        </div>
+                      )}
+
+                      {genMode === "video" && (
+                        <div className="space-y-3">
+                          <label className="text-xs font-medium text-muted-foreground block">Chọn video từ Assets <span className="text-destructive">*</span></label>
+                          {loadingCreatives ? (
+                            <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
+                              <IconLoader2 className="size-4 animate-spin" />Loading videos...
+                            </div>
+                          ) : creatives.length === 0 ? (
+                            <div className="py-6 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
+                              No videos found. Upload videos in Assets first.
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
+                              {creatives.map(c => (
+                                <button key={c.id} onClick={() => setGenCreative(c)}
+                                  className={cn("relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-muted",
+                                    genCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
+                                  )}>
+                                  {c.fb_thumbnail_url
+                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" />
+                                    : <div className="w-full h-full flex items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
+                                  }
+                                  {genCreative?.id === c.id && (
+                                    <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                                      <IconCheck className="size-5 text-primary" />
+                                    </div>
+                                  )}
+                                  <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {genCreative && (
+                            <p className="text-xs text-muted-foreground">Selected: <strong className="text-foreground">{genCreative.file_name}</strong></p>
+                          )}
+                          <p className="text-xs text-muted-foreground">
+                            AI xem video và tạo ra ad copy hoàn chỉnh dựa trên nội dung, sản phẩm và ngôn ngữ trong video.
+                          </p>
+                        </div>
+                      )}
+
+                      {generateError && (
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+                          <IconAlertCircle className="size-4 shrink-0" />{generateError}
+                        </div>
+                      )}
+
+                      <Button onClick={handleGenerate} disabled={generating ||
+                        (genMode === "url" && !genUrl.trim()) ||
+                        (genMode === "video" && !genCreative)
+                      } className="gap-2">
+                        {generating
+                          ? <><IconLoader2 className="size-4 animate-spin" />{generateStep || "Generating..."}</>
+                          : <><IconBulb className="size-4" />Generate Ad Copy</>
+                        }
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <GenerateResult generated={generated} onReset={() => { setGenerated(null); setGenUrl(""); setGenCreative(null) }} />
+                )
+              )}
+
             </div>
           </div>
         )}
