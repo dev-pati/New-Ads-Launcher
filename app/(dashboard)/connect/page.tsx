@@ -28,6 +28,8 @@ import {
   IconCode,
   IconBolt,
   IconX,
+  IconEye,
+  IconEyeOff,
 } from "@tabler/icons-react"
 
 type SubTab = "channels" | "media" | "api" | "mcp"
@@ -139,6 +141,7 @@ function McpTab() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showSetupModal, setShowSetupModal] = useState(false)
   const [setupMethod, setSetupMethod] = useState<SetupMethod>("web")
+  const [revealedKeyId, setRevealedKeyId] = useState<string | null>(null)
 
   const mcpUrl = typeof window !== "undefined"
     ? `${window.location.origin}/api/mcp`
@@ -469,7 +472,33 @@ function McpTab() {
                 <tr key={k.id} className="hover:bg-muted/20">
                   <td className="px-5 py-3 font-medium">{k.name}</td>
                   <td className="px-5 py-3 font-mono text-xs text-muted-foreground">
-                    {k.api_key ? `${k.api_key.slice(0, 12)}${"•".repeat(20)}` : "••••••••••••"}
+                    <div className="flex items-center gap-2">
+                      <span className="break-all">
+                        {k.api_key
+                          ? revealedKeyId === k.id
+                            ? k.api_key
+                            : `${k.api_key.slice(0, 12)}${"•".repeat(20)}`
+                          : "••••••••••••"}
+                      </span>
+                      {k.api_key && (
+                        <button
+                          onClick={() => setRevealedKeyId(revealedKeyId === k.id ? null : k.id)}
+                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          title={revealedKeyId === k.id ? "Hide key" : "Show key"}
+                        >
+                          {revealedKeyId === k.id ? <IconEyeOff className="size-3.5" /> : <IconEye className="size-3.5" />}
+                        </button>
+                      )}
+                      {revealedKeyId === k.id && k.api_key && (
+                        <button
+                          onClick={() => copyText(k.api_key, `copy-${k.id}`)}
+                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          title="Copy key"
+                        >
+                          {copied === `copy-${k.id}` ? <IconCheck className="size-3.5 text-green-500" /> : <IconCopy className="size-3.5" />}
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 py-3 text-muted-foreground text-xs">
                     {k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : "Never"}
