@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +19,14 @@ import {
   IconApi,
   IconServer,
   IconBuildingStore,
+  IconPlus,
+  IconTrash,
+  IconCopy,
+  IconLoader2,
+  IconKey,
+  IconAlertCircle,
+  IconCode,
+  IconBolt,
 } from "@tabler/icons-react"
 
 type SubTab = "channels" | "media" | "api" | "mcp"
@@ -102,6 +110,255 @@ const AD_CHANNELS: AdChannel[] = [
     beta: true,
   },
 ]
+
+// ─── MCP Tools list ──────────────────────────────────────────────────────────
+
+const MCP_TOOLS = [
+  { name: "get_ad_accounts", desc: "List all connected ad accounts" },
+  { name: "get_campaigns", desc: "List campaigns with ROAS, spend, purchases" },
+  { name: "get_adsets", desc: "List ad sets with budget and performance" },
+  { name: "get_ad_insights", desc: "Detailed metrics — ROAS, CPC, CTR, CPM" },
+  { name: "toggle_status", desc: "Pause or resume any campaign / ad set / ad" },
+  { name: "adjust_budget", desc: "Change daily or lifetime budget" },
+  { name: "get_media_library", desc: "Browse images and videos in media library" },
+  { name: "get_automation_rules", desc: "List Facebook Automated Rules" },
+]
+
+// ─── MCP Tab ─────────────────────────────────────────────────────────────────
+
+function McpTab() {
+  const [keys, setKeys] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [generating, setGenerating] = useState(false)
+  const [newKey, setNewKey] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState("")
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const mcpUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/api/mcp`
+    : "/api/mcp"
+
+  const fetchKeys = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/mcp/keys")
+      const d = await res.json()
+      setKeys(d.keys || [])
+    } catch {}
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchKeys() }, [fetchKeys])
+
+  async function generateKey() {
+    setGenerating(true); setError(""); setNewKey(null)
+    try {
+      const res = await fetch("/api/mcp/keys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Claude Desktop" }) })
+      const d = await res.json()
+      if (!res.ok) { setError(d.error || "Failed"); return }
+      setNewKey(d.key.api_key)
+      setKeys(prev => [d.key, ...prev])
+    } catch (e: any) { setError(e.message) }
+    finally { setGenerating(false) }
+  }
+
+  async function deleteKey(id: string) {
+    setDeletingId(id)
+    try {
+      await fetch("/api/mcp/keys", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) })
+      setKeys(prev => prev.filter(k => k.id !== id))
+      if (newKey && keys.find(k => k.id === id)?.api_key === newKey) setNewKey(null)
+    } catch {}
+    finally { setDeletingId(null) }
+  }
+
+  function copyText(text: string) {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const displayKey = newKey || keys[0]?.api_key
+  const claudeConfig = displayKey ? JSON.stringify({
+    mcpServers: {
+      adlauncher: {
+        url: mcpUrl,
+        headers: { Authorization: `Bearer ${displayKey}` },
+      },
+    },
+  }, null, 2) : null
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* Header */}
+      <div className="flex items-start gap-4 p-5 rounded-xl border bg-gradient-to-br from-primary/5 to-primary/0">
+        <div className="size-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <IconServer className="size-5 text-primary" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-base">AdLauncher MCP Server</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Connect Claude Desktop or any MCP-compatible AI to your Facebook Ads data. Ask questions, get insights, and take actions using natural language.
+          </p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className="size-2 rounded-full bg-green-500 inline-block" />
+            <span className="text-xs text-green-600 dark:text-green-400 font-medium">Server Online</span>
+            <span className="text-xs text-muted-foreground ml-2 font-mono">{mcpUrl}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* API Keys */}
+      <div className="border rounded-xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b bg-muted/20">
+          <div className="flex items-center gap-2">
+            <IconKey className="size-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">API Keys</h3>
+          </div>
+          <Button size="sm" className="gap-1.5 text-xs" onClick={generateKey} disabled={generating}>
+            {generating
+              ? <IconLoader2 className="size-3.5 animate-spin" />
+              : <IconPlus className="size-3.5" />
+            }
+            Generate Key
+          </Button>
+        </div>
+
+        {/* New key banner */}
+        {newKey && (
+          <div className="px-5 py-4 bg-green-50 dark:bg-green-950/20 border-b border-green-200 dark:border-green-900">
+            <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-2">
+              ✅ Key generated — copy it now, it won't be shown again in full.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-xs bg-background border rounded-lg px-3 py-2 font-mono break-all">{newKey}</code>
+              <Button size="sm" variant="outline" className="shrink-0 gap-1.5 text-xs" onClick={() => copyText(newKey)}>
+                <IconCopy className="size-3.5" />
+                {copied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div className="px-5 py-3 flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border-b">
+            <IconAlertCircle className="size-4 shrink-0" />{error}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-10">
+            <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : keys.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <IconKey className="size-8 text-muted-foreground/30 mb-2" />
+            <p className="text-sm text-muted-foreground">No API keys yet. Generate one to connect Claude.</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/30">
+              <tr>
+                <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Name</th>
+                <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Key</th>
+                <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Last Used</th>
+                <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Created</th>
+                <th className="px-5 py-2.5" />
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {keys.map(k => (
+                <tr key={k.id} className="hover:bg-muted/20">
+                  <td className="px-5 py-3 font-medium">{k.name}</td>
+                  <td className="px-5 py-3 font-mono text-xs text-muted-foreground">
+                    {k.api_key ? `${k.api_key.slice(0, 12)}${"•".repeat(20)}` : "••••••••••••"}
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground text-xs">
+                    {k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : "Never"}
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground text-xs">
+                    {new Date(k.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-5 py-3 text-right">
+                    <button onClick={() => deleteKey(k.id)} disabled={deletingId === k.id} className="text-muted-foreground hover:text-destructive transition-colors">
+                      {deletingId === k.id
+                        ? <IconLoader2 className="size-4 animate-spin" />
+                        : <IconTrash className="size-4" />
+                      }
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Claude Desktop config */}
+      {claudeConfig && (
+        <div className="border rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b bg-muted/20">
+            <div className="flex items-center gap-2">
+              <IconCode className="size-4 text-muted-foreground" />
+              <h3 className="text-sm font-semibold">Claude Desktop Config</h3>
+            </div>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => copyText(claudeConfig)}>
+              <IconCopy className="size-3.5" />{copied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+          <div className="p-5">
+            <p className="text-xs text-muted-foreground mb-3">
+              Add this to your <code className="bg-muted px-1 py-0.5 rounded text-xs">claude_desktop_config.json</code> file:
+            </p>
+            <pre className="text-xs bg-muted/50 rounded-lg p-4 overflow-x-auto font-mono leading-relaxed border">{claudeConfig}</pre>
+            <p className="text-xs text-muted-foreground mt-3">
+              Config file location: <code className="bg-muted px-1 py-0.5 rounded">~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) or <code className="bg-muted px-1 py-0.5 rounded">%APPDATA%\Claude\claude_desktop_config.json</code> (Windows)
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Available tools */}
+      <div className="border rounded-xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b bg-muted/20 flex items-center gap-2">
+          <IconBolt className="size-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Available Tools ({MCP_TOOLS.length})</h3>
+        </div>
+        <div className="divide-y">
+          {MCP_TOOLS.map(t => (
+            <div key={t.name} className="flex items-center gap-3 px-5 py-3">
+              <code className="text-xs font-mono bg-primary/8 text-primary px-2 py-0.5 rounded shrink-0">{t.name}</code>
+              <span className="text-sm text-muted-foreground">{t.desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Example prompts */}
+      <div className="border rounded-xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b bg-muted/20">
+          <h3 className="text-sm font-semibold">Example Prompts for Claude</h3>
+        </div>
+        <div className="p-5 space-y-2">
+          {[
+            "Which campaigns had the highest ROAS this week?",
+            "Pause all ad sets with ROAS below 1 in account act_123456",
+            "What's the total spend across all accounts in the last 30 days?",
+            "Show me all videos in the media library",
+            "Increase the daily budget of adset 98765 to $200",
+            "Which campaigns are currently paused?",
+          ].map(p => (
+            <div key={p} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <span className="text-primary mt-0.5 shrink-0">→</span>
+              <span>"{p}"</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function ConnectPage() {
   const [subTab, setSubTab] = useState<SubTab>("channels")
@@ -299,14 +556,7 @@ export default function ConnectPage() {
         )}
 
         {subTab === "mcp" && (
-          <div className="max-w-2xl">
-            <div className="border rounded-xl p-8 text-center bg-card">
-              <IconServer className="size-10 text-muted-foreground/40 mx-auto mb-3" />
-              <h3 className="text-sm font-semibold">MCP Server</h3>
-              <p className="text-sm text-muted-foreground mt-1">Connect via Model Context Protocol for AI-powered automations.</p>
-              <Button className="mt-4" size="sm" disabled>Coming Soon</Button>
-            </div>
-          </div>
+          <McpTab />
         )}
       </div>
     </div>
