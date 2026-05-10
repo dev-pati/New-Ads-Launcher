@@ -9722,6 +9722,17 @@ function AdSetupPanel({
   const [aiVariationsError, setAiVariationsError] = useState<string | null>(null)
   const [addedVariations, setAddedVariations] = useState<Set<number>>(new Set())
 
+  // Generate from URL/Video state
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [genMode, setGenMode] = useState<"url" | "video">("url")
+  const [genUrl, setGenUrl] = useState("")
+  const [genCreatives, setGenCreatives] = useState<Creative[]>([])
+  const [genCreative, setGenCreative] = useState<Creative | null>(null)
+  const [loadingGenCreatives, setLoadingGenCreatives] = useState(false)
+  const [generatingCopy, setGeneratingCopy] = useState(false)
+  const [generateCopyStep, setGenerateCopyStep] = useState("")
+  const [generateCopyError, setGenerateCopyError] = useState<string | null>(null)
+
   const updateText = (idx: number, val: string) => {
     const next = [...primaryTexts]; next[idx] = val; setPrimaryTexts(next)
   }
@@ -9767,6 +9778,64 @@ function AdSetupPanel({
   }
   const addHeadline = () => setHeadlines([...headlines, ""])
   const removeHeadline = (idx: number) => setHeadlines(headlines.filter((_, i) => i !== idx))
+
+  const openGenerateModal = async () => {
+    setShowGenerateModal(true)
+    setGenerateCopyError(null)
+    if (genCreatives.length === 0) {
+      setLoadingGenCreatives(true)
+      try {
+        const res = await fetch("/api/creatives?media_type=video")
+        const data = await res.json()
+        setGenCreatives(data.creatives || [])
+      } catch { /* silent */ }
+      finally { setLoadingGenCreatives(false) }
+    }
+  }
+
+  const handleGenerateCopy = async () => {
+    setGeneratingCopy(true)
+    setGenerateCopyError(null)
+    try {
+      if (genMode === "url") {
+        if (!genUrl.trim()) { setGenerateCopyError("Please enter a URL"); return }
+        setGenerateCopyStep("Fetching page...")
+        const res = await fetch("/api/inspo/ai/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "url", url: genUrl.trim() }),
+        })
+        setGenerateCopyStep("Generating copy...")
+        const data = await res.json()
+        if (data.error) { setGenerateCopyError(data.error); return }
+        const g = data.generated
+        setPrimaryTexts(g.primary_texts.map((p: { text: string }) => p.text))
+        setHeadlines(g.headlines)
+        if (g.descriptions?.[0]) setDescription(g.descriptions[0])
+        if (g.cta) setCta(g.cta)
+      } else {
+        if (!genCreative) { setGenerateCopyError("Please select a video"); return }
+        setGenerateCopyStep("Uploading video...")
+        const res = await fetch("/api/inspo/ai/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "video", url: genCreative.file_url }),
+        })
+        setGenerateCopyStep("Generating copy...")
+        const data = await res.json()
+        if (data.error) { setGenerateCopyError(data.error); return }
+        const g = data.generated
+        setPrimaryTexts(g.primary_texts.map((p: { text: string }) => p.text))
+        setHeadlines(g.headlines)
+        if (g.descriptions?.[0]) setDescription(g.descriptions[0])
+        if (g.cta) setCta(g.cta)
+      }
+      setShowGenerateModal(false)
+      setGenUrl("")
+      setGenCreative(null)
+    } catch { setGenerateCopyError("Network error. Please try again.") }
+    finally { setGeneratingCopy(false); setGenerateCopyStep("") }
+  }
 
   return (
     <div className="border rounded-xl bg-card">
@@ -9875,12 +9944,112 @@ function AdSetupPanel({
           if (t.cta) setCta(t.cta)
         }}
       />
+
+      {/* Generate Copy from URL/Video Modal */}
+      <Dialog open={showGenerateModal} onOpenChange={(open) => { setShowGenerateModal(open); if (!open) { setGenerateCopyError(null) } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IconSparkles className="size-4 text-primary" />
+              Generate Ad Copy with AI
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">AI sẽ tạo primary text, headline, description và CTA — tự điền vào các field bên dưới.</p>
+
+          {/* Mode switcher */}
+          <div className="flex gap-1 p-1 rounded-xl bg-muted w-fit">
+            {([
+              { id: "url",   label: "Landing Page", icon: IconWorld },
+              { id: "video", label: "Video",         icon: IconVideo },
+            ] as const).map(m => (
+              <button key={m.id} onClick={() => { setGenMode(m.id); setGenerateCopyError(null) }}
+                className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                  genMode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}>
+                <m.icon className="size-3.5" />{m.label}
+              </button>
+            ))}
+          </div>
+
+          {/* URL input */}
+          {genMode === "url" && (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Landing page URL</label>
+              <input
+                type="url"
+                value={genUrl}
+                onChange={e => setGenUrl(e.target.value)}
+                placeholder="https://example.com/product"
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50"
+                onKeyDown={e => e.key === "Enter" && handleGenerateCopy()}
+              />
+            </div>
+          )}
+
+          {/* Video picker */}
+          {genMode === "video" && (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Chọn video từ Assets</label>
+              {loadingGenCreatives ? (
+                <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
+                  <IconLoader2 className="size-4 animate-spin" />Loading...
+                </div>
+              ) : genCreatives.length === 0 ? (
+                <div className="py-5 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
+                  No videos found. Upload videos in Assets first.
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                  {genCreatives.map(c => (
+                    <button key={c.id} onClick={() => setGenCreative(c)}
+                      className={cn("relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-muted",
+                        genCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
+                      )}>
+                      {c.fb_thumbnail_url
+                        ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" />
+                        : <div className="w-full h-full flex items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
+                      }
+                      {genCreative?.id === c.id && (
+                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                          <IconCheck className="size-5 text-primary" />
+                        </div>
+                      )}
+                      <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {genCreative && (
+                <p className="text-xs text-muted-foreground">Selected: <strong className="text-foreground">{genCreative.file_name}</strong></p>
+              )}
+            </div>
+          )}
+
+          {generateCopyError && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+              <IconAlertCircle className="size-4 shrink-0" />{generateCopyError}
+            </div>
+          )}
+
+          <Button className="w-full gap-2" onClick={handleGenerateCopy}
+            disabled={generatingCopy || (genMode === "url" && !genUrl.trim()) || (genMode === "video" && !genCreative)}>
+            {generatingCopy
+              ? <><IconLoader2 className="size-4 animate-spin" />{generateCopyStep || "Generating..."}</>
+              : <><IconSparkles className="size-4" />Generate & Fill Fields</>
+            }
+          </Button>
+        </DialogContent>
+      </Dialog>
+
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-semibold">Ad Setup</span>
           <span className="text-destructive text-xs font-bold">*</span>
         </div>
         <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5" onClick={openGenerateModal}>
+            <IconSparkles className="size-3" />Generate
+          </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setSettingsOpen(true)}>
             <IconSettings className="size-3" />Settings<IconChevronDown className="size-3" />
           </Button>
