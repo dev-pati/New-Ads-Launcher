@@ -66,18 +66,22 @@ const TEMPLATES = [
     name: "Performance Monitoring",
     category: "Optimization" as TemplateCategory,
     featured: true,
+    fbLive: true,
+    fbAction: "SEND_NOTIFICATION",
+    fbActionLabel: "Send Notification",
     icon: IconChartBar,
     iconColor: "text-violet-500",
     iconBg: "bg-violet-50 dark:bg-violet-950/30",
     description: "Track key metric changes across your ad accounts. Get alerted when spend, CPA, or ROAS shifts significantly day-over-day or week-over-week so you can act fast.",
     steps: 2,
-    trigger: { type: "metric_threshold", config: { metric: "roas", operator: "LESS_THAN", value: 1.5, window: "day_over_day" } },
-    actions: [{ type: "send_notification", config: { message: "ROAS dropped below threshold" } }],
+    trigger: { type: "metric_threshold", config: { metric: "roas", operator: "LESS_THAN", value: 1.5 } },
+    actions: [{ type: "SEND_NOTIFICATION", config: {} }],
   },
   {
     id: "scale_top_performers",
     name: "Scale Top Performers",
     category: "Scaling" as TemplateCategory,
+    comingSoon: true,
     icon: IconRocket,
     iconColor: "text-pink-500",
     iconBg: "bg-pink-50 dark:bg-pink-950/30",
@@ -90,18 +94,22 @@ const TEMPLATES = [
     id: "budget_boost_winners",
     name: "Budget Boost for Winners",
     category: "Scaling" as TemplateCategory,
+    fbLive: true,
+    fbAction: "INCREASE_DAILY_BUDGET",
+    fbActionLabel: "Increase Daily Budget",
     icon: IconMoneybag,
     iconColor: "text-amber-500",
     iconBg: "bg-amber-50 dark:bg-amber-950/30",
-    description: "Increase budget by 20% for campaigns with ROAS above 2 to capitalize on high-performing spend.",
+    description: "Increase budget by 20% for ad sets with ROAS above 2 to capitalize on high-performing spend.",
     steps: 2,
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "GREATER_THAN", value: 2 } },
-    actions: [{ type: "adjust_budget", config: { change_type: "percentage_increase", percentage: 20 } }],
+    actions: [{ type: "INCREASE_DAILY_BUDGET", config: { percentage: 20 } }],
   },
   {
     id: "post_approval_scaling",
     name: "Post-Approval Scaling",
     category: "Scaling" as TemplateCategory,
+    comingSoon: true,
     icon: IconCircleCheck,
     iconColor: "text-green-500",
     iconBg: "bg-green-50 dark:bg-green-950/30",
@@ -114,6 +122,7 @@ const TEMPLATES = [
     id: "launch_winners_tiktok",
     name: "Launch Winners on TikTok",
     category: "Scaling" as TemplateCategory,
+    comingSoon: true,
     icon: IconBrandTiktok,
     iconColor: "text-slate-800 dark:text-slate-200",
     iconBg: "bg-slate-100 dark:bg-slate-800/50",
@@ -126,6 +135,7 @@ const TEMPLATES = [
     id: "launch_winners_snapchat",
     name: "Launch Winners on Snapchat",
     category: "Scaling" as TemplateCategory,
+    comingSoon: true,
     icon: IconBrandSnapchat,
     iconColor: "text-yellow-500",
     iconBg: "bg-yellow-50 dark:bg-yellow-950/30",
@@ -138,6 +148,7 @@ const TEMPLATES = [
     id: "launch_winners_pinterest",
     name: "Launch Winners on Pinterest",
     category: "Scaling" as TemplateCategory,
+    comingSoon: true,
     icon: IconBrandPinterest,
     iconColor: "text-red-500",
     iconBg: "bg-red-50 dark:bg-red-950/30",
@@ -150,18 +161,22 @@ const TEMPLATES = [
     id: "pause_underperformers",
     name: "Pause Underperformers",
     category: "Optimization" as TemplateCategory,
+    fbLive: true,
+    fbAction: "PAUSE_ADSET",
+    fbActionLabel: "Pause Ad Set",
     icon: IconPlayerPause,
     iconColor: "text-blue-500",
     iconBg: "bg-blue-50 dark:bg-blue-950/30",
-    description: "Automatically pause ads with ROAS below 1 to stop wasting budget on low-performing creatives.",
+    description: "Automatically pause ad sets with ROAS below 1 to stop wasting budget on low-performing creatives.",
     steps: 2,
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "LESS_THAN", value: 1 } },
-    actions: [{ type: "pause_ad", config: {} }],
+    actions: [{ type: "PAUSE_ADSET", config: {} }],
   },
   {
     id: "daily_budget_toggle",
     name: "Daily Budget Rule Toggle",
     category: "Optimization" as TemplateCategory,
+    comingSoon: true,
     icon: IconToggleLeft,
     iconColor: "text-indigo-500",
     iconBg: "bg-indigo-50 dark:bg-indigo-950/30",
@@ -174,6 +189,7 @@ const TEMPLATES = [
     id: "log_ad_launches_sheets",
     name: "Log Ad Launches to Sheets",
     category: "Reporting" as TemplateCategory,
+    comingSoon: true,
     icon: IconFileSpreadsheet,
     iconColor: "text-green-600",
     iconBg: "bg-green-50 dark:bg-green-950/30",
@@ -243,6 +259,284 @@ function execStatusBadge(status: string) {
 
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })
+}
+
+// ─── Create Facebook Rule Modal (live on Meta) ────────────────────────────────
+
+const FB_METRIC_OPTIONS = [
+  { value: "roas", label: "ROAS" },
+  { value: "spend", label: "Spend ($)" },
+  { value: "cpc", label: "CPC ($)" },
+  { value: "cpm", label: "CPM ($)" },
+  { value: "ctr", label: "CTR (%)" },
+  { value: "impressions", label: "Impressions" },
+  { value: "frequency", label: "Frequency" },
+  { value: "cost_per_result", label: "Cost per Result ($)" },
+  { value: "results", label: "Results" },
+]
+
+const FB_OPERATOR_OPTIONS = [
+  { value: "GREATER_THAN", label: "is greater than (>)" },
+  { value: "LESS_THAN", label: "is less than (<)" },
+  { value: "GREATER_THAN_OR_EQUAL_TO", label: "is ≥" },
+  { value: "LESS_THAN_OR_EQUAL_TO", label: "is ≤" },
+]
+
+const FB_SCHEDULE_OPTIONS = [
+  { value: "SEMI_HOURLY", label: "Every 30 minutes" },
+  { value: "HOURLY", label: "Every hour" },
+  { value: "EVERY_12_HOURS", label: "Every 12 hours" },
+  { value: "DAILY", label: "Daily" },
+  { value: "WEEKLY", label: "Weekly" },
+]
+
+function CreateFbRuleModal({
+  open, onClose, template, adAccounts,
+}: {
+  open: boolean
+  onClose: () => void
+  template: typeof TEMPLATES[0] | null
+  adAccounts: { id: string; name: string; account_id: string }[]
+}) {
+  const tc = template?.trigger?.config as any
+  const [accountId, setAccountId] = useState(adAccounts[0]?.account_id || "")
+  const [name, setName] = useState(template?.name || "")
+  const [metric, setMetric] = useState(tc?.metric || "roas")
+  const [operator, setOperator] = useState(tc?.operator || "GREATER_THAN")
+  const [value, setValue] = useState(String(tc?.value ?? "2"))
+  const [budgetPct, setBudgetPct] = useState("20")
+  const [schedule, setSchedule] = useState("DAILY")
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false)
+  const [createdRuleId, setCreatedRuleId] = useState("")
+
+  useEffect(() => {
+    if (open && template) {
+      const tc2 = template.trigger?.config as any
+      setName(template.name)
+      setMetric(tc2?.metric || "roas")
+      setOperator(tc2?.operator || "GREATER_THAN")
+      setValue(String(tc2?.value ?? "2"))
+      setBudgetPct("20")
+      setSchedule("DAILY")
+      setError("")
+      setSuccess(false)
+      setCreatedRuleId("")
+      if (adAccounts.length > 0) setAccountId(adAccounts[0].account_id || adAccounts[0].id)
+    }
+  }, [open, template, adAccounts])
+
+  const fbAction = template?.fbAction || "SEND_NOTIFICATION"
+  const needsBudgetPct = fbAction === "INCREASE_DAILY_BUDGET" || fbAction === "DECREASE_DAILY_BUDGET" ||
+    fbAction === "INCREASE_LIFETIME_BUDGET" || fbAction === "DECREASE_LIFETIME_BUDGET"
+
+  async function handleCreate() {
+    if (!accountId) { setError("Please select an ad account"); return }
+    if (!name.trim()) { setError("Rule name is required"); return }
+    if (!value || isNaN(parseFloat(value))) { setError("Threshold value must be a number"); return }
+    if (needsBudgetPct && (!budgetPct || isNaN(parseFloat(budgetPct)))) {
+      setError("Budget percentage is required"); return
+    }
+    setSaving(true); setError("")
+    try {
+      const norm = accountId.startsWith("act_") ? accountId : `act_${accountId}`
+      const res = await fetch("/api/facebook/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adAccountId: norm,
+          name: name.trim(),
+          conditions: [{ field: metric, operator, value: parseFloat(value) }],
+          action: {
+            type: fbAction,
+            value: needsBudgetPct ? budgetPct : undefined,
+          },
+          schedule: { type: schedule, count: 1 },
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setError(d.error || "Failed to create rule"); return }
+      setCreatedRuleId(d.rule?.id || "")
+      setSuccess(true)
+    } catch (e: any) { setError(e.message) }
+    finally { setSaving(false) }
+  }
+
+  if (!open || !template) return null
+
+  const metricLabel = FB_METRIC_OPTIONS.find(m => m.value === metric)?.label || metric
+  const operatorLabel = FB_OPERATOR_OPTIONS.find(o => o.value === operator)?.label || operator
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-background rounded-2xl shadow-2xl border w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="flex items-center gap-3">
+            <div className={cn("size-9 rounded-lg flex items-center justify-center shrink-0", template.iconBg)}>
+              <template.icon className={cn("size-5", template.iconColor)} />
+            </div>
+            <div>
+              <h2 className="font-semibold text-base">{template.name}</h2>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="size-1.5 rounded-full bg-green-500 inline-block" />
+                <span className="text-xs text-green-600 dark:text-green-400 font-medium">Live on Meta · Creates real Facebook rule</span>
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <IconX className="size-5" />
+          </button>
+        </div>
+
+        {success ? (
+          /* Success state */
+          <div className="flex flex-col items-center justify-center p-10 text-center gap-4">
+            <div className="size-16 rounded-full bg-green-100 dark:bg-green-950/40 flex items-center justify-center">
+              <IconCheck className="size-8 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg">Rule Created!</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Your rule is now live on Meta and will run <strong>{FB_SCHEDULE_OPTIONS.find(s => s.value === schedule)?.label?.toLowerCase()}</strong>.
+              </p>
+              {createdRuleId && (
+                <p className="text-xs text-muted-foreground mt-1 font-mono">Rule ID: {createdRuleId}</p>
+              )}
+            </div>
+            <div className="flex gap-2 mt-2">
+              <Button variant="outline" onClick={onClose}>Close</Button>
+              <Button asChild>
+                <a href="/automate/rules" onClick={onClose}>View in Rules</a>
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Description */}
+              <p className="text-sm text-muted-foreground leading-relaxed">{template.description}</p>
+
+              {/* Ad Account */}
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Ad Account</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                  value={accountId}
+                  onChange={e => setAccountId(e.target.value)}
+                >
+                  {adAccounts.map(a => (
+                    <option key={a.id} value={a.account_id || a.id}>
+                      {a.name} ({a.account_id || a.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Rule name */}
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Rule Name</label>
+                <input
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                />
+              </div>
+
+              {/* Condition */}
+              <div>
+                <label className="text-sm font-medium mb-2 block">Condition — when this is true</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <select
+                    className="border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                    value={metric}
+                    onChange={e => setMetric(e.target.value)}
+                  >
+                    {FB_METRIC_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                  <select
+                    className="border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                    value={operator}
+                    onChange={e => setOperator(e.target.value)}
+                  >
+                    {FB_OPERATOR_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    className="border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                    value={value}
+                    onChange={e => setValue(e.target.value)}
+                    step="0.1"
+                    min="0"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  → When <strong>{metricLabel}</strong> {operatorLabel} <strong>{value}</strong>
+                </p>
+              </div>
+
+              {/* Action */}
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Action — then do this</label>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40 border text-sm">
+                  <IconBolt className="size-4 text-primary shrink-0" />
+                  <span className="font-medium">{template.fbActionLabel}</span>
+                  {needsBudgetPct && (
+                    <div className="flex items-center gap-1.5 ml-auto">
+                      <span className="text-muted-foreground text-xs">by</span>
+                      <input
+                        type="number"
+                        className="w-16 border rounded-md px-2 py-1 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none text-center"
+                        value={budgetPct}
+                        onChange={e => setBudgetPct(e.target.value)}
+                        min="1"
+                        max="1000"
+                      />
+                      <span className="text-muted-foreground text-xs">%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Schedule */}
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Run Frequency</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                  value={schedule}
+                  onChange={e => setSchedule(e.target.value)}
+                >
+                  {FB_SCHEDULE_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </div>
+
+              {/* Summary */}
+              <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 text-xs text-blue-700 dark:text-blue-400 leading-relaxed">
+                <strong>Summary:</strong> {FB_SCHEDULE_OPTIONS.find(s => s.value === schedule)?.label}, when <strong>{metricLabel}</strong> {operatorLabel} <strong>{value}</strong> → <strong>{template.fbActionLabel}</strong>{needsBudgetPct ? ` by ${budgetPct}%` : ""}. Rule runs on Meta's servers automatically.
+              </div>
+
+              {error && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-sm">
+                  <IconAlertCircle className="size-4 shrink-0" />{error}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t flex justify-end gap-2">
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button onClick={handleCreate} disabled={saving}>
+                {saving
+                  ? <><IconLoader2 className="size-4 animate-spin mr-1.5" />Creating...</>
+                  : <><IconBolt className="size-4 mr-1.5" />Create Live Rule on Meta</>
+                }
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ─── Create Automation Modal ───────────────────────────────────────────────────
@@ -521,6 +815,8 @@ export default function AutomatePage() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState<typeof TEMPLATES[0] | null>(null)
+  const [fbRuleOpen, setFbRuleOpen] = useState(false)
+  const [fbRuleTemplate, setFbRuleTemplate] = useState<typeof TEMPLATES[0] | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
@@ -591,6 +887,12 @@ export default function AutomatePage() {
   }
 
   const useTemplate = (tpl: typeof TEMPLATES[0]) => {
+    if ((tpl as any).comingSoon) return
+    if ((tpl as any).fbLive) {
+      setFbRuleTemplate(tpl)
+      setFbRuleOpen(true)
+      return
+    }
     setSelectedTemplate(tpl)
     setCreateOpen(true)
     setTab("automations")
@@ -772,6 +1074,11 @@ export default function AutomatePage() {
                           <IconBell className="size-3.5 text-amber-500" />
                           <span>{featured.steps} steps</span>
                         </div>
+                        {(featured as any).fbLive && (
+                          <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400 font-medium">
+                            <span className="size-1.5 rounded-full bg-green-500 inline-block" />Live on Meta
+                          </span>
+                        )}
                         <Button size="sm" onClick={() => useTemplate(featured)} className="ml-auto h-7 text-xs">
                           Use Template
                         </Button>
@@ -786,13 +1093,28 @@ export default function AutomatePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {filteredTemplates.filter(t => !t.featured || templateCategory !== "All").map(t => {
                 const Icon = t.icon
+                const isLive = !!(t as any).fbLive
+                const isSoon = !!(t as any).comingSoon
                 return (
-                  <div key={t.id} className="border rounded-xl p-4 bg-card hover:shadow-sm transition-shadow">
+                  <div key={t.id} className={cn(
+                    "border rounded-xl p-4 bg-card transition-shadow relative",
+                    isLive ? "hover:shadow-sm" : isSoon ? "opacity-70" : "hover:shadow-sm"
+                  )}>
+                    {isLive && (
+                      <span className="absolute top-3 right-3 flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400 font-medium">
+                        <span className="size-1.5 rounded-full bg-green-500 inline-block animate-pulse" />Live on Meta
+                      </span>
+                    )}
+                    {isSoon && (
+                      <span className="absolute top-3 right-3 text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                        Coming Soon
+                      </span>
+                    )}
                     <div className="flex items-start gap-3 mb-3">
                       <div className={cn("size-9 rounded-lg flex items-center justify-center shrink-0", t.iconBg)}>
                         <Icon className={cn("size-4.5", t.iconColor)} />
                       </div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 pr-20">
                         <h3 className="text-sm font-medium leading-tight">{t.name}</h3>
                         <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-1 inline-block",
                           t.category === "Scaling" ? "bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400" :
@@ -808,9 +1130,20 @@ export default function AutomatePage() {
                         <IconBolt className="size-3.5" />→<IconBolt className="size-3.5" />
                         <span>{t.steps} steps</span>
                       </div>
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => useTemplate(t)}>
-                        Use
-                      </Button>
+                      {isSoon ? (
+                        <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
+                          Use
+                        </Button>
+                      ) : (
+                        <Button
+                          variant={isLive ? "default" : "outline"}
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => useTemplate(t)}
+                        >
+                          {isLive ? "Use →" : "Use"}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 )
@@ -1024,13 +1357,21 @@ export default function AutomatePage() {
         )}
       </div>
 
-      {/* Create modal */}
+      {/* Create automation modal (DB) */}
       <CreateAutomationModal
         open={createOpen}
         onClose={() => { setCreateOpen(false); setSelectedTemplate(null) }}
         onCreated={a => setAutomations(prev => [a, ...prev])}
         adAccounts={adAccounts}
         template={selectedTemplate}
+      />
+
+      {/* Create Facebook live rule modal */}
+      <CreateFbRuleModal
+        open={fbRuleOpen}
+        onClose={() => { setFbRuleOpen(false); setFbRuleTemplate(null) }}
+        template={fbRuleTemplate}
+        adAccounts={adAccounts}
       />
     </div>
   )
