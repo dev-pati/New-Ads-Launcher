@@ -175,8 +175,11 @@ export async function POST(request: NextRequest) {
     if (err instanceof SyntaxError) {
       return NextResponse.json({ error: "Failed to parse AI response. Please try again." }, { status: 500 })
     }
-    const msg = err instanceof Error ? err.message : "Generation failed."
-    return NextResponse.json({ error: msg }, { status: 500 })
+    const msg = err instanceof Error ? err.message : ""
+    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota")) {
+      return NextResponse.json({ error: "Gemini API quota exceeded. Please add billing at aistudio.google.com or wait until tomorrow." }, { status: 429 })
+    }
+    return NextResponse.json({ error: msg || "Generation failed. Please try again." }, { status: 500 })
   } finally {
     if (tmpPath) { try { fs.unlinkSync(tmpPath) } catch { } }
   }

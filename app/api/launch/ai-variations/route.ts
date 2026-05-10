@@ -55,6 +55,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ variations: data.variations || [] })
   } catch (err) {
     console.error("AI variations error:", err)
+    const msg = err instanceof Error ? err.message : ""
+    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota")) {
+      return NextResponse.json({ error: "Gemini API quota exceeded. Please add billing at aistudio.google.com or wait until tomorrow." }, { status: 429 })
+    }
     return NextResponse.json({ error: "Failed to generate variations. Please try again." }, { status: 500 })
   }
 }
