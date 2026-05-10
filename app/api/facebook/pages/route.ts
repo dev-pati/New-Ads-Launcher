@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getFacebookPages } from "@/lib/facebook"
+export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
