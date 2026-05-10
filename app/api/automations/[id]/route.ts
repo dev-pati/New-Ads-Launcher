@@ -4,18 +4,19 @@ import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const { id } = await params
     const body = await request.json()
     const supabase = await createClient()
 
     const { data, error } = await supabase
       .from("automations")
       .update({ ...body, updated_at: new Date().toISOString() })
-      .eq("id", params.id)
+      .eq("id", id)
       .eq("org_id", ctx.orgId)
       .select()
       .single()
@@ -29,16 +30,17 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    const { id } = await params
     const supabase = await createClient()
     const { error } = await supabase
       .from("automations")
       .delete()
-      .eq("id", params.id)
+      .eq("id", id)
       .eq("org_id", ctx.orgId)
 
     if (error) throw error
