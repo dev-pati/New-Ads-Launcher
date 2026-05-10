@@ -55,9 +55,22 @@ export async function POST(request: NextRequest) {
     const accountPath = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
     const token = connection.access_token
 
-    // Build Facebook Automated Rules spec
+    // Map internal field names → Facebook Automated Rules API field names
+    const FB_FIELD_MAP: Record<string, string> = {
+      roas: "purchase_roas",
+      cost_per_result: "cost_per_action_type:offsite_conversion.fb_pixel_purchase",
+      results: "actions:offsite_conversion.fb_pixel_purchase",
+      spend: "spend",
+      cpc: "cpc",
+      cpm: "cpm",
+      ctr: "ctr",
+      impressions: "impressions",
+      frequency: "frequency",
+      reach: "reach",
+    }
+
     const filters = (conditions || []).map((c: any) => ({
-      field: c.field,
+      field: FB_FIELD_MAP[c.field] || c.field,
       value: String(c.value),
       operator: c.operator,
     }))

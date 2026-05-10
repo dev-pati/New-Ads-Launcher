@@ -264,15 +264,16 @@ function fmtDate(d: string) {
 // ─── Create Facebook Rule Modal (live on Meta) ────────────────────────────────
 
 const FB_METRIC_OPTIONS = [
-  { value: "roas", label: "ROAS" },
+  { value: "roas", label: "Purchase ROAS" },
   { value: "spend", label: "Spend ($)" },
   { value: "cpc", label: "CPC ($)" },
   { value: "cpm", label: "CPM ($)" },
   { value: "ctr", label: "CTR (%)" },
   { value: "impressions", label: "Impressions" },
+  { value: "reach", label: "Reach" },
   { value: "frequency", label: "Frequency" },
-  { value: "cost_per_result", label: "Cost per Result ($)" },
-  { value: "results", label: "Results" },
+  { value: "cost_per_result", label: "Cost per Purchase ($)" },
+  { value: "results", label: "Purchases" },
 ]
 
 const FB_OPERATOR_OPTIONS = [
