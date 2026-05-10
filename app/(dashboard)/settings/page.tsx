@@ -45,6 +45,12 @@ import {
   IconRefresh,
   IconClock,
   IconAlertTriangle,
+  IconKey,
+  IconEye,
+  IconEyeOff,
+  IconCopy,
+  IconSparkles,
+  IconExternalLink,
 } from "@tabler/icons-react"
 
 interface FbConnection {
@@ -93,6 +99,14 @@ function SettingsContent() {
   const [deletingInvite, setDeletingInvite] = useState<string | null>(null)
   const [message, setMessage] = useState("")
 
+  // AI Keys
+  const [geminiKey, setGeminiKey] = useState("")
+  const [geminiKeyVisible, setGeminiKeyVisible] = useState(false)
+  const [loadingAiKeys, setLoadingAiKeys] = useState(true)
+  const [savingAiKeys, setSavingAiKeys] = useState(false)
+  const [aiKeysSaved, setAiKeysSaved] = useState(false)
+  const [aiKeysError, setAiKeysError] = useState("")
+
   // Delete org
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleteStep, setDeleteStep] = useState(1) // 1: warning, 2: type name, 3: final confirm
@@ -132,6 +146,44 @@ function SettingsContent() {
   }
 
   useEffect(() => { fetchMembers() }, [activeOrgId])
+
+  useEffect(() => {
+    async function fetchAiKeys() {
+      setLoadingAiKeys(true)
+      try {
+        const res = await fetch("/api/settings/ai-keys")
+        const data = await res.json()
+        setGeminiKey(data.gemini_api_key ?? "")
+      } catch { /* ignore */ } finally {
+        setLoadingAiKeys(false)
+      }
+    }
+    fetchAiKeys()
+  }, [])
+
+  const handleSaveAiKeys = async () => {
+    setSavingAiKeys(true)
+    setAiKeysError("")
+    setAiKeysSaved(false)
+    try {
+      const res = await fetch("/api/settings/ai-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gemini_api_key: geminiKey }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setAiKeysError(d.error || "Failed to save")
+      } else {
+        setAiKeysSaved(true)
+        setTimeout(() => setAiKeysSaved(false), 3000)
+      }
+    } catch {
+      setAiKeysError("Network error")
+    } finally {
+      setSavingAiKeys(false)
+    }
+  }
 
   const handleConnect = () => { window.location.href = "/api/auth/facebook" }
 
@@ -251,6 +303,10 @@ function SettingsContent() {
           <TabsTrigger value="connections">
             <IconBrandFacebook className="mr-1.5 size-4" />
             Connections
+          </TabsTrigger>
+          <TabsTrigger value="ai-keys">
+            <IconKey className="mr-1.5 size-4" />
+            AI Keys
           </TabsTrigger>
         </TabsList>
 
@@ -423,6 +479,102 @@ function SettingsContent() {
                 <IconTrash className="size-4" />
                 Delete Organization
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* AI Keys Tab */}
+        <TabsContent value="ai-keys" className="space-y-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <IconSparkles className="size-5 text-primary" />
+                AI API Keys
+              </CardTitle>
+              <CardDescription>
+                Configure API keys for AI features (Generate ad copy, Analyze ads, AI Variations).
+                Keys are stored per organization and override the server default.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {loadingAiKeys ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <IconLoader2 className="size-4 animate-spin" />Loading...
+                </div>
+              ) : (
+                <>
+                  {/* Gemini Key */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2">
+                        <img src="https://www.gstatic.com/lamda/images/gemini_sparkle_v002_d4735304ff6292a690345.svg" alt="Gemini" className="size-4" />
+                        Google Gemini API Key
+                      </Label>
+                      <a
+                        href="https://aistudio.google.com/app/apikey"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        Get key <IconExternalLink className="size-3" />
+                      </a>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Used for: Generate ad copy, Analyze ads, AI Variations. Get a key at{" "}
+                      <strong>aistudio.google.com</strong> (free tier available, add billing for more quota).
+                    </p>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          type={geminiKeyVisible ? "text" : "password"}
+                          value={geminiKey}
+                          onChange={e => setGeminiKey(e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="pr-20 font-mono text-sm"
+                        />
+                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setGeminiKeyVisible(v => !v)}
+                            className="text-muted-foreground hover:text-foreground p-1"
+                          >
+                            {geminiKeyVisible ? <IconEyeOff className="size-3.5" /> : <IconEye className="size-3.5" />}
+                          </button>
+                          {geminiKey && (
+                            <button
+                              type="button"
+                              onClick={() => navigator.clipboard.writeText(geminiKey)}
+                              className="text-muted-foreground hover:text-foreground p-1"
+                            >
+                              <IconCopy className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {geminiKey && (
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+                        <IconCheck className="size-3.5" />
+                        Key configured
+                      </div>
+                    )}
+                  </div>
+
+                  {aiKeysError && (
+                    <p className="text-sm text-destructive">{aiKeysError}</p>
+                  )}
+
+                  <Button onClick={handleSaveAiKeys} disabled={savingAiKeys} className="gap-2">
+                    {savingAiKeys ? (
+                      <><IconLoader2 className="size-4 animate-spin" />Saving...</>
+                    ) : aiKeysSaved ? (
+                      <><IconCheck className="size-4" />Saved!</>
+                    ) : (
+                      <><IconKey className="size-4" />Save API Keys</>
+                    )}
+                  </Button>
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getAuthContext } from "@/lib/auth"
+import { getGeminiApiKey } from "@/lib/get-ai-key"
 
 function buildPrompt(text: string, headline?: string) {
   return `You are an expert Meta/Facebook direct response copywriter. Generate 5 high-converting variations of this ad primary text, each using a different persuasion angle.
@@ -32,8 +33,9 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: "AI service not configured" }, { status: 503 })
+    const geminiKey = await getGeminiApiKey(ctx.orgId)
+    if (!geminiKey) {
+      return NextResponse.json({ error: "Gemini API key not configured. Add it in Settings → AI Keys." }, { status: 503 })
     }
 
     const body = await request.json()
@@ -43,7 +45,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Primary text is required" }, { status: 400 })
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+    const genAI = new GoogleGenerativeAI(geminiKey)
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash",
       generationConfig: { responseMimeType: "application/json" },

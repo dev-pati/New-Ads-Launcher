@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server"
 import { getAuthContext } from "@/lib/auth"
+import { getGeminiApiKey } from "@/lib/get-ai-key"
 import fs from "fs"
 import path from "path"
 import os from "os"
@@ -90,14 +91,15 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: "AI service not configured" }, { status: 503 })
+    const geminiKey = await getGeminiApiKey(ctx.orgId)
+    if (!geminiKey) {
+      return NextResponse.json({ error: "Gemini API key not configured. Add it in Settings → AI Keys." }, { status: 503 })
     }
 
     const body = await request.json()
     const { type, url } = body
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+    const genAI = new GoogleGenerativeAI(geminiKey)
     const model = genAI.getGenerativeModel({
       model: "gemini-2.0-flash",
       generationConfig: { responseMimeType: "application/json" },
@@ -142,7 +144,7 @@ export async function POST(request: NextRequest) {
       tmpPath = path.join(os.tmpdir(), `gen_video_${Date.now()}.${ext}`)
       fs.writeFileSync(tmpPath, buffer)
 
-      const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY)
+      const fileManager = new GoogleAIFileManager(geminiKey)
       const uploadResult = await fileManager.uploadFile(tmpPath, { mimeType: contentType, displayName: "ad_video" })
 
       let geminiFile = await fileManager.getFile(uploadResult.file.name)

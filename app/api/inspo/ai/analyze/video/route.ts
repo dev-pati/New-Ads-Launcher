@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server"
 import { getAuthContext } from "@/lib/auth"
+import { getGeminiApiKey } from "@/lib/get-ai-key"
 import fs from "fs"
 import path from "path"
 import os from "os"
@@ -60,8 +61,8 @@ async function fetchAndWriteTemp(videoUrl: string): Promise<{ tmpPath: string; m
   return { tmpPath, mimeType: contentType }
 }
 
-async function analyzeVideoFile(tmpPath: string, mimeType: string) {
-  const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY!)
+async function analyzeVideoFile(tmpPath: string, mimeType: string, geminiKey: string) {
+  const fileManager = new GoogleAIFileManager(geminiKey)
 
   const uploadResult = await fileManager.uploadFile(tmpPath, {
     mimeType,
@@ -84,7 +85,7 @@ async function analyzeVideoFile(tmpPath: string, mimeType: string) {
     throw new Error("Video processing timed out. Try a shorter video.")
   }
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
+  const genAI = new GoogleGenerativeAI(geminiKey)
   const model = genAI.getGenerativeModel({
     model: "gemini-2.0-flash",
     generationConfig: { responseMimeType: "application/json" },
@@ -107,8 +108,9 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: "AI service not configured" }, { status: 503 })
+    const geminiKey = await getGeminiApiKey(ctx.orgId)
+    if (!geminiKey) {
+      return NextResponse.json({ error: "Gemini API key not configured. Add it in Settings → AI Keys." }, { status: 503 })
     }
 
     const contentType = request.headers.get("content-type") || ""
@@ -141,7 +143,7 @@ export async function POST(request: NextRequest) {
       mimeType = file.type || "video/mp4"
     }
 
-    const analysis = await analyzeVideoFile(tmpPath, mimeType)
+    const analysis = await analyzeVideoFile(tmpPath, mimeType, geminiKey)
     return NextResponse.json({ analysis })
   } catch (err: unknown) {
     console.error("Video analyze error:", err)
