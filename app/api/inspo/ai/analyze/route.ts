@@ -1,17 +1,41 @@
 import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { YoutubeTranscript } from "youtube-transcript"
 import { getAuthContext } from "@/lib/auth"
 
-function buildPrompt(body: string, title?: string) {
-  return `You are an expert Meta/Facebook advertiser and direct response copywriter with 15+ years analyzing high-performing ads.
+// ─── Text extraction from HTML ───────────────────────────────────────────────
 
-Analyze this Facebook/Meta ad:
-${title ? `\nHeadline: ${title}` : ""}
-Body:
-${body}
+function extractTextFromHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/\s{2,}/g, " ")
+    .trim()
+    .slice(0, 6000)
+}
 
-Return ONLY valid JSON (no markdown, no code blocks, no explanation):
-{
+function extractYoutubeId(url: string): string | null {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
+  ]
+  for (const pattern of patterns) {
+    const match = url.match(pattern)
+    if (match) return match[1]
+  }
+  return null
+}
+
+// ─── Prompts ─────────────────────────────────────────────────────────────────
+
+const ANALYSIS_SCHEMA = `{
   "hook": {
     "text": "the opening hook sentence or phrase",
     "type": "curiosity|fear|social_proof|transformation|urgency|humor|authority",
@@ -19,7 +43,7 @@ Return ONLY valid JSON (no markdown, no code blocks, no explanation):
   },
   "framework": {
     "name": "PAS|AIDA|BAB|PASTOR|DIC|4Ps|other",
-    "explanation": "how this framework is applied in the ad"
+    "explanation": "how this framework is applied"
   },
   "audience": "specific target audience description",
   "emotion": "primary emotion triggered",
@@ -34,7 +58,45 @@ Return ONLY valid JSON (no markdown, no code blocks, no explanation):
     { "hook": "variation 3 hook", "angle": "the angle used" }
   ]
 }`
+
+function buildTextPrompt(body: string, title?: string) {
+  return `You are an expert Meta/Facebook advertiser and direct response copywriter.
+
+Analyze this Facebook/Meta ad:
+${title ? `Headline: ${title}\n` : ""}Body:
+${body}
+
+Return ONLY valid JSON (no markdown, no code blocks):
+${ANALYSIS_SCHEMA}`
 }
+
+function buildUrlPrompt(content: string, url: string) {
+  return `You are an expert Meta/Facebook advertiser and direct response copywriter.
+
+Analyze this landing page/website content and evaluate it as an ad creative — assess its value proposition, hook, messaging, and persuasion effectiveness.
+
+URL: ${url}
+Content:
+${content}
+
+Return ONLY valid JSON (no markdown, no code blocks):
+${ANALYSIS_SCHEMA}`
+}
+
+function buildVideoPrompt(transcript: string, videoUrl: string) {
+  return `You are an expert Meta/Facebook advertiser and direct response copywriter.
+
+Analyze this video ad transcript and evaluate its hook, messaging framework, and persuasion effectiveness.
+
+Video URL: ${videoUrl}
+Transcript:
+${transcript}
+
+Return ONLY valid JSON (no markdown, no code blocks):
+${ANALYSIS_SCHEMA}`
+}
+
+// ─── Route ───────────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   try {
@@ -46,10 +108,67 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { ad_body, ad_title } = body
+    const { type = "text", ad_body, ad_title, url } = body
 
-    if (!ad_body?.trim()) {
-      return NextResponse.json({ error: "Ad copy is required" }, { status: 400 })
+    let prompt: string
+
+    if (type === "url") {
+      if (!url?.trim()) return NextResponse.json({ error: "URL is required" }, { status: 400 })
+
+      let fetchUrl = url.trim()
+      if (!fetchUrl.startsWith("http")) fetchUrl = "https://" + fetchUrl
+
+      let content: string
+      try {
+        const res = await fetch(fetchUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; AdLauncher/1.0)",
+            "Accept": "text/html",
+          },
+          signal: AbortSignal.timeout(10000),
+        })
+        const html = await res.text()
+        content = extractTextFromHtml(html)
+        if (!content || content.length < 50) {
+          return NextResponse.json({ error: "Could not extract content from this URL. The site may block automated access." }, { status: 400 })
+        }
+      } catch {
+        return NextResponse.json({ error: "Failed to fetch URL. Make sure it's publicly accessible." }, { status: 400 })
+      }
+
+      prompt = buildUrlPrompt(content, fetchUrl)
+
+    } else if (type === "video") {
+      if (!url?.trim()) return NextResponse.json({ error: "Video URL is required" }, { status: 400 })
+
+      const videoUrl = url.trim()
+      const youtubeId = extractYoutubeId(videoUrl)
+
+      if (!youtubeId) {
+        return NextResponse.json(
+          { error: "Only YouTube URLs are supported for video analysis. Supported: youtube.com/watch?v=..., youtu.be/..., YouTube Shorts." },
+          { status: 400 }
+        )
+      }
+
+      let transcript: string
+      try {
+        const segments = await YoutubeTranscript.fetchTranscript(youtubeId, { lang: "vi" })
+          .catch(() => YoutubeTranscript.fetchTranscript(youtubeId))
+        transcript = segments.map(s => s.text).join(" ").trim()
+        if (!transcript) throw new Error("Empty transcript")
+      } catch {
+        return NextResponse.json(
+          { error: "Could not get transcript from this video. Make sure it has captions/subtitles enabled." },
+          { status: 400 }
+        )
+      }
+
+      prompt = buildVideoPrompt(transcript.slice(0, 6000), videoUrl)
+
+    } else {
+      if (!ad_body?.trim()) return NextResponse.json({ error: "Ad copy is required" }, { status: 400 })
+      prompt = buildTextPrompt(ad_body.trim(), ad_title)
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
@@ -58,10 +177,9 @@ export async function POST(request: NextRequest) {
       generationConfig: { responseMimeType: "application/json" },
     })
 
-    const result = await model.generateContent(buildPrompt(ad_body.trim(), ad_title))
-    const text = result.response.text()
+    const result = await model.generateContent(prompt)
+    const analysis = JSON.parse(result.response.text())
 
-    const analysis = JSON.parse(text)
     return NextResponse.json({ analysis })
   } catch (err) {
     console.error("AI analyze error:", err)

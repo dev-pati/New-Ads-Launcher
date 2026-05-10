@@ -27,11 +27,24 @@ import {
   IconRefresh,
   IconQuote,
   IconRoute,
+  IconWorld,
+  IconVideo,
+  IconFileText,
+  IconPlayerPlay,
 } from "@tabler/icons-react"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type SubTab = "adscan" | "ai" | "create" | "brand-spy" | "saved"
+type AiMode = "text" | "url" | "video"
+
+interface Creative {
+  id: string
+  file_name: string
+  file_url: string
+  media_type: "image" | "video"
+  fb_thumbnail_url?: string
+}
 
 interface AdResult {
   id: string
@@ -376,9 +389,15 @@ export default function InspoPage() {
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
 
   // AI tab state
+  const [aiMode, setAiMode] = useState<AiMode>("text")
   const [aiBody, setAiBody] = useState("")
   const [aiTitle, setAiTitle] = useState("")
+  const [aiUrl, setAiUrl] = useState("")
+  const [selectedCreative, setSelectedCreative] = useState<Creative | null>(null)
+  const [creatives, setCreatives] = useState<Creative[]>([])
+  const [loadingCreatives, setLoadingCreatives] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
+  const [analyzeStep, setAnalyzeStep] = useState("")
   const [aiError, setAiError] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<Analysis | null>(null)
 
@@ -396,6 +415,20 @@ export default function InspoPage() {
   }, [])
 
   useEffect(() => { loadSavedAds() }, [loadSavedAds])
+
+  const loadCreatives = useCallback(async () => {
+    setLoadingCreatives(true)
+    try {
+      const res = await fetch("/api/creatives?media_type=video")
+      const data = await res.json()
+      setCreatives(data.creatives || [])
+    } catch { /* silent */ }
+    finally { setLoadingCreatives(false) }
+  }, [])
+
+  useEffect(() => {
+    if (aiMode === "video") loadCreatives()
+  }, [aiMode, loadCreatives])
 
   const handleSearch = async () => {
     if (!query.trim()) return
@@ -454,21 +487,48 @@ export default function InspoPage() {
   }
 
   const handleAnalyze = async () => {
-    if (!aiBody.trim()) return
     setAnalyzing(true)
     setAiError(null)
     setAnalysis(null)
     try {
-      const res = await fetch("/api/inspo/ai/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ad_body: aiBody.trim(), ad_title: aiTitle.trim() || undefined }),
-      })
-      const data = await res.json()
-      if (data.error) { setAiError(data.error) }
-      else { setAnalysis(data.analysis) }
+      if (aiMode === "video") {
+        if (!selectedCreative) { setAiError("Please select a video"); return }
+        setAnalyzeStep("Uploading to AI...")
+        const res = await fetch("/api/inspo/ai/analyze/video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: selectedCreative.file_url }),
+        })
+        setAnalyzeStep("Analyzing video...")
+        const data = await res.json()
+        if (data.error) setAiError(data.error)
+        else setAnalysis(data.analysis)
+      } else if (aiMode === "url") {
+        if (!aiUrl.trim()) { setAiError("Please enter a URL"); return }
+        setAnalyzeStep("Fetching page...")
+        const res = await fetch("/api/inspo/ai/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "url", url: aiUrl.trim() }),
+        })
+        setAnalyzeStep("Analyzing...")
+        const data = await res.json()
+        if (data.error) setAiError(data.error)
+        else setAnalysis(data.analysis)
+      } else {
+        if (!aiBody.trim()) { setAiError("Please enter ad copy"); return }
+        setAnalyzeStep("Analyzing...")
+        const res = await fetch("/api/inspo/ai/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "text", ad_body: aiBody.trim(), ad_title: aiTitle.trim() || undefined }),
+        })
+        const data = await res.json()
+        if (data.error) setAiError(data.error)
+        else setAnalysis(data.analysis)
+      }
     } catch { setAiError("Network error. Please try again.") }
-    finally { setAnalyzing(false) }
+    finally { setAnalyzing(false); setAnalyzeStep("") }
   }
 
   const isPermissionError = (err: string) => err.toLowerCase().includes("permission")
@@ -625,75 +685,119 @@ export default function InspoPage() {
             <div className="flex-1 p-6 space-y-6 max-w-5xl mx-auto w-full">
               {!analysis ? (
                 <>
-                  {/* Input */}
+                  {/* Mode switcher */}
+                  <div className="flex gap-1 p-1 rounded-xl bg-muted w-fit">
+                    {([
+                      { id: "text",  label: "Ad Copy",  icon: IconFileText },
+                      { id: "url",   label: "Website",  icon: IconWorld },
+                      { id: "video", label: "Video",    icon: IconVideo },
+                    ] as const).map(m => (
+                      <button key={m.id} onClick={() => { setAiMode(m.id); setAiError(null); setAnalysis(null) }}
+                        className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
+                          aiMode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+                        )}>
+                        <m.icon className="size-3.5" />{m.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Input area */}
                   <div className="border rounded-xl bg-card p-5 space-y-4">
-                    <div>
-                      <h3 className="font-semibold">Analyze ad with AI</h3>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        Paste any Facebook/Meta ad copy — Claude sẽ phân tích hook, framework, điểm mạnh/yếu và suggest variations.
-                      </p>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                          Ad copy / body text <span className="text-destructive">*</span>
-                        </label>
-                        <textarea
-                          value={aiBody}
-                          onChange={e => setAiBody(e.target.value)}
-                          placeholder="Paste the ad body copy here..."
-                          rows={6}
-                          className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                          Headline / title <span className="text-muted-foreground font-normal">(optional)</span>
-                        </label>
-                        <Input value={aiTitle} onChange={e => setAiTitle(e.target.value)}
-                          placeholder="Ad headline or link title..." />
-                      </div>
-                    </div>
-
-                    {aiError && (
-                      <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
-                        <IconAlertCircle className="size-4 shrink-0" />
-                        {aiError}
+                    {/* Text mode */}
+                    {aiMode === "text" && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Ad copy / body text <span className="text-destructive">*</span></label>
+                          <textarea value={aiBody} onChange={e => setAiBody(e.target.value)}
+                            placeholder="Paste the ad body copy here..."
+                            rows={6}
+                            className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Headline <span className="font-normal">(optional)</span></label>
+                          <Input value={aiTitle} onChange={e => setAiTitle(e.target.value)} placeholder="Ad headline..." />
+                        </div>
                       </div>
                     )}
 
-                    <Button onClick={handleAnalyze} disabled={analyzing || !aiBody.trim()} className="gap-2">
+                    {/* URL mode */}
+                    {aiMode === "url" && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Landing page / product URL <span className="text-destructive">*</span></label>
+                          <Input value={aiUrl} onChange={e => setAiUrl(e.target.value)}
+                            placeholder="https://example.com/product"
+                            type="url" />
+                        </div>
+                        <p className="text-xs text-muted-foreground">AI sẽ đọc nội dung trang web và phân tích value proposition, messaging, CTA.</p>
+                      </div>
+                    )}
+
+                    {/* Video mode */}
+                    {aiMode === "video" && (
+                      <div className="space-y-3">
+                        <label className="text-xs font-medium text-muted-foreground block">Chọn video từ Assets <span className="text-destructive">*</span></label>
+                        {loadingCreatives ? (
+                          <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
+                            <IconLoader2 className="size-4 animate-spin" />Loading videos...
+                          </div>
+                        ) : creatives.length === 0 ? (
+                          <div className="py-6 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
+                            No videos found. Upload videos in Assets first.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-60 overflow-y-auto">
+                            {creatives.map(c => (
+                              <button key={c.id} onClick={() => setSelectedCreative(c)}
+                                className={cn("relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-muted",
+                                  selectedCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
+                                )}>
+                                {c.fb_thumbnail_url
+                                  ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" />
+                                  : <div className="w-full h-full flex items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
+                                }
+                                {selectedCreative?.id === c.id && (
+                                  <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                                    <IconCheck className="size-5 text-primary" />
+                                  </div>
+                                )}
+                                <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {selectedCreative && (
+                          <p className="text-xs text-muted-foreground">Selected: <strong className="text-foreground">{selectedCreative.file_name}</strong></p>
+                        )}
+                        <p className="text-xs text-muted-foreground">AI xem từng frame và audio để phân tích hook, messaging, và hiệu quả của video ad.</p>
+                      </div>
+                    )}
+
+                    {aiError && (
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+                        <IconAlertCircle className="size-4 shrink-0" />{aiError}
+                      </div>
+                    )}
+
+                    <Button onClick={handleAnalyze} disabled={analyzing ||
+                      (aiMode === "text" && !aiBody.trim()) ||
+                      (aiMode === "url" && !aiUrl.trim()) ||
+                      (aiMode === "video" && !selectedCreative)
+                    } className="gap-2">
                       {analyzing
-                        ? <><IconLoader2 className="size-4 animate-spin" />Analyzing...</>
+                        ? <><IconLoader2 className="size-4 animate-spin" />{analyzeStep || "Analyzing..."}</>
                         : <><IconSparkles className="size-4" />Analyze with AI</>
                       }
                     </Button>
                   </div>
 
-                  {/* Tips */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {[
-                      { icon: "📋", title: "Paste any ad copy", desc: "From Meta Ad Library, competitor websites, or anywhere you spot a good ad" },
-                      { icon: "🧠", title: "Get deep analysis", desc: "Hook type, copywriting framework, target audience, emotional triggers, CTA strategy" },
-                      { icon: "✨", title: "Get 3 variations", desc: "AI suggests 3 different hook angles to test for your own campaigns" },
-                    ].map(tip => (
-                      <div key={tip.title} className="border rounded-xl p-4 bg-muted/20 space-y-1.5">
-                        <span className="text-xl">{tip.icon}</span>
-                        <p className="text-sm font-semibold">{tip.title}</p>
-                        <p className="text-xs text-muted-foreground">{tip.desc}</p>
-                      </div>
-                    ))}
-                  </div>
-
                   {/* Quick analyze from saved */}
-                  {savedAds.length > 0 && (
+                  {aiMode === "text" && savedAds.length > 0 && (
                     <div className="border rounded-xl p-4 space-y-3">
                       <p className="text-sm font-semibold">Quick analyze from Saved Ads</p>
                       <div className="flex flex-wrap gap-2">
                         {savedAds.slice(0, 5).filter(a => a.ad_body).map(ad => (
-                          <button key={ad.id}
-                            onClick={() => handleAnalyzeAd(ad.ad_body, ad.ad_title)}
+                          <button key={ad.id} onClick={() => handleAnalyzeAd(ad.ad_body, ad.ad_title)}
                             className="text-xs px-3 py-1.5 rounded-full border bg-background hover:bg-muted transition-colors truncate max-w-[200px]">
                             {ad.page_name}
                           </button>
