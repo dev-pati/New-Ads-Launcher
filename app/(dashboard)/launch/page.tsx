@@ -9728,10 +9728,10 @@ function AdSetupPanel({
   const addText = () => setPrimaryTexts([...primaryTexts, ""])
   const removeText = (idx: number) => setPrimaryTexts(primaryTexts.filter((_, i) => i !== idx))
 
-  const handleOpenAiVariations = async () => {
-    const sourceText = primaryTexts[0]?.trim()
-    if (!sourceText) return
+  const handleOpenAiVariations = async (sourceOverride?: string) => {
+    const sourceText = sourceOverride ?? primaryTexts[0]?.trim()
     setShowAiVariations(true)
+    if (!sourceText) return
     setAiVariations([])
     setAiVariationsError(null)
     setAddedVariations(new Set())
@@ -9778,7 +9778,7 @@ function AdSetupPanel({
         orgName={orgName}
       />
       {/* AI Variations Modal */}
-      <Dialog open={showAiVariations} onOpenChange={setShowAiVariations}>
+      <Dialog open={showAiVariations} onOpenChange={(open) => { setShowAiVariations(open); if (!open) { setAiVariations([]); setAiVariationsError(null) } }}>
         <DialogContent className="max-w-xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -9787,11 +9787,30 @@ function AdSetupPanel({
             </DialogTitle>
           </DialogHeader>
 
-          {/* Source text preview */}
-          <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground border shrink-0">
-            <span className="font-medium text-foreground">Source: </span>
-            {primaryTexts[0]?.slice(0, 120)}{(primaryTexts[0]?.length ?? 0) > 120 ? "…" : ""}
-          </div>
+          {/* No source text → ask user to enter text first */}
+          {!primaryTexts[0]?.trim() && !loadingAiVariations && aiVariations.length === 0 && !aiVariationsError ? (
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-muted-foreground">Nhập primary text để AI tạo 5 variations:</p>
+              <textarea
+                placeholder="Write your primary ad text..."
+                rows={5}
+                className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50"
+                onChange={e => { const next = [...primaryTexts]; next[0] = e.target.value; setPrimaryTexts(next) }}
+              />
+              <Button className="w-full gap-2" onClick={() => handleOpenAiVariations(primaryTexts[0]?.trim())}
+                disabled={!primaryTexts[0]?.trim()}>
+                <IconSparkles className="size-4" />Generate variations
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Source text preview */}
+              {primaryTexts[0]?.trim() && (
+                <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground border shrink-0">
+                  <span className="font-medium text-foreground">Source: </span>
+                  {primaryTexts[0]?.slice(0, 120)}{(primaryTexts[0]?.length ?? 0) > 120 ? "…" : ""}
+                </div>
+              )}
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1">
             {loadingAiVariations ? (
@@ -9803,7 +9822,7 @@ function AdSetupPanel({
               <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                 <IconAlertCircle className="size-7 text-destructive/50" />
                 <p className="text-sm text-muted-foreground">{aiVariationsError}</p>
-                <Button size="sm" variant="outline" onClick={handleOpenAiVariations}>Try again</Button>
+                <Button size="sm" variant="outline" onClick={() => handleOpenAiVariations()}>Try again</Button>
               </div>
             ) : (
               aiVariations.map((v, i) => (
@@ -9833,6 +9852,8 @@ function AdSetupPanel({
               ))
             )}
           </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -9894,9 +9915,8 @@ function AdSetupPanel({
             </button>
             <span className="text-muted-foreground/40">|</span>
             <button
-              className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
-              onClick={handleOpenAiVariations}
-              disabled={!primaryTexts[0]?.trim()}
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+              onClick={() => handleOpenAiVariations()}
             >
               <IconSparkles className="size-3" />
               AI Variations
