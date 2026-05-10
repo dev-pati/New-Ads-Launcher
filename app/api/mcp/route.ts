@@ -471,8 +471,47 @@ export async function POST(request: NextRequest) {
   return jsonRpcError(id, -32601, `Method not found: ${method}`)
 }
 
-// MCP clients may send GET to check the server
-export async function GET() {
+// SSE transport for mcp-remote + regular info for browsers
+export async function GET(request: NextRequest) {
+  const accept = request.headers.get("accept") || ""
+
+  if (accept.includes("text/event-stream")) {
+    const url = new URL(request.url)
+    const postEndpoint = `${url.protocol}//${url.host}/api/mcp`
+    const encoder = new TextEncoder()
+
+    const stream = new ReadableStream({
+      start(controller) {
+        // Send endpoint event — mcp-remote reads this to know where to POST
+        controller.enqueue(encoder.encode(`event: endpoint\ndata: ${postEndpoint}\n\n`))
+
+        // Keepalive pings so the connection stays alive
+        const ping = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(`: ping\n\n`))
+          } catch {
+            clearInterval(ping)
+          }
+        }, 20000)
+
+        request.signal.addEventListener("abort", () => {
+          clearInterval(ping)
+          try { controller.close() } catch {}
+        })
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "X-Accel-Buffering": "no",
+      },
+    })
+  }
+
   return NextResponse.json({
     name: SERVER_NAME,
     version: SERVER_VERSION,
