@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
-import Anthropic from "@anthropic-ai/sdk"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getAuthContext } from "@/lib/auth"
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-const SYSTEM = `You are an expert Meta/Facebook advertiser and direct response copywriter with 15+ years analyzing high-performing ads. Return ONLY valid JSON — no markdown, no explanation outside the JSON.`
-
 function buildPrompt(body: string, title?: string) {
-  return `Analyze this Facebook/Meta ad:
+  return `You are an expert Meta/Facebook advertiser and direct response copywriter with 15+ years analyzing high-performing ads.
+
+Analyze this Facebook/Meta ad:
 ${title ? `\nHeadline: ${title}` : ""}
 Body:
 ${body}
 
-Return ONLY this JSON (no code blocks):
+Return ONLY valid JSON (no markdown, no code blocks, no explanation):
 {
   "hook": {
     "text": "the opening hook sentence or phrase",
@@ -43,7 +41,7 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    if (!process.env.ANTHROPIC_API_KEY) {
+    if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({ error: "AI service not configured" }, { status: 503 })
     }
 
@@ -54,17 +52,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ad copy is required" }, { status: 400 })
     }
 
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1500,
-      system: SYSTEM,
-      messages: [{ role: "user", content: buildPrompt(ad_body.trim(), ad_title) }],
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      generationConfig: { responseMimeType: "application/json" },
     })
 
-    const text = message.content[0].type === "text" ? message.content[0].text : ""
-    const cleaned = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "").trim()
-    const analysis = JSON.parse(cleaned)
+    const result = await model.generateContent(buildPrompt(ad_body.trim(), ad_title))
+    const text = result.response.text()
 
+    const analysis = JSON.parse(text)
     return NextResponse.json({ analysis })
   } catch (err) {
     console.error("AI analyze error:", err)
