@@ -76,10 +76,7 @@ const navSections: NavSection[] = [
     label: "Connect",
     icon: IconLink,
     subItems: [
-      { label: "Ad Channels", href: "/connect" },
-      { label: "Media", href: "/connect/media" },
-      { label: "API", href: "/connect/api" },
-      { label: "MCP", href: "/connect/mcp" },
+      { label: "Connect", href: "/connect" },
     ],
   },
   {
