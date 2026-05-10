@@ -24,7 +24,10 @@ export async function GET(request: NextRequest) {
     if (search) q = q.ilike("automation_name", `%${search}%`)
 
     const { data, error } = await q
-    if (error) throw error
+    if (error) {
+      if (error.code === "42P01") return NextResponse.json({ history: [] })
+      throw error
+    }
 
     return NextResponse.json({ history: data || [] })
   } catch (err: any) {

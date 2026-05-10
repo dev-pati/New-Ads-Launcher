@@ -27,7 +27,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { data, error } = await q
-    if (error) throw error
+    if (error) {
+      if (error.code === "42P01") return NextResponse.json({ schedules: [] })
+      throw error
+    }
 
     return NextResponse.json({ schedules: data || [] })
   } catch (err: any) {

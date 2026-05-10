@@ -65,12 +65,18 @@ export async function POST(request: NextRequest) {
     const actionEntry: Record<string, any> = { type: action.type }
     if (action.value) actionEntry.value = String(action.value)
 
+    // execution_type: SEND_NOTIFICATION for notify actions, ROTATE for everything else
+    const executionType = action.type === "SEND_NOTIFICATION" ? "SEND_NOTIFICATION" : "ROTATE"
+
     const params = new URLSearchParams({
       access_token: token,
       name,
       evaluation_spec: JSON.stringify({
         evaluation_type: "SCHEDULE",
         filters,
+      }),
+      execution_spec: JSON.stringify({
+        execution_type: executionType,
       }),
       schedule_spec: JSON.stringify({
         schedule_type: schedule?.type || "DAILY",

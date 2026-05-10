@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
       .eq("status", status)
       .order("created_at", { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      if (error.code === "42P01") return NextResponse.json({ approvals: [] })
+      throw error
+    }
     return NextResponse.json({ approvals: data || [] })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

@@ -22,7 +22,11 @@ export async function GET(request: NextRequest) {
     if (status) q = q.eq("status", status)
 
     const { data, error } = await q
-    if (error) throw error
+    // Gracefully handle missing table (migration not yet applied)
+    if (error) {
+      if (error.code === "42P01") return NextResponse.json({ automations: [] })
+      throw error
+    }
 
     return NextResponse.json({ automations: data || [] })
   } catch (err: any) {
