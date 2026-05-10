@@ -188,11 +188,15 @@ function McpTab() {
   }
 
   const displayKey = newKey || keys[0]?.api_key
-  const claudeConfig = displayKey ? JSON.stringify({
+  const desktopConfig = displayKey ? JSON.stringify({
     mcpServers: {
       adlauncher: {
-        url: mcpUrl,
-        headers: { Authorization: `Bearer ${displayKey}` },
+        command: "C:\\Users\\<YOUR_USERNAME>\\AppData\\Roaming\\npm\\mcp-remote.cmd",
+        args: [
+          mcpUrl,
+          "--header",
+          `Authorization: Bearer ${displayKey}`,
+        ],
       },
     },
   }, null, 2) : null
@@ -286,8 +290,31 @@ function McpTab() {
               ) : (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    Dùng cho Claude Desktop app. Cần tạo API key rồi thêm vào config file.
+                    Dùng cho Claude Desktop app trên Windows/macOS. Cần cài Node.js và mcp-remote trước.
                   </p>
+
+                  {/* Prerequisites */}
+                  <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                    <p className="text-xs font-medium">Yêu cầu trước khi bắt đầu</p>
+                    <div className="space-y-1.5 text-xs text-muted-foreground">
+                      <p>1. Cài <strong className="text-foreground">Node.js</strong> tại <code className="bg-muted px-1 rounded">nodejs.org</code> (kiểm tra: <code className="bg-muted px-1 rounded">node -v</code>)</p>
+                      <p>2. Cài <strong className="text-foreground">mcp-remote</strong> global:</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <code className="flex-1 bg-background border rounded px-2 py-1 font-mono">npm install -g mcp-remote</code>
+                        <button className="text-muted-foreground hover:text-foreground shrink-0" onClick={() => copyText("npm install -g mcp-remote", "npm-install")}>
+                          {copied === "npm-install" ? <IconCheck className="size-3.5 text-green-500" /> : <IconCopy className="size-3.5" />}
+                        </button>
+                      </div>
+                      <p>3. Lấy đường dẫn mcp-remote (chạy trong terminal):</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 bg-background border rounded px-2 py-1 font-mono">where mcp-remote</code>
+                        <button className="text-muted-foreground hover:text-foreground shrink-0" onClick={() => copyText("where mcp-remote", "where-mcp")}>
+                          {copied === "where-mcp" ? <IconCheck className="size-3.5 text-green-500" /> : <IconCopy className="size-3.5" />}
+                        </button>
+                      </div>
+                      <p className="text-amber-600 dark:text-amber-400">⚠️ Dùng file <strong>.cmd</strong>, không dùng npx (npx có thể gây lỗi trên Windows)</p>
+                    </div>
+                  </div>
 
                   {!displayKey && (
                     <div className="flex items-center gap-3 p-4 rounded-lg border bg-muted/30">
@@ -303,38 +330,57 @@ function McpTab() {
                     </div>
                   )}
 
-                  {claudeConfig && (
+                  {desktopConfig && (
                     <>
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">1</span>
-                          <p className="text-sm font-medium">Copy config này</p>
+                          <p className="text-sm font-medium">Copy config này, thay <code className="bg-muted px-1 rounded text-xs">&lt;YOUR_USERNAME&gt;</code> bằng tên user Windows</p>
                         </div>
                         <div className="ml-8">
                           <div className="relative">
-                            <pre className="text-xs bg-muted/50 rounded-lg p-4 overflow-x-auto font-mono leading-relaxed border">{claudeConfig}</pre>
-                            <Button size="sm" variant="outline" className="absolute top-2 right-2 gap-1.5 text-xs h-7" onClick={() => copyText(claudeConfig, "cfg")}>
+                            <pre className="text-xs bg-muted/50 rounded-lg p-4 overflow-x-auto font-mono leading-relaxed border">{desktopConfig}</pre>
+                            <Button size="sm" variant="outline" className="absolute top-2 right-2 gap-1.5 text-xs h-7" onClick={() => copyText(desktopConfig, "cfg")}>
                               <IconCopy className="size-3" />
                               {copied === "cfg" ? "Copied!" : "Copy"}
                             </Button>
                           </div>
+                          <p className="text-xs text-muted-foreground mt-1.5">
+                            Hoặc thay path bằng kết quả của <code className="bg-muted px-1 rounded">where mcp-remote</code> (chọn file .cmd)
+                          </p>
                         </div>
                       </div>
 
                       <div className="space-y-2">
                         <div className="flex items-center gap-2">
                           <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">2</span>
-                          <p className="text-sm font-medium">Paste vào file config của Claude Desktop</p>
+                          <p className="text-sm font-medium">Mở file config (chạy trong terminal)</p>
                         </div>
-                        <div className="ml-8 text-xs text-muted-foreground space-y-1">
-                          <p><strong className="text-foreground">macOS:</strong> <code className="bg-muted px-1 rounded">~/Library/Application Support/Claude/claude_desktop_config.json</code></p>
-                          <p><strong className="text-foreground">Windows:</strong> <code className="bg-muted px-1 rounded">%APPDATA%\Claude\claude_desktop_config.json</code></p>
+                        <div className="ml-8 space-y-1.5">
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 text-xs bg-background border rounded px-2 py-1 font-mono">notepad "%APPDATA%\Claude\claude_desktop_config.json"</code>
+                            <button className="text-muted-foreground hover:text-foreground shrink-0" onClick={() => copyText('notepad "%APPDATA%\\Claude\\claude_desktop_config.json"', "notepad-cmd")}>
+                              {copied === "notepad-cmd" ? <IconCheck className="size-3.5 text-green-500" /> : <IconCopy className="size-3.5" />}
+                            </button>
+                          </div>
+                          <p className="text-xs text-muted-foreground">Paste config vào, save file</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">3</span>
+                          <p className="text-sm font-medium">Restart Claude Desktop hoàn toàn</p>
+                        </div>
+                        <div className="ml-8 text-xs text-muted-foreground">
+                          <p>Mở Task Manager → tìm tất cả process <strong className="text-foreground">Claude</strong> → End Task → mở lại</p>
+                          <p className="text-amber-600 dark:text-amber-400 mt-1">⚠️ Chỉ đóng cửa sổ chưa đủ — phải kill hết trong Task Manager</p>
                         </div>
                       </div>
 
                       <div className="flex items-start gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 text-sm text-green-700 dark:text-green-400">
                         <IconCheck className="size-4 shrink-0 mt-0.5" />
-                        <span>Restart Claude Desktop, thử: <em>"Show me my ad accounts"</em></span>
+                        <span>Vào <strong>Settings → Developer</strong> kiểm tra server status. Nếu xanh → thử: <em>"Show me my ad accounts from adlauncher"</em></span>
                       </div>
                     </>
                   )}
