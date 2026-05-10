@@ -143,9 +143,7 @@ function McpTab() {
   const [setupMethod, setSetupMethod] = useState<SetupMethod>("web")
   const [revealedKeyId, setRevealedKeyId] = useState<string | null>(null)
 
-  const mcpUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/mcp`
-    : "https://www.sonkieu.site/api/mcp"
+  const mcpUrl = "https://www.sonkieu.site/api/mcp"
 
   const fetchKeys = useCallback(async () => {
     setLoading(true)
