@@ -17,8 +17,19 @@ import {
   IconAlertCircle,
   IconBrandFacebook,
   IconBrandInstagram,
-  IconLink,
+  IconCopy,
+  IconCheck,
+  IconBulb,
+  IconTarget,
+  IconThumbUp,
+  IconThumbDown,
+  IconStar,
+  IconRefresh,
+  IconQuote,
+  IconRoute,
 } from "@tabler/icons-react"
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 type SubTab = "adscan" | "ai" | "create" | "brand-spy" | "saved"
 
@@ -44,6 +55,21 @@ interface SavedAd {
   publisher_platforms?: string[]
   created_at: string
 }
+
+interface Analysis {
+  hook: { text: string; type: string; why_works: string }
+  framework: { name: string; explanation: string }
+  audience: string
+  emotion: string
+  cta: string
+  strengths: string[]
+  weaknesses: string[]
+  score: number
+  score_reason: string
+  variations: Array<{ hook: string; angle: string }>
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const COUNTRIES = [
   { code: "VN", label: "🇻🇳 Vietnam" },
@@ -72,6 +98,27 @@ const AVATAR_COLORS = [
   "bg-red-500", "bg-amber-500", "bg-cyan-500",
 ]
 
+const HOOK_TYPES: Record<string, { label: string; color: string }> = {
+  curiosity:     { label: "Curiosity",     color: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300" },
+  fear:          { label: "Fear",          color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
+  social_proof:  { label: "Social Proof",  color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
+  transformation:{ label: "Transformation",color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300" },
+  urgency:       { label: "Urgency",       color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300" },
+  humor:         { label: "Humor",         color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300" },
+  authority:     { label: "Authority",     color: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300" },
+}
+
+const FRAMEWORK_COLORS: Record<string, string> = {
+  PAS:   "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+  AIDA:  "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  BAB:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300",
+  PASTOR:"bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300",
+  DIC:   "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300",
+  "4Ps": "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300",
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function avatarColor(name: string) {
   return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length]
 }
@@ -80,33 +127,23 @@ function formatDate(dateStr?: string) {
   if (!dateStr) return null
   try {
     return new Date(dateStr).toLocaleDateString("en-US", { month: "short", year: "numeric" })
-  } catch {
-    return null
-  }
+  } catch { return null }
 }
 
+// ─── Shared Components ────────────────────────────────────────────────────────
+
 function PlatformPill({ platform }: { platform: string }) {
-  if (platform === "facebook") {
-    return (
-      <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
-        <IconBrandFacebook className="size-3" />
-        Facebook
-      </span>
-    )
-  }
-  if (platform === "instagram") {
-    return (
-      <span className="flex items-center gap-1 text-xs text-pink-600 bg-pink-50 dark:bg-pink-950/30 dark:text-pink-400 px-2 py-0.5 rounded-full font-medium">
-        <IconBrandInstagram className="size-3" />
-        Instagram
-      </span>
-    )
-  }
-  return (
-    <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full capitalize font-medium">
-      {platform}
+  if (platform === "facebook") return (
+    <span className="flex items-center gap-1 text-xs text-blue-600 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-medium">
+      <IconBrandFacebook className="size-3" />Facebook
     </span>
   )
+  if (platform === "instagram") return (
+    <span className="flex items-center gap-1 text-xs text-pink-600 bg-pink-50 dark:bg-pink-950/30 dark:text-pink-400 px-2 py-0.5 rounded-full font-medium">
+      <IconBrandInstagram className="size-3" />Instagram
+    </span>
+  )
+  return <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full capitalize font-medium">{platform}</span>
 }
 
 interface AdCardProps {
@@ -121,35 +158,28 @@ interface AdCardProps {
   isSaving: boolean
   onSave: () => void
   onUnsave: () => void
+  onAnalyze?: () => void
 }
 
-function AdCard({
-  pageName, body, title, snapshotUrl, startTime,
-  platforms, isSaved, isSaving, onSave, onUnsave,
-}: AdCardProps) {
+function AdCard({ pageName, body, title, snapshotUrl, startTime, platforms, isSaved, isSaving, onSave, onUnsave, onAnalyze }: AdCardProps) {
   return (
-    <div className="border rounded-xl bg-card hover:shadow-md transition-all duration-150 flex flex-col overflow-hidden">
+    <div className="border rounded-xl bg-card hover:shadow-md transition-all flex flex-col overflow-hidden">
       <div className="p-4 flex items-center gap-3">
         <div className={cn("size-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0", avatarColor(pageName))}>
           {pageName[0]?.toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{pageName}</p>
-          {startTime && (
-            <p className="text-xs text-muted-foreground">Since {formatDate(startTime)}</p>
-          )}
+          {startTime && <p className="text-xs text-muted-foreground">Since {formatDate(startTime)}</p>}
         </div>
       </div>
 
       <div className="px-4 pb-3 flex-1">
-        {body ? (
-          <p className="text-sm text-muted-foreground line-clamp-4 leading-relaxed">{body}</p>
-        ) : (
-          <p className="text-sm text-muted-foreground/40 italic">No ad copy</p>
-        )}
-        {title && (
-          <p className="text-sm font-medium mt-2 line-clamp-2">{title}</p>
-        )}
+        {body
+          ? <p className="text-sm text-muted-foreground line-clamp-4 leading-relaxed">{body}</p>
+          : <p className="text-sm text-muted-foreground/40 italic">No ad copy</p>
+        }
+        {title && <p className="text-sm font-medium mt-2 line-clamp-2">{title}</p>}
       </div>
 
       {platforms && platforms.length > 0 && (
@@ -159,30 +189,20 @@ function AdCard({
       )}
 
       <div className="px-4 py-3 border-t flex items-center gap-2">
-        <Button
-          size="sm"
-          variant={isSaved ? "default" : "outline"}
-          className="gap-1.5 text-xs flex-1"
-          onClick={isSaved ? onUnsave : onSave}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <IconLoader2 className="size-3 animate-spin" />
-          ) : isSaved ? (
-            <IconBookmarkFilled className="size-3" />
-          ) : (
-            <IconBookmark className="size-3" />
-          )}
+        <Button size="sm" variant={isSaved ? "default" : "outline"} className="gap-1.5 text-xs flex-1"
+          onClick={isSaved ? onUnsave : onSave} disabled={isSaving}>
+          {isSaving ? <IconLoader2 className="size-3 animate-spin" />
+            : isSaved ? <IconBookmarkFilled className="size-3" />
+            : <IconBookmark className="size-3" />}
           {isSaved ? "Saved" : "Save"}
         </Button>
+        {onAnalyze && body && (
+          <Button size="sm" variant="ghost" className="gap-1.5 text-xs px-2" onClick={onAnalyze} title="Analyze with AI">
+            <IconSparkles className="size-3.5" />
+          </Button>
+        )}
         {snapshotUrl && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="px-2.5"
-            onClick={() => window.open(snapshotUrl, "_blank")}
-            title="View on Meta Ad Library"
-          >
+          <Button size="sm" variant="ghost" className="px-2.5" onClick={() => window.open(snapshotUrl, "_blank")} title="View on Meta Ad Library">
             <IconExternalLink className="size-3.5" />
           </Button>
         )}
@@ -190,6 +210,152 @@ function AdCard({
     </div>
   )
 }
+
+// ─── Analysis Result Components ──────────────────────────────────────────────
+
+function AnalysisCard({ title, icon, children, className }: { title: string; icon: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("border rounded-xl bg-card p-4 space-y-3", className)}>
+      <div className="flex items-center gap-2">
+        <span className="text-muted-foreground">{icon}</span>
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h4>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+  return (
+    <button onClick={handleCopy} className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+      {copied ? <IconCheck className="size-3.5 text-green-500" /> : <IconCopy className="size-3.5" />}
+    </button>
+  )
+}
+
+function AnalysisResult({ analysis, onReset }: { analysis: Analysis; onReset: () => void }) {
+  const hookMeta = HOOK_TYPES[analysis.hook.type] ?? { label: analysis.hook.type, color: "bg-muted text-muted-foreground" }
+  const frameworkColor = FRAMEWORK_COLORS[analysis.framework.name] ?? "bg-muted text-muted-foreground"
+  const scoreColor = analysis.score >= 8 ? "text-emerald-600" : analysis.score >= 6 ? "text-amber-500" : "text-red-500"
+  const scoreBg = analysis.score >= 8 ? "bg-emerald-500" : analysis.score >= 6 ? "bg-amber-400" : "bg-red-400"
+
+  return (
+    <div className="space-y-4">
+      {/* Top actions */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold">Analysis complete</p>
+        <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={onReset}>
+          <IconRefresh className="size-3.5" />
+          Analyze another
+        </Button>
+      </div>
+
+      {/* Row 1 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Hook */}
+        <AnalysisCard title="Hook" icon={<IconQuote className="size-4" />}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", hookMeta.color)}>
+              {hookMeta.label}
+            </span>
+          </div>
+          <p className="text-sm font-medium leading-snug">"{analysis.hook.text}"</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{analysis.hook.why_works}</p>
+        </AnalysisCard>
+
+        {/* Framework */}
+        <AnalysisCard title="Copywriting Framework" icon={<IconRoute className="size-4" />}>
+          <span className={cn("inline-block text-sm font-bold px-3 py-1 rounded-lg", frameworkColor)}>
+            {analysis.framework.name}
+          </span>
+          <p className="text-xs text-muted-foreground leading-relaxed">{analysis.framework.explanation}</p>
+        </AnalysisCard>
+
+        {/* Audience + Emotion */}
+        <AnalysisCard title="Audience & Emotion" icon={<IconTarget className="size-4" />}>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">Target</p>
+            <p className="text-sm leading-snug">{analysis.audience}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">Primary emotion</p>
+            <p className="text-sm leading-snug">{analysis.emotion}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">CTA</p>
+            <p className="text-sm leading-snug">{analysis.cta}</p>
+          </div>
+        </AnalysisCard>
+      </div>
+
+      {/* Row 2 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Strengths */}
+        <AnalysisCard title="Strengths" icon={<IconThumbUp className="size-4" />}>
+          <ul className="space-y-1.5">
+            {analysis.strengths.map((s, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm">
+                <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
+                <span>{s}</span>
+              </li>
+            ))}
+          </ul>
+        </AnalysisCard>
+
+        {/* Weaknesses */}
+        <AnalysisCard title="Weaknesses" icon={<IconThumbDown className="size-4" />}>
+          <ul className="space-y-1.5">
+            {analysis.weaknesses.length > 0
+              ? analysis.weaknesses.map((w, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm">
+                  <span className="text-amber-500 mt-0.5 shrink-0">!</span>
+                  <span>{w}</span>
+                </li>
+              ))
+              : <li className="text-sm text-muted-foreground">No major weaknesses identified</li>
+            }
+          </ul>
+        </AnalysisCard>
+
+        {/* Score */}
+        <AnalysisCard title="Performance Score" icon={<IconStar className="size-4" />}>
+          <div className="flex items-baseline gap-2">
+            <span className={cn("text-4xl font-black", scoreColor)}>{analysis.score}</span>
+            <span className="text-lg text-muted-foreground font-medium">/10</span>
+          </div>
+          {/* Score bar */}
+          <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className={cn("h-full rounded-full transition-all", scoreBg)} style={{ width: `${analysis.score * 10}%` }} />
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{analysis.score_reason}</p>
+        </AnalysisCard>
+      </div>
+
+      {/* Variations */}
+      <AnalysisCard title="3 Hook Variations to Test" icon={<IconBulb className="size-4" />}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {analysis.variations.map((v, i) => (
+            <div key={i} className="rounded-lg bg-muted/40 border p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">V{i + 1} · {v.angle}</span>
+                <CopyButton text={v.hook} />
+              </div>
+              <p className="text-sm leading-snug font-medium">"{v.hook}"</p>
+            </div>
+          ))}
+        </div>
+      </AnalysisCard>
+    </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InspoPage() {
   const [subTab, setSubTab] = useState<SubTab>("adscan")
@@ -209,6 +375,13 @@ export default function InspoPage() {
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set())
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
 
+  // AI tab state
+  const [aiBody, setAiBody] = useState("")
+  const [aiTitle, setAiTitle] = useState("")
+  const [analyzing, setAnalyzing] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
+
   const loadSavedAds = useCallback(async () => {
     setLoadingSaved(true)
     try {
@@ -218,16 +391,11 @@ export default function InspoPage() {
         setSavedAds(data.ads)
         setSavedIds(new Set(data.ads.map((a: SavedAd) => a.ad_archive_id)))
       }
-    } catch {
-      // silent
-    } finally {
-      setLoadingSaved(false)
-    }
+    } catch { /* silent */ }
+    finally { setLoadingSaved(false) }
   }, [])
 
-  useEffect(() => {
-    loadSavedAds()
-  }, [loadSavedAds])
+  useEffect(() => { loadSavedAds() }, [loadSavedAds])
 
   const handleSearch = async () => {
     if (!query.trim()) return
@@ -238,18 +406,12 @@ export default function InspoPage() {
       const params = new URLSearchParams({ q: query.trim(), country, status: adStatus })
       const res = await fetch(`/api/inspo/adscan?${params}`)
       const data = await res.json()
-      if (data.error) {
-        setSearchError(data.error)
-        setResults([])
-      } else {
-        setResults(data.ads || [])
-      }
+      if (data.error) { setSearchError(data.error); setResults([]) }
+      else { setResults(data.ads || []) }
     } catch {
       setSearchError("Network error. Please try again.")
       setResults([])
-    } finally {
-      setSearching(false)
-    }
+    } finally { setSearching(false) }
   }
 
   const handleSave = async (ad: AdResult) => {
@@ -259,72 +421,83 @@ export default function InspoPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ad_archive_id: ad.id,
-          page_name: ad.page_name,
-          page_id: ad.page_id,
-          ad_body: ad.ad_creative_bodies?.[0],
-          ad_title: ad.ad_creative_link_titles?.[0],
-          ad_snapshot_url: ad.ad_snapshot_url,
-          ad_delivery_start_time: ad.ad_delivery_start_time,
+          ad_archive_id: ad.id, page_name: ad.page_name, page_id: ad.page_id,
+          ad_body: ad.ad_creative_bodies?.[0], ad_title: ad.ad_creative_link_titles?.[0],
+          ad_snapshot_url: ad.ad_snapshot_url, ad_delivery_start_time: ad.ad_delivery_start_time,
           publisher_platforms: ad.publisher_platforms,
         }),
       })
-      if (res.ok) {
-        setSavedIds(prev => new Set(prev).add(ad.id))
-        loadSavedAds()
-      }
-    } finally {
-      setSavingIds(prev => { const n = new Set(prev); n.delete(ad.id); return n })
-    }
+      if (res.ok) { setSavedIds(prev => new Set(prev).add(ad.id)); loadSavedAds() }
+    } finally { setSavingIds(prev => { const n = new Set(prev); n.delete(ad.id); return n }) }
   }
 
   const handleUnsave = async (archiveId: string, dbId?: string) => {
     setSavingIds(prev => new Set(prev).add(archiveId))
     try {
-      const savedAd = savedAds.find(a => a.ad_archive_id === archiveId)
-      const id = dbId || savedAd?.id
+      const id = dbId || savedAds.find(a => a.ad_archive_id === archiveId)?.id
       if (!id) return
       const res = await fetch(`/api/inspo/saved/${id}`, { method: "DELETE" })
       if (res.ok) {
         setSavedIds(prev => { const n = new Set(prev); n.delete(archiveId); return n })
         setSavedAds(prev => prev.filter(a => a.id !== id))
       }
-    } finally {
-      setSavingIds(prev => { const n = new Set(prev); n.delete(archiveId); return n })
-    }
+    } finally { setSavingIds(prev => { const n = new Set(prev); n.delete(archiveId); return n }) }
   }
 
-  const selectClass = "h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
+  const handleAnalyzeAd = (body?: string, title?: string) => {
+    if (!body) return
+    setAiBody(body)
+    setAiTitle(title || "")
+    setAnalysis(null)
+    setAiError(null)
+    setSubTab("ai")
+  }
+
+  const handleAnalyze = async () => {
+    if (!aiBody.trim()) return
+    setAnalyzing(true)
+    setAiError(null)
+    setAnalysis(null)
+    try {
+      const res = await fetch("/api/inspo/ai/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ad_body: aiBody.trim(), ad_title: aiTitle.trim() || undefined }),
+      })
+      const data = await res.json()
+      if (data.error) { setAiError(data.error) }
+      else { setAnalysis(data.analysis) }
+    } catch { setAiError("Network error. Please try again.") }
+    finally { setAnalyzing(false) }
+  }
+
+  const isPermissionError = (err: string) => err.toLowerCase().includes("permission")
+  const metaLibraryUrl = `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&is_targeted_country=false&media_type=all&q=${encodeURIComponent(query)}&search_type=keyword_unordered`
+
+  const selectClass = "h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="px-6 py-5 border-b shrink-0">
         <h1 className="font-heading text-xl font-bold">Inspo</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Research competitors, scan winning ads, and generate creative inspiration.
-        </p>
+        <p className="text-sm text-muted-foreground mt-1">Research competitors, scan winning ads, and generate creative inspiration.</p>
       </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-0 px-6 border-b shrink-0">
-        {[
-          { id: "adscan", label: "Ad Scan", icon: IconScan },
-          { id: "ai", label: "AI", icon: IconSparkles },
-          { id: "create", label: "Create", icon: IconPencil },
-          { id: "brand-spy", label: "Brand Spy", icon: IconBinoculars },
-          { id: "saved", label: "Saved Ads", icon: IconBookmark },
-        ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setSubTab(t.id as SubTab)}
-            className={cn(
-              "flex items-center gap-1.5 px-0 py-3 mr-7 text-sm border-b-2 transition-colors",
-              subTab === t.id
-                ? "border-foreground font-medium text-foreground"
+        {([
+          { id: "adscan",    label: "Ad Scan",   icon: IconScan },
+          { id: "ai",        label: "AI",         icon: IconSparkles },
+          { id: "create",    label: "Create",     icon: IconPencil },
+          { id: "brand-spy", label: "Brand Spy",  icon: IconBinoculars },
+          { id: "saved",     label: "Saved Ads",  icon: IconBookmark },
+        ] as const).map(t => (
+          <button key={t.id} onClick={() => setSubTab(t.id)}
+            className={cn("flex items-center gap-1.5 px-0 py-3 mr-7 text-sm border-b-2 transition-colors",
+              subTab === t.id ? "border-foreground font-medium text-foreground"
                 : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
+            )}>
             <t.icon className="size-3.5" />
             {t.label}
             {t.id === "saved" && savedIds.size > 0 && (
@@ -346,41 +519,19 @@ export default function InspoPage() {
               <div className="flex gap-3 flex-wrap">
                 <div className="relative flex-1 min-w-[200px]">
                   <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-                  <Input
-                    placeholder="Search by brand or keyword..."
-                    value={query}
+                  <Input placeholder="Search by brand or keyword..." value={query}
                     onChange={e => setQuery(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && handleSearch()}
-                    className="pl-9"
-                  />
+                    className="pl-9" />
                 </div>
-                <select
-                  value={country}
-                  onChange={e => setCountry(e.target.value)}
-                  className={selectClass}
-                >
-                  {COUNTRIES.map(c => (
-                    <option key={c.code} value={c.code}>{c.label}</option>
-                  ))}
+                <select value={country} onChange={e => setCountry(e.target.value)} className={selectClass}>
+                  {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
                 </select>
-                <select
-                  value={adStatus}
-                  onChange={e => setAdStatus(e.target.value)}
-                  className={selectClass}
-                >
-                  {STATUSES.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                <select value={adStatus} onChange={e => setAdStatus(e.target.value)} className={selectClass}>
+                  {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
-                <Button
-                  onClick={handleSearch}
-                  disabled={searching || !query.trim()}
-                  className="gap-2 shrink-0"
-                >
-                  {searching
-                    ? <IconLoader2 className="size-4 animate-spin" />
-                    : <IconSearch className="size-4" />
-                  }
+                <Button onClick={handleSearch} disabled={searching || !query.trim()} className="gap-2 shrink-0">
+                  {searching ? <IconLoader2 className="size-4 animate-spin" /> : <IconSearch className="size-4" />}
                   Search
                 </Button>
               </div>
@@ -393,35 +544,38 @@ export default function InspoPage() {
                   <p className="text-sm text-muted-foreground">Searching Meta Ad Library...</p>
                 </div>
               ) : searchError ? (
-                <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
-                  <IconAlertCircle className="size-10 text-destructive/50" />
+                <div className="flex flex-col items-center justify-center min-h-64 gap-4 text-center py-8">
+                  <IconAlertCircle className="size-10 text-amber-400" />
                   <div>
-                    <p className="font-medium text-sm">Search failed</p>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">{searchError}</p>
+                    <p className="font-semibold">Can't access Meta Ad Library API</p>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+                      {isPermissionError(searchError)
+                        ? "App chưa được Meta approve để dùng Ad Library API."
+                        : searchError}
+                    </p>
                   </div>
-                  {(searchError.includes("permission") || searchError.includes("Permission")) && (
-                    <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-4 text-left max-w-sm space-y-2">
-                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Cách fix:</p>
-                      <ol className="text-xs text-amber-700 dark:text-amber-400 space-y-1.5 list-decimal list-inside">
-                        <li>Vào <strong>Connect → Meta</strong> và reconnect lại tài khoản để refresh token</li>
-                        <li>Hoặc vào <strong>facebook.com/ads/library</strong>, xác minh danh tính lần đầu</li>
-                      </ol>
-                      <div className="flex gap-2 pt-1">
-                        <Button size="sm" variant="outline" className="text-xs gap-1.5 flex-1" onClick={() => window.open(`https://facebook.com/ads/library?q=${encodeURIComponent(query)}&active_status=active&ad_type=all&country=all&is_targeted_country=false&media_type=all`, "_blank")}>
-                          <IconExternalLink className="size-3" />
-                          Mở Meta Ad Library
-                        </Button>
-                        <Button size="sm" variant="outline" className="text-xs" onClick={handleSearch}>
-                          Retry
-                        </Button>
-                      </div>
+                  <div className="border rounded-xl bg-muted/30 p-5 max-w-md w-full text-left space-y-4">
+                    <div>
+                      <p className="text-sm font-semibold mb-2">Tìm kiếm trực tiếp trên Meta Ad Library</p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Kết quả tương tự, đầy đủ dữ liệu — mở trong tab mới.
+                      </p>
+                      <Button className="w-full gap-2" onClick={() => window.open(metaLibraryUrl, "_blank")}>
+                        <IconExternalLink className="size-4" />
+                        Tìm "{query}" trên Meta Ad Library
+                      </Button>
                     </div>
-                  )}
-                  {!searchError.includes("permission") && !searchError.includes("Permission") && (
-                    <Button size="sm" variant="outline" onClick={handleSearch}>
-                      Try again
-                    </Button>
-                  )}
+                    {isPermissionError(searchError) && (
+                      <div className="border-t pt-4">
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Để fix API (cần làm 1 lần):</p>
+                        <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                          <li>Vào developers.facebook.com → App của bạn</li>
+                          <li>Use cases → Advertiser → Set up</li>
+                          <li>Request permission <strong className="text-foreground">ads_read</strong></li>
+                        </ol>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : !hasSearched ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
@@ -431,7 +585,7 @@ export default function InspoPage() {
                   <div>
                     <h3 className="font-semibold">Scan competitor ads</h3>
                     <p className="text-sm text-muted-foreground mt-1 max-w-xs">
-                      Search by brand name or keyword to discover active ads from Meta Ad Library
+                      Search by brand name or keyword to discover active ads
                     </p>
                   </div>
                 </div>
@@ -448,23 +602,108 @@ export default function InspoPage() {
                   <p className="text-xs text-muted-foreground mb-4">{results.length} ads found</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                     {results.map(ad => (
-                      <AdCard
-                        key={ad.id}
-                        archiveId={ad.id}
-                        pageName={ad.page_name}
-                        body={ad.ad_creative_bodies?.[0]}
-                        title={ad.ad_creative_link_titles?.[0]}
-                        snapshotUrl={ad.ad_snapshot_url}
-                        startTime={ad.ad_delivery_start_time}
+                      <AdCard key={ad.id}
+                        archiveId={ad.id} pageName={ad.page_name}
+                        body={ad.ad_creative_bodies?.[0]} title={ad.ad_creative_link_titles?.[0]}
+                        snapshotUrl={ad.ad_snapshot_url} startTime={ad.ad_delivery_start_time}
                         platforms={ad.publisher_platforms}
-                        isSaved={savedIds.has(ad.id)}
-                        isSaving={savingIds.has(ad.id)}
-                        onSave={() => handleSave(ad)}
-                        onUnsave={() => handleUnsave(ad.id)}
+                        isSaved={savedIds.has(ad.id)} isSaving={savingIds.has(ad.id)}
+                        onSave={() => handleSave(ad)} onUnsave={() => handleUnsave(ad.id)}
+                        onAnalyze={() => handleAnalyzeAd(ad.ad_creative_bodies?.[0], ad.ad_creative_link_titles?.[0])}
                       />
                     ))}
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── AI Analysis ── */}
+        {subTab === "ai" && (
+          <div className="h-full flex flex-col overflow-y-auto">
+            <div className="flex-1 p-6 space-y-6 max-w-5xl mx-auto w-full">
+              {!analysis ? (
+                <>
+                  {/* Input */}
+                  <div className="border rounded-xl bg-card p-5 space-y-4">
+                    <div>
+                      <h3 className="font-semibold">Analyze ad with AI</h3>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        Paste any Facebook/Meta ad copy — Claude sẽ phân tích hook, framework, điểm mạnh/yếu và suggest variations.
+                      </p>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                          Ad copy / body text <span className="text-destructive">*</span>
+                        </label>
+                        <textarea
+                          value={aiBody}
+                          onChange={e => setAiBody(e.target.value)}
+                          placeholder="Paste the ad body copy here..."
+                          rows={6}
+                          className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium text-muted-foreground block mb-1.5">
+                          Headline / title <span className="text-muted-foreground font-normal">(optional)</span>
+                        </label>
+                        <Input value={aiTitle} onChange={e => setAiTitle(e.target.value)}
+                          placeholder="Ad headline or link title..." />
+                      </div>
+                    </div>
+
+                    {aiError && (
+                      <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+                        <IconAlertCircle className="size-4 shrink-0" />
+                        {aiError}
+                      </div>
+                    )}
+
+                    <Button onClick={handleAnalyze} disabled={analyzing || !aiBody.trim()} className="gap-2">
+                      {analyzing
+                        ? <><IconLoader2 className="size-4 animate-spin" />Analyzing...</>
+                        : <><IconSparkles className="size-4" />Analyze with AI</>
+                      }
+                    </Button>
+                  </div>
+
+                  {/* Tips */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      { icon: "📋", title: "Paste any ad copy", desc: "From Meta Ad Library, competitor websites, or anywhere you spot a good ad" },
+                      { icon: "🧠", title: "Get deep analysis", desc: "Hook type, copywriting framework, target audience, emotional triggers, CTA strategy" },
+                      { icon: "✨", title: "Get 3 variations", desc: "AI suggests 3 different hook angles to test for your own campaigns" },
+                    ].map(tip => (
+                      <div key={tip.title} className="border rounded-xl p-4 bg-muted/20 space-y-1.5">
+                        <span className="text-xl">{tip.icon}</span>
+                        <p className="text-sm font-semibold">{tip.title}</p>
+                        <p className="text-xs text-muted-foreground">{tip.desc}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Quick analyze from saved */}
+                  {savedAds.length > 0 && (
+                    <div className="border rounded-xl p-4 space-y-3">
+                      <p className="text-sm font-semibold">Quick analyze from Saved Ads</p>
+                      <div className="flex flex-wrap gap-2">
+                        {savedAds.slice(0, 5).filter(a => a.ad_body).map(ad => (
+                          <button key={ad.id}
+                            onClick={() => handleAnalyzeAd(ad.ad_body, ad.ad_title)}
+                            className="text-xs px-3 py-1.5 rounded-full border bg-background hover:bg-muted transition-colors truncate max-w-[200px]">
+                            {ad.page_name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <AnalysisResult analysis={analysis} onReset={() => { setAnalysis(null); setAiBody(""); setAiTitle("") }} />
               )}
             </div>
           </div>
@@ -476,18 +715,14 @@ export default function InspoPage() {
             <div className="px-6 py-4 border-b shrink-0 flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-sm">Saved Ads</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {savedAds.length} ad{savedAds.length !== 1 ? "s" : ""} saved
-                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">{savedAds.length} ad{savedAds.length !== 1 ? "s" : ""} saved</p>
               </div>
               {savedAds.length > 0 && (
                 <Button size="sm" variant="outline" className="gap-2 text-xs" onClick={() => setSubTab("adscan")}>
-                  <IconScan className="size-3.5" />
-                  Scan more
+                  <IconScan className="size-3.5" />Scan more
                 </Button>
               )}
             </div>
-
             <div className="flex-1 overflow-y-auto p-6">
               {loadingSaved ? (
                 <div className="flex items-center justify-center h-64">
@@ -500,31 +735,23 @@ export default function InspoPage() {
                   </div>
                   <div>
                     <h3 className="font-semibold">No saved ads yet</h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Scan competitors and save ads that inspire you
-                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">Scan competitors and save ads that inspire you</p>
                   </div>
                   <Button size="sm" variant="outline" className="gap-2 mt-1" onClick={() => setSubTab("adscan")}>
-                    <IconScan className="size-3.5" />
-                    Go to Ad Scan
+                    <IconScan className="size-3.5" />Go to Ad Scan
                   </Button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {savedAds.map(ad => (
-                    <AdCard
-                      key={ad.id}
-                      archiveId={ad.ad_archive_id}
-                      pageName={ad.page_name}
-                      body={ad.ad_body}
-                      title={ad.ad_title}
-                      snapshotUrl={ad.ad_snapshot_url}
-                      startTime={ad.ad_delivery_start_time}
+                    <AdCard key={ad.id}
+                      archiveId={ad.ad_archive_id} pageName={ad.page_name}
+                      body={ad.ad_body} title={ad.ad_title}
+                      snapshotUrl={ad.ad_snapshot_url} startTime={ad.ad_delivery_start_time}
                       platforms={ad.publisher_platforms}
-                      isSaved={true}
-                      isSaving={savingIds.has(ad.ad_archive_id)}
-                      onSave={() => {}}
-                      onUnsave={() => handleUnsave(ad.ad_archive_id, ad.id)}
+                      isSaved={true} isSaving={savingIds.has(ad.ad_archive_id)}
+                      onSave={() => {}} onUnsave={() => handleUnsave(ad.ad_archive_id, ad.id)}
+                      onAnalyze={() => handleAnalyzeAd(ad.ad_body, ad.ad_title)}
                     />
                   ))}
                 </div>
@@ -533,24 +760,23 @@ export default function InspoPage() {
           </div>
         )}
 
-        {/* ── Coming Soon tabs ── */}
-        {(subTab === "ai" || subTab === "create" || subTab === "brand-spy") && (
+        {/* ── Coming Soon ── */}
+        {(subTab === "create" || subTab === "brand-spy") && (
           <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
             <div className="size-16 rounded-2xl bg-muted/50 flex items-center justify-center">
-              {subTab === "ai" && <IconSparkles className="size-8 text-muted-foreground/40" />}
               {subTab === "create" && <IconPencil className="size-8 text-muted-foreground/40" />}
               {subTab === "brand-spy" && <IconBinoculars className="size-8 text-muted-foreground/40" />}
             </div>
             <div>
               <h2 className="text-lg font-semibold">Coming Soon</h2>
               <p className="text-sm text-muted-foreground mt-2 max-w-xs">
-                {subTab === "ai" && "AI-powered analysis of saved ads — hooks, messaging structure, and copy suggestions"}
                 {subTab === "create" && "Generate ad creatives and copy directly from your saved inspiration"}
                 {subTab === "brand-spy" && "Monitor competitor brands and track their ad strategy over time"}
               </p>
             </div>
           </div>
         )}
+
       </div>
     </div>
   )
