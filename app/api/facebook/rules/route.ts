@@ -62,23 +62,20 @@ export async function POST(request: NextRequest) {
       operator: c.operator,
     }))
 
+    const actionEntry: Record<string, any> = { type: action.type }
+    if (action.value) actionEntry.value = String(action.value)
+
     const params = new URLSearchParams({
       access_token: token,
       name,
       evaluation_spec: JSON.stringify({
         evaluation_type: "SCHEDULE",
         filters,
-        schedule_spec: {
-          schedule_type: schedule?.type || "DAILY",
-          schedule_type_count: schedule?.count || 1,
-        },
       }),
-      actions: JSON.stringify([{
-        type: action.type,
-        value: action.value ? String(action.value) : null,
-        notification_message: action.message || null,
-      }]),
-      trigger_subscriptions: JSON.stringify([{ type: "AD_INSIGHTS" }]),
+      schedule_spec: JSON.stringify({
+        schedule_type: schedule?.type || "DAILY",
+      }),
+      actions: JSON.stringify([actionEntry]),
       status: "ENABLED",
     })
 
