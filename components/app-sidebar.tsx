@@ -84,10 +84,7 @@ const navSections: NavSection[] = [
     label: "Inspo",
     icon: IconBulb,
     subItems: [
-      { label: "Ad Scan", href: "/inspo" },
-      { label: "AI", href: "/inspo/ai" },
-      { label: "Brand Spy", href: "/inspo/brand-spy" },
-      { label: "Saved Ads", href: "/inspo/saved" },
+      { label: "Inspo", href: "/inspo" },
     ],
   },
 ]

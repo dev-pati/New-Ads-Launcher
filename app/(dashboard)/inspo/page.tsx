@@ -393,15 +393,35 @@ export default function InspoPage() {
                   <p className="text-sm text-muted-foreground">Searching Meta Ad Library...</p>
                 </div>
               ) : searchError ? (
-                <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
+                <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
                   <IconAlertCircle className="size-10 text-destructive/50" />
                   <div>
                     <p className="font-medium text-sm">Search failed</p>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-sm">{searchError}</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">{searchError}</p>
                   </div>
-                  <Button size="sm" variant="outline" onClick={handleSearch}>
-                    Try again
-                  </Button>
+                  {(searchError.includes("permission") || searchError.includes("Permission")) && (
+                    <div className="rounded-lg border bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800 p-4 text-left max-w-sm space-y-2">
+                      <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Cách fix:</p>
+                      <ol className="text-xs text-amber-700 dark:text-amber-400 space-y-1.5 list-decimal list-inside">
+                        <li>Vào <strong>Connect → Meta</strong> và reconnect lại tài khoản để refresh token</li>
+                        <li>Hoặc vào <strong>facebook.com/ads/library</strong>, xác minh danh tính lần đầu</li>
+                      </ol>
+                      <div className="flex gap-2 pt-1">
+                        <Button size="sm" variant="outline" className="text-xs gap-1.5 flex-1" onClick={() => window.open(`https://facebook.com/ads/library?q=${encodeURIComponent(query)}&active_status=active&ad_type=all&country=all&is_targeted_country=false&media_type=all`, "_blank")}>
+                          <IconExternalLink className="size-3" />
+                          Mở Meta Ad Library
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-xs" onClick={handleSearch}>
+                          Retry
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {!searchError.includes("permission") && !searchError.includes("Permission") && (
+                    <Button size="sm" variant="outline" onClick={handleSearch}>
+                      Try again
+                    </Button>
+                  )}
                 </div>
               ) : !hasSearched ? (
                 <div className="flex flex-col items-center justify-center h-64 gap-3 text-center">
