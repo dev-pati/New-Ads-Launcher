@@ -46,6 +46,7 @@ import {
   IconCurrencyDollar, IconTarget, IconTrendingUp,
   IconFilter, IconWorldPin,
   IconChevronLeft, IconChevronRight,
+  IconSparkles,
 } from "@tabler/icons-react"
 import { CreativeCardMedia } from "@/components/creative-card-media"
 
@@ -9715,12 +9716,51 @@ function AdSetupPanel({
   const [showDesc, setShowDesc] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [copyTemplateOpen, setCopyTemplateOpen] = useState(false)
+  const [showAiVariations, setShowAiVariations] = useState(false)
+  const [aiVariations, setAiVariations] = useState<{ angle: string; text: string }[]>([])
+  const [loadingAiVariations, setLoadingAiVariations] = useState(false)
+  const [aiVariationsError, setAiVariationsError] = useState<string | null>(null)
+  const [addedVariations, setAddedVariations] = useState<Set<number>>(new Set())
 
   const updateText = (idx: number, val: string) => {
     const next = [...primaryTexts]; next[idx] = val; setPrimaryTexts(next)
   }
   const addText = () => setPrimaryTexts([...primaryTexts, ""])
   const removeText = (idx: number) => setPrimaryTexts(primaryTexts.filter((_, i) => i !== idx))
+
+  const handleOpenAiVariations = async () => {
+    const sourceText = primaryTexts[0]?.trim()
+    if (!sourceText) return
+    setShowAiVariations(true)
+    setAiVariations([])
+    setAiVariationsError(null)
+    setAddedVariations(new Set())
+    setLoadingAiVariations(true)
+    try {
+      const res = await fetch("/api/launch/ai-variations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: sourceText, headline: headlines[0] }),
+      })
+      const data = await res.json()
+      if (data.error) setAiVariationsError(data.error)
+      else setAiVariations(data.variations || [])
+    } catch {
+      setAiVariationsError("Network error. Please try again.")
+    } finally {
+      setLoadingAiVariations(false)
+    }
+  }
+
+  const handleAddVariation = (text: string, idx: number) => {
+    setPrimaryTexts([...primaryTexts.filter(t => t.trim()), text])
+    setAddedVariations(prev => new Set(prev).add(idx))
+  }
+
+  const handleReplaceWithVariation = (text: string, idx: number) => {
+    const next = [...primaryTexts]; next[0] = text; setPrimaryTexts(next)
+    setAddedVariations(prev => new Set(prev).add(idx))
+  }
 
   const updateHeadline = (idx: number, val: string) => {
     const next = [...headlines]; next[idx] = val; setHeadlines(next)
@@ -9737,6 +9777,65 @@ function AdSetupPanel({
         adAccountName={adAccountName}
         orgName={orgName}
       />
+      {/* AI Variations Modal */}
+      <Dialog open={showAiVariations} onOpenChange={setShowAiVariations}>
+        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <IconSparkles className="size-4 text-primary" />
+              AI Variations
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Source text preview */}
+          <div className="bg-muted/40 rounded-lg px-3 py-2 text-xs text-muted-foreground border shrink-0">
+            <span className="font-medium text-foreground">Source: </span>
+            {primaryTexts[0]?.slice(0, 120)}{(primaryTexts[0]?.length ?? 0) > 120 ? "…" : ""}
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+            {loadingAiVariations ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <IconLoader2 className="size-7 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Generating variations...</p>
+              </div>
+            ) : aiVariationsError ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                <IconAlertCircle className="size-7 text-destructive/50" />
+                <p className="text-sm text-muted-foreground">{aiVariationsError}</p>
+                <Button size="sm" variant="outline" onClick={handleOpenAiVariations}>Try again</Button>
+              </div>
+            ) : (
+              aiVariations.map((v, i) => (
+                <div key={i} className="border rounded-xl p-3.5 space-y-2 bg-card">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      {v.angle}
+                    </span>
+                    {addedVariations.has(i) && (
+                      <span className="flex items-center gap-1 text-xs text-green-600 font-medium">
+                        <IconCheck className="size-3" />Added
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm leading-relaxed">{v.text}</p>
+                  <div className="flex gap-2 pt-1">
+                    <Button size="sm" variant="outline" className="text-xs gap-1.5 flex-1"
+                      onClick={() => handleAddVariation(v.text, i)}>
+                      <IconPlus className="size-3" />Add
+                    </Button>
+                    <Button size="sm" variant="outline" className="text-xs gap-1.5 flex-1"
+                      onClick={() => handleReplaceWithVariation(v.text, i)}>
+                      <IconRefresh className="size-3" />Replace
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <AdCopyTemplateModal
         open={copyTemplateOpen}
         onClose={() => setCopyTemplateOpen(false)}
@@ -9794,7 +9893,14 @@ function AdSetupPanel({
               {primaryTexts.length > 1 && <span className="ml-1 text-muted-foreground">({primaryTexts.length - 1} additional)</span>}
             </button>
             <span className="text-muted-foreground/40">|</span>
-            <button className="text-xs text-primary hover:underline">AI Variations</button>
+            <button
+              className="text-xs text-primary hover:underline flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+              onClick={handleOpenAiVariations}
+              disabled={!primaryTexts[0]?.trim()}
+            >
+              <IconSparkles className="size-3" />
+              AI Variations
+            </button>
           </div>
         </div>
 
