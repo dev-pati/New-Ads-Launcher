@@ -6,6 +6,8 @@ import fs from "fs"
 import path from "path"
 import os from "os"
 
+export const maxDuration = 300
+
 const OUTPUT_SCHEMA = `{
   "product_name": "name of the product/service",
   "target_audience": "who this is for",
@@ -129,10 +131,12 @@ export async function POST(request: NextRequest) {
       if (!url?.trim()) return NextResponse.json({ error: "Video URL is required" }, { status: 400 })
 
       // Fetch video from Supabase storage
-      const videoRes = await fetch(url, { signal: AbortSignal.timeout(30000) })
+      const videoRes = await fetch(url, { signal: AbortSignal.timeout(120000) })
       if (!videoRes.ok) return NextResponse.json({ error: "Failed to fetch video." }, { status: 400 })
 
-      const contentType = videoRes.headers.get("content-type") || "video/mp4"
+      const rawContentType = videoRes.headers.get("content-type") || "video/mp4"
+      // Supabase may return content-type with params like "video/mp4; charset=..."
+      const contentType = rawContentType.split(";")[0].trim() || "video/mp4"
       const ext = contentType.includes("quicktime") ? "mov" : contentType.includes("webm") ? "webm" : "mp4"
       const buffer = Buffer.from(await videoRes.arrayBuffer())
       tmpPath = path.join(os.tmpdir(), `gen_video_${Date.now()}.${ext}`)
@@ -171,7 +175,8 @@ export async function POST(request: NextRequest) {
     if (err instanceof SyntaxError) {
       return NextResponse.json({ error: "Failed to parse AI response. Please try again." }, { status: 500 })
     }
-    return NextResponse.json({ error: "Generation failed. Please try again." }, { status: 500 })
+    const msg = err instanceof Error ? err.message : "Generation failed."
+    return NextResponse.json({ error: msg }, { status: 500 })
   } finally {
     if (tmpPath) { try { fs.unlinkSync(tmpPath) } catch { } }
   }

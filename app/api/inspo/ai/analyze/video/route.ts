@@ -6,6 +6,8 @@ import fs from "fs"
 import path from "path"
 import os from "os"
 
+export const maxDuration = 300
+
 const ANALYSIS_SCHEMA = `{
   "hook": {
     "text": "the opening hook (first 3 seconds visual/audio)",
@@ -42,10 +44,11 @@ Return ONLY valid JSON (no markdown, no code blocks):
 ${ANALYSIS_SCHEMA}`
 
 async function fetchAndWriteTemp(videoUrl: string): Promise<{ tmpPath: string; mimeType: string }> {
-  const res = await fetch(videoUrl, { signal: AbortSignal.timeout(30000) })
+  const res = await fetch(videoUrl, { signal: AbortSignal.timeout(120000) })
   if (!res.ok) throw new Error(`Failed to fetch video: ${res.status}`)
 
-  const contentType = res.headers.get("content-type") || "video/mp4"
+  const rawContentType = res.headers.get("content-type") || "video/mp4"
+  const contentType = rawContentType.split(";")[0].trim() || "video/mp4"
   const ext = contentType.includes("quicktime") ? "mov"
     : contentType.includes("webm") ? "webm"
     : "mp4"
