@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
     const token = connection.access_token
 
     const res = await fetch(
-      `${GRAPH}/${accountPath}/automation_rules?fields=${RULE_FIELDS}&limit=50&access_token=${token}`
+      `${GRAPH}/${accountPath}/adrules_library?fields=${RULE_FIELDS}&limit=50&access_token=${token}`
     )
     const data = await res.json()
 
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       status: "ENABLED",
     })
 
-    const res = await fetch(`${GRAPH}/${accountPath}/automation_rules`, {
+    const res = await fetch(`${GRAPH}/${accountPath}/adrules_library`, {
       method: "POST",
       body: params,
     })

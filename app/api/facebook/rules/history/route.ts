@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     // First get all rules, then get history for each
     const rulesRes = await fetch(
-      `${GRAPH}/${accountPath}/automation_rules?fields=id,name,status&limit=50&access_token=${token}`
+      `${GRAPH}/${accountPath}/adrules_library?fields=id,name,status&limit=50&access_token=${token}`
     )
     const rulesData = await rulesRes.json()
     if (rulesData.error) return NextResponse.json({ error: rulesData.error.message }, { status: 400 })
