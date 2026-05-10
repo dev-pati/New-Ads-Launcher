@@ -127,20 +127,22 @@ const MCP_TOOLS = [
 
 // ─── MCP Tab ─────────────────────────────────────────────────────────────────
 
+type SetupMethod = "web" | "desktop"
+
 function McpTab() {
   const [keys, setKeys] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [newKey, setNewKey] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [copied, setCopied] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [showConnectModal, setShowConnectModal] = useState(false)
+  const [showSetupModal, setShowSetupModal] = useState(false)
+  const [setupMethod, setSetupMethod] = useState<SetupMethod>("web")
 
   const mcpUrl = typeof window !== "undefined"
     ? `${window.location.origin}/api/mcp`
-    : "/api/mcp"
+    : "https://www.sonkieu.site/api/mcp"
 
   const fetchKeys = useCallback(async () => {
     setLoading(true)
@@ -176,15 +178,10 @@ function McpTab() {
     finally { setDeletingId(null) }
   }
 
-  function copyText(text: string, field?: string) {
+  function copyText(text: string, field: string) {
     navigator.clipboard.writeText(text)
-    if (field) {
-      setCopiedField(field)
-      setTimeout(() => setCopiedField(null), 2000)
-    } else {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
+    setCopied(field)
+    setTimeout(() => setCopied(null), 2000)
   }
 
   const displayKey = newKey || keys[0]?.api_key
@@ -199,110 +196,151 @@ function McpTab() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      {/* Connect with Claude.ai modal */}
-      {showConnectModal && displayKey && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      {/* Setup modal */}
+      {showSetupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-background rounded-2xl shadow-2xl border w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
             <div className="flex items-center justify-between px-6 py-4 border-b">
-              <div className="flex items-center gap-3">
-                <div className="size-8 rounded-lg bg-[#D97757]/10 flex items-center justify-center">
-                  <svg viewBox="0 0 24 24" className="size-5 fill-[#D97757]"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z"/></svg>
-                </div>
-                <h2 className="font-semibold text-base">Connect to Claude.ai</h2>
-              </div>
-              <button onClick={() => setShowConnectModal(false)} className="text-muted-foreground hover:text-foreground">
+              <h2 className="font-semibold text-base">Setup Guide</h2>
+              <button onClick={() => setShowSetupModal(false)} className="text-muted-foreground hover:text-foreground">
                 <IconX className="size-5" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              <p className="text-sm text-muted-foreground">
-                Làm theo 3 bước dưới đây. Mỗi bước có nút copy — chỉ cần paste vào Claude.ai là xong.
-              </p>
-
-              {/* Step 1 */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">1</span>
-                  <p className="text-sm font-medium">Mở trang Integrations của Claude.ai</p>
-                </div>
-                <div className="ml-8">
-                  <Button
-                    size="sm"
-                    className="gap-2 text-xs"
-                    onClick={() => window.open("https://claude.ai/settings/integrations", "_blank")}
-                  >
-                    <IconExternalLink className="size-3.5" />
-                    Mở Claude.ai → Settings → Integrations
-                  </Button>
-                  <p className="text-xs text-muted-foreground mt-1.5">Bấm <strong>"Add Integration"</strong> hoặc <strong>"Add custom integration"</strong></p>
-                </div>
-              </div>
-
-              {/* Step 2 */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">2</span>
-                  <p className="text-sm font-medium">Điền URL của MCP Server</p>
-                </div>
-                <div className="ml-8 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs bg-muted border rounded-lg px-3 py-2 font-mono">{mcpUrl}</code>
-                    <Button size="sm" variant="outline" className="shrink-0 gap-1.5 text-xs h-8"
-                      onClick={() => copyText(mcpUrl, "url")}>
-                      <IconCopy className="size-3.5" />
-                      {copiedField === "url" ? "Copied!" : "Copy"}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Paste vào ô <strong>Integration URL</strong></p>
-                </div>
-              </div>
-
-              {/* Step 3 */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">3</span>
-                  <p className="text-sm font-medium">Thêm API Key vào header</p>
-                </div>
-                <div className="ml-8 space-y-1.5">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Header name:</p>
-                      <div className="flex items-center gap-1.5">
-                        <code className="flex-1 text-xs bg-muted border rounded-lg px-2 py-1.5 font-mono">Authorization</code>
-                        <Button size="sm" variant="outline" className="shrink-0 px-2 h-7"
-                          onClick={() => copyText("Authorization", "hname")}>
-                          <IconCopy className="size-3" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Header value:</p>
-                      <div className="flex items-center gap-1.5">
-                        <code className="flex-1 text-xs bg-muted border rounded-lg px-2 py-1.5 font-mono truncate">Bearer {displayKey.slice(0, 12)}...</code>
-                        <Button size="sm" variant="outline" className="shrink-0 px-2 h-7"
-                          onClick={() => copyText(`Bearer ${displayKey}`, "hval")}>
-                          <IconCopy className="size-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  {copiedField === "hval" && (
-                    <p className="text-xs text-green-600 dark:text-green-400">✅ Copied full header value!</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">Paste vào phần <strong>Custom headers</strong> của integration form</p>
-                </div>
-              </div>
-
-              {/* Done */}
-              <div className="flex items-start gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 text-sm text-green-700 dark:text-green-400">
-                <IconCheck className="size-4 shrink-0 mt-0.5" />
-                <span>Sau khi save, mở chat mới trong Claude.ai và thử: <em>"Show me my ad accounts"</em></span>
+            {/* Method switcher */}
+            <div className="px-6 pt-5">
+              <div className="flex gap-1 p-1 rounded-lg bg-muted w-full">
+                <button
+                  className={cn("flex-1 text-xs font-medium py-2 rounded-md transition-colors", setupMethod === "web" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                  onClick={() => setSetupMethod("web")}
+                >
+                  Claude.ai Web (OAuth)
+                </button>
+                <button
+                  className={cn("flex-1 text-xs font-medium py-2 rounded-md transition-colors", setupMethod === "desktop" ? "bg-background shadow-sm" : "text-muted-foreground hover:text-foreground")}
+                  onClick={() => setSetupMethod("desktop")}
+                >
+                  Claude Desktop
+                </button>
               </div>
             </div>
 
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {setupMethod === "web" ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Kết nối Claude.ai web với AdLauncher qua OAuth. Không cần nhập API key thủ công — Claude sẽ tự xác thực.
+                  </p>
+
+                  {/* Step 1 */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">1</span>
+                      <p className="text-sm font-medium">Mở Claude.ai Integrations</p>
+                    </div>
+                    <div className="ml-8">
+                      <Button size="sm" className="gap-2 text-xs" onClick={() => window.open("https://claude.ai/settings/integrations", "_blank")}>
+                        <IconExternalLink className="size-3.5" />
+                        claude.ai → Settings → Integrations
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-1.5">Bấm <strong>"Add Integration"</strong></p>
+                    </div>
+                  </div>
+
+                  {/* Step 2 */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">2</span>
+                      <p className="text-sm font-medium">Copy và paste URL này vào ô Integration URL</p>
+                    </div>
+                    <div className="ml-8">
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 text-xs bg-muted border rounded-lg px-3 py-2 font-mono break-all">{mcpUrl}</code>
+                        <Button size="sm" variant="outline" className="shrink-0 gap-1.5 text-xs h-8" onClick={() => copyText(mcpUrl, "modal-url")}>
+                          <IconCopy className="size-3.5" />
+                          {copied === "modal-url" ? "Copied!" : "Copy"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Step 3 */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">3</span>
+                      <p className="text-sm font-medium">Click Connect — Claude sẽ chuyển bạn sang trang authorize</p>
+                    </div>
+                    <div className="ml-8">
+                      <p className="text-xs text-muted-foreground">Bấm <strong>Authorize</strong> để cấp quyền truy cập. Xong!</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 text-sm text-green-700 dark:text-green-400">
+                    <IconCheck className="size-4 shrink-0 mt-0.5" />
+                    <span>Sau khi xong, thử trong Claude: <em>"Show me my ad accounts"</em></span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Dùng cho Claude Desktop app. Cần tạo API key rồi thêm vào config file.
+                  </p>
+
+                  {!displayKey && (
+                    <div className="flex items-center gap-3 p-4 rounded-lg border bg-muted/30">
+                      <IconKey className="size-5 text-muted-foreground shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">Chưa có API key</p>
+                        <p className="text-xs text-muted-foreground">Tạo key ở phần bên dưới trước</p>
+                      </div>
+                      <Button size="sm" onClick={() => { setShowSetupModal(false); generateKey() }} disabled={generating}>
+                        {generating ? <IconLoader2 className="size-3.5 animate-spin mr-1" /> : null}
+                        Tạo key
+                      </Button>
+                    </div>
+                  )}
+
+                  {claudeConfig && (
+                    <>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">1</span>
+                          <p className="text-sm font-medium">Copy config này</p>
+                        </div>
+                        <div className="ml-8">
+                          <div className="relative">
+                            <pre className="text-xs bg-muted/50 rounded-lg p-4 overflow-x-auto font-mono leading-relaxed border">{claudeConfig}</pre>
+                            <Button size="sm" variant="outline" className="absolute top-2 right-2 gap-1.5 text-xs h-7" onClick={() => copyText(claudeConfig, "cfg")}>
+                              <IconCopy className="size-3" />
+                              {copied === "cfg" ? "Copied!" : "Copy"}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="size-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center shrink-0">2</span>
+                          <p className="text-sm font-medium">Paste vào file config của Claude Desktop</p>
+                        </div>
+                        <div className="ml-8 text-xs text-muted-foreground space-y-1">
+                          <p><strong className="text-foreground">macOS:</strong> <code className="bg-muted px-1 rounded">~/Library/Application Support/Claude/claude_desktop_config.json</code></p>
+                          <p><strong className="text-foreground">Windows:</strong> <code className="bg-muted px-1 rounded">%APPDATA%\Claude\claude_desktop_config.json</code></p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 text-sm text-green-700 dark:text-green-400">
+                        <IconCheck className="size-4 shrink-0 mt-0.5" />
+                        <span>Restart Claude Desktop, thử: <em>"Show me my ad accounts"</em></span>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+
             <div className="px-6 py-4 border-t flex justify-end">
-              <Button variant="outline" onClick={() => setShowConnectModal(false)}>Đóng</Button>
+              <Button variant="outline" onClick={() => setShowSetupModal(false)}>Đóng</Button>
             </div>
           </div>
         </div>
@@ -321,22 +359,53 @@ function McpTab() {
                 Kết nối Claude với Facebook Ads data của bạn. Hỏi, phân tích, và thực hiện action bằng ngôn ngữ tự nhiên.
               </p>
             </div>
-            {displayKey && (
-              <Button
-                size="sm"
-                className="gap-2 shrink-0"
-                onClick={() => setShowConnectModal(true)}
-              >
-                <IconExternalLink className="size-4" />
-                Connect với Claude.ai
-              </Button>
-            )}
+            <Button size="sm" className="gap-2 shrink-0" onClick={() => setShowSetupModal(true)}>
+              <IconExternalLink className="size-4" />
+              Setup Guide
+            </Button>
           </div>
           <div className="flex items-center gap-2 mt-2">
             <span className="size-2 rounded-full bg-green-500 inline-block" />
             <span className="text-xs text-green-600 dark:text-green-400 font-medium">Server Online</span>
-            <span className="text-xs text-muted-foreground ml-2 font-mono">{mcpUrl}</span>
+            <div className="flex items-center gap-1 ml-2">
+              <code className="text-xs text-muted-foreground font-mono">{mcpUrl}</code>
+              <button className="text-muted-foreground hover:text-foreground transition-colors" onClick={() => copyText(mcpUrl, "header-url")}>
+                <IconCopy className="size-3" />
+              </button>
+              {copied === "header-url" && <span className="text-xs text-green-600 dark:text-green-400">Copied!</span>}
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* Quick connect row */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="border rounded-xl p-4 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <div className="size-7 rounded-lg bg-[#D97757]/10 flex items-center justify-center">
+              <svg viewBox="0 0 24 24" className="size-4 fill-[#D97757]"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8z"/></svg>
+            </div>
+            <span className="text-sm font-medium">Claude.ai Web</span>
+            <span className="text-xs bg-green-500/10 text-green-700 dark:text-green-400 px-1.5 py-0.5 rounded font-medium">OAuth</span>
+          </div>
+          <p className="text-xs text-muted-foreground">Dùng OAuth — không cần copy API key, tự động authorize.</p>
+          <Button size="sm" className="w-full gap-2 text-xs" onClick={() => { setSetupMethod("web"); setShowSetupModal(true) }}>
+            <IconExternalLink className="size-3.5" />
+            Xem hướng dẫn
+          </Button>
+        </div>
+        <div className="border rounded-xl p-4 space-y-2.5">
+          <div className="flex items-center gap-2">
+            <div className="size-7 rounded-lg bg-muted flex items-center justify-center">
+              <IconCode className="size-4 text-muted-foreground" />
+            </div>
+            <span className="text-sm font-medium">Claude Desktop</span>
+          </div>
+          <p className="text-xs text-muted-foreground">Dùng API key + config file cho Claude Desktop app.</p>
+          <Button size="sm" variant="outline" className="w-full gap-2 text-xs" onClick={() => { setSetupMethod("desktop"); setShowSetupModal(true) }}>
+            <IconCode className="size-3.5" />
+            Xem hướng dẫn
+          </Button>
         </div>
       </div>
 
@@ -346,27 +415,24 @@ function McpTab() {
           <div className="flex items-center gap-2">
             <IconKey className="size-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">API Keys</h3>
+            <span className="text-xs text-muted-foreground">(cho Claude Desktop)</span>
           </div>
           <Button size="sm" className="gap-1.5 text-xs" onClick={generateKey} disabled={generating}>
-            {generating
-              ? <IconLoader2 className="size-3.5 animate-spin" />
-              : <IconPlus className="size-3.5" />
-            }
+            {generating ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconPlus className="size-3.5" />}
             Generate Key
           </Button>
         </div>
 
-        {/* New key banner */}
         {newKey && (
           <div className="px-5 py-4 bg-green-50 dark:bg-green-950/20 border-b border-green-200 dark:border-green-900">
             <p className="text-xs font-medium text-green-700 dark:text-green-400 mb-2">
-              ✅ Key generated — copy it now, it won't be shown again in full.
+              ✅ Key generated — copy ngay, sẽ không hiển thị đầy đủ sau này.
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-background border rounded-lg px-3 py-2 font-mono break-all">{newKey}</code>
-              <Button size="sm" variant="outline" className="shrink-0 gap-1.5 text-xs" onClick={() => copyText(newKey)}>
+              <Button size="sm" variant="outline" className="shrink-0 gap-1.5 text-xs" onClick={() => copyText(newKey, "newkey")}>
                 <IconCopy className="size-3.5" />
-                {copied ? "Copied!" : "Copy"}
+                {copied === "newkey" ? "Copied!" : "Copy"}
               </Button>
             </div>
           </div>
@@ -385,7 +451,7 @@ function McpTab() {
         ) : keys.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <IconKey className="size-8 text-muted-foreground/30 mb-2" />
-            <p className="text-sm text-muted-foreground">No API keys yet. Generate one to connect Claude.</p>
+            <p className="text-sm text-muted-foreground">Chưa có API key. Generate key nếu muốn dùng Claude Desktop.</p>
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -413,10 +479,7 @@ function McpTab() {
                   </td>
                   <td className="px-5 py-3 text-right">
                     <button onClick={() => deleteKey(k.id)} disabled={deletingId === k.id} className="text-muted-foreground hover:text-destructive transition-colors">
-                      {deletingId === k.id
-                        ? <IconLoader2 className="size-4 animate-spin" />
-                        : <IconTrash className="size-4" />
-                      }
+                      {deletingId === k.id ? <IconLoader2 className="size-4 animate-spin" /> : <IconTrash className="size-4" />}
                     </button>
                   </td>
                 </tr>
@@ -425,30 +488,6 @@ function McpTab() {
           </table>
         )}
       </div>
-
-      {/* Claude Desktop config */}
-      {claudeConfig && (
-        <div className="border rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3.5 border-b bg-muted/20">
-            <div className="flex items-center gap-2">
-              <IconCode className="size-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Claude Desktop Config</h3>
-            </div>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => copyText(claudeConfig)}>
-              <IconCopy className="size-3.5" />{copied ? "Copied!" : "Copy"}
-            </Button>
-          </div>
-          <div className="p-5">
-            <p className="text-xs text-muted-foreground mb-3">
-              Add this to your <code className="bg-muted px-1 py-0.5 rounded text-xs">claude_desktop_config.json</code> file:
-            </p>
-            <pre className="text-xs bg-muted/50 rounded-lg p-4 overflow-x-auto font-mono leading-relaxed border">{claudeConfig}</pre>
-            <p className="text-xs text-muted-foreground mt-3">
-              Config file location: <code className="bg-muted px-1 py-0.5 rounded">~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) or <code className="bg-muted px-1 py-0.5 rounded">%APPDATA%\Claude\claude_desktop_config.json</code> (Windows)
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Available tools */}
       <div className="border rounded-xl overflow-hidden">

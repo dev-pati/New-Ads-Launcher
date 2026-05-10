@@ -153,35 +153,58 @@ const TOOLS = [
 
 // ─── Auth helper ────────────────────────────────────────────────────────────
 
-async function resolveApiKey(apiKey: string) {
+async function getFbToken(orgId: string) {
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from("mcp_api_keys")
-    .select("id, org_id, user_id")
-    .eq("api_key", apiKey)
-    .single()
-
-  if (error || !data) return null
-
-  // Update last_used_at
-  await admin
-    .from("mcp_api_keys")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", data.id)
-
-  // Get Facebook connection
   const { data: conn } = await admin
     .from("facebook_connections")
-    .select("access_token, fb_user_name")
-    .eq("org_id", data.org_id)
+    .select("access_token")
+    .eq("org_id", orgId)
     .eq("is_active", true)
     .order("updated_at", { ascending: false })
     .limit(1)
     .single()
+  return conn?.access_token || null
+}
 
-  if (!conn?.access_token) return null
+async function resolveApiKey(bearer: string) {
+  const admin = createAdminClient()
 
-  return { orgId: data.org_id, userId: data.user_id, token: conn.access_token }
+  // OAuth token (mcp_xxx)
+  if (bearer.startsWith("mcp_")) {
+    const { data, error } = await admin
+      .from("mcp_oauth_tokens")
+      .select("id, org_id, user_id, expires_at")
+      .eq("access_token", bearer)
+      .single()
+
+    if (error || !data) return null
+    if (new Date(data.expires_at) < new Date()) return null
+
+    await admin.from("mcp_oauth_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", data.id)
+
+    const fbToken = await getFbToken(data.org_id)
+    if (!fbToken) return null
+    return { orgId: data.org_id, userId: data.user_id, token: fbToken }
+  }
+
+  // API key (al_xxx)
+  if (bearer.startsWith("al_")) {
+    const { data, error } = await admin
+      .from("mcp_api_keys")
+      .select("id, org_id, user_id")
+      .eq("api_key", bearer)
+      .single()
+
+    if (error || !data) return null
+
+    await admin.from("mcp_api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", data.id)
+
+    const fbToken = await getFbToken(data.org_id)
+    if (!fbToken) return null
+    return { orgId: data.org_id, userId: data.user_id, token: fbToken }
+  }
+
+  return null
 }
 
 // ─── Tool executors ──────────────────────────────────────────────────────────
@@ -381,8 +404,8 @@ export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization") || ""
   const apiKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : ""
 
-  if (!apiKey || !apiKey.startsWith("al_")) {
-    return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Missing or invalid API key. Use Authorization: Bearer al_..." } }, { status: 401 })
+  if (!apiKey || (!apiKey.startsWith("al_") && !apiKey.startsWith("mcp_"))) {
+    return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Missing or invalid token. Use Authorization: Bearer <api_key_or_oauth_token>" } }, { status: 401 })
   }
 
   let body: any
