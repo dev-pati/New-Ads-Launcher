@@ -137,21 +137,21 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
     Promise.all([
       supabase
         .from("launch_batches")
-        .select("id, successful_ads")
+        .select("id, total_ads, failed_ads")
         .eq("org_id", activeOrg.id)
         .gte("created_at", since),
       supabase
         .from("inspo_saved_ads")
-        .select("id", { count: "exact", head: true })
+        .select("id")
         .eq("org_id", activeOrg.id)
         .gte("created_at", since),
     ]).then(([batchRes, savedRes]) => {
       const batches = batchRes.data || []
-      const ads = batches.reduce((sum: number, b: any) => sum + (b.successful_ads || 0), 0)
+      const ads = batches.reduce((sum: number, b: any) => sum + ((b.total_ads || 0) - (b.failed_ads || 0)), 0)
       setLaunchStats({
         ads,
         batches: batches.length,
-        saved: savedRes.count ?? 0,
+        saved: (savedRes.data || []).length,
       })
     })
   }, [activeOrg?.id])
