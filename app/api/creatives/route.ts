@@ -182,6 +182,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save creative" }, { status: 500 })
     }
 
+    const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
+    notifyOrgMembers({
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName,
+      type: "asset_uploaded",
+      title: `${actorName} uploaded "${file.name}"`,
+      link: "/assets",
+    }).catch(() => {})
+
     return NextResponse.json({ creative }, { status: 201 })
   } catch (err: any) {
     console.error("Failed to create creative:", err)

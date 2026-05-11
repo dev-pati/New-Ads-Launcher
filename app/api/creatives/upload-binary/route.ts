@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
+import { notifyOrgMembers } from "@/lib/notify-org"
 
 // Large media upload via raw binary body (avoids FormData parser limits).
 // Client sends file as raw body, metadata via URL params + headers.
@@ -123,6 +124,17 @@ export async function POST(request: NextRequest) {
       console.error("[upload-binary] DB insert error:", insertError)
       return NextResponse.json({ error: "Failed to save creative" }, { status: 500 })
     }
+
+    const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
+    notifyOrgMembers({
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName,
+      type: "asset_uploaded",
+      title: `${actorName} uploaded "${filename}"`,
+      body: mediaType === "video" ? "Video" : "Image",
+      link: "/assets",
+    }).catch(() => {})
 
     return NextResponse.json({ creative }, { status: 201 })
   } catch (err: any) {
