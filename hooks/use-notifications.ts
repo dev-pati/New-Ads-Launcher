@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useOrg } from "@/lib/org-context"
 
@@ -19,7 +19,6 @@ export function useNotifications() {
   const { activeOrg } = useOrg()
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [loading, setLoading] = useState(false)
-  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null)
 
   const fetchNotifications = useCallback(async () => {
     if (!activeOrg?.id) return
@@ -40,51 +39,12 @@ export function useNotifications() {
     fetchNotifications()
   }, [fetchNotifications])
 
-  // Poll every 30s as the reliable update mechanism
+  // Poll every 30s
   useEffect(() => {
     if (!activeOrg?.id) return
     const interval = setInterval(fetchNotifications, 30_000)
     return () => clearInterval(interval)
   }, [activeOrg?.id, fetchNotifications])
-
-  // Realtime for instant updates — guard against double-subscribe (React StrictMode)
-  useEffect(() => {
-    if (!activeOrg?.id) return
-
-    // Tear down any existing channel before creating a new one
-    const supabase = createClient()
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
-      channelRef.current = null
-    }
-
-    const channel = supabase
-      .channel(`notif_${activeOrg.id}_${Math.random()}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `org_id=eq.${activeOrg.id}` },
-        (payload) => {
-          setNotifications(prev => [payload.new as AppNotification, ...prev].slice(0, 30))
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "notifications", filter: `org_id=eq.${activeOrg.id}` },
-        (payload) => {
-          setNotifications(prev =>
-            prev.map(n => n.id === payload.new.id ? { ...n, ...(payload.new as AppNotification) } : n)
-          )
-        }
-      )
-      .subscribe()
-
-    channelRef.current = channel
-
-    return () => {
-      supabase.removeChannel(channel)
-      channelRef.current = null
-    }
-  }, [activeOrg?.id])
 
   const markRead = useCallback(async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
