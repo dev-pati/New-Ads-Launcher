@@ -10235,15 +10235,12 @@ function AdSetupPanel({
               {(adSourceMode === "post_id" || adSourceMode === "creative_id") && (
                 <div className="px-2 pb-2 space-y-1.5">
                   {selectedCreatives.map(c => {
-                    const thumb = c.fb_thumbnail_url || c.fb_image_url || c.file_url
                     const val = adSourceIds[c.id] || ""
                     const isResolved = !!val
                     return (
                       <div key={c.id} className="flex items-center gap-2">
                         <div className="relative size-8 rounded overflow-hidden bg-muted shrink-0">
-                          {thumb
-                            ? <img src={thumb} alt="" className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center"><IconVideo className="size-3 text-muted-foreground/40" /></div>}
+                          <CreativeCardMedia creative={c} compact className="w-full h-full object-cover" />
                           {isResolved && (
                             <div className="absolute inset-0 bg-green-500/20 flex items-end justify-end p-0.5">
                               <div className="size-3 rounded-full bg-green-500 flex items-center justify-center">
@@ -10274,14 +10271,11 @@ function AdSetupPanel({
               {adSourceMode === "new_ad" && (
                 <div className="px-3 pb-3 flex gap-2 flex-wrap">
                   {selectedCreatives.map(c => {
-                    const thumb = c.fb_thumbnail_url || c.fb_image_url || c.file_url
                     const ready = !!(c.fb_video_id || c.fb_image_hash)
                     return (
                       <div key={c.id} className="relative" title={c.file_name}>
                         <div className="size-10 rounded overflow-hidden bg-muted border">
-                          {thumb
-                            ? <img src={thumb} alt="" className="w-full h-full object-cover" />
-                            : <div className="w-full h-full flex items-center justify-center"><IconVideo className="size-3 text-muted-foreground/40" /></div>}
+                          <CreativeCardMedia creative={c} compact className="w-full h-full object-cover" />
                         </div>
                         <div className={cn(
                           "absolute -bottom-1 -right-1 size-3.5 rounded-full border border-background flex items-center justify-center",
