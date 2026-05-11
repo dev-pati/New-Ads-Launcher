@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { notifyOrgMembers } from "@/lib/notify-org"
 
 export async function GET(request: NextRequest) {
   try {
@@ -59,6 +60,17 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
+    notifyOrgMembers({
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName,
+      type: "template_created",
+      title: `${actorName} created template "${name.trim()}"`,
+      link: "/templates",
+    }).catch(() => {})
+
     return NextResponse.json({ template: data }, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

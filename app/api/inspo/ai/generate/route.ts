@@ -72,6 +72,32 @@ Rules:
 - Pick the most relevant CTA based on video content`
 }
 
+function buildCombinedPrompt(urlContent: string, url: string, transcript: string) {
+  return `You are an expert Meta/Facebook direct response copywriter.
+
+You have access to BOTH the landing page content AND the video transcript for this product/service.
+Synthesize insights from both sources to create the most compelling, accurate ad copy.
+
+Landing Page URL: ${url}
+Landing Page Content:
+${urlContent}
+
+Video Transcript:
+${transcript}
+
+Write in the SAME LANGUAGE as the content (Vietnamese if Vietnamese, English if English).
+
+Return ONLY valid JSON (no markdown, no code blocks):
+${OUTPUT_SCHEMA}
+
+CTA options: ${CTA_OPTIONS}
+Rules:
+- Primary texts: 100-300 words each, combine messaging from BOTH landing page and video
+- Headlines: punchy, benefit-driven, max 40 characters
+- Descriptions: short supporting copy, max 30 characters
+- Pick the most relevant CTA`
+}
+
 function buildTranscriptPrompt(transcript: string) {
   return `You are an expert Meta/Facebook direct response copywriter.
 
@@ -114,7 +140,7 @@ export async function POST(request: NextRequest) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await request.json()
-    const { type, url } = body
+    const { type, url, videoUrl } = body
 
     if (type === "url") {
       if (!url?.trim()) return NextResponse.json({ error: "URL is required" }, { status: 400 })
@@ -224,8 +250,86 @@ export async function POST(request: NextRequest) {
       const generated = JSON.parse(result.response.text())
       return NextResponse.json({ generated })
 
+    } else if (type === "both") {
+      if (!url?.trim()) return NextResponse.json({ error: "URL is required" }, { status: 400 })
+      if (!videoUrl?.trim()) return NextResponse.json({ error: "Video URL is required" }, { status: 400 })
+
+      const [openaiKey, geminiKey] = await Promise.all([
+        getOpenAIApiKey(ctx.orgId),
+        getGeminiApiKey(ctx.orgId),
+      ])
+      if (!openaiKey && !geminiKey) {
+        return NextResponse.json({ error: "No AI key configured. Add one in Settings → AI Keys." }, { status: 503 })
+      }
+
+      // Fetch URL content + download video in parallel
+      let fetchUrl = url.trim()
+      if (!fetchUrl.startsWith("http")) fetchUrl = "https://" + fetchUrl
+
+      const [pageRes, videoRes] = await Promise.all([
+        fetch(fetchUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; AdLauncher/1.0)", "Accept": "text/html" },
+          signal: AbortSignal.timeout(10000),
+        }).catch(() => null),
+        fetch(videoUrl, { signal: AbortSignal.timeout(120000) }),
+      ])
+
+      const urlContent = pageRes?.ok ? extractTextFromHtml(await pageRes.text()) : ""
+
+      if (!videoRes.ok) return NextResponse.json({ error: "Failed to fetch video." }, { status: 400 })
+      const rawContentType = videoRes.headers.get("content-type") || "video/mp4"
+      const contentType = rawContentType.split(";")[0].trim() || "video/mp4"
+      const ext = contentType.includes("quicktime") ? "mov" : contentType.includes("webm") ? "webm" : "mp4"
+      const buffer = Buffer.from(await videoRes.arrayBuffer())
+      tmpPath = path.join(os.tmpdir(), `gen_both_${Date.now()}.${ext}`)
+      fs.writeFileSync(tmpPath, buffer)
+
+      // Transcribe video then combine with URL content
+      if (openaiKey) {
+        const openai = new OpenAI({ apiKey: openaiKey })
+        const transcription = await openai.audio.transcriptions.create({
+          file: fs.createReadStream(tmpPath) as Parameters<typeof openai.audio.transcriptions.create>[0]["file"],
+          model: "whisper-1",
+        })
+        const transcript = transcription.text?.trim() || ""
+        const prompt = urlContent
+          ? buildCombinedPrompt(urlContent, fetchUrl, transcript)
+          : buildTranscriptPrompt(transcript)
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [{ role: "user", content: prompt }],
+        })
+        const generated = JSON.parse(completion.choices[0].message.content || "{}")
+        return NextResponse.json({ generated })
+      }
+
+      // Gemini fallback — native video + URL content in prompt
+      const fileManager = new GoogleAIFileManager(geminiKey!)
+      const uploadResult = await fileManager.uploadFile(tmpPath, { mimeType: contentType, displayName: "ad_video" })
+      let geminiFile = await fileManager.getFile(uploadResult.file.name)
+      let attempts = 0
+      while (geminiFile.state === FileState.PROCESSING && attempts < 30) {
+        await new Promise(r => setTimeout(r, 3000))
+        geminiFile = await fileManager.getFile(uploadResult.file.name)
+        attempts++
+      }
+      if (geminiFile.state !== FileState.ACTIVE) {
+        return NextResponse.json({ error: "Video processing failed. Try MP4 format." }, { status: 500 })
+      }
+      const genAI = new GoogleGenerativeAI(geminiKey!)
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { responseMimeType: "application/json" } })
+      const urlNote = urlContent ? `\n\nAdditional context from landing page (${fetchUrl}):\n${urlContent}` : ""
+      const result = await model.generateContent([
+        { fileData: { fileUri: geminiFile.uri, mimeType: geminiFile.mimeType } },
+        { text: buildVideoPrompt() + urlNote },
+      ])
+      await fileManager.deleteFile(geminiFile.name).catch(() => {})
+      const generated = JSON.parse(result.response.text())
+      return NextResponse.json({ generated })
+
     } else {
-      return NextResponse.json({ error: "Invalid type. Use 'url' or 'video'." }, { status: 400 })
+      return NextResponse.json({ error: "Invalid type. Use 'url', 'video', or 'both'." }, { status: 400 })
     }
   } catch (err) {
     console.error("AI generate error:", err)

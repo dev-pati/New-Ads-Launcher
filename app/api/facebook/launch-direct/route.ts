@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -485,6 +486,19 @@ export async function POST(request: NextRequest) {
       console.error("[launch-direct] Failed to save launch batch:", batchErr)
     }
     const batchId: string | null = batchRecord?.id || null
+
+    // Notify teammates about the launch
+    if (created.length > 0) {
+      notifyOrgMembers({
+        orgId: ctx.orgId,
+        actorId: ctx.user.id,
+        actorName: userName,
+        type: "ad_launched",
+        title: `${userName} launched ${created.length} ad${created.length !== 1 ? "s" : ""}`,
+        body: adAccountName ? `on ${adAccountName}` : undefined,
+        link: batchId ? `/ads-manager?batch=${batchId}` : "/ads-manager",
+      }).catch(() => {})
+    }
 
     // Save scheduled activation record so cron job can activate at the right time
     if (scheduledStart && created.length > 0) {

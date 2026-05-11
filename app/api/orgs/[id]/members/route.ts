@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendInviteEmail, sendAddedToOrgEmail } from "@/lib/email"
+import { notifyOrgMembers } from "@/lib/notify-org"
 
 // List org members
 export async function GET(
@@ -126,6 +127,17 @@ export async function POST(
       } catch (emailErr) {
         console.error("Failed to send notification email:", emailErr)
       }
+
+      const inviterName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Someone"
+      notifyOrgMembers({
+        orgId,
+        actorId: existingUser.id,
+        actorName: email,
+        type: "member_joined",
+        title: `${email} joined the workspace`,
+        body: `Invited by ${inviterName}`,
+        link: "/settings",
+      }).catch(() => {})
 
       return NextResponse.json({ success: true, added: true })
     }

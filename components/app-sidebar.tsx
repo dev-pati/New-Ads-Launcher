@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useOrg } from "@/lib/org-context"
 import { useTheme } from "next-themes"
 import { useUserSettings } from "@/hooks/use-user-settings"
+import { useNotifications } from "@/hooks/use-notifications"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { cn } from "@/lib/utils"
 import {
   IconRocket,
@@ -120,7 +122,39 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
   const { resolvedTheme, setTheme } = useTheme()
   const { settings, updateSettings } = useUserSettings()
   const [collapsed, setCollapsed] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const { unreadCount } = useNotifications()
   const activeSection = getActiveSection(pathname)
+
+  const [launchStats, setLaunchStats] = useState<{ ads: number | null; batches: number | null; saved: number | null }>({
+    ads: null, batches: null, saved: null,
+  })
+
+  useEffect(() => {
+    if (!activeOrg?.id) return
+    const supabase = createClient()
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+    Promise.all([
+      supabase
+        .from("launch_batches")
+        .select("id, successful_ads")
+        .eq("org_id", activeOrg.id)
+        .gte("created_at", since),
+      supabase
+        .from("inspo_saved_ads")
+        .select("id", { count: "exact", head: true })
+        .eq("org_id", activeOrg.id)
+        .gte("created_at", since),
+    ]).then(([batchRes, savedRes]) => {
+      const batches = batchRes.data || []
+      const ads = batches.reduce((sum: number, b: any) => sum + (b.successful_ads || 0), 0)
+      setLaunchStats({
+        ads,
+        batches: batches.length,
+        saved: savedRes.count ?? 0,
+      })
+    })
+  }, [activeOrg?.id])
 
   useEffect(() => {
     if (settings?.theme && settings.theme !== "system") setTheme(settings.theme)
@@ -163,12 +197,21 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
           {!collapsed && (
-            <button
-              className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
-              title="Notifications"
-            >
-              <IconBell className="size-3.5" />
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setNotifOpen(v => !v)}
+                className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
+                title="Notifications"
+              >
+                <IconBell className="size-3.5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 size-3.5 rounded-full bg-red-500 text-[8px] font-bold text-white flex items-center justify-center leading-none">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
+              {notifOpen && <NotificationsDropdown onClose={() => setNotifOpen(false)} />}
+            </div>
           )}
           <button
             onClick={() => setCollapsed(!collapsed)}
@@ -235,15 +278,21 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
                       </p>
                       <div className="flex items-center gap-4">
                         <div>
-                          <div className="text-xs font-bold text-sidebar-foreground">—</div>
+                          <div className="text-xs font-bold text-sidebar-foreground">
+                            {launchStats.ads === null ? "—" : launchStats.ads.toLocaleString()}
+                          </div>
                           <div className="text-[9px] text-sidebar-foreground/45">Ads</div>
                         </div>
                         <div>
-                          <div className="text-xs font-bold text-sidebar-foreground">—</div>
+                          <div className="text-xs font-bold text-sidebar-foreground">
+                            {launchStats.batches === null ? "—" : launchStats.batches}
+                          </div>
                           <div className="text-[9px] text-sidebar-foreground/45">Batches</div>
                         </div>
                         <div>
-                          <div className="text-xs font-bold text-sidebar-foreground">—</div>
+                          <div className="text-xs font-bold text-sidebar-foreground">
+                            {launchStats.saved === null ? "—" : launchStats.saved}
+                          </div>
                           <div className="text-[9px] text-sidebar-foreground/45">Saved</div>
                         </div>
                       </div>

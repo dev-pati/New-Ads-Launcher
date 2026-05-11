@@ -9730,7 +9730,7 @@ function AdSetupPanel({
 
   // Generate from URL/Video state
   const [showGenerateModal, setShowGenerateModal] = useState(false)
-  const [genMode, setGenMode] = useState<"url" | "video">("url")
+  const [genMode, setGenMode] = useState<"url" | "video">("url") // kept for compat, unused
   const [genUrl, setGenUrl] = useState("")
   const [genCreative, setGenCreative] = useState<Creative | null>(null)
   const [generatingCopy, setGeneratingCopy] = useState(false)
@@ -9789,43 +9789,37 @@ function AdSetupPanel({
   }
 
   const handleGenerateCopy = async () => {
+    const hasUrl = !!genUrl.trim()
+    const hasVideo = !!genCreative
+    if (!hasUrl && !hasVideo) { setGenerateCopyError("Nhập URL hoặc chọn video để generate"); return }
     setGeneratingCopy(true)
     setGenerateCopyError(null)
     try {
-      if (genMode === "url") {
-        if (!genUrl.trim()) { setGenerateCopyError("Please enter a URL"); return }
+      let body: Record<string, string>
+      if (hasUrl && hasVideo) {
+        body = { type: "both", url: genUrl.trim(), videoUrl: genCreative!.file_url }
+        setGenerateCopyStep("Đang phân tích URL & video...")
+      } else if (hasUrl) {
+        body = { type: "url", url: genUrl.trim() }
         setGenerateCopyStep("Fetching page...")
-        const res = await fetch("/api/inspo/ai/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "url", url: genUrl.trim() }),
-        })
-        setGenerateCopyStep("Generating copy...")
-        const data = await res.json()
-        if (data.error) { setGenerateCopyError(data.error); return }
-        const g = data.generated
-        setPrimaryTexts(g.primary_texts.map((p: { text: string }) => p.text))
-        setHeadlines(g.headlines)
-        if (g.descriptions?.[0]) setDescription(g.descriptions[0])
-        if (g.cta) setCta(g.cta)
-        setWebLink(genUrl.trim())
       } else {
-        if (!genCreative) { setGenerateCopyError("Please select a video"); return }
+        body = { type: "video", url: genCreative!.file_url }
         setGenerateCopyStep("Uploading video...")
-        const res = await fetch("/api/inspo/ai/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: "video", url: genCreative.file_url }),
-        })
-        setGenerateCopyStep("Generating copy...")
-        const data = await res.json()
-        if (data.error) { setGenerateCopyError(data.error); return }
-        const g = data.generated
-        setPrimaryTexts(g.primary_texts.map((p: { text: string }) => p.text))
-        setHeadlines(g.headlines)
-        if (g.descriptions?.[0]) setDescription(g.descriptions[0])
-        if (g.cta) setCta(g.cta)
       }
+      const res = await fetch("/api/inspo/ai/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      setGenerateCopyStep("Generating copy...")
+      const data = await res.json()
+      if (data.error) { setGenerateCopyError(data.error); return }
+      const g = data.generated
+      setPrimaryTexts(g.primary_texts.map((p: { text: string }) => p.text))
+      setHeadlines(g.headlines)
+      if (g.descriptions?.[0]) setDescription(g.descriptions[0])
+      if (g.cta) setCta(g.cta)
+      if (hasUrl) setWebLink(genUrl.trim())
       setShowGenerateModal(false)
       setGenUrl("")
       setGenCreative(null)
@@ -9952,50 +9946,48 @@ function AdSetupPanel({
           </DialogHeader>
           <p className="text-xs text-muted-foreground -mt-2">AI sẽ tạo primary text, headline, description và CTA — tự điền vào các field bên dưới.</p>
 
-          {/* Mode switcher */}
-          <div className="flex gap-1 p-1 rounded-xl bg-muted w-fit">
-            {([
-              { id: "url",   label: "Landing Page", icon: IconWorld },
-              { id: "video", label: "Video",         icon: IconVideo },
-            ] as const).map(m => (
-              <button key={m.id} onClick={() => { setGenMode(m.id); setGenerateCopyError(null) }}
-                className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all",
-                  genMode === m.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}>
-                <m.icon className="size-3.5" />{m.label}
-              </button>
-            ))}
-          </div>
-
-          {/* URL input */}
-          {genMode === "url" && (
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Landing page URL</label>
-              <input
-                type="url"
-                value={genUrl}
-                onChange={e => { setGenUrl(e.target.value); setWebLink(e.target.value) }}
-                placeholder="https://example.com/product"
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50"
-                onKeyDown={e => e.key === "Enter" && handleGenerateCopy()}
-              />
+          {/* Combined mode badge */}
+          {genUrl.trim() && genCreative && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary font-medium w-fit">
+              <IconSparkles className="size-3.5" />Kết hợp URL + Video — kết quả tốt nhất
             </div>
           )}
 
-          {/* Video picker — from current session's selected ads */}
-          {genMode === "video" && (() => {
+          {/* URL input — always shown */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium flex items-center gap-1.5">
+              <IconWorld className="size-3.5 text-muted-foreground" />
+              Landing Page URL
+              <span className="text-muted-foreground/50 font-normal">(optional)</span>
+            </label>
+            <input
+              type="url"
+              value={genUrl}
+              onChange={e => { setGenUrl(e.target.value); setWebLink(e.target.value) }}
+              placeholder="https://example.com/product"
+              className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50"
+              onKeyDown={e => e.key === "Enter" && handleGenerateCopy()}
+            />
+          </div>
+
+          {/* Video picker — always shown */}
+          {(() => {
             const sessionVideos = selectedCreatives.filter(c => c.media_type === "video")
             return (
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground">Chọn video từ ads đã chọn</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium flex items-center gap-1.5">
+                  <IconVideo className="size-3.5 text-muted-foreground" />
+                  Video
+                  <span className="text-muted-foreground/50 font-normal">(optional)</span>
+                </label>
                 {sessionVideos.length === 0 ? (
-                  <div className="py-5 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
-                    Chưa có video nào trong danh sách. Thêm video vào ads trước.
+                  <div className="py-4 text-center text-xs text-muted-foreground border rounded-lg bg-muted/20">
+                    Chưa có video nào. Thêm video vào ads trước.
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-3 gap-2 max-h-44 overflow-y-auto">
                     {sessionVideos.map(c => (
-                      <button key={c.id} onClick={() => setGenCreative(c)}
+                      <button key={c.id} onClick={() => setGenCreative(genCreative?.id === c.id ? null : c)}
                         className={cn("relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-muted",
                           genCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
                         )}>
@@ -10011,7 +10003,9 @@ function AdSetupPanel({
                   </div>
                 )}
                 {genCreative && (
-                  <p className="text-xs text-muted-foreground">Đã chọn: <strong className="text-foreground">{genCreative.file_name}</strong></p>
+                  <p className="text-xs text-muted-foreground">Đã chọn: <strong className="text-foreground">{genCreative.file_name}</strong>
+                    <button onClick={() => setGenCreative(null)} className="ml-2 text-destructive hover:underline">Bỏ chọn</button>
+                  </p>
                 )}
               </div>
             )
@@ -10024,7 +10018,7 @@ function AdSetupPanel({
           )}
 
           <Button className="w-full gap-2" onClick={handleGenerateCopy}
-            disabled={generatingCopy || (genMode === "url" && !genUrl.trim()) || (genMode === "video" && !genCreative)}>
+            disabled={generatingCopy || (!genUrl.trim() && !genCreative)}>
             {generatingCopy
               ? <><IconLoader2 className="size-4 animate-spin" />{generateCopyStep || "Generating..."}</>
               : <><IconSparkles className="size-4" />Generate & Fill Fields</>
