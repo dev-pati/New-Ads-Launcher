@@ -23,7 +23,6 @@ export async function notifyOrgMembers({
       .from("org_members")
       .select("user_id")
       .eq("org_id", orgId)
-      .neq("user_id", actorId)
 
     if (!members || members.length === 0) return
 
