@@ -7187,9 +7187,9 @@ function DuplicateCampaignModal({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-2xl p-0 max-h-[92vh] overflow-y-auto gap-0">
+      <DialogContent className="max-w-3xl w-full p-0 max-h-[92vh] flex flex-col gap-0 overflow-hidden">
         {/* Header */}
-        <div className="px-5 py-4 border-b">
+        <div className="px-5 py-4 border-b shrink-0">
           <DialogTitle className="text-base font-semibold mb-3">Duplicate an existing campaign</DialogTitle>
           {/* Step indicator */}
           <div className="flex items-center justify-between gap-2">
@@ -7219,6 +7219,9 @@ function DuplicateCampaignModal({
             ))}
           </div>
         </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
 
         {/* STEP 1 — Duplicate Campaign */}
         {step === 1 && (
@@ -8013,8 +8016,10 @@ function DuplicateCampaignModal({
           </div>
         )}
 
+        </div>{/* end scrollable body */}
+
         {/* Footer */}
-        <div className="px-5 py-3 border-t flex items-center justify-between">
+        <div className="px-5 py-3 border-t flex items-center justify-between shrink-0">
           {step === 3 ? (
             <Button onClick={onClose} className="w-full h-10 bg-emerald-500 hover:bg-emerald-600 text-white">
               <IconCheck className="size-4 mr-1" />Done
@@ -9713,7 +9718,8 @@ function AdSetupPanel({
   adSourceIds: Record<string, string>
   setAdSourceIds: (v: Record<string, string>) => void
 }) {
-  const [showDesc, setShowDesc] = useState(false)
+  const [showDesc, setShowDesc] = useState(() => !!description)
+  useEffect(() => { if (description) setShowDesc(true) }, [description])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [copyTemplateOpen, setCopyTemplateOpen] = useState(false)
   const [showAiVariations, setShowAiVariations] = useState(false)
@@ -9726,9 +9732,7 @@ function AdSetupPanel({
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [genMode, setGenMode] = useState<"url" | "video">("url")
   const [genUrl, setGenUrl] = useState("")
-  const [genCreatives, setGenCreatives] = useState<Creative[]>([])
   const [genCreative, setGenCreative] = useState<Creative | null>(null)
-  const [loadingGenCreatives, setLoadingGenCreatives] = useState(false)
   const [generatingCopy, setGeneratingCopy] = useState(false)
   const [generateCopyStep, setGenerateCopyStep] = useState("")
   const [generateCopyError, setGenerateCopyError] = useState<string | null>(null)
@@ -9779,18 +9783,9 @@ function AdSetupPanel({
   const addHeadline = () => setHeadlines([...headlines, ""])
   const removeHeadline = (idx: number) => setHeadlines(headlines.filter((_, i) => i !== idx))
 
-  const openGenerateModal = async () => {
+  const openGenerateModal = () => {
     setShowGenerateModal(true)
     setGenerateCopyError(null)
-    if (genCreatives.length === 0) {
-      setLoadingGenCreatives(true)
-      try {
-        const res = await fetch("/api/creatives?media_type=video")
-        const data = await res.json()
-        setGenCreatives(data.creatives || [])
-      } catch { /* silent */ }
-      finally { setLoadingGenCreatives(false) }
-    }
   }
 
   const handleGenerateCopy = async () => {
@@ -9813,6 +9808,7 @@ function AdSetupPanel({
         setHeadlines(g.headlines)
         if (g.descriptions?.[0]) setDescription(g.descriptions[0])
         if (g.cta) setCta(g.cta)
+        setWebLink(genUrl.trim())
       } else {
         if (!genCreative) { setGenerateCopyError("Please select a video"); return }
         setGenerateCopyStep("Uploading video...")
@@ -9978,7 +9974,7 @@ function AdSetupPanel({
               <input
                 type="url"
                 value={genUrl}
-                onChange={e => setGenUrl(e.target.value)}
+                onChange={e => { setGenUrl(e.target.value); setWebLink(e.target.value) }}
                 placeholder="https://example.com/product"
                 className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground/50"
                 onKeyDown={e => e.key === "Enter" && handleGenerateCopy()}
@@ -9986,44 +9982,40 @@ function AdSetupPanel({
             </div>
           )}
 
-          {/* Video picker */}
-          {genMode === "video" && (
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-muted-foreground">Chọn video từ Assets</label>
-              {loadingGenCreatives ? (
-                <div className="flex items-center gap-2 py-4 text-muted-foreground text-sm">
-                  <IconLoader2 className="size-4 animate-spin" />Loading...
-                </div>
-              ) : genCreatives.length === 0 ? (
-                <div className="py-5 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
-                  No videos found. Upload videos in Assets first.
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
-                  {genCreatives.map(c => (
-                    <button key={c.id} onClick={() => setGenCreative(c)}
-                      className={cn("relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-muted",
-                        genCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
-                      )}>
-                      {c.fb_thumbnail_url
-                        ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
-                      }
-                      {genCreative?.id === c.id && (
-                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                          <IconCheck className="size-5 text-primary" />
-                        </div>
-                      )}
-                      <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {genCreative && (
-                <p className="text-xs text-muted-foreground">Selected: <strong className="text-foreground">{genCreative.file_name}</strong></p>
-              )}
-            </div>
-          )}
+          {/* Video picker — from current session's selected ads */}
+          {genMode === "video" && (() => {
+            const sessionVideos = selectedCreatives.filter(c => c.media_type === "video")
+            return (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground">Chọn video từ ads đã chọn</label>
+                {sessionVideos.length === 0 ? (
+                  <div className="py-5 text-center text-sm text-muted-foreground border rounded-lg bg-muted/20">
+                    Chưa có video nào trong danh sách. Thêm video vào ads trước.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto">
+                    {sessionVideos.map(c => (
+                      <button key={c.id} onClick={() => setGenCreative(c)}
+                        className={cn("relative rounded-lg overflow-hidden border-2 transition-all aspect-video bg-muted",
+                          genCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
+                        )}>
+                        <CreativeCardMedia creative={c} compact />
+                        {genCreative?.id === c.id && (
+                          <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                            <IconCheck className="size-5 text-primary" />
+                          </div>
+                        )}
+                        <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {genCreative && (
+                  <p className="text-xs text-muted-foreground">Đã chọn: <strong className="text-foreground">{genCreative.file_name}</strong></p>
+                )}
+              </div>
+            )
+          })()}
 
           {generateCopyError && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">

@@ -72,6 +72,27 @@ Rules:
 - Pick the most relevant CTA based on video content`
 }
 
+function buildTranscriptPrompt(transcript: string) {
+  return `You are an expert Meta/Facebook direct response copywriter.
+
+Based on this video transcript, write high-converting Facebook/Meta ad copy.
+
+Transcript:
+${transcript}
+
+Write in the SAME LANGUAGE as the transcript (Vietnamese if Vietnamese, English if English).
+
+Return ONLY valid JSON (no markdown, no code blocks):
+${OUTPUT_SCHEMA}
+
+CTA options: ${CTA_OPTIONS}
+Rules:
+- Primary texts: 100-300 words each, hook in first line, reference product/service from transcript
+- Headlines: punchy, benefit-driven, max 40 characters
+- Descriptions: short supporting copy, max 30 characters
+- Pick the most relevant CTA based on content`
+}
+
 function extractTextFromHtml(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, "")
@@ -140,10 +161,15 @@ export async function POST(request: NextRequest) {
     } else if (type === "video") {
       if (!url?.trim()) return NextResponse.json({ error: "Video URL is required" }, { status: 400 })
 
-      // Video analysis requires Gemini (native video support)
-      const geminiKey = await getGeminiApiKey(ctx.orgId)
-      if (!geminiKey) return NextResponse.json({ error: "Gemini API key required for video. Add it in Settings → AI Keys." }, { status: 503 })
+      const [openaiKey, geminiKey] = await Promise.all([
+        getOpenAIApiKey(ctx.orgId),
+        getGeminiApiKey(ctx.orgId),
+      ])
+      if (!openaiKey && !geminiKey) {
+        return NextResponse.json({ error: "AI key required for video. Add OpenAI or Gemini key in Settings → AI Keys." }, { status: 503 })
+      }
 
+      // Download video to temp file
       const videoRes = await fetch(url, { signal: AbortSignal.timeout(120000) })
       if (!videoRes.ok) return NextResponse.json({ error: "Failed to fetch video." }, { status: 400 })
 
@@ -154,7 +180,26 @@ export async function POST(request: NextRequest) {
       tmpPath = path.join(os.tmpdir(), `gen_video_${Date.now()}.${ext}`)
       fs.writeFileSync(tmpPath, buffer)
 
-      const fileManager = new GoogleAIFileManager(geminiKey)
+      // OpenAI path: Whisper transcription + GPT-4o-mini
+      if (openaiKey) {
+        const openai = new OpenAI({ apiKey: openaiKey })
+        const transcription = await openai.audio.transcriptions.create({
+          file: fs.createReadStream(tmpPath) as Parameters<typeof openai.audio.transcriptions.create>[0]["file"],
+          model: "whisper-1",
+        })
+        const transcript = transcription.text?.trim()
+        if (!transcript) return NextResponse.json({ error: "Could not transcribe video audio. Make sure the video has speech." }, { status: 400 })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [{ role: "user", content: buildTranscriptPrompt(transcript) }],
+        })
+        const generated = JSON.parse(completion.choices[0].message.content || "{}")
+        return NextResponse.json({ generated })
+      }
+
+      // Gemini path: native video file upload
+      const fileManager = new GoogleAIFileManager(geminiKey!)
       const uploadResult = await fileManager.uploadFile(tmpPath, { mimeType: contentType, displayName: "ad_video" })
 
       let geminiFile = await fileManager.getFile(uploadResult.file.name)
@@ -169,7 +214,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Video processing failed. Try MP4 format." }, { status: 500 })
       }
 
-      const genAI = new GoogleGenerativeAI(geminiKey)
+      const genAI = new GoogleGenerativeAI(geminiKey!)
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { responseMimeType: "application/json" } })
       const result = await model.generateContent([
         { fileData: { fileUri: geminiFile.uri, mimeType: geminiFile.mimeType } },
@@ -187,6 +232,7 @@ export async function POST(request: NextRequest) {
     if (err instanceof SyntaxError) return NextResponse.json({ error: "Failed to parse AI response. Please try again." }, { status: 500 })
     const msg = err instanceof Error ? err.message : ""
     if (msg.includes("429") || msg.includes("quota")) return NextResponse.json({ error: "AI quota exceeded. Check your API key billing." }, { status: 429 })
+    if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) return NextResponse.json({ error: "Gemini API key is invalid. Update it in Settings → AI Keys." }, { status: 400 })
     return NextResponse.json({ error: msg || "Generation failed. Please try again." }, { status: 500 })
   } finally {
     if (tmpPath) { try { fs.unlinkSync(tmpPath) } catch { } }

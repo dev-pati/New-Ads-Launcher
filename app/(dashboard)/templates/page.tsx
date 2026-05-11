@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import {
@@ -214,8 +215,9 @@ export default function TemplatesPage() {
   const [tab, setTab] = useState<Tab>("ad-setup")
   const [templates, setTemplates] = useState<AdCopyTemplate[]>([])
   const [loading, setLoading] = useState(false)
-  const [search, setSearch] = useState("")
-  const [searchActive, setSearchActive] = useState(false)
+  const searchParams = useSearchParams()
+  const [search, setSearch] = useState(() => searchParams.get("q") || "")
+  const [searchActive, setSearchActive] = useState(() => !!searchParams.get("q"))
   const [sort, setSort] = useState<SortOption>("newest")
 
   // Dialogs

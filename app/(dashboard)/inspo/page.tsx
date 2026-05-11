@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -446,7 +447,12 @@ function AnalysisResult({ analysis, onReset }: { analysis: Analysis; onReset: ()
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function InspoPage() {
-  const [subTab, setSubTab] = useState<SubTab>("adscan")
+  const searchParams = useSearchParams()
+  const [subTab, setSubTab] = useState<SubTab>(() => {
+    const tab = searchParams.get("tab")
+    return (tab === "saved" || tab === "ai" || tab === "adscan") ? tab : "adscan"
+  })
+  const [savedSearch, setSavedSearch] = useState(() => searchParams.get("q") || "")
 
   // Ad Scan state
   const [query, setQuery] = useState("")
@@ -1052,13 +1058,22 @@ export default function InspoPage() {
         {/* ── Saved Ads ── */}
         {subTab === "saved" && (
           <div className="h-full flex flex-col">
-            <div className="px-6 py-4 border-b shrink-0 flex items-center justify-between">
-              <div>
+            <div className="px-6 py-4 border-b shrink-0 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
                 <h3 className="font-semibold text-sm">Saved Ads</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{savedAds.length} ad{savedAds.length !== 1 ? "s" : ""} saved</p>
               </div>
+              <div className="relative">
+                <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+                <input
+                  value={savedSearch}
+                  onChange={e => setSavedSearch(e.target.value)}
+                  placeholder="Filter saved ads…"
+                  className="h-8 pl-8 pr-3 text-xs rounded-lg border bg-muted/30 outline-none focus:ring-1 focus:ring-ring w-44 placeholder:text-muted-foreground/50"
+                />
+              </div>
               {savedAds.length > 0 && (
-                <Button size="sm" variant="outline" className="gap-2 text-xs" onClick={() => setSubTab("adscan")}>
+                <Button size="sm" variant="outline" className="gap-2 text-xs shrink-0" onClick={() => setSubTab("adscan")}>
                   <IconScan className="size-3.5" />Scan more
                 </Button>
               )}
@@ -1081,9 +1096,22 @@ export default function InspoPage() {
                     <IconScan className="size-3.5" />Go to Ad Scan
                   </Button>
                 </div>
-              ) : (
+              ) : (() => {
+                const filtered = savedSearch.trim()
+                  ? savedAds.filter(ad =>
+                      (ad.page_name || "").toLowerCase().includes(savedSearch.toLowerCase()) ||
+                      (ad.ad_body || "").toLowerCase().includes(savedSearch.toLowerCase()) ||
+                      (ad.ad_title || "").toLowerCase().includes(savedSearch.toLowerCase())
+                    )
+                  : savedAds
+                return filtered.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-64 gap-2 text-center">
+                    <p className="text-sm text-muted-foreground">No saved ads match "{savedSearch}"</p>
+                    <button onClick={() => setSavedSearch("")} className="text-xs text-primary hover:underline">Clear filter</button>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {savedAds.map(ad => (
+                  {filtered.map(ad => (
                     <AdCard key={ad.id}
                       archiveId={ad.ad_archive_id} pageName={ad.page_name}
                       body={ad.ad_body} title={ad.ad_title}
@@ -1095,7 +1123,8 @@ export default function InspoPage() {
                     />
                   ))}
                 </div>
-              )}
+                )
+              })()}
             </div>
           </div>
         )}

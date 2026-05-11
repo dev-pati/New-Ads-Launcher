@@ -98,6 +98,7 @@ function SettingsContent() {
   const [resending, setResending] = useState<string | null>(null)
   const [deletingInvite, setDeletingInvite] = useState<string | null>(null)
   const [message, setMessage] = useState("")
+  const [messageType, setMessageType] = useState<"success" | "error">("success")
 
   // AI Keys
   const [geminiKey, setGeminiKey] = useState("")
@@ -212,12 +213,12 @@ function SettingsContent() {
         body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
       })
       const data = await res.json()
-      if (!res.ok) { setMessage(data.error || "Failed to invite"); return }
-      setMessage(data.added ? "Member added successfully!" : "Invitation sent!")
+      if (!res.ok) { setMessageType("error"); setMessage(data.error || "Failed to invite"); return }
+      setMessageType("success"); setMessage(data.added ? "Member added successfully!" : "Invitation sent!")
       setInviteEmail("")
       fetchMembers()
     } catch {
-      setMessage("Failed to invite member")
+      setMessageType("error"); setMessage("Failed to invite member")
     } finally {
       setInviting(false)
     }
@@ -368,7 +369,11 @@ function SettingsContent() {
                   Invite
                 </Button>
               </form>
-              {message && <p className="mt-2 text-sm text-muted-foreground">{message}</p>}
+              {message && (
+                <p className={`mt-2 text-sm font-medium ${messageType === "success" ? "text-emerald-600" : "text-destructive"}`}>
+                  {messageType === "success" ? "✓ " : "✕ "}{message}
+                </p>
+              )}
             </CardContent>
           </Card>
 

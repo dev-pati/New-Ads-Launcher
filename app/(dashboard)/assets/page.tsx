@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
@@ -97,7 +98,8 @@ export default function AssetsPage() {
   const [boards, setBoards]             = useState<Board[]>([])
   const [requests, setRequests]         = useState<CreativeRequest[]>([])
   const [selected, setSelected]         = useState<Set<string>>(new Set())
-  const [search, setSearch]             = useState("")
+  const searchParams = useSearchParams()
+  const [search, setSearch]             = useState(() => searchParams.get("q") || "")
   const [filterType, setFilterType]     = useState<"" | "image" | "video">("")
   const [filterStatus, setFilterStatus] = useState<"" | "ready" | "pending">("")
   const [loadingCreatives, setLoadingCreatives] = useState(true)

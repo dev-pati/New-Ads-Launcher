@@ -87,8 +87,8 @@ export async function POST(
     const adminSupabase = createAdminClient()
 
     // Check if user with this email already exists
-    const { data: existingUsers } = await adminSupabase.auth.admin.listUsers()
-    const existingUser = existingUsers?.users?.find((u) => u.email === email)
+    const { data: existingUsers } = await adminSupabase.auth.admin.listUsers({ perPage: 1000 })
+    const existingUser = existingUsers?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())
 
     if (existingUser) {
       const { data: existingMember } = await supabase
