@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useOrg } from "@/lib/org-context"
 
@@ -19,6 +19,7 @@ export function useNotifications() {
   const { activeOrg } = useOrg()
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [loading, setLoading] = useState(false)
+  const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null)
 
   const fetchNotifications = useCallback(async () => {
     if (!activeOrg?.id) return
@@ -34,36 +35,55 @@ export function useNotifications() {
     setLoading(false)
   }, [activeOrg?.id])
 
+  // Initial fetch
   useEffect(() => {
     fetchNotifications()
   }, [fetchNotifications])
 
-  // Realtime: new notifications appear instantly
+  // Poll every 30s as the reliable update mechanism
   useEffect(() => {
     if (!activeOrg?.id) return
+    const interval = setInterval(fetchNotifications, 30_000)
+    return () => clearInterval(interval)
+  }, [activeOrg?.id, fetchNotifications])
+
+  // Realtime for instant updates — guard against double-subscribe (React StrictMode)
+  useEffect(() => {
+    if (!activeOrg?.id) return
+
+    // Tear down any existing channel before creating a new one
     const supabase = createClient()
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+
     const channel = supabase
-      .channel(`notif_${activeOrg.id}`)
-      .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "notifications",
-        filter: `org_id=eq.${activeOrg.id}`,
-      }, (payload) => {
-        setNotifications(prev => [payload.new as AppNotification, ...prev].slice(0, 30))
-      })
-      .on("postgres_changes", {
-        event: "UPDATE",
-        schema: "public",
-        table: "notifications",
-        filter: `org_id=eq.${activeOrg.id}`,
-      }, (payload) => {
-        setNotifications(prev =>
-          prev.map(n => n.id === payload.new.id ? { ...n, ...(payload.new as AppNotification) } : n)
-        )
-      })
+      .channel(`notif_${activeOrg.id}_${Math.random()}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `org_id=eq.${activeOrg.id}` },
+        (payload) => {
+          setNotifications(prev => [payload.new as AppNotification, ...prev].slice(0, 30))
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "notifications", filter: `org_id=eq.${activeOrg.id}` },
+        (payload) => {
+          setNotifications(prev =>
+            prev.map(n => n.id === payload.new.id ? { ...n, ...(payload.new as AppNotification) } : n)
+          )
+        }
+      )
       .subscribe()
-    return () => { supabase.removeChannel(channel) }
+
+    channelRef.current = channel
+
+    return () => {
+      supabase.removeChannel(channel)
+      channelRef.current = null
+    }
   }, [activeOrg?.id])
 
   const markRead = useCallback(async (id: string) => {
