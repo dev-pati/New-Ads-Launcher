@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
-// Save a thumbnail (client-extracted video frame) to Supabase Storage
-// and update the creative's fb_thumbnail_url to the public URL.
-// Body: raw image binary (jpeg/png).
-// Eliminates dependency on Meta thumbnail polling for the lifetime of this creative.
 export const runtime = "nodejs"
 export const maxDuration = 60
 export const dynamic = "force-dynamic"
@@ -20,6 +17,7 @@ export async function POST(
 
     const { id } = await params
     const supabase = await createClient()
+    const admin = createAdminClient()
 
     // Verify creative belongs to org
     const { data: creative, error: fetchErr } = await supabase
@@ -28,7 +26,9 @@ export async function POST(
       .eq("id", id)
       .eq("org_id", ctx.orgId)
       .single()
-    if (fetchErr || !creative) return NextResponse.json({ error: "Creative not found" }, { status: 404 })
+    if (fetchErr || !creative) {
+      return NextResponse.json({ error: "Creative not found" }, { status: 404 })
+    }
 
     // Read raw body
     const buffer = await request.arrayBuffer()
@@ -37,28 +37,26 @@ export async function POST(
 
     const contentType = request.headers.get("content-type") || "image/jpeg"
     const ext = contentType.includes("png") ? "png" : "jpg"
-    const path = `thumbnails/${ctx.orgId}/${id}.${ext}`
+    const storagePath = `thumbnails/${ctx.orgId}/${id}.${ext}`
 
-    // Upload to Supabase Storage (upsert to overwrite if exists)
-    const { error: uploadErr } = await supabase.storage
+    // Use admin client for storage to bypass RLS issues
+    const { error: uploadErr } = await admin.storage
       .from("ad-media")
-      .upload(path, buffer, {
+      .upload(storagePath, buffer, {
         contentType,
         upsert: true,
-        cacheControl: "31536000", // 1 year
+        cacheControl: "31536000",
       })
+
     if (uploadErr) {
       console.error("[save-thumbnail] Storage upload error:", uploadErr)
       return NextResponse.json({ error: uploadErr.message }, { status: 500 })
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage.from("ad-media").getPublicUrl(path)
+    const { data: urlData } = admin.storage.from("ad-media").getPublicUrl(storagePath)
     const publicUrl = urlData.publicUrl
 
-    // Update creative — only the thumbnail field. NEVER overwrite file_url, because for video
-    // creatives file_url must point to a video source (blob/Meta video) so the <video> tag works.
-    await supabase
+    await admin
       .from("creatives")
       .update({ fb_thumbnail_url: publicUrl })
       .eq("id", id)
