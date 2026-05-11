@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import OpenAI from "openai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { GoogleAIFileManager, FileState } from "@google/generative-ai/server"
 import { getAuthContext } from "@/lib/auth"
-import { getGeminiApiKey } from "@/lib/get-ai-key"
+import { getOpenAIApiKey, getGeminiApiKey } from "@/lib/get-ai-key"
 import fs from "fs"
 import path from "path"
 import os from "os"
@@ -91,21 +92,8 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const geminiKey = await getGeminiApiKey(ctx.orgId)
-    if (!geminiKey) {
-      return NextResponse.json({ error: "Gemini API key not configured. Add it in Settings → AI Keys." }, { status: 503 })
-    }
-
     const body = await request.json()
     const { type, url } = body
-
-    const genAI = new GoogleGenerativeAI(geminiKey)
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      generationConfig: { responseMimeType: "application/json" },
-    })
-
-    let result
 
     if (type === "url") {
       if (!url?.trim()) return NextResponse.json({ error: "URL is required" }, { status: 400 })
@@ -127,17 +115,39 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to fetch URL. Make sure it's publicly accessible." }, { status: 400 })
       }
 
-      result = await model.generateContent(buildUrlPrompt(content, fetchUrl))
+      // OpenAI preferred for text tasks
+      const openaiKey = await getOpenAIApiKey(ctx.orgId)
+      if (openaiKey) {
+        const openai = new OpenAI({ apiKey: openaiKey })
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [{ role: "user", content: buildUrlPrompt(content, fetchUrl) }],
+        })
+        const generated = JSON.parse(completion.choices[0].message.content || "{}")
+        return NextResponse.json({ generated })
+      }
+
+      // Fallback to Gemini
+      const geminiKey = await getGeminiApiKey(ctx.orgId)
+      if (!geminiKey) return NextResponse.json({ error: "No AI key configured. Add one in Settings → AI Keys." }, { status: 503 })
+      const genAI = new GoogleGenerativeAI(geminiKey)
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { responseMimeType: "application/json" } })
+      const result = await model.generateContent(buildUrlPrompt(content, fetchUrl))
+      const generated = JSON.parse(result.response.text())
+      return NextResponse.json({ generated })
 
     } else if (type === "video") {
       if (!url?.trim()) return NextResponse.json({ error: "Video URL is required" }, { status: 400 })
 
-      // Fetch video from Supabase storage
+      // Video analysis requires Gemini (native video support)
+      const geminiKey = await getGeminiApiKey(ctx.orgId)
+      if (!geminiKey) return NextResponse.json({ error: "Gemini API key required for video. Add it in Settings → AI Keys." }, { status: 503 })
+
       const videoRes = await fetch(url, { signal: AbortSignal.timeout(120000) })
       if (!videoRes.ok) return NextResponse.json({ error: "Failed to fetch video." }, { status: 400 })
 
       const rawContentType = videoRes.headers.get("content-type") || "video/mp4"
-      // Supabase may return content-type with params like "video/mp4; charset=..."
       const contentType = rawContentType.split(";")[0].trim() || "video/mp4"
       const ext = contentType.includes("quicktime") ? "mov" : contentType.includes("webm") ? "webm" : "mp4"
       const buffer = Buffer.from(await videoRes.arrayBuffer())
@@ -159,28 +169,24 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Video processing failed. Try MP4 format." }, { status: 500 })
       }
 
-      result = await model.generateContent([
+      const genAI = new GoogleGenerativeAI(geminiKey)
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { responseMimeType: "application/json" } })
+      const result = await model.generateContent([
         { fileData: { fileUri: geminiFile.uri, mimeType: geminiFile.mimeType } },
         { text: buildVideoPrompt() },
       ])
-
       await fileManager.deleteFile(geminiFile.name).catch(() => {})
+      const generated = JSON.parse(result.response.text())
+      return NextResponse.json({ generated })
 
     } else {
       return NextResponse.json({ error: "Invalid type. Use 'url' or 'video'." }, { status: 400 })
     }
-
-    const generated = JSON.parse(result.response.text())
-    return NextResponse.json({ generated })
   } catch (err) {
     console.error("AI generate error:", err)
-    if (err instanceof SyntaxError) {
-      return NextResponse.json({ error: "Failed to parse AI response. Please try again." }, { status: 500 })
-    }
+    if (err instanceof SyntaxError) return NextResponse.json({ error: "Failed to parse AI response. Please try again." }, { status: 500 })
     const msg = err instanceof Error ? err.message : ""
-    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota")) {
-      return NextResponse.json({ error: "Gemini API quota exceeded. Please add billing at aistudio.google.com or wait until tomorrow." }, { status: 429 })
-    }
+    if (msg.includes("429") || msg.includes("quota")) return NextResponse.json({ error: "AI quota exceeded. Check your API key billing." }, { status: 429 })
     return NextResponse.json({ error: msg || "Generation failed. Please try again." }, { status: 500 })
   } finally {
     if (tmpPath) { try { fs.unlinkSync(tmpPath) } catch { } }

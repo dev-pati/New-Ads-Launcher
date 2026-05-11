@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
+import OpenAI from "openai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getAuthContext } from "@/lib/auth"
-import { getGeminiApiKey } from "@/lib/get-ai-key"
+import { getOpenAIApiKey, getGeminiApiKey } from "@/lib/get-ai-key"
 
 function buildPrompt(text: string, headline?: string) {
   return `You are an expert Meta/Facebook direct response copywriter. Generate 5 high-converting variations of this ad primary text, each using a different persuasion angle.
@@ -33,34 +34,38 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const geminiKey = await getGeminiApiKey(ctx.orgId)
-    if (!geminiKey) {
-      return NextResponse.json({ error: "Gemini API key not configured. Add it in Settings → AI Keys." }, { status: 503 })
-    }
-
     const body = await request.json()
     const { text, headline } = body
+    if (!text?.trim()) return NextResponse.json({ error: "Primary text is required" }, { status: 400 })
 
-    if (!text?.trim()) {
-      return NextResponse.json({ error: "Primary text is required" }, { status: 400 })
+    const prompt = buildPrompt(text.trim(), headline)
+
+    // OpenAI preferred
+    const openaiKey = await getOpenAIApiKey(ctx.orgId)
+    if (openaiKey) {
+      const openai = new OpenAI({ apiKey: openaiKey })
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }],
+      })
+      const data = JSON.parse(completion.choices[0].message.content || "{}")
+      return NextResponse.json({ variations: data.variations || [] })
     }
 
+    // Fallback to Gemini
+    const geminiKey = await getGeminiApiKey(ctx.orgId)
+    if (!geminiKey) return NextResponse.json({ error: "No AI key configured. Add one in Settings → AI Keys." }, { status: 503 })
     const genAI = new GoogleGenerativeAI(geminiKey)
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      generationConfig: { responseMimeType: "application/json" },
-    })
-
-    const result = await model.generateContent(buildPrompt(text.trim(), headline))
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { responseMimeType: "application/json" } })
+    const result = await model.generateContent(prompt)
     const data = JSON.parse(result.response.text())
-
     return NextResponse.json({ variations: data.variations || [] })
+
   } catch (err) {
     console.error("AI variations error:", err)
     const msg = err instanceof Error ? err.message : ""
-    if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("quota")) {
-      return NextResponse.json({ error: "Gemini API quota exceeded. Please add billing at aistudio.google.com or wait until tomorrow." }, { status: 429 })
-    }
+    if (msg.includes("429") || msg.includes("quota")) return NextResponse.json({ error: "AI quota exceeded. Check your API key billing." }, { status: 429 })
     return NextResponse.json({ error: "Failed to generate variations. Please try again." }, { status: 500 })
   }
 }

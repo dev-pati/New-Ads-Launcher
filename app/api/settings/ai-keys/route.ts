@@ -9,12 +9,13 @@ export async function GET() {
   const supabase = await createClient()
   const { data } = await supabase
     .from("org_ai_keys")
-    .select("gemini_api_key")
+    .select("gemini_api_key, openai_api_key")
     .eq("org_id", ctx.orgId)
     .single()
 
   return NextResponse.json({
     gemini_api_key: data?.gemini_api_key ?? null,
+    openai_api_key: data?.openai_api_key ?? null,
   })
 }
 
@@ -23,13 +24,18 @@ export async function POST(request: NextRequest) {
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await request.json()
-  const { gemini_api_key } = body
+  const { gemini_api_key, openai_api_key } = body
 
   const supabase = await createClient()
   const { error } = await supabase
     .from("org_ai_keys")
     .upsert(
-      { org_id: ctx.orgId, gemini_api_key: gemini_api_key?.trim() || null, updated_at: new Date().toISOString() },
+      {
+        org_id: ctx.orgId,
+        gemini_api_key: gemini_api_key?.trim() || null,
+        openai_api_key: openai_api_key?.trim() || null,
+        updated_at: new Date().toISOString(),
+      },
       { onConflict: "org_id" }
     )
 

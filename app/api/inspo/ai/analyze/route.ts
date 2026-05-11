@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { YoutubeTranscript } from "youtube-transcript"
+import OpenAI from "openai"
 import { getAuthContext } from "@/lib/auth"
-import { getGeminiApiKey } from "@/lib/get-ai-key"
+import { getOpenAIApiKey, getGeminiApiKey } from "@/lib/get-ai-key"
 
 // ─── Text extraction from HTML ───────────────────────────────────────────────
 
@@ -104,11 +105,6 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const geminiKey = await getGeminiApiKey(ctx.orgId)
-    if (!geminiKey) {
-      return NextResponse.json({ error: "Gemini API key not configured. Add it in Settings → AI Keys." }, { status: 503 })
-    }
-
     const body = await request.json()
     const { type = "text", ad_body, ad_title, url } = body
 
@@ -116,43 +112,25 @@ export async function POST(request: NextRequest) {
 
     if (type === "url") {
       if (!url?.trim()) return NextResponse.json({ error: "URL is required" }, { status: 400 })
-
       let fetchUrl = url.trim()
       if (!fetchUrl.startsWith("http")) fetchUrl = "https://" + fetchUrl
-
       let content: string
       try {
         const res = await fetch(fetchUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; AdLauncher/1.0)",
-            "Accept": "text/html",
-          },
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; AdLauncher/1.0)", "Accept": "text/html" },
           signal: AbortSignal.timeout(10000),
         })
-        const html = await res.text()
-        content = extractTextFromHtml(html)
-        if (!content || content.length < 50) {
-          return NextResponse.json({ error: "Could not extract content from this URL. The site may block automated access." }, { status: 400 })
-        }
+        content = extractTextFromHtml(await res.text())
+        if (!content || content.length < 50) return NextResponse.json({ error: "Could not extract content from this URL. The site may block automated access." }, { status: 400 })
       } catch {
         return NextResponse.json({ error: "Failed to fetch URL. Make sure it's publicly accessible." }, { status: 400 })
       }
-
       prompt = buildUrlPrompt(content, fetchUrl)
-
     } else if (type === "video") {
       if (!url?.trim()) return NextResponse.json({ error: "Video URL is required" }, { status: 400 })
-
       const videoUrl = url.trim()
       const youtubeId = extractYoutubeId(videoUrl)
-
-      if (!youtubeId) {
-        return NextResponse.json(
-          { error: "Only YouTube URLs are supported for video analysis. Supported: youtube.com/watch?v=..., youtu.be/..., YouTube Shorts." },
-          { status: 400 }
-        )
-      }
-
+      if (!youtubeId) return NextResponse.json({ error: "Only YouTube URLs are supported. Supported: youtube.com/watch?v=..., youtu.be/..., Shorts." }, { status: 400 })
       let transcript: string
       try {
         const segments = await YoutubeTranscript.fetchTranscript(youtubeId, { lang: "vi" })
@@ -160,28 +138,34 @@ export async function POST(request: NextRequest) {
         transcript = segments.map(s => s.text).join(" ").trim()
         if (!transcript) throw new Error("Empty transcript")
       } catch {
-        return NextResponse.json(
-          { error: "Could not get transcript from this video. Make sure it has captions/subtitles enabled." },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: "Could not get transcript. Make sure the video has captions enabled." }, { status: 400 })
       }
-
       prompt = buildVideoPrompt(transcript.slice(0, 6000), videoUrl)
-
     } else {
       if (!ad_body?.trim()) return NextResponse.json({ error: "Ad copy is required" }, { status: 400 })
       prompt = buildTextPrompt(ad_body.trim(), ad_title)
     }
 
-    const genAI = new GoogleGenerativeAI(geminiKey)
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      generationConfig: { responseMimeType: "application/json" },
-    })
+    // OpenAI preferred for text tasks
+    const openaiKey = await getOpenAIApiKey(ctx.orgId)
+    if (openaiKey) {
+      const openai = new OpenAI({ apiKey: openaiKey })
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }],
+      })
+      const analysis = JSON.parse(completion.choices[0].message.content || "{}")
+      return NextResponse.json({ analysis })
+    }
 
+    // Fallback to Gemini
+    const geminiKey = await getGeminiApiKey(ctx.orgId)
+    if (!geminiKey) return NextResponse.json({ error: "No AI key configured. Add one in Settings → AI Keys." }, { status: 503 })
+    const genAI = new GoogleGenerativeAI(geminiKey)
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", generationConfig: { responseMimeType: "application/json" } })
     const result = await model.generateContent(prompt)
     const analysis = JSON.parse(result.response.text())
-
     return NextResponse.json({ analysis })
   } catch (err) {
     console.error("AI analyze error:", err)

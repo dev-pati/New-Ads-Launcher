@@ -14,3 +14,18 @@ export async function getGeminiApiKey(orgId: string): Promise<string | null> {
 
   return process.env.GEMINI_API_KEY ?? null
 }
+
+export async function getOpenAIApiKey(orgId: string): Promise<string | null> {
+  try {
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from("org_ai_keys")
+      .select("openai_api_key")
+      .eq("org_id", orgId)
+      .single()
+
+    if (data?.openai_api_key?.trim()) return data.openai_api_key.trim()
+  } catch { /* fallthrough */ }
+
+  return process.env.OPENAI_API_KEY ?? null
+}
