@@ -108,8 +108,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
           muted
           playsInline
           loop
-          autoPlay
-          preload="auto"
+          preload="none"
           poster={metaThumb || undefined}
           className={className}
           onLoadedData={() => {
@@ -117,7 +116,11 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
               try { videoRef.current.pause() } catch {}
             }
           }}
-          onMouseEnter={() => videoRef.current?.play().catch(() => {})}
+          onMouseEnter={e => {
+            const v = e.currentTarget
+            if (v.preload !== "auto") v.preload = "auto"
+            v.play().catch(() => {})
+          }}
           onMouseLeave={() => {
             if (videoRef.current) {
               videoRef.current.pause()

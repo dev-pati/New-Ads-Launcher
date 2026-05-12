@@ -165,23 +165,29 @@ export default function AssetsPage() {
     } catch {}
   }, [applyCreativePreviewUpdate])
 
-  const refreshVideoPreviews = useCallback((items: Creative[]) => {
-    items
-      .filter((creative) =>
-        creative.media_type === "video"
-        && creative.fb_video_id
-        && (
-          !creative.fb_thumbnail_url
-          || (
-            !/^https?:/.test(creative.fb_thumbnail_url)
-            && !creative.fb_thumbnail_url.startsWith("/api/creatives/")
-          )
-          || creative.fb_thumbnail_url.includes("rsrc.php")
+  const refreshVideoPreviews = useCallback(async (items: Creative[]) => {
+    const toRefresh = items.filter((creative) =>
+      creative.media_type === "video"
+      && creative.fb_video_id
+      && (
+        !creative.fb_thumbnail_url
+        || (
+          !/^https?:/.test(creative.fb_thumbnail_url)
+          && !creative.fb_thumbnail_url.startsWith("/api/creatives/")
         )
+        || creative.fb_thumbnail_url.includes("rsrc.php")
       )
-      .forEach((creative) => {
-        void refreshVideoPreview(creative.id)
-      })
+    )
+
+    // Only process the first 10 items automatically to prevent rate limiting
+    // The rest will be processed if the user re-loads or interacts.
+    const limited = toRefresh.slice(0, 10)
+    
+    for (const creative of limited) {
+      await refreshVideoPreview(creative.id)
+      // Add a small 200ms delay between requests to be gentle on the API
+      await new Promise(r => setTimeout(r, 200))
+    }
   }, [refreshVideoPreview])
 
   // ── Load helpers ──────────────────────────────────────────────────────────
