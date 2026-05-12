@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -24,6 +25,11 @@ export async function POST(request: NextRequest) {
 
     if (!adAccountId || !uploadSessionId) {
       return NextResponse.json({ error: "ad_account_id and upload_session_id required" }, { status: 400 })
+    }
+
+    const belongsToOrg = await adAccountBelongsToOrg(ctx.orgId, adAccountId, connection.access_token)
+    if (!belongsToOrg) {
+      return NextResponse.json({ error: "Ad account not in your workspace" }, { status: 403 })
     }
 
     const chunkBuffer = await request.arrayBuffer()
@@ -54,8 +60,11 @@ export async function POST(request: NextRequest) {
       start_offset: data.start_offset,
       end_offset: data.end_offset,
     })
-  } catch (err: any) {
+  } catch (err) {
     console.error("[video-upload/chunk]", err)
-    return NextResponse.json({ error: err.message || "Failed" }, { status: 500 })
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed" },
+      { status: 500 }
+    )
   }
 }

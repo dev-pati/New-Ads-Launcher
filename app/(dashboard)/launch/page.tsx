@@ -12151,43 +12151,90 @@ export default function LaunchPage() {
   const uploadVideoChunked = async (item: UploadItem): Promise<Creative | null> => {
     const currentPrimary = primaryTexts.find(t => t.trim()) || ""
     const currentHeadline = headlines.find(h => h.trim()) || ""
+    const fallbackChunkSize = 4 * 1024 * 1024
 
     const safeJson = async (res: Response) => {
       const text = await res.text()
       try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } }
     }
 
-    // 1. Get FB access token from our server (auth check + token proxy)
-    const tokenRes = await fetch("/api/facebook/video-upload/start", {
+    const startRes = await fetch("/api/facebook/video-upload/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ad_account_id: selectedAccountId, file_name: item.file.name, file_size: item.file.size }),
     })
-    const tokenData = await safeJson(tokenRes)
-    if (!tokenRes.ok) {
-      updateUpload(item.id, { status: "error", error: tokenData.error || "Auth failed" })
+    const startData = await safeJson(startRes)
+    if (!startRes.ok) {
+      updateUpload(item.id, { status: "error", error: startData.error || "Failed to start upload" })
       return null
     }
-    const { ad_account_id: normAccountId, access_token } = tokenData
+    const {
+      ad_account_id: normAccountId,
+      upload_session_id: uploadSessionId,
+      video_id,
+      start_offset: initialStartOffset,
+      end_offset: initialEndOffset,
+    } = startData as {
+      ad_account_id: string
+      upload_session_id: string
+      video_id: string
+      start_offset: string
+      end_offset: string
+    }
+    if (!normAccountId || !uploadSessionId || !video_id) {
+      updateUpload(item.id, { status: "error", error: "Upload session did not start correctly" })
+      return null
+    }
 
     // 2. Upload entire file directly to Facebook (client → FB, bypasses Vercel completely)
     updateUpload(item.id, { uploaded: 0, fileSize: item.file.size })
-    const form = new FormData()
-    form.append("access_token", access_token)
-    form.append("title", item.file.name)
-    form.append("source", item.file, item.file.name)
+    const startedAt = Date.now()
+    let lastTick = startedAt
+    let lastLoaded = 0
+    let startOffset = Number(initialStartOffset || "0")
+    let endOffset = Number(initialEndOffset || "0")
 
-    const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${normAccountId}/advideos`, {
-      method: "POST",
-      body: form,
-    })
-    const uploadData = await safeJson(uploadRes)
-    if (!uploadRes.ok || uploadData.error) {
-      updateUpload(item.id, { status: "error", error: uploadData.error?.message || uploadData.error || "Upload to Facebook failed" })
-      return null
+    while (startOffset < item.file.size) {
+      const chunkEnd =
+        Number.isFinite(endOffset) && endOffset > startOffset
+          ? Math.min(endOffset, item.file.size)
+          : Math.min(startOffset + fallbackChunkSize, item.file.size)
+      const chunk = item.file.slice(startOffset, chunkEnd)
+
+      const chunkRes = await fetch(
+        `/api/facebook/video-upload/chunk?ad_account_id=${encodeURIComponent(normAccountId)}&upload_session_id=${encodeURIComponent(uploadSessionId)}&start_offset=${encodeURIComponent(String(startOffset))}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: chunk,
+        }
+      )
+      const chunkData = await safeJson(chunkRes)
+      if (!chunkRes.ok) {
+        updateUpload(item.id, { status: "error", error: chunkData.error || "Chunk upload failed" })
+        return null
+      }
+
+      const uploaded = chunkEnd
+      const now = Date.now()
+      const dt = (now - lastTick) / 1000
+      const dl = uploaded - lastLoaded
+      const speed = dt > 0 ? dl / dt : 0
+      const remaining = item.file.size - uploaded
+      const eta = speed > 0 ? remaining / speed : 0
+      lastTick = now
+      lastLoaded = uploaded
+      updateUpload(item.id, { uploaded, fileSize: item.file.size, speed, eta })
+
+      const nextStartOffset = Number(chunkData.start_offset)
+      const nextEndOffset = Number(chunkData.end_offset)
+      startOffset = Number.isFinite(nextStartOffset) && nextStartOffset > uploaded
+        ? nextStartOffset
+        : uploaded
+      endOffset = Number.isFinite(nextEndOffset) && nextEndOffset > startOffset
+        ? nextEndOffset
+        : Math.min(startOffset + fallbackChunkSize, item.file.size)
     }
-    const video_id = uploadData.id
-    updateUpload(item.id, { uploaded: item.file.size, fileSize: item.file.size })
 
     // 3. Finish session (tiny JSON body)
     const finishRes = await fetch("/api/facebook/video-upload/finish", {
@@ -12212,7 +12259,14 @@ export default function LaunchPage() {
     }
 
     const creative: Creative = finishData.creative
-    updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
+    const totalDurationSeconds = Math.max((Date.now() - startedAt) / 1000, 1)
+    updateUpload(item.id, {
+      status: "completed",
+      uploaded: item.fileSize,
+      eta: 0,
+      speed: item.file.size / totalDurationSeconds,
+      creativeId: creative.id,
+    })
 
     // Poll Meta for thumbnail in background
     ;(async () => {

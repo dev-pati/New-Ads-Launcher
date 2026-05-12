@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getVideoThumbnail, pollVideoReady, uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
+import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       }, { status: 413 })
     }
 
-    const storedOriginal = await uploadOriginalToStorage({
+    const storedOriginalPromise = uploadOriginalToStorage({
       orgId: ctx.orgId,
       fileName: filename,
       contentType: fileType,
@@ -124,23 +124,25 @@ export async function POST(request: NextRequest) {
     let fbImageUrl: string | null = null
     let fbThumbnailUrl: string | null = null
     let fbVideoId: string | null = null
-
-    if (mediaType === "image") {
-      const r = await uploadImageToMeta(fbAdAccountId!, connection.access_token, fileBuffer, filename)
-      fbImageHash = r.hash
-      fbImageUrl = r.url
-      fbThumbnailUrl = r.url_128
-    } else {
-      const r = await uploadVideoToMeta(fbAdAccountId!, connection.access_token, fileBuffer, filename)
-      fbVideoId = r.videoId
-      const ready = await pollVideoReady(fbVideoId, connection.access_token, 120_000)
-      if (!ready.ready) {
-        return NextResponse.json({
-          error: ready.errorMsg || "Video is still processing on Meta. Try again in a minute.",
-        }, { status: 400 })
+    const storedOriginal = await (async () => {
+      if (mediaType === "image") {
+        const [stored, uploadedImage] = await Promise.all([
+          storedOriginalPromise,
+          uploadImageToMeta(fbAdAccountId!, connection.access_token, fileBuffer, filename),
+        ])
+        fbImageHash = uploadedImage.hash
+        fbImageUrl = uploadedImage.url
+        fbThumbnailUrl = uploadedImage.url_128
+        return stored
       }
-      fbThumbnailUrl = (await getVideoThumbnail(fbVideoId, connection.access_token)) || null
-    }
+
+      const [stored, uploadedVideo] = await Promise.all([
+        storedOriginalPromise,
+        uploadVideoToMeta(fbAdAccountId!, connection.access_token, fileBuffer, filename),
+      ])
+      fbVideoId = uploadedVideo.videoId
+      return stored
+    })()
 
     const { data: creative, error: insertError } = await supabase
       .from("creatives")

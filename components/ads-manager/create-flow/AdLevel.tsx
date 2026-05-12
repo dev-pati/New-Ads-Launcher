@@ -169,7 +169,7 @@ export function AdLevel({
                 </label>
                 <label className="mt-1.5 flex h-9 cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-[#ccd0d5] bg-white px-3 text-[13px] font-medium text-[#1c2b33] transition-colors hover:border-[#1877f2] hover:text-[#1877f2] dark:border-gray-700 dark:bg-background dark:text-gray-200">
                   <IconUpload className="size-4" />
-                  <span>{mediaUploading ? "Uploading to Meta..." : "Choose image or video"}</span>
+                  <span>{mediaUploading ? "Uploading media..." : "Choose image or video"}</span>
                   <input
                     type="file"
                     accept="image/*,video/*"
@@ -345,12 +345,23 @@ export function AdLevel({
             )}
             <div className="flex aspect-square w-full items-center justify-center border-y border-gray-200 bg-gray-100">
               {previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={previewUrl}
-                  alt={state.creativeFileName || state.headline || "Ad media preview"}
-                  className="h-full w-full object-cover"
-                />
+                state.mediaType === "video" ? (
+                  <video
+                    src={previewUrl}
+                    className="h-full w-full object-cover"
+                    controls
+                    muted
+                    playsInline
+                    preload="metadata"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrl}
+                    alt={state.creativeFileName || state.headline || "Ad media preview"}
+                    className="h-full w-full object-cover"
+                  />
+                )
               ) : state.mediaType === "video" ? (
                 <IconVideo className="size-10 text-gray-400" />
               ) : (

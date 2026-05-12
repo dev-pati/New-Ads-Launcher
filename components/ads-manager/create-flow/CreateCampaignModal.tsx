@@ -149,7 +149,9 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
 
   const applyUploadedCreative = (creative: CreativeAssetOption) => {
     const previewUrl =
-      creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || ""
+      creative.media_type === "video"
+        ? creative.file_url || creative.fb_thumbnail_url || ""
+        : creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || ""
 
     setState((previous) => ({
       ...previous,
@@ -167,7 +169,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
       const data = await res.json()
       if (!res.ok) return
 
-      const previewUrl = data.thumbnail_url || data.source_url || ""
+      const previewUrl = data.source_url || data.thumbnail_url || ""
       if (!previewUrl) return
 
       setState((previous) => {
