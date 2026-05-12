@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getAdAccountPages, getFacebookPages, getPageInstagramAccounts } from "@/lib/facebook"
+import { getCachedFacebookMetadata } from "../_cache"
 import { adAccountBelongsToOrg } from "../_utils"
 
 export const dynamic = "force-dynamic"
+const PAGES_TTL_MS = 2 * 60 * 1000
+const INSTAGRAM_TTL_MS = 2 * 60 * 1000
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,9 +26,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const pages = adAccountId
-      ? await getAdAccountPages(adAccountId, connection.access_token)
-      : await getFacebookPages(connection.access_token)
+    const pages = await getCachedFacebookMetadata(
+      adAccountId
+        ? `fb:pages:${ctx.orgId}:ad-account:${adAccountId}`
+        : `fb:pages:${ctx.orgId}:all`,
+      PAGES_TTL_MS,
+      () => adAccountId
+        ? getAdAccountPages(adAccountId, connection.access_token)
+        : getFacebookPages(connection.access_token)
+    )
 
     if (pageId) {
       const page = pages.find((candidate) => candidate.id === pageId)
@@ -33,14 +42,22 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Facebook Page not found for this ad account" }, { status: 403 })
       }
 
-      const igAccounts = await getPageInstagramAccounts(page.id, page.access_token)
+      const igAccounts = await getCachedFacebookMetadata(
+        `fb:page-instagram:${ctx.orgId}:${page.id}`,
+        INSTAGRAM_TTL_MS,
+        () => getPageInstagramAccounts(page.id, page.access_token)
+      )
       return NextResponse.json({ igAccounts })
     }
 
     const results = await Promise.all(
       pages.map(async (page) => ({
         pageId: page.id,
-        igAccounts: await getPageInstagramAccounts(page.id, page.access_token),
+        igAccounts: await getCachedFacebookMetadata(
+          `fb:page-instagram:${ctx.orgId}:${page.id}`,
+          INSTAGRAM_TTL_MS,
+          () => getPageInstagramAccounts(page.id, page.access_token)
+        ),
       }))
     )
 

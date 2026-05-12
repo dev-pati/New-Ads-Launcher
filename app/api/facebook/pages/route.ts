@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getAdAccountPages, getFacebookPages } from "@/lib/facebook"
+import { getCachedFacebookMetadata } from "../_cache"
 import { adAccountBelongsToOrg } from "../_utils"
 export const dynamic = "force-dynamic"
+
+const PAGES_TTL_MS = 2 * 60 * 1000
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,9 +24,17 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const pages = adAccountId
-        ? await getAdAccountPages(adAccountId, connection.access_token)
-        : await getFacebookPages(connection.access_token)
+      const cacheKey = adAccountId
+        ? `fb:pages:${ctx.orgId}:ad-account:${adAccountId}`
+        : `fb:pages:${ctx.orgId}:all`
+
+      const pages = await getCachedFacebookMetadata(
+        cacheKey,
+        PAGES_TTL_MS,
+        () => adAccountId
+          ? getAdAccountPages(adAccountId, connection.access_token)
+          : getFacebookPages(connection.access_token)
+      )
       return NextResponse.json({ pages })
     } catch (metaErr) {
       const msg = metaErr instanceof Error ? metaErr.message : "Meta API error"

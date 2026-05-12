@@ -19,6 +19,8 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   const videoRef = useRef<HTMLVideoElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
   const isVideo = creative.media_type === "video"
+  const isCreativeMediaRoute = (url: string) => url.startsWith("/api/creatives/")
+  const isDisplayableImageUrl = (url: string) => /^https?:/.test(url) || isCreativeMediaRoute(url)
 
   const isVideoFile = (url: string) => {
     const ext = [".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"]
@@ -29,15 +31,15 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   const isGDrive = videoSrc.includes("#gdrive")
   const cleanVideoSrc = videoSrc.replace("#gdrive", "")
   const stableImageUrl =
-    creative.file_url && /^https?:/.test(cleanVideoSrc) && !isVideoFile(cleanVideoSrc) && !isMetaCdnUrl(cleanVideoSrc)
+    creative.file_url && isDisplayableImageUrl(cleanVideoSrc) && !isVideoFile(cleanVideoSrc) && !isMetaCdnUrl(cleanVideoSrc)
       ? cleanVideoSrc
       : null
   const metaThumb = stableImageUrl
-    || ((creative.fb_thumbnail_url && /^https?:/.test(creative.fb_thumbnail_url) && !creative.fb_thumbnail_url.includes("rsrc.php"))
+    || ((creative.fb_thumbnail_url && isDisplayableImageUrl(creative.fb_thumbnail_url) && !creative.fb_thumbnail_url.includes("rsrc.php"))
       ? creative.fb_thumbnail_url
-      : (creative.fb_image_url && /^https?:/.test(creative.fb_image_url))
+      : (creative.fb_image_url && isDisplayableImageUrl(creative.fb_image_url))
         ? creative.fb_image_url
-        : (creative.file_url && /^https?:/.test(creative.file_url) && !isVideoFile(creative.file_url))
+        : (creative.file_url && isDisplayableImageUrl(creative.file_url) && !isVideoFile(creative.file_url))
           ? creative.file_url
           : null)
 
@@ -46,7 +48,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
     return (
       <div className="relative h-full w-full">
         {imgSrc && !imgFailed ? (
-          <img src={imgSrc} alt={creative.file_name} className={className} onError={() => setImgFailed(true)} />
+          <img src={imgSrc} alt={creative.file_name} className={className} loading="lazy" onError={() => setImgFailed(true)} />
         ) : (
           <div className={`${className} flex items-center justify-center bg-muted`}>
             <IconPhoto className="size-6 text-muted-foreground/40" />
@@ -145,7 +147,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   if (metaThumb && !imgFailed) {
     return (
       <div className="relative h-full w-full">
-        <img src={metaThumb} alt={creative.file_name} className={className} onError={() => setImgFailed(true)} />
+        <img src={metaThumb} alt={creative.file_name} className={className} loading="lazy" onError={() => setImgFailed(true)} />
         {isGDrive && (
           <div className="absolute bottom-1.5 right-1.5 rounded bg-white/90 p-1 shadow-sm backdrop-blur-sm">
             <IconBrandGoogleDrive className="size-4 text-[#4285F4]" />

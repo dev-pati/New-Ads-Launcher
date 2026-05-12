@@ -4623,7 +4623,10 @@ function LoadMediaModal({
   useEffect(() => {
     if (!open || mediaTab !== "library" || allCreatives.length === 0) return
     
-    const pending = allCreatives.filter(c => c.media_type === "video" && !c.fb_thumbnail_url)
+    const pending = allCreatives.filter(c =>
+      c.media_type === "video"
+      && (!c.fb_thumbnail_url || (!/^https?:/.test(c.fb_thumbnail_url) && !c.fb_thumbnail_url.startsWith("/api/creatives/")))
+    )
     if (pending.length === 0) return
 
     const interval = setInterval(async () => {
@@ -4878,7 +4881,9 @@ function LoadMediaModal({
         const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
         const videosToRefresh = list.filter(c => {
           if (c.media_type !== "video" || !c.fb_video_id) return false
-          const hasGoodThumb = c.fb_thumbnail_url && /^https?:/.test(c.fb_thumbnail_url)
+          const hasGoodThumb =
+            !!c.fb_thumbnail_url &&
+            (/^https?:/.test(c.fb_thumbnail_url) || c.fb_thumbnail_url.startsWith("/api/creatives/"))
           if (hasGoodThumb) return false // already has thumbnail, skip
           const createdAt = c.created_at ? new Date(c.created_at).getTime() : 0
           return createdAt > oneDayAgo // only refresh recent uploads (Meta processed by now)
@@ -11986,7 +11991,7 @@ export default function LaunchPage() {
     const pending = selectedCreatives.filter(c => 
       c.media_type === "video" && 
       c.fb_video_id && 
-      !(c.fb_thumbnail_url && /^https?:/.test(c.fb_thumbnail_url)) &&
+      !(c.fb_thumbnail_url && (/^https?:/.test(c.fb_thumbnail_url) || c.fb_thumbnail_url.startsWith("/api/creatives/"))) &&
       !c.id.startsWith("temp_")
     )
     if (pending.length === 0) return
@@ -12651,10 +12656,16 @@ export default function LaunchPage() {
 
   // Poll for missing thumbnails/sources in selectedCreatives
   useEffect(() => {
-    const videosMissingMeta = selectedCreatives.filter(c => 
-      c.media_type === "video" && 
-      c.fb_video_id && 
-      (!c.fb_thumbnail_url || (!c.file_url?.startsWith("http") && !c.file_url?.startsWith("blob")))
+    const videosMissingMeta = selectedCreatives.filter(c =>
+      c.media_type === "video"
+      && c.fb_video_id
+      && (
+        !c.fb_thumbnail_url
+        || (
+          !/^https?:/.test(c.fb_thumbnail_url)
+          && !c.fb_thumbnail_url.startsWith("/api/creatives/")
+        )
+      )
     )
     
     videosMissingMeta.forEach(c => {
@@ -12672,8 +12683,7 @@ export default function LaunchPage() {
                 file_url: data.source_url || x.file_url || data.thumbnail_url
               } : x
             ))
-            // If we got everything, stop. Else continue polling a few more times.
-            if (data.thumbnail_url && data.source_url) return
+            if (data.thumbnail_url) return
           }
         } catch {}
         attempts++

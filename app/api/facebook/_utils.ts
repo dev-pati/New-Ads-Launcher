@@ -1,5 +1,6 @@
 import { getAdAccounts } from "@/lib/facebook"
 import { createClient } from "@/lib/supabase/server"
+import { getCachedFacebookMetadata } from "./_cache"
 
 interface OrgAdAccountRow {
   fb_ad_account_id: string | null
@@ -10,6 +11,8 @@ export interface OrgAdAccountInfo {
   id: string
   currency?: string
 }
+
+const AD_ACCOUNTS_TTL_MS = 2 * 60 * 1000
 
 export function normalizeAdAccountId(id: string) {
   return id.startsWith("act_") ? id.slice(4) : id
@@ -32,7 +35,11 @@ export async function getOrgAdAccountInfo(
   })
   if (dbAccount) return { id: adAccountId, currency: dbAccount.currency || undefined }
 
-  const liveAccounts = await getAdAccounts(accessToken)
+  const liveAccounts = await getCachedFacebookMetadata(
+    `fb:ad-accounts:${orgId}:live`,
+    AD_ACCOUNTS_TTL_MS,
+    () => getAdAccounts(accessToken)
+  )
   const liveAccount = liveAccounts.find((account) => {
     return (
       normalizeAdAccountId(account.id) === requested ||

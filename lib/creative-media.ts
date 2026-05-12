@@ -48,12 +48,8 @@ export function mapCreativeForClient<T extends ClientCreativeMedia>(creative: T)
     return mapped
   }
 
-  const shouldResolveSource =
-    !creative.storage_path &&
-    (!!creative.fb_video_id || !creative.file_url || isMetaCdnUrl(creative.file_url))
-
-  if (shouldResolveSource) {
-    mapped.file_url = buildCreativeMediaRoute(creative.id, "source")
+  if (!creative.storage_path && isMetaCdnUrl(creative.file_url)) {
+    mapped.file_url = ""
   }
 
   if (creative.fb_video_id && (!creative.fb_thumbnail_url || isMetaCdnUrl(creative.fb_thumbnail_url))) {

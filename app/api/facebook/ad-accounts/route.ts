@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getAdAccounts } from "@/lib/facebook"
+import { getCachedFacebookMetadata } from "../_cache"
+
+const AD_ACCOUNTS_TTL_MS = 2 * 60 * 1000
 
 export async function GET() {
   try {
@@ -10,7 +13,11 @@ export async function GET() {
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection found" }, { status: 401 })
 
-    const adAccounts = await getAdAccounts(connection.access_token)
+    const adAccounts = await getCachedFacebookMetadata(
+      `fb:ad-accounts:${ctx.orgId}`,
+      AD_ACCOUNTS_TTL_MS,
+      () => getAdAccounts(connection.access_token)
+    )
     return NextResponse.json({ adAccounts })
   } catch (err) {
     console.error("Failed to fetch ad accounts:", err)

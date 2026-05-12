@@ -35,9 +35,21 @@ export async function POST(
       /^https?:/.test(creative.fb_thumbnail_url) &&
       !creative.fb_thumbnail_url.includes("rsrc.php")
     const hasPlayableSource = !!(creative.file_url && /^https?:/.test(creative.file_url) && /(\.mp4|\.mov|\.webm|fbcdn\.net)/.test(creative.file_url))
+    const clientCreative = mapCreativeForClient(creative)
+    const hasDeferredThumbnailRoute =
+      !!clientCreative.fb_thumbnail_url &&
+      clientCreative.fb_thumbnail_url.startsWith("/api/creatives/")
+
+    if (!hasThumb && hasDeferredThumbnailRoute) {
+      return NextResponse.json({
+        thumbnail_url: clientCreative.fb_thumbnail_url,
+        source_url: clientCreative.file_url,
+        creative: clientCreative,
+        deferred: true,
+      })
+    }
 
     if (hasThumb && hasPlayableSource) {
-      const clientCreative = mapCreativeForClient(creative)
       return NextResponse.json({
         thumbnail_url: clientCreative.fb_thumbnail_url,
         source_url: clientCreative.file_url,

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getPixels } from "@/lib/facebook"
+import { getCachedFacebookMetadata } from "../_cache"
 import { adAccountBelongsToOrg } from "../_utils"
+
+const PIXELS_TTL_MS = 2 * 60 * 1000
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +25,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Ad account not found in workspace" }, { status: 403 })
     }
 
-    const pixels = await getPixels(adAccountId, connection.access_token)
+    const pixels = await getCachedFacebookMetadata(
+      `fb:pixels:${ctx.orgId}:${adAccountId}`,
+      PIXELS_TTL_MS,
+      () => getPixels(adAccountId, connection.access_token)
+    )
     return NextResponse.json({ pixels })
   } catch (err) {
     console.error("Failed to fetch pixels:", err)
