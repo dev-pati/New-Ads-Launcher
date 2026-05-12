@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createClient as createServerClient } from "@/lib/supabase/server"
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -8,20 +9,42 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id } = await params
-    const db = createAdminClient()
+    const db = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createAdminClient()
+      : await createServerClient()
+
+    const { data: board, error: boardError } = await db
+      .from("asset_boards")
+      .select("id, name, description")
+      .eq("id", id)
+      .eq("org_id", ctx.orgId)
+      .single()
+
+    if (boardError || !board) {
+      return NextResponse.json({ error: "Board not found" }, { status: 404 })
+    }
 
     const { data: boardAssets, error } = await db
       .from("board_assets")
-      .select("creative_id, added_at, creatives(*)")
+      .select("creative_id, added_at, creatives!inner(*)")
       .eq("board_id", id)
+      .eq("creatives.org_id", ctx.orgId)
       .order("added_at", { ascending: false })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const creatives = (boardAssets || []).map((ba: any) => ba.creatives)
-    return NextResponse.json({ creatives })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    const creatives = (boardAssets || []).flatMap((boardAsset) => {
+      const nestedCreative = boardAsset.creatives
+      if (Array.isArray(nestedCreative)) return nestedCreative
+      return nestedCreative ? [nestedCreative] : []
+    })
+
+    return NextResponse.json({ board, creatives })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to load board" },
+      { status: 500 }
+    )
   }
 }
 
@@ -32,7 +55,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { id } = await params
     const body = await request.json()
-    const db = createAdminClient()
+    const db = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createAdminClient()
+      : await createServerClient()
 
     const { data, error } = await db
       .from("asset_boards")
@@ -44,8 +69,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ board: data })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to update board" },
+      { status: 500 }
+    )
   }
 }
 
@@ -55,7 +83,9 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id } = await params
-    const db = createAdminClient()
+    const db = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createAdminClient()
+      : await createServerClient()
 
     const { error } = await db
       .from("asset_boards")
@@ -65,7 +95,10 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json({ ok: true })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to delete board" },
+      { status: 500 }
+    )
   }
 }

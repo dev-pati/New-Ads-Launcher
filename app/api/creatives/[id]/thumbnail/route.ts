@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { mapCreativeForClient } from "@/lib/creative-media"
 import { createClient } from "@/lib/supabase/server"
 import { getVideoThumbnail, getVideoSource } from "@/lib/facebook"
+
+interface ThumbnailUpdate {
+  fb_thumbnail_url?: string
+  file_url?: string
+}
 
 export async function POST(
   _request: NextRequest,
@@ -15,7 +21,7 @@ export async function POST(
     const supabase = await createClient()
     const { data: creative } = await supabase
       .from("creatives")
-      .select("id, fb_video_id, fb_thumbnail_url, file_url")
+      .select("id, media_type, storage_path, fb_video_id, fb_thumbnail_url, fb_image_url, file_url")
       .eq("id", id)
       .eq("org_id", ctx.orgId)
       .single()
@@ -24,13 +30,18 @@ export async function POST(
     if (!creative.fb_video_id) return NextResponse.json({ error: "Not a video creative" }, { status: 400 })
 
     // Check what's missing — only call Meta for what we don't already have
-    const hasThumb = !!creative.fb_thumbnail_url
+    const hasThumb =
+      !!creative.fb_thumbnail_url &&
+      /^https?:/.test(creative.fb_thumbnail_url) &&
+      !creative.fb_thumbnail_url.includes("rsrc.php")
     const hasPlayableSource = !!(creative.file_url && /^https?:/.test(creative.file_url) && /(\.mp4|\.mov|\.webm|fbcdn\.net)/.test(creative.file_url))
 
     if (hasThumb && hasPlayableSource) {
+      const clientCreative = mapCreativeForClient(creative)
       return NextResponse.json({
-        thumbnail_url: creative.fb_thumbnail_url,
-        source_url: creative.file_url,
+        thumbnail_url: clientCreative.fb_thumbnail_url,
+        source_url: clientCreative.file_url,
+        creative: clientCreative,
         cached: true,
       })
     }
@@ -44,9 +55,14 @@ export async function POST(
       hasPlayableSource ? Promise.resolve(creative.file_url) : getVideoSource(creative.fb_video_id, connection.access_token),
     ])
 
-    if (!thumbnailUrl && !sourceUrl) return NextResponse.json({ thumbnail_url: null })
+    if (!thumbnailUrl && !sourceUrl) {
+      return NextResponse.json({
+        thumbnail_url: null,
+        creative: mapCreativeForClient(creative)
+      })
+    }
 
-    const update: any = {}
+    const update: ThumbnailUpdate = {}
     if (thumbnailUrl && !hasThumb) update.fb_thumbnail_url = thumbnailUrl
     // Only update file_url if we just fetched a NEW source AND DB didn't already have a playable one
     if (sourceUrl && !hasPlayableSource) update.file_url = sourceUrl
@@ -58,11 +74,20 @@ export async function POST(
         .eq("id", id)
     }
 
-    return NextResponse.json({
-      thumbnail_url: thumbnailUrl,
-      source_url: sourceUrl,
+    const nextCreative = mapCreativeForClient({
+      ...creative,
+      ...update,
     })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+
+    return NextResponse.json({
+      thumbnail_url: nextCreative.fb_thumbnail_url,
+      source_url: nextCreative.file_url,
+      creative: nextCreative,
+    })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to refresh thumbnail" },
+      { status: 500 }
+    )
   }
 }

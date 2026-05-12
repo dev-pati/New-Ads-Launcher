@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
+import { CreativeCardMedia } from "@/components/creative-card-media"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -13,7 +14,7 @@ import {
   IconSearch, IconUpload, IconFolder, IconFolderPlus, IconRefresh,
   IconLoader2, IconPhoto, IconVideo, IconLayoutGrid, IconList,
   IconChevronDown, IconPlus, IconCheck, IconDotsVertical,
-  IconPlayerPlay, IconX, IconTrash, IconPencil, IconArrowLeft,
+  IconPlayerPlay, IconX, IconTrash, IconArrowLeft,
   IconClipboardList, IconUser, IconAlertCircle, IconCircleCheck,
   IconClock, IconCloudUpload,
 } from "@tabler/icons-react"
@@ -63,14 +64,16 @@ interface UploadItem {
   error?: string
 }
 
+interface DeleteConfirmState {
+  type: "creative" | "board" | "request" | "bulk_creative"
+  id?: string
+  ids?: string[]
+  name: string
+}
+
 type Section = "all" | "boards" | "requests" | "upload" | "my-uploads" | `board_${string}`
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function thumbOf(c: Creative) {
-  if (c.media_type === "video") return c.fb_thumbnail_url || null
-  return c.fb_image_url || c.file_url || null
-}
 
 function formatDate(s?: string) {
   if (!s) return "—"
@@ -118,6 +121,7 @@ export default function AssetsPage() {
   const [boardName, setBoardName]                 = useState("")
   const [boardDesc, setBoardDesc]                 = useState("")
   const [savingBoard, setSavingBoard]             = useState(false)
+  const [boardDialogError, setBoardDialogError]   = useState("")
 
   const [createReqOpen, setCreateReqOpen]         = useState(false)
   const [reqTitle, setReqTitle]                   = useState("")
@@ -125,8 +129,9 @@ export default function AssetsPage() {
   const [reqDue, setReqDue]                       = useState("")
   const [savingReq, setSavingReq]                 = useState(false)
 
-  const [deleteConfirm, setDeleteConfirm]         = useState<{ type: "creative" | "board" | "request"; id: string; name: string } | null>(null)
+  const [deleteConfirm, setDeleteConfirm]         = useState<DeleteConfirmState | null>(null)
   const [deleting, setDeleting]                   = useState(false)
+  const [actionError, setActionError]             = useState("")
 
   const [addToBoardOpen, setAddToBoardOpen]       = useState(false)
   const [addingToBoard, setAddingToBoard]         = useState<string | null>(null)
@@ -139,24 +144,78 @@ export default function AssetsPage() {
   const currentBoardId = section.startsWith("board_") ? section.slice(6) : null
   const currentBoard   = boards.find(b => b.id === currentBoardId)
 
+  const applyCreativePreviewUpdate = useCallback((creativeId: string, update: Partial<Creative>) => {
+    if (Object.keys(update).length === 0) return
+    const patch = (list: Creative[]) =>
+      list.map((creative) => creative.id === creativeId ? { ...creative, ...update } : creative)
+    setCreatives((prev) => patch(prev))
+    setBoardCreatives((prev) => patch(prev))
+  }, [])
+
+  const refreshVideoPreview = useCallback(async (creativeId: string) => {
+    try {
+      const response = await fetch(`/api/creatives/${creativeId}/thumbnail`, { method: "POST" })
+      const data = await response.json()
+      if (data.error || !data.creative) return
+      applyCreativePreviewUpdate(creativeId, {
+        file_url: data.creative.file_url,
+        fb_image_url: data.creative.fb_image_url,
+        fb_thumbnail_url: data.creative.fb_thumbnail_url,
+      })
+    } catch {}
+  }, [applyCreativePreviewUpdate])
+
+  const refreshVideoPreviews = useCallback((items: Creative[]) => {
+    items
+      .filter((creative) =>
+        creative.media_type === "video"
+        && creative.fb_video_id
+        && (
+          !creative.fb_thumbnail_url
+          || (
+            !/^https?:/.test(creative.fb_thumbnail_url)
+            && !creative.fb_thumbnail_url.startsWith("/api/creatives/")
+          )
+          || creative.fb_thumbnail_url.includes("rsrc.php")
+        )
+      )
+      .forEach((creative) => {
+        void refreshVideoPreview(creative.id)
+      })
+  }, [refreshVideoPreview])
+
   // ── Load helpers ──────────────────────────────────────────────────────────
 
   const loadCreatives = useCallback(() => {
     if (!selectedAccountId) { setLoadingCreatives(false); return }
     setLoadingCreatives(true)
+    setActionError("")
     fetch(`/api/creatives?ad_account_id=${encodeURIComponent(selectedAccountId)}`)
       .then(r => r.json())
-      .then(d => setCreatives(d.creatives || []))
-      .catch(() => {})
+      .then(d => {
+        if (d.error) throw new Error(d.error)
+        const nextCreatives = d.creatives || []
+        setCreatives(nextCreatives)
+        refreshVideoPreviews(nextCreatives)
+      })
+      .catch((error: unknown) => {
+        setActionError(error instanceof Error ? error.message : "Failed to load assets")
+      })
       .finally(() => setLoadingCreatives(false))
-  }, [selectedAccountId])
+  }, [refreshVideoPreviews, selectedAccountId])
 
   const loadBoards = useCallback(() => {
     setLoadingBoards(true)
+    setActionError("")
     fetch("/api/assets/boards")
       .then(r => r.json())
-      .then(d => setBoards(d.boards || []))
-      .catch(() => {})
+      .then(d => {
+        if (d.error) throw new Error(d.error)
+        setBoards(d.boards || [])
+      })
+      .catch((error: unknown) => {
+        setActionError(error instanceof Error ? error.message : "Failed to load boards")
+      })
       .finally(() => setLoadingBoards(false))
   }, [])
 
@@ -171,12 +230,20 @@ export default function AssetsPage() {
 
   const loadBoardCreatives = useCallback((boardId: string) => {
     setLoadingBoard(true)
+    setActionError("")
     fetch(`/api/assets/boards/${boardId}`)
       .then(r => r.json())
-      .then(d => setBoardCreatives(d.creatives || []))
-      .catch(() => {})
+      .then(d => {
+        if (d.error) throw new Error(d.error)
+        const nextCreatives = d.creatives || []
+        setBoardCreatives(nextCreatives)
+        refreshVideoPreviews(nextCreatives)
+      })
+      .catch((error: unknown) => {
+        setActionError(error instanceof Error ? error.message : "Failed to load board assets")
+      })
       .finally(() => setLoadingBoard(false))
-  }, [])
+  }, [refreshVideoPreviews])
 
   // ── Initial loads ─────────────────────────────────────────────────────────
 
@@ -221,6 +288,7 @@ export default function AssetsPage() {
     })
   }
 
+  /* eslint-disable @typescript-eslint/no-explicit-any */
   const displayList = (() => {
     if (section === "my-uploads") return filterCreatives(creatives.filter(c => c.user_id === currentUserId))
     if (currentBoardId) return filterCreatives(boardCreatives)
@@ -231,9 +299,12 @@ export default function AssetsPage() {
 
   // ── Selection ─────────────────────────────────────────────────────────────
 
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
     return next
   })
   const selectAll = () => setSelected(new Set(displayList.map(c => c.id)))
@@ -244,36 +315,71 @@ export default function AssetsPage() {
   const handleCreateBoard = async () => {
     if (!boardName.trim()) return
     setSavingBoard(true)
-    const res = await fetch("/api/assets/boards", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: boardName.trim(), description: boardDesc }),
-    })
-    const d = await res.json()
-    if (d.board) setBoards(prev => [d.board, ...prev])
-    setBoardName(""); setBoardDesc(""); setCreateBoardOpen(false); setSavingBoard(false)
+    setBoardDialogError("")
+    setActionError("")
+    try {
+      const res = await fetch("/api/assets/boards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: boardName.trim(), description: boardDesc }),
+      })
+      const d = await res.json()
+      if (!res.ok || d.error || !d.board) {
+        throw new Error(d.error || "Failed to create board")
+      }
+      setBoards(prev => [d.board, ...prev])
+      setSection(`board_${d.board.id}` as Section)
+      setBoardName("")
+      setBoardDesc("")
+      setCreateBoardOpen(false)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to create board"
+      setBoardDialogError(message)
+      setActionError(message)
+    } finally {
+      setSavingBoard(false)
+    }
   }
 
   const handleAddToBoard = async (boardId: string) => {
     if (selected.size === 0) return
     setAddingToBoard(boardId)
-    await fetch(`/api/assets/boards/${boardId}/assets`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creative_ids: Array.from(selected) }),
-    })
-    setAddingToBoard(null)
-    setAddToBoardOpen(false)
-    clearSelected()
-    loadBoards()
-    if (currentBoardId === boardId) loadBoardCreatives(boardId)
+    setActionError("")
+    try {
+      const res = await fetch(`/api/assets/boards/${boardId}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ creative_ids: Array.from(selected) }),
+      })
+      const d = await res.json()
+      if (!res.ok || d.error) {
+        throw new Error(d.error || "Failed to add assets to board")
+      }
+      setAddToBoardOpen(false)
+      clearSelected()
+      loadBoards()
+      if (currentBoardId === boardId) loadBoardCreatives(boardId)
+    } catch (error: unknown) {
+      setActionError(error instanceof Error ? error.message : "Failed to add assets to board")
+    } finally {
+      setAddingToBoard(null)
+    }
   }
 
   const handleRemoveFromBoard = async (creativeId: string) => {
     if (!currentBoardId) return
-    await fetch(`/api/assets/boards/${currentBoardId}/assets?creative_id=${creativeId}`, { method: "DELETE" })
-    setBoardCreatives(prev => prev.filter(c => c.id !== creativeId))
-    loadBoards()
+    setActionError("")
+    try {
+      const res = await fetch(`/api/assets/boards/${currentBoardId}/assets?creative_id=${creativeId}`, { method: "DELETE" })
+      const d = await res.json()
+      if (!res.ok || d.error) {
+        throw new Error(d.error || "Failed to remove asset from board")
+      }
+      setBoardCreatives(prev => prev.filter(c => c.id !== creativeId))
+      loadBoards()
+    } catch (error: unknown) {
+      setActionError(error instanceof Error ? error.message : "Failed to remove asset from board")
+    }
   }
 
   // ── CRUD: Request ─────────────────────────────────────────────────────────
@@ -305,21 +411,52 @@ export default function AssetsPage() {
   const handleDelete = async () => {
     if (!deleteConfirm) return
     setDeleting(true)
-    const { type, id } = deleteConfirm
-    if (type === "creative") {
-      await fetch(`/api/creatives/${id}`, { method: "DELETE" })
-      setCreatives(prev => prev.filter(c => c.id !== id))
-      setBoardCreatives(prev => prev.filter(c => c.id !== id))
-    } else if (type === "board") {
-      await fetch(`/api/assets/boards/${id}`, { method: "DELETE" })
-      setBoards(prev => prev.filter(b => b.id !== id))
-      if (currentBoardId === id) setSection("all")
-    } else if (type === "request") {
-      await fetch(`/api/assets/requests/${id}`, { method: "DELETE" })
-      setRequests(prev => prev.filter(r => r.id !== id))
+    setActionError("")
+    const { type, id, ids } = deleteConfirm
+    try {
+      if (type === "creative") {
+        const res = await fetch(`/api/creatives/${id}`, { method: "DELETE" })
+        const d = await res.json()
+        if (!res.ok || d.error) throw new Error(d.error || "Failed to delete asset")
+        setCreatives(prev => prev.filter(c => c.id !== id))
+        setBoardCreatives(prev => prev.filter(c => c.id !== id))
+        setSelected(prev => {
+          const next = new Set(prev)
+          if (id) next.delete(id)
+          return next
+        })
+        loadBoards()
+      } else if (type === "bulk_creative") {
+        const res = await fetch("/api/creatives", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids }),
+        })
+        const d = await res.json()
+        if (!res.ok || d.error) throw new Error(d.error || "Failed to delete selected assets")
+        const deletedIds = new Set<string>(d.deletedIds || ids || [])
+        setCreatives(prev => prev.filter(c => !deletedIds.has(c.id)))
+        setBoardCreatives(prev => prev.filter(c => !deletedIds.has(c.id)))
+        clearSelected()
+        loadBoards()
+      } else if (type === "board") {
+        const res = await fetch(`/api/assets/boards/${id}`, { method: "DELETE" })
+        const d = await res.json()
+        if (!res.ok || d.error) throw new Error(d.error || "Failed to delete board")
+        setBoards(prev => prev.filter(b => b.id !== id))
+        if (currentBoardId === id) setSection("all")
+      } else if (type === "request") {
+        const res = await fetch(`/api/assets/requests/${id}`, { method: "DELETE" })
+        const d = await res.json()
+        if (!res.ok || d.error) throw new Error(d.error || "Failed to delete request")
+        setRequests(prev => prev.filter(r => r.id !== id))
+      }
+      setDeleteConfirm(null)
+    } catch (error: unknown) {
+      setActionError(error instanceof Error ? error.message : "Delete failed")
+    } finally {
+      setDeleting(false)
     }
-    setDeleting(false)
-    setDeleteConfirm(null)
   }
 
   // ── Upload ────────────────────────────────────────────────────────────────
@@ -354,12 +491,14 @@ export default function AssetsPage() {
       const d = await res.json()
       if (d.creative) {
         setCreatives(prev => [d.creative, ...prev])
+        refreshVideoPreviews([d.creative])
         setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "done" } : i))
       } else {
         setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: d.error || "Upload failed" } : i))
       }
-    } catch (e: any) {
-      setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: e.message } : i))
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Upload failed"
+      setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: message } : i))
     }
   }
 
@@ -395,7 +534,7 @@ export default function AssetsPage() {
             { id: "requests",   icon: IconClipboardList, label: "Requests",     count: requests.filter(r => r.status === "open").length || undefined },
             { id: "upload",     icon: IconUpload,        label: "Upload" },
             { id: "my-uploads", icon: IconUser,          label: "My Uploads" },
-          ] as { id: Section; icon: any; label: string; count?: number }[]).map(item => (
+          ] as { id: Section; icon: typeof IconLayoutGrid; label: string; count?: number }[]).map(item => (
             <button
               key={item.id}
               onClick={() => setSection(item.id)}
@@ -468,6 +607,13 @@ export default function AssetsPage() {
 
       {/* ── Main Content ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col overflow-hidden">
+
+        {actionError && (
+          <div className="mx-4 mt-4 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive shrink-0">
+            <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+        )}
 
         {/* ── Upload Section ─────────────────────────────────────────────── */}
         {section === "upload" && (
@@ -779,6 +925,18 @@ export default function AssetsPage() {
                         <IconFolderPlus className="size-3.5" /> Add to Board
                       </Button>
                     )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs text-destructive hover:text-destructive"
+                      onClick={() => setDeleteConfirm({
+                        type: "bulk_creative",
+                        ids: Array.from(selected),
+                        name: `${selected.size} selected asset${selected.size > 1 ? "s" : ""}`,
+                      })}
+                    >
+                      <IconTrash className="size-3.5" /> Delete
+                    </Button>
                     <Button size="sm" variant="outline" className="h-7 text-xs" onClick={clearSelected}>
                       Deselect
                     </Button>
@@ -791,7 +949,10 @@ export default function AssetsPage() {
                   </button>
                 )}
 
-                <button onClick={loadCreatives} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50">
+                <button
+                  onClick={() => currentBoardId ? loadBoardCreatives(currentBoardId) : loadCreatives()}
+                  className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                >
                   <IconRefresh className="size-4" />
                 </button>
 
@@ -856,7 +1017,6 @@ export default function AssetsPage() {
                   {displayList.map(c => {
                     const isSelected = selected.has(c.id)
                     const isReady    = !!(c.fb_image_hash || c.fb_video_id)
-                    const thumb      = thumbOf(c)
                     return (
                       <div
                         key={c.id}
@@ -867,14 +1027,7 @@ export default function AssetsPage() {
                         onClick={() => toggleSelect(c.id)}
                         onContextMenu={e => { e.preventDefault(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
                       >
-                        {thumb
-                          ? <img src={thumb} alt={c.file_name} className="w-full h-full object-cover" />
-                          : <div className="w-full h-full bg-muted flex items-center justify-center">
-                              {c.media_type === "video"
-                                ? <IconVideo className="size-8 text-muted-foreground/30" />
-                                : <IconPhoto className="size-8 text-muted-foreground/30" />}
-                            </div>
-                        }
+                        <CreativeCardMedia creative={c} className="h-full w-full object-cover" />
                         {/* Checkbox */}
                         <div className={cn(
                           "absolute top-2 left-2 size-5 rounded-full border-2 flex items-center justify-center transition-all",
@@ -934,7 +1087,6 @@ export default function AssetsPage() {
                       {displayList.map(c => {
                         const isSelected = selected.has(c.id)
                         const isReady    = !!(c.fb_image_hash || c.fb_video_id)
-                        const thumb      = thumbOf(c)
                         return (
                           <tr key={c.id} className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer", isSelected && "bg-primary/5")} onClick={() => toggleSelect(c.id)}>
                             <td className="px-3 py-2.5">
@@ -945,11 +1097,7 @@ export default function AssetsPage() {
                             <td className="px-3 py-2.5">
                               <div className="flex items-center gap-3">
                                 <div className="size-9 rounded-lg overflow-hidden bg-muted shrink-0">
-                                  {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" /> : (
-                                    <div className="w-full h-full flex items-center justify-center">
-                                      {c.media_type === "video" ? <IconVideo className="size-4 text-muted-foreground/30" /> : <IconPhoto className="size-4 text-muted-foreground/30" />}
-                                    </div>
-                                  )}
+                                  <CreativeCardMedia creative={c} className="h-full w-full object-cover" compact />
                                 </div>
                                 <span className="text-sm font-medium truncate max-w-[200px]">{c.file_name}</span>
                               </div>
@@ -1065,7 +1213,13 @@ export default function AssetsPage() {
       </Dialog>
 
       {/* ── Create Board Dialog ───────────────────────────────────────────── */}
-      <Dialog open={createBoardOpen} onOpenChange={setCreateBoardOpen}>
+      <Dialog
+        open={createBoardOpen}
+        onOpenChange={(open) => {
+          setCreateBoardOpen(open)
+          if (!open) setBoardDialogError("")
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Create Board</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
@@ -1084,6 +1238,12 @@ export default function AssetsPage() {
               <Label htmlFor="board-desc">Description <span className="text-muted-foreground font-normal">(optional)</span></Label>
               <Input id="board-desc" value={boardDesc} onChange={e => setBoardDesc(e.target.value)} placeholder="What's this board for?" />
             </div>
+            {boardDialogError && (
+              <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span>{boardDialogError}</span>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateBoardOpen(false)}>Cancel</Button>
@@ -1141,12 +1301,19 @@ export default function AssetsPage() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              Delete {deleteConfirm?.type === "creative" ? "Asset" : deleteConfirm?.type === "board" ? "Board" : "Request"}?
+              Delete {deleteConfirm?.type === "creative"
+                ? "Asset"
+                : deleteConfirm?.type === "board"
+                  ? "Board"
+                  : deleteConfirm?.type === "bulk_creative"
+                    ? "Selected Assets"
+                    : "Request"}?
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground py-2">
-            Are you sure you want to delete <span className="font-medium text-foreground">"{deleteConfirm?.name}"</span>?
+            Are you sure you want to delete <span className="font-medium text-foreground">&quot;{deleteConfirm?.name}&quot;</span>?
             {deleteConfirm?.type === "creative" && " This will also remove it from any boards."}
+            {deleteConfirm?.type === "bulk_creative" && " Each asset will also be removed from any boards."}
             {deleteConfirm?.type === "board" && " The assets inside will not be deleted."}
             {" "}This action cannot be undone.
           </p>

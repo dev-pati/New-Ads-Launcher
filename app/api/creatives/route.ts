@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { mapCreativeForClient } from "@/lib/creative-media"
 import { createClient } from "@/lib/supabase/server"
 import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
 import { notifyOrgMembers } from "@/lib/notify-org"
@@ -8,6 +10,32 @@ import { notifyOrgMembers } from "@/lib/notify-org"
 export const runtime = "nodejs"
 export const maxDuration = 300 // 5 minutes for big videos
 export const dynamic = "force-dynamic"
+
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-")
+}
+
+async function uploadOriginalToStorage(params: {
+  orgId: string
+  fileName: string
+  contentType: string
+  buffer: ArrayBuffer
+}) {
+  const storagePath = `creatives/${params.orgId}/${crypto.randomUUID()}-${sanitizeFileName(params.fileName)}`
+  const admin = createAdminClient()
+  const { error } = await admin.storage.from("ad-media").upload(storagePath, params.buffer, {
+    contentType: params.contentType,
+    upsert: false,
+    cacheControl: "31536000",
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const { data } = admin.storage.from("ad-media").getPublicUrl(storagePath)
+  return { storagePath, publicUrl: data.publicUrl }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -33,7 +61,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch creatives" }, { status: 500 })
     }
 
-    return NextResponse.json({ creatives: data || [] })
+    return NextResponse.json({ creatives: (data || []).map((creative) => mapCreativeForClient(creative)) })
   } catch (err) {
     console.error("Failed to fetch creatives:", err)
     return NextResponse.json({ error: "Failed to fetch creatives" }, { status: 500 })
@@ -83,16 +111,16 @@ export async function POST(request: NextRequest) {
       }
 
       const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-      notifyOrgMembers({
+      await notifyOrgMembers({
         orgId: ctx.orgId,
         actorId: ctx.user.id,
         actorName,
         type: "asset_uploaded",
         title: `${actorName} uploaded "${body.file_name}"`,
         link: "/assets",
-      }).catch(() => {})
+      })
 
-      return NextResponse.json({ creative }, { status: 201 })
+      return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
     }
 
     // Old flow: file uploaded through server (for duplicate row etc.)
@@ -138,6 +166,12 @@ export async function POST(request: NextRequest) {
     const isVideo = file.type.startsWith("video/")
     const mediaType = isVideo ? "video" : "image"
     const fileBuffer = await file.arrayBuffer()
+    const storedOriginal = await uploadOriginalToStorage({
+      orgId: ctx.orgId,
+      fileName: file.name,
+      contentType: file.type || "application/octet-stream",
+      buffer: fileBuffer,
+    })
 
     let fbImageHash: string | null = null
     let fbImageUrl: string | null = null
@@ -161,7 +195,8 @@ export async function POST(request: NextRequest) {
         user_id: ctx.user.id,
         ad_account_id: fbAdAccountId || null,
         file_name: file.name,
-        file_url: fbThumbnailUrl || fbImageUrl || "",
+        file_url: storedOriginal.publicUrl,
+        storage_path: storedOriginal.storagePath,
         media_type: mediaType,
         file_size: file.size,
         headline,
@@ -183,18 +218,76 @@ export async function POST(request: NextRequest) {
     }
 
     const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-    notifyOrgMembers({
+    await notifyOrgMembers({
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,
       type: "asset_uploaded",
       title: `${actorName} uploaded "${file.name}"`,
       link: "/assets",
-    }).catch(() => {})
+    })
 
-    return NextResponse.json({ creative }, { status: 201 })
-  } catch (err: any) {
+    return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
+  } catch (err: unknown) {
     console.error("Failed to create creative:", err)
-    return NextResponse.json({ error: err.message || "Failed to create creative" }, { status: 500 })
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to create creative" },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const ctx = await getAuthContext()
+    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const body = await request.json().catch(() => null)
+    const ids = Array.isArray(body?.ids)
+      ? body.ids.filter((value: unknown): value is string => typeof value === "string" && value.length > 0)
+      : []
+
+    if (ids.length === 0) {
+      return NextResponse.json({ error: "ids are required" }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const { data: creatives, error: fetchError } = await supabase
+      .from("creatives")
+      .select("id, storage_path")
+      .eq("org_id", ctx.orgId)
+      .in("id", ids)
+
+    if (fetchError) {
+      return NextResponse.json({ error: "Failed to load creatives" }, { status: 500 })
+    }
+
+    const foundIds = (creatives || []).map((creative) => creative.id)
+    if (foundIds.length !== ids.length) {
+      return NextResponse.json({ error: "Some selected assets were not found" }, { status: 404 })
+    }
+
+    const storagePaths = (creatives || [])
+      .map((creative) => creative.storage_path)
+      .filter((path): path is string => typeof path === "string" && path.length > 0)
+
+    if (storagePaths.length > 0) {
+      await supabase.storage.from("ad-media").remove(storagePaths)
+    }
+
+    const { error: deleteError } = await supabase
+      .from("creatives")
+      .delete()
+      .eq("org_id", ctx.orgId)
+      .in("id", ids)
+
+    if (deleteError) {
+      return NextResponse.json({ error: "Failed to delete creatives" }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, deletedIds: ids })
+  } catch (err) {
+    console.error("Failed to bulk delete creatives:", err)
+    return NextResponse.json({ error: "Failed to bulk delete creatives" }, { status: 500 })
   }
 }

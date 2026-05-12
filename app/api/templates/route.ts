@@ -12,15 +12,11 @@ export async function GET(request: NextRequest) {
     const adAccountId = searchParams.get("ad_account_id")
 
     const db = createAdminClient()
-    let query = db
+    const { data, error } = await db
       .from("ad_copy_templates")
       .select("*")
       .eq("org_id", ctx.orgId)
       .order("created_at", { ascending: false })
-
-    if (adAccountId) query = query.eq("ad_account_id", adAccountId)
-
-    const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     return NextResponse.json({ templates: data || [] })
@@ -37,8 +33,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { ad_account_id, name, primary_text, headline, description, link, cta, tags } = body
 
-    if (!ad_account_id || !name?.trim()) {
-      return NextResponse.json({ error: "ad_account_id and name are required" }, { status: 400 })
+    if (!name?.trim()) {
+      return NextResponse.json({ error: "name is required" }, { status: 400 })
     }
 
     const db = createAdminClient()
@@ -62,14 +58,14 @@ export async function POST(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-    notifyOrgMembers({
+    await notifyOrgMembers({
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,
       type: "template_created",
       title: `${actorName} created template "${name.trim()}"`,
       link: "/templates",
-    }).catch(() => {})
+    })
 
     return NextResponse.json({ template: data }, { status: 201 })
   } catch (err: any) {

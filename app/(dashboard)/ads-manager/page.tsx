@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { CreateCampaignModal } from "@/components/ads-manager/create-flow/CreateCampaignModal"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -146,14 +147,14 @@ function StatusToggle({ id, status, onToggle }: { id: string; status: string; on
     <button
       onClick={e => { e.stopPropagation(); onToggle(id, isActive ? "PAUSED" : "ACTIVE") }}
       className={cn(
-        "relative inline-flex h-[18px] w-8 items-center rounded-full transition-colors shrink-0",
-        isActive ? "bg-blue-600" : "bg-gray-300 dark:bg-gray-600"
+        "relative inline-flex h-4 w-[30px] items-center rounded-full transition-colors shrink-0",
+        isActive ? "bg-[#1877f2]" : "bg-[#bec3c9] dark:bg-gray-600"
       )}
       title={isActive ? "Click to pause" : "Click to activate"}
     >
       <span className={cn(
-        "inline-block size-3 rounded-full bg-white shadow-sm transition-transform",
-        isActive ? "translate-x-[18px]" : "translate-x-0.5"
+        "inline-block size-[14px] rounded-full bg-white shadow-sm transition-transform",
+        isActive ? "translate-x-[14px]" : "translate-x-px"
       )} />
     </button>
   )
@@ -164,8 +165,8 @@ function StatusToggle({ id, status, onToggle }: { id: string; status: string; on
 function DeliveryBadge({ effective_status }: { effective_status: string }) {
   const isActive = effective_status === "ACTIVE"
   return (
-    <span className={cn("flex items-center gap-1.5 text-xs", isActive ? "text-green-600 dark:text-green-400" : "text-muted-foreground")}>
-      <span className={cn("size-2 rounded-full", isActive ? "bg-green-500" : "bg-gray-400")} />
+    <span className="flex items-center gap-1.5 text-[13px] text-[#1c2b33] dark:text-gray-300">
+      <span className={cn("size-[7px] rounded-full", isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]")} />
       {isActive ? "Active" : effective_status === "PAUSED" ? "Off" : effective_status.charAt(0) + effective_status.slice(1).toLowerCase()}
     </span>
   )
@@ -180,13 +181,13 @@ function SortTh({ label, field, sortField, sortDir, onSort, className }: {
   const active = sortField === field
   return (
     <th
-      className={cn("px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground cursor-pointer select-none whitespace-nowrap hover:text-foreground group", className)}
+      className={cn("px-3 py-2 text-left text-[13px] font-semibold text-[#65676b] dark:text-muted-foreground cursor-pointer select-none whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5", className)}
       onClick={() => onSort(field)}
     >
-      <span className="flex items-center gap-0.5">
+      <span className="flex items-center gap-1">
         {label}
         {active
-          ? (sortDir === "asc" ? <IconArrowUp className="size-3 text-primary" /> : <IconArrowDown className="size-3 text-primary" />)
+          ? (sortDir === "asc" ? <IconArrowUp className="size-3 text-[#1877f2]" /> : <IconArrowDown className="size-3 text-[#1877f2]" />)
           : <IconArrowsUpDown className="size-3 opacity-0 group-hover:opacity-50" />
         }
       </span>
@@ -247,6 +248,7 @@ export default function AdsManagerPage() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [defaultsOpen, setDefaultsOpen] = useState(false)
   const [defaultPrimaryText, setDefaultPrimaryText] = useState("")
+  const [createModalOpen, setCreateModalOpen] = useState(false)
   const [defaultHeadline, setDefaultHeadline] = useState("")
   const [defaultCta, setDefaultCta] = useState("SHOP_NOW")
   const [defaultLink, setDefaultLink] = useState("")
@@ -602,6 +604,7 @@ export default function AdsManagerPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
+      <CreateCampaignModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={fetchData} />
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
@@ -665,10 +668,10 @@ export default function AdsManagerPage() {
                 key={t}
                 onClick={() => switchTab(t)}
                 className={cn(
-                  "flex items-center gap-1.5 px-1 py-2.5 mr-5 text-sm border-b-2 transition-colors whitespace-nowrap",
+                  "flex items-center gap-1.5 px-4 py-2 text-[13px] transition-colors whitespace-nowrap rounded-t-lg border-t border-l border-r",
                   tab === t
-                    ? "border-blue-600 text-blue-600 font-medium"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    ? "bg-white dark:bg-card border-[#e4e6eb] dark:border-gray-800 font-bold text-gray-900 dark:text-gray-100 z-10 -mb-px shadow-[0_-2px_0_0_#1877f2]"
+                    : "bg-[#f5f6f7] dark:bg-muted/50 border-transparent border-b-[#e4e6eb] dark:border-b-gray-800 text-[#65676b] dark:text-muted-foreground hover:bg-[#ebedf0] dark:hover:bg-muted font-semibold"
                 )}
               >
                 {t === "campaigns"
@@ -742,17 +745,17 @@ export default function AdsManagerPage() {
       </div>
 
       {/* ── Action toolbar ── */}
-      <div className="flex items-center gap-1.5 px-4 py-2 border-b shrink-0 flex-wrap">
-        <button onClick={() => setDefaultsOpen(true)} className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0 flex-wrap bg-white dark:bg-background">
+        <button onClick={() => setDefaultsOpen(true)} className="flex items-center gap-1.5 h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm">
           <IconSettings className="size-3.5" />Ad defaults
         </button>
-        <button onClick={() => router.push("/launch")} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors font-medium">
+        <button onClick={() => setCreateModalOpen(true)} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded bg-[#31a24c] hover:bg-[#2b9244] text-white transition-colors font-semibold shadow-sm">
           <IconPlus className="size-3.5" />Create
         </button>
         <button
           disabled={selectedIds.size === 0}
           onClick={() => setDuplicateDialogOpen(true)}
-          className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground disabled:opacity-40"
+          className="flex items-center gap-1.5 h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm disabled:opacity-40"
         >
           <IconCopy className="size-3.5" />
           Duplicate{selectedIds.size > 0 && ` (${selectedIds.size})`}
@@ -760,23 +763,23 @@ export default function AdsManagerPage() {
         <button
           disabled={selectedIds.size === 0}
           onClick={() => setEditingNode(currentData.find(x => x.id === Array.from(selectedIds)[0]) || null)}
-          className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground disabled:opacity-40"
+          className="flex items-center gap-1.5 h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm disabled:opacity-40"
         >
           <IconPencil className="size-3.5" />
           Edit{selectedIds.size > 0 && ` (${selectedIds.size})`}
         </button>
 
         {selectedIds.size > 0 && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 ml-2">
             <button
               onClick={() => Array.from(selectedIds).forEach(id => toggleStatus(id, "ACTIVE"))}
-              className="h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-blue-600 font-medium"
+              className="h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#1877f2] font-semibold shadow-sm"
             >
               Activate
             </button>
             <button
               onClick={() => Array.from(selectedIds).forEach(id => toggleStatus(id, "PAUSED"))}
-              className="h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground"
+              className="h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm"
             >
               Pause
             </button>
@@ -877,7 +880,7 @@ export default function AdsManagerPage() {
           </div>
         ) : (
           <table className="w-full text-sm border-collapse" style={{ minWidth: 1100 }}>
-            <thead className="sticky top-0 z-10 bg-background border-b">
+            <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted/80 border-b border-[#e4e6eb] dark:border-gray-800">
               <tr>
                 <th className="w-10 px-3 py-2.5">
                   <input ref={headerCheckRef} type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
@@ -936,18 +939,18 @@ export default function AdsManagerPage() {
                   const cpr = getCostPerResult(c, c.objective)
                   const isSel = selectedIds.has(c.id)
                   return (
-                    <tr key={c.id} className={cn("border-b hover:bg-muted/20 transition-colors group", isSel && "bg-blue-50/40 dark:bg-blue-950/10")}>
-                      <td className="px-3 py-2.5">
-                        <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={isSel}
+                    <tr key={c.id} className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                      <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                           onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(c.id) : s.add(c.id); return s })} />
                       </td>
-                      <td className="px-2 py-2.5">
+                      <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                         {toggling.has(c.id)
-                          ? <IconLoader2 className="size-4 animate-spin text-muted-foreground" />
+                          ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" />
                           : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />
                         }
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                         {inlineEditingId === c.id ? (
                           <div className="flex items-center gap-2">
                             <Input
@@ -955,47 +958,55 @@ export default function AdsManagerPage() {
                               onChange={e => setInlineEditingName(e.target.value)}
                               onBlur={() => saveInlineRename(c.id)}
                               onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)}
-                              className="h-7 text-sm py-1"
+                              className="h-7 text-[13px] py-1"
                               autoFocus
                             />
                           </div>
                         ) : (
-                          <div className="group/name flex items-center gap-2">
-                            <button
-                              onClick={() => drillToAdSets(c)}
-                              className="text-blue-600 hover:text-blue-800 hover:underline text-sm font-medium text-left line-clamp-2"
-                            >
-                              {c.name}
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setInlineEditingId(c.id);
-                                setInlineEditingName(c.name);
-                              }}
-                              className="opacity-0 group-hover/name:opacity-100 p-1 hover:bg-muted rounded transition-opacity"
-                            >
-                              <IconPencil className="size-3 text-muted-foreground" />
-                            </button>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => drillToAdSets(c)}
+                                className="text-[#1877f2] hover:underline text-[13px] font-semibold text-left line-clamp-2"
+                              >
+                                {c.name}
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInlineEditingId(c.id);
+                                  setInlineEditingName(c.name);
+                                }}
+                                className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"
+                              >
+                                <IconPencil className="size-3 text-[#65676b]" />
+                              </button>
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(c)}>Edit</button>
+                              <span className="text-[#ccd0d5]">·</span>
+                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                            </div>
+                            <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{c.id}</p>
                           </div>
                         )}
-                        <p className="text-[10px] text-muted-foreground">{c.id}</p>
                       </td>
-                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-sm tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
-                      {visibleCols.has("budget") && <td className="px-3 py-2.5 text-sm tabular-nums">
+                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
+                      {visibleCols.has("budget") && <td className="px-3 py-2.5 text-[13px] tabular-nums">
                         {c.daily_budget ? fmtBudget(c.daily_budget) : c.lifetime_budget ? fmtBudget(c.lifetime_budget) : "—"}
                       </td>}
                       {visibleCols.has("results") && <td className="px-3 py-2.5">
-                        <span className="text-sm tabular-nums">{ins ? resultCount : "—"}</span>
-                        {ins && <p className="text-[10px] text-muted-foreground">{resultType}</p>}
+                        <span className="text-[13px] tabular-nums">{ins ? resultCount : "—"}</span>
+                        {ins && <p className="text-[11px] text-[#65676b]">{resultType}</p>}
                       </td>}
                       {visibleCols.has("cpr") && <td className="px-3 py-2.5">
-                        <span className="text-sm tabular-nums">{cpr || "—"}</span>
-                        {cpr && <p className="text-[10px] text-muted-foreground">Per {resultType}</p>}
+                        <span className="text-[13px] tabular-nums">{cpr || "—"}</span>
+                        {cpr && <p className="text-[11px] text-[#65676b]">Per {resultType}</p>}
                       </td>}
                       {visibleCols.has("schedule") && <>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtDate(c.start_time)}</td>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtDate(c.stop_time)}</td>
+                        <td className="px-3 py-2.5 text-[13px] text-[#65676b]">{fmtDate(c.start_time)}</td>
+                        <td className="px-3 py-2.5 text-[13px] text-[#65676b]">{fmtDate(c.stop_time)}</td>
                       </>}
                       {visibleCols.has("delivery") && <td className="px-3 py-2.5"><DeliveryBadge effective_status={c.effective_status} /></td>}
                     </tr>
@@ -1010,18 +1021,18 @@ export default function AdsManagerPage() {
                   const cpr = getCostPerResult(a, campaign?.objective)
                   const isSel = selectedIds.has(a.id)
                   return (
-                    <tr key={a.id} className={cn("border-b hover:bg-muted/20 transition-colors group", isSel && "bg-blue-50/40 dark:bg-blue-950/10")}>
-                      <td className="px-3 py-2.5">
-                        <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={isSel}
+                    <tr key={a.id} className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                      <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                           onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
                       </td>
-                      <td className="px-2 py-2.5">
+                      <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                         {toggling.has(a.id)
-                          ? <IconLoader2 className="size-4 animate-spin text-muted-foreground" />
+                          ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" />
                           : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />
                         }
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                         {inlineEditingId === a.id ? (
                           <div className="flex items-center gap-2">
                             <Input
@@ -1029,44 +1040,52 @@ export default function AdsManagerPage() {
                               onChange={e => setInlineEditingName(e.target.value)}
                               onBlur={() => saveInlineRename(a.id)}
                               onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)}
-                              className="h-7 text-sm py-1"
+                              className="h-7 text-[13px] py-1"
                               autoFocus
                             />
                           </div>
                         ) : (
-                          <div className="group/name flex items-center gap-2">
-                            <button onClick={() => drillToAds(a)} className="text-blue-600 hover:text-blue-800 hover:underline text-sm font-medium text-left line-clamp-2">
-                              {a.name}
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setInlineEditingId(a.id);
-                                setInlineEditingName(a.name);
-                              }}
-                              className="opacity-0 group-hover/name:opacity-100 p-1 hover:bg-muted rounded transition-opacity"
-                            >
-                              <IconPencil className="size-3 text-muted-foreground" />
-                            </button>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => drillToAds(a)} className="text-[#1877f2] hover:underline text-[13px] font-semibold text-left line-clamp-2">
+                                {a.name}
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInlineEditingId(a.id);
+                                  setInlineEditingName(a.name);
+                                }}
+                                className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"
+                              >
+                                <IconPencil className="size-3 text-[#65676b]" />
+                              </button>
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
+                              <span className="text-[#ccd0d5]">·</span>
+                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                            </div>
+                            <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
                           </div>
                         )}
-                        <p className="text-[10px] text-muted-foreground">{a.id}</p>
                       </td>
-                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-sm tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
-                      {visibleCols.has("budget") && <td className="px-3 py-2.5 text-sm tabular-nums">
+                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
+                      {visibleCols.has("budget") && <td className="px-3 py-2.5 text-[13px] tabular-nums">
                         {a.daily_budget ? fmtBudget(a.daily_budget) : a.lifetime_budget ? fmtBudget(a.lifetime_budget) : "—"}
                       </td>}
                       {visibleCols.has("results") && <td className="px-3 py-2.5">
-                        <span className="text-sm">{ins ? resultCount : "—"}</span>
-                        {ins && <p className="text-[10px] text-muted-foreground">{resultType}</p>}
+                        <span className="text-[13px]">{ins ? resultCount : "—"}</span>
+                        {ins && <p className="text-[11px] text-[#65676b]">{resultType}</p>}
                       </td>}
                       {visibleCols.has("cpr") && <td className="px-3 py-2.5">
-                        <span className="text-sm">{cpr || "—"}</span>
-                        {cpr && <p className="text-[10px] text-muted-foreground">Per {resultType}</p>}
+                        <span className="text-[13px]">{cpr || "—"}</span>
+                        {cpr && <p className="text-[11px] text-[#65676b]">Per {resultType}</p>}
                       </td>}
                       {visibleCols.has("schedule") && <>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground">{a.optimization_goal?.replace(/_/g, " ").toLowerCase() || "—"}</td>
-                        <td className="px-3 py-2.5 text-xs text-muted-foreground">{fmtDate(a.start_time)}</td>
+                        <td className="px-3 py-2.5 text-[13px] text-[#65676b]">{a.optimization_goal?.replace(/_/g, " ").toLowerCase() || "—"}</td>
+                        <td className="px-3 py-2.5 text-[13px] text-[#65676b]">{fmtDate(a.start_time)}</td>
                       </>}
                       {visibleCols.has("delivery") && <td className="px-3 py-2.5"><DeliveryBadge effective_status={a.effective_status} /></td>}
                     </tr>
@@ -1083,18 +1102,18 @@ export default function AdsManagerPage() {
                   const isSel = selectedIds.has(a.id)
                   const thumb = a.creative?.thumbnail_url || a.creative?.image_url
                   return (
-                    <tr key={a.id} className={cn("border-b hover:bg-muted/20 transition-colors group", isSel && "bg-blue-50/40 dark:bg-blue-950/10")}>
-                      <td className="px-3 py-2.5">
-                        <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={isSel}
+                    <tr key={a.id} className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                      <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                           onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
                       </td>
-                      <td className="px-2 py-2.5">
+                      <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                         {toggling.has(a.id)
-                          ? <IconLoader2 className="size-4 animate-spin text-muted-foreground" />
+                          ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" />
                           : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />
                         }
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                         {inlineEditingId === a.id ? (
                           <div className="flex items-center gap-2">
                             <Input
@@ -1102,27 +1121,35 @@ export default function AdsManagerPage() {
                               onChange={e => setInlineEditingName(e.target.value)}
                               onBlur={() => saveInlineRename(a.id)}
                               onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)}
-                              className="h-7 text-sm py-1"
+                              className="h-7 text-[13px] py-1"
                               autoFocus
                             />
                           </div>
                         ) : (
-                          <div className="group/name flex items-center gap-2">
-                            <p className="text-sm font-medium line-clamp-2">{a.name}</p>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setInlineEditingId(a.id);
-                                setInlineEditingName(a.name);
-                              }}
-                              className="opacity-0 group-hover/name:opacity-100 p-1 hover:bg-muted rounded transition-opacity"
-                            >
-                              <IconPencil className="size-3 text-muted-foreground" />
-                            </button>
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-2">
+                              <p className="text-[13px] font-semibold text-[#1c2b33] dark:text-gray-200 line-clamp-2">{a.name}</p>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setInlineEditingId(a.id);
+                                  setInlineEditingName(a.name);
+                                }}
+                                className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"
+                              >
+                                <IconPencil className="size-3 text-[#65676b]" />
+                              </button>
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
+                              <span className="text-[#ccd0d5]">·</span>
+                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                            </div>
+                            <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
+                            {adSet && <p className="text-[10px] text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
                           </div>
                         )}
-                        <p className="text-[10px] text-muted-foreground">{a.id}</p>
-                        {adSet && <p className="text-[10px] text-muted-foreground truncate max-w-[200px]">↳ {adSet.name}</p>}
                       </td>
                       <td className="px-3 py-2.5">
                         {thumb
@@ -1130,14 +1157,14 @@ export default function AdsManagerPage() {
                           : <div className="size-12 rounded bg-muted border flex items-center justify-center text-[10px] text-muted-foreground">No img</div>
                         }
                       </td>
-                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-sm tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
+                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
                       {visibleCols.has("results") && <td className="px-3 py-2.5">
-                        <span className="text-sm">{ins ? resultCount : "—"}</span>
-                        {ins && <p className="text-[10px] text-muted-foreground">{resultType}</p>}
+                        <span className="text-[13px]">{ins ? resultCount : "—"}</span>
+                        {ins && <p className="text-[11px] text-[#65676b]">{resultType}</p>}
                       </td>}
                       {visibleCols.has("cpr") && <td className="px-3 py-2.5">
-                        <span className="text-sm">{cpr || "—"}</span>
-                        {cpr && <p className="text-[10px] text-muted-foreground">Per {resultType}</p>}
+                        <span className="text-[13px]">{cpr || "—"}</span>
+                        {cpr && <p className="text-[11px] text-[#65676b]">Per {resultType}</p>}
                       </td>}
                       {visibleCols.has("delivery") && <td className="px-3 py-2.5"><DeliveryBadge effective_status={a.effective_status} /></td>}
                     </tr>

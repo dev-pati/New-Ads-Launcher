@@ -106,10 +106,10 @@ export async function POST(request: NextRequest) {
       .map((c: any) => ({ creativeId: c.id, videoId: c.fb_video_id, fileName: c.file_name }))
 
     if (videosToCheck.length > 0) {
-      console.log(`[launch-direct] Polling ${videosToCheck.length} unprocessed video(s) for "ready" status (max 30s)…`)
-      // Short 30s timeout — most videos finish in 10-20s. If still processing, fail fast and ask user to retry.
+      console.log(`[launch-direct] Polling ${videosToCheck.length} unprocessed video(s) for "ready" status (max 120s)…`)
+      // Professional videos from Drive often need 45-90s to process. 120s is a safe expert-recommended limit.
       const readyResults = await Promise.all(
-        videosToCheck.map(v => pollVideoReady(v.videoId, token, 30_000).then(r => ({ ...v, ...r })))
+        videosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000).then(r => ({ ...v, ...r })))
       )
       const notReady = readyResults.filter(r => !r.ready)
       for (const nr of notReady) {
@@ -489,7 +489,7 @@ export async function POST(request: NextRequest) {
 
     // Notify teammates about the launch
     if (created.length > 0) {
-      notifyOrgMembers({
+      await notifyOrgMembers({
         orgId: ctx.orgId,
         actorId: ctx.user.id,
         actorName: userName,
@@ -497,7 +497,7 @@ export async function POST(request: NextRequest) {
         title: `${userName} launched ${created.length} ad${created.length !== 1 ? "s" : ""}`,
         body: adAccountName ? `on ${adAccountName}` : undefined,
         link: batchId ? `/ads-manager?batch=${batchId}` : "/ads-manager",
-      }).catch(() => {})
+      })
     }
 
     // Save scheduled activation record so cron job can activate at the right time

@@ -9028,15 +9028,15 @@ function AdCopyTemplateModal({
   })
 
   useEffect(() => {
-    if (!open || !adAccountId) return
+    if (!open) return
     setSearch(""); setPage(1)
     setLoadingTemplates(true)
-    fetch(`/api/templates?ad_account_id=${encodeURIComponent(adAccountId)}`)
+    fetch(`/api/templates`)
       .then(r => r.json())
       .then(d => setTemplates((d.templates || []).map(dbToLocal)))
       .catch(() => setTemplates([]))
       .finally(() => setLoadingTemplates(false))
-  }, [open, adAccountId])
+  }, [open])
 
   // Read Default Settings
   const defaultCopy = useMemo(() => {
@@ -9159,7 +9159,17 @@ function AdCopyTemplateModal({
     try {
       const res = await fetch(`/api/facebook/existing-ads?ad_account_id=${encodeURIComponent(adAccountId)}&active_only=1&limit=100`)
       const data = await res.json()
-      setExistingAds((data.ads || []).filter((a: any) => a.primaryText || a.headline))
+      const adsWithCopy = (data.ads || []).filter((a: any) => a.primaryText || a.headline)
+      
+      const seen = new Set<string>()
+      const uniqueAds = adsWithCopy.filter((a: any) => {
+        const key = `${(a.primaryText || "").trim()}|||${(a.headline || "").trim()}|||${(a.link || "").trim()}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      
+      setExistingAds(uniqueAds)
     } catch {}
     setLoadingAds(false)
   }

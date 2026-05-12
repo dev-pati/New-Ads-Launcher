@@ -435,30 +435,73 @@ export async function uploadImageToMeta(
   }
 }
 
-// Upload video to Meta Ad Account (returns video ID)
+// Upload video to Meta Ad Account using Resumable Upload (recommended for stability)
+// Phase 1: START, Phase 2: TRANSFER, Phase 3: FINISH
 export async function uploadVideoToMeta(
   adAccountId: string,
   accessToken: string,
   fileBuffer: ArrayBuffer,
   fileName: string
 ): Promise<{ videoId: string }> {
-  const blob = new Blob([fileBuffer])
-
+  const fileSize = fileBuffer.byteLength
+  
+  // Phase 1: START
+  const startParams = new URLSearchParams({
+    access_token: accessToken,
+    upload_phase: "start",
+    file_size: fileSize.toString(),
+  })
+  
+  const startRes = await fetch(`${GRAPH_API_BASE}/${adAccountId}/advideos`, {
+    method: "POST",
+    body: startParams,
+  })
+  
+  if (!startRes.ok) {
+    const error = await startRes.json()
+    throw new Error(`Meta Video Upload START failed: ${error.error?.message || "Unknown error"}`)
+  }
+  
+  const { upload_session_id, video_id } = await startRes.json()
+  
+  // Phase 2: TRANSFER
+  // We send the entire buffer in one chunk for simplicity, but using the session makes it stable
   const formData = new FormData()
   formData.append("access_token", accessToken)
-  formData.append("title", fileName)
-  formData.append("source", blob, fileName)
-
-  const res = await fetch(
-    `${GRAPH_API_BASE}/${adAccountId}/advideos`,
-    { method: "POST", body: formData }
-  )
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to upload video to Meta")
+  formData.append("upload_phase", "transfer")
+  formData.append("upload_session_id", upload_session_id)
+  formData.append("start_offset", "0")
+  formData.append("video_file_chunk", new Blob([fileBuffer]), fileName)
+  
+  const transferRes = await fetch(`${GRAPH_API_BASE}/${adAccountId}/advideos`, {
+    method: "POST",
+    body: formData,
+  })
+  
+  if (!transferRes.ok) {
+    const error = await transferRes.json()
+    throw new Error(`Meta Video Upload TRANSFER failed: ${error.error?.message || "Unknown error"}`)
   }
-  const data = await res.json()
-  return { videoId: data.id }
+  
+  // Phase 3: FINISH
+  const finishParams = new URLSearchParams({
+    access_token: accessToken,
+    upload_phase: "finish",
+    upload_session_id: upload_session_id,
+    title: fileName,
+  })
+  
+  const finishRes = await fetch(`${GRAPH_API_BASE}/${adAccountId}/advideos`, {
+    method: "POST",
+    body: finishParams,
+  })
+  
+  if (!finishRes.ok) {
+    const error = await finishRes.json()
+    throw new Error(`Meta Video Upload FINISH failed: ${error.error?.message || "Unknown error"}`)
+  }
+  
+  return { videoId: video_id }
 }
 
 // Get full details of an ad including adset & campaign settings (for template copy)

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { useOrg } from "@/lib/org-context"
 
 export type AppNotification = {
   id: string
@@ -16,23 +15,24 @@ export type AppNotification = {
 }
 
 export function useNotifications() {
-  const { activeOrg } = useOrg()
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [loading, setLoading] = useState(false)
 
   const fetchNotifications = useCallback(async () => {
-    if (!activeOrg?.id) return
     setLoading(true)
     const supabase = createClient()
-    const { data } = await supabase
+    const { data: { session } } = await supabase.auth.getSession()
+    console.log("[notifications] session uid:", session?.user?.id ?? "NO SESSION")
+    const { data, error } = await supabase
       .from("notifications")
       .select("id, type, title, body, link, actor_name, is_read, created_at")
-      .eq("org_id", activeOrg.id)
       .order("created_at", { ascending: false })
       .limit(30)
+    console.log("[notifications] result:", { count: data?.length, error, rows: data })
+    if (error) console.error("[notifications] fetch error:", error)
     setNotifications(data || [])
     setLoading(false)
-  }, [activeOrg?.id])
+  }, [])
 
   // Initial fetch
   useEffect(() => {
@@ -41,10 +41,9 @@ export function useNotifications() {
 
   // Poll every 30s
   useEffect(() => {
-    if (!activeOrg?.id) return
     const interval = setInterval(fetchNotifications, 30_000)
     return () => clearInterval(interval)
-  }, [activeOrg?.id, fetchNotifications])
+  }, [fetchNotifications])
 
   const markRead = useCallback(async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
@@ -53,15 +52,13 @@ export function useNotifications() {
   }, [])
 
   const markAllRead = useCallback(async () => {
-    if (!activeOrg?.id) return
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
     const supabase = createClient()
     await supabase
       .from("notifications")
       .update({ is_read: true })
-      .eq("org_id", activeOrg.id)
       .eq("is_read", false)
-  }, [activeOrg?.id])
+  }, [])
 
   const unreadCount = notifications.filter(n => !n.is_read).length
 

@@ -229,16 +229,15 @@ export default function TemplatesPage() {
   const [accountDropOpen, setAccountDropOpen] = useState(false)
 
   const fetchTemplates = useCallback(async () => {
-    if (!selectedAccountId) return
     setLoading(true)
     try {
-      const r = await fetch(`/api/templates?ad_account_id=${encodeURIComponent(selectedAccountId)}`)
+      const r = await fetch(`/api/templates`)
       const d = await r.json()
       setTemplates(d.templates || [])
     } catch { /* silent */ } finally {
       setLoading(false)
     }
-  }, [selectedAccountId])
+  }, [])
 
   useEffect(() => { fetchTemplates() }, [fetchTemplates])
 
@@ -263,7 +262,6 @@ export default function TemplatesPage() {
   const openEdit = (t: AdCopyTemplate) => { setEditTarget(t); setFormOpen(true) }
 
   const handleSave = async (form: ReturnType<typeof emptyForm>) => {
-    if (!selectedAccountId) return
     setSaving(true)
     try {
       if (editTarget) {
@@ -278,7 +276,7 @@ export default function TemplatesPage() {
         const r = await fetch("/api/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ad_account_id: selectedAccountId, ...form }),
+          body: JSON.stringify({ ad_account_id: selectedAccountId || null, ...form }),
         })
         const d = await r.json()
         if (r.ok) setTemplates(prev => [d.template, ...prev])
@@ -323,7 +321,7 @@ export default function TemplatesPage() {
     input.type = "file"; input.accept = ".csv"
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0]
-      if (!file || !selectedAccountId) return
+      if (!file) return
       const text = await file.text()
       const lines = text.split("\n").slice(1).filter(l => l.trim())
       const toCreate: ReturnType<typeof emptyForm>[] = []
@@ -337,7 +335,7 @@ export default function TemplatesPage() {
         const r = await fetch("/api/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ad_account_id: selectedAccountId, ...t }),
+          body: JSON.stringify({ ad_account_id: selectedAccountId || null, ...t }),
         })
         if (r.ok) { const d = await r.json(); setTemplates(prev => [d.template, ...prev]) }
       }

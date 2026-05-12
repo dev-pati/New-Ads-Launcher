@@ -129,7 +129,7 @@ export async function POST(
       }
 
       const inviterName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Someone"
-      notifyOrgMembers({
+      await notifyOrgMembers({
         orgId,
         actorId: existingUser.id,
         actorName: email,
@@ -137,7 +137,7 @@ export async function POST(
         title: `${email} joined the workspace`,
         body: `Invited by ${inviterName}`,
         link: "/settings",
-      }).catch(() => {})
+      })
 
       return NextResponse.json({ success: true, added: true })
     }

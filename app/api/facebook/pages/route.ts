@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { getFacebookPages } from "@/lib/facebook"
+import { getAdAccountPages, getFacebookPages } from "@/lib/facebook"
+import { adAccountBelongsToOrg } from "../_utils"
 export const dynamic = "force-dynamic"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -12,11 +13,20 @@ export async function GET() {
     if (!connection) return NextResponse.json({ error: "No Facebook connection found. Go to /connect to link Facebook." }, { status: 401 })
 
     try {
-      const pages = await getFacebookPages(connection.access_token)
-      console.log(`[pages] Fetched ${pages.length} pages for org=${ctx.orgId}`)
+      const adAccountId = request.nextUrl.searchParams.get("ad_account_id")
+      if (adAccountId) {
+        const allowed = await adAccountBelongsToOrg(ctx.orgId, adAccountId, connection.access_token)
+        if (!allowed) {
+          return NextResponse.json({ error: "Ad account not found in workspace" }, { status: 403 })
+        }
+      }
+
+      const pages = adAccountId
+        ? await getAdAccountPages(adAccountId, connection.access_token)
+        : await getFacebookPages(connection.access_token)
       return NextResponse.json({ pages })
-    } catch (metaErr: any) {
-      const msg = metaErr.message || "Meta API error"
+    } catch (metaErr) {
+      const msg = metaErr instanceof Error ? metaErr.message : "Meta API error"
       console.error("[pages] Meta API error:", msg)
       const lower = msg.toLowerCase()
       // Rate limit
@@ -41,8 +51,11 @@ export async function GET() {
       }
       return NextResponse.json({ error: `Meta API: ${msg}` }, { status: 500 })
     }
-  } catch (err: any) {
+  } catch (err) {
     console.error("[pages] Server error:", err)
-    return NextResponse.json({ error: err.message || "Server error" }, { status: 500 })
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Server error" },
+      { status: 500 }
+    )
   }
 }

@@ -292,7 +292,7 @@ export function AllAccountsView({ adAccounts }: { adAccounts: { id: string; name
                 }} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {accounts.map((acc, i) => (
-                  <Bar key={acc.name} dataKey={metricKey === "spend" ? acc.name : acc.name + (metricKey === "impressions" ? "_impr" : "_clicks")}
+                  <Bar key={acc.id} dataKey={metricKey === "spend" ? acc.name : acc.name + (metricKey === "impressions" ? "_impr" : "_clicks")}
                     name={acc.name} stackId="a" fill={ACCOUNT_COLORS[i % ACCOUNT_COLORS.length]} radius={i === accounts.length - 1 ? [2,2,0,0] : undefined} />
                 ))}
               </BarChart>
@@ -472,10 +472,10 @@ export function SpendView() {
                   <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}
                     formatter={(v: any) => fmt$(v)} labelFormatter={(s: any) => fmtDay(s)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {topNames.map((name: string, i: number) => (
-                    <Bar key={name} dataKey={name} name={name.length > 30 ? name.slice(0, 30) + "…" : name}
+                  {Array.from(new Set(topNames as string[])).map((name: string, i: number, arr: string[]) => (
+                    <Bar key={`${name}-${i}`} dataKey={name} name={name.length > 30 ? name.slice(0, 30) + "…" : name}
                       stackId="a" fill={CAMP_COLORS[i % CAMP_COLORS.length]}
-                      radius={i === topNames.length - 1 ? [2,2,0,0] : undefined} />
+                      radius={i === arr.length - 1 ? [2,2,0,0] : undefined} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>

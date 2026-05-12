@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { getFacebookPages, getPageInstagramAccounts } from "@/lib/facebook"
+import { getAdAccountPages, getFacebookPages, getPageInstagramAccounts } from "@/lib/facebook"
+import { adAccountBelongsToOrg } from "../_utils"
+
+export const dynamic = "force-dynamic"
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,19 +14,29 @@ export async function GET(request: NextRequest) {
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
     const pageId = request.nextUrl.searchParams.get("page_id")
+    const adAccountId = request.nextUrl.searchParams.get("ad_account_id")
 
-    // Fetch all pages to get their access tokens
-    const pages = await getFacebookPages(connection.access_token)
+    if (adAccountId) {
+      const allowed = await adAccountBelongsToOrg(ctx.orgId, adAccountId, connection.access_token)
+      if (!allowed) {
+        return NextResponse.json({ error: "Ad account not found in workspace" }, { status: 403 })
+      }
+    }
+
+    const pages = adAccountId
+      ? await getAdAccountPages(adAccountId, connection.access_token)
+      : await getFacebookPages(connection.access_token)
 
     if (pageId) {
-      // Return IG accounts for a specific page
-      const page = pages.find(p => p.id === pageId)
-      if (!page) return NextResponse.json({ igAccounts: [] })
+      const page = pages.find((candidate) => candidate.id === pageId)
+      if (!page) {
+        return NextResponse.json({ error: "Facebook Page not found for this ad account" }, { status: 403 })
+      }
+
       const igAccounts = await getPageInstagramAccounts(page.id, page.access_token)
       return NextResponse.json({ igAccounts })
     }
 
-    // Return IG accounts for all pages in parallel
     const results = await Promise.all(
       pages.map(async (page) => ({
         pageId: page.id,
@@ -32,8 +45,11 @@ export async function GET(request: NextRequest) {
     )
 
     return NextResponse.json({ results })
-  } catch (err: any) {
+  } catch (err) {
     console.error("page-instagram error:", err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to fetch Instagram accounts" },
+      { status: 500 }
+    )
   }
 }

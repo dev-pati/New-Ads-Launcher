@@ -57,8 +57,11 @@ interface Props {
 }
 
 export function NotificationsDropdown({ onClose }: Props) {
-  const { notifications, unreadCount, loading, markRead, markAllRead } = useNotifications()
+  const { notifications, unreadCount, loading, markRead, markAllRead, refresh } = useNotifications()
   const ref = useRef<HTMLDivElement>(null)
+
+  // Force fresh fetch every time dropdown opens
+  useEffect(() => { refresh() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

@@ -1,7 +1,9 @@
 "use client"
+/* eslint-disable @next/next/no-img-element */
 
 import { useRef, useState } from "react"
 import { IconPhoto, IconVideo, IconLoader2, IconBrandGoogleDrive } from "@tabler/icons-react"
+import { isMetaCdnUrl } from "@/lib/creative-media"
 
 interface Creative {
   id: string
@@ -26,16 +28,21 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   const videoSrc = creative.file_url || ""
   const isGDrive = videoSrc.includes("#gdrive")
   const cleanVideoSrc = videoSrc.replace("#gdrive", "")
-  const metaThumb = (creative.fb_thumbnail_url && /^https?:/.test(creative.fb_thumbnail_url) && !creative.fb_thumbnail_url.includes("rsrc.php")) 
-    ? creative.fb_thumbnail_url 
-    : (creative.fb_image_url && /^https?:/.test(creative.fb_image_url)) 
-      ? creative.fb_image_url 
-      : (creative.file_url && /^https?:/.test(creative.file_url) && !isVideoFile(creative.file_url)) 
-        ? creative.file_url 
-        : null
+  const stableImageUrl =
+    creative.file_url && /^https?:/.test(cleanVideoSrc) && !isVideoFile(cleanVideoSrc) && !isMetaCdnUrl(cleanVideoSrc)
+      ? cleanVideoSrc
+      : null
+  const metaThumb = stableImageUrl
+    || ((creative.fb_thumbnail_url && /^https?:/.test(creative.fb_thumbnail_url) && !creative.fb_thumbnail_url.includes("rsrc.php"))
+      ? creative.fb_thumbnail_url
+      : (creative.fb_image_url && /^https?:/.test(creative.fb_image_url))
+        ? creative.fb_image_url
+        : (creative.file_url && /^https?:/.test(creative.file_url) && !isVideoFile(creative.file_url))
+          ? creative.file_url
+          : null)
 
   if (!isVideo) {
-    const imgSrc = creative.fb_image_url || creative.fb_thumbnail_url || cleanVideoSrc
+    const imgSrc = stableImageUrl || creative.fb_image_url || creative.fb_thumbnail_url || cleanVideoSrc
     return (
       <div className="relative h-full w-full">
         {imgSrc && !imgFailed ? (
@@ -54,15 +61,12 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
     )
   }
 
-  const playable = cleanVideoSrc && /^(blob|data|https?):/.test(cleanVideoSrc) && isVideoFile(cleanVideoSrc)
+  const playable = cleanVideoSrc && (/^(blob|data|https?):/.test(cleanVideoSrc) || cleanVideoSrc.startsWith("/")) && (isVideoFile(cleanVideoSrc) || isVideo)
 
   if (playable) {
-    // Compact mode (list rows): only load first frame as poster initially.
-    // Hover triggers play (loads full video on demand) — only the hovered video loads,
-    // so 30+ rows don't all decode at once.
     if (compact) {
       return (
-        <div className="relative h-full w-full">
+        <div className="relative h-full w-full bg-muted/30">
           <video
             ref={videoRef}
             src={cleanVideoSrc + (cleanVideoSrc.includes("#t=") ? "" : "#t=0.1")}
@@ -74,7 +78,6 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
             className={className}
             onMouseEnter={e => {
               const v = e.currentTarget
-              // Switch preload to auto on demand so the video can actually play
               if (v.preload !== "auto") v.preload = "auto"
               v.play().catch(() => {})
             }}
@@ -89,11 +92,16 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
               <IconBrandGoogleDrive className="size-3 text-[#4285F4]" />
             </div>
           )}
+          {!metaThumb && !cleanVideoSrc.includes("fbcdn.net") && (
+             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <IconVideo className="size-4 text-muted-foreground/20" />
+             </div>
+          )}
         </div>
       )
     }
     return (
-      <div className="relative h-full w-full">
+      <div className="relative h-full w-full bg-muted/30">
         <video
           ref={videoRef}
           src={cleanVideoSrc ? (cleanVideoSrc + (cleanVideoSrc.includes("#t=") ? "" : "#t=0.1")) : undefined}
@@ -122,6 +130,11 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
             <IconBrandGoogleDrive className="size-4 text-[#4285F4]" />
           </div>
         )}
+        {!metaThumb && !cleanVideoSrc.includes("fbcdn.net") && (
+           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <IconVideo className="size-6 text-muted-foreground/20" />
+           </div>
+        )}
       </div>
     )
   }
@@ -139,18 +152,24 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
     )
   }
 
-  if (creative.fb_video_id) {
+  if (isVideo) {
     return (
       <div className={`${className} flex flex-col items-center justify-center gap-1.5 bg-muted`}>
-        <IconLoader2 className={`${compact ? "size-3" : "size-5"} text-muted-foreground/40 animate-spin`} />
-        {!compact && <span className="text-[10px] text-muted-foreground/60">Generating preview…</span>}
+        {creative.fb_video_id ? (
+          <>
+            <IconLoader2 className={`${compact ? "size-3" : "size-5"} text-muted-foreground/40 animate-spin`} />
+            {!compact && <span className="text-[10px] text-muted-foreground/60">Generating preview…</span>}
+          </>
+        ) : (
+          <IconVideo className={`${compact ? "size-3.5" : "size-6"} text-muted-foreground/40`} />
+        )}
       </div>
     )
   }
 
   return (
     <div className={`${className} flex items-center justify-center bg-muted`}>
-      <IconVideo className={`${compact ? "size-3.5" : "size-6"} text-muted-foreground/40`} />
+      <IconPhoto className={`${compact ? "size-3.5" : "size-6"} text-muted-foreground/40`} />
     </div>
   )
 }

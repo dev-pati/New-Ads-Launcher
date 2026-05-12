@@ -1,14 +1,43 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
-import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { getVideoThumbnail, pollVideoReady, uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
+import { mapCreativeForClient } from "@/lib/creative-media"
 import { notifyOrgMembers } from "@/lib/notify-org"
+import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
 
 // Large media upload via raw binary body (avoids FormData parser limits).
 // Client sends file as raw body, metadata via URL params + headers.
 export const runtime = "nodejs"
 export const maxDuration = 300 // Vercel Hobby plan max
 export const dynamic = "force-dynamic"
+
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-")
+}
+
+async function uploadOriginalToStorage(params: {
+  orgId: string
+  fileName: string
+  contentType: string
+  buffer: ArrayBuffer
+}) {
+  const storagePath = `creatives/${params.orgId}/${crypto.randomUUID()}-${sanitizeFileName(params.fileName)}`
+  const admin = createAdminClient()
+  const { error } = await admin.storage.from("ad-media").upload(storagePath, params.buffer, {
+    contentType: params.contentType,
+    upsert: false,
+    cacheControl: "31536000",
+  })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const { data } = admin.storage.from("ad-media").getPublicUrl(storagePath)
+  return { storagePath, publicUrl: data.publicUrl }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,22 +79,24 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient()
     let fbAdAccountId = adAccountIdParam
 
-    // Always fetch org's ad accounts for either validation or fallback
-    const { data: orgAdAccounts } = await supabase
-      .from("ad_accounts")
-      .select("fb_ad_account_id")
-      .eq("org_id", ctx.orgId)
-    const allowedIds = (orgAdAccounts || []).map((a: any) => a.fb_ad_account_id)
-
     if (!fbAdAccountId) {
-      if (allowedIds.length === 0) return NextResponse.json({ error: "No ad account found in workspace" }, { status: 400 })
-      fbAdAccountId = allowedIds[0]
+      const { data: firstOrgAdAccount } = await supabase
+        .from("ad_accounts")
+        .select("fb_ad_account_id")
+        .eq("org_id", ctx.orgId)
+        .limit(1)
+        .maybeSingle()
+
+      if (!firstOrgAdAccount?.fb_ad_account_id) {
+        return NextResponse.json({ error: "No ad account found in workspace" }, { status: 400 })
+      }
+      fbAdAccountId = firstOrgAdAccount.fb_ad_account_id
     } else {
-      // Security: validate the requested ad account belongs to this org (normalize act_ prefix)
-      const norm = (id: string) => id.startsWith("act_") ? id.slice(4) : id
-      if (!allowedIds.map(norm).includes(norm(fbAdAccountId))) {
+      const account = await getOrgAdAccountInfo(ctx.orgId, fbAdAccountId, connection.access_token)
+      if (!account) {
         return NextResponse.json({ error: `Ad account ${fbAdAccountId} not in your workspace` }, { status: 403 })
       }
+      fbAdAccountId = account.id
     }
 
     const mediaType: "image" | "video" = isVideo ? "video" : "image"
@@ -82,6 +113,13 @@ export async function POST(request: NextRequest) {
       }, { status: 413 })
     }
 
+    const storedOriginal = await uploadOriginalToStorage({
+      orgId: ctx.orgId,
+      fileName: filename,
+      contentType: fileType,
+      buffer: fileBuffer,
+    })
+
     let fbImageHash: string | null = null
     let fbImageUrl: string | null = null
     let fbThumbnailUrl: string | null = null
@@ -95,6 +133,13 @@ export async function POST(request: NextRequest) {
     } else {
       const r = await uploadVideoToMeta(fbAdAccountId!, connection.access_token, fileBuffer, filename)
       fbVideoId = r.videoId
+      const ready = await pollVideoReady(fbVideoId, connection.access_token, 120_000)
+      if (!ready.ready) {
+        return NextResponse.json({
+          error: ready.errorMsg || "Video is still processing on Meta. Try again in a minute.",
+        }, { status: 400 })
+      }
+      fbThumbnailUrl = (await getVideoThumbnail(fbVideoId, connection.access_token)) || null
     }
 
     const { data: creative, error: insertError } = await supabase
@@ -104,7 +149,8 @@ export async function POST(request: NextRequest) {
         user_id: ctx.user.id,
         ad_account_id: fbAdAccountId,
         file_name: filename,
-        file_url: fbThumbnailUrl || fbImageUrl || "",
+        file_url: storedOriginal.publicUrl,
+        storage_path: storedOriginal.storagePath,
         media_type: mediaType,
         file_size: fileSize || fileBuffer.byteLength,
         headline,
@@ -126,7 +172,7 @@ export async function POST(request: NextRequest) {
     }
 
     const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-    notifyOrgMembers({
+    await notifyOrgMembers({
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,
@@ -134,11 +180,14 @@ export async function POST(request: NextRequest) {
       title: `${actorName} uploaded "${filename}"`,
       body: mediaType === "video" ? "Video" : "Image",
       link: "/assets",
-    }).catch(() => {})
+    })
 
-    return NextResponse.json({ creative }, { status: 201 })
-  } catch (err: any) {
+    return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
+  } catch (err) {
     console.error("[upload-binary] error:", err)
-    return NextResponse.json({ error: err.message || "Upload failed" }, { status: 500 })
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Upload failed" },
+      { status: 500 }
+    )
   }
 }

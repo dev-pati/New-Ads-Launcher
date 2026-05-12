@@ -19,14 +19,21 @@ export async function notifyOrgMembers({
 }) {
   try {
     const db = createAdminClient()
-    const { data: members } = await db
+    const { data: members, error: membersErr } = await db
       .from("org_members")
       .select("user_id")
       .eq("org_id", orgId)
 
-    if (!members || members.length === 0) return
+    if (membersErr) {
+      console.error("[notify-org] failed to fetch org members:", membersErr)
+      return
+    }
+    if (!members || members.length === 0) {
+      console.warn("[notify-org] no members found for org:", orgId)
+      return
+    }
 
-    await db.from("notifications").insert(
+    const { error: insertErr } = await db.from("notifications").insert(
       members.map((m: any) => ({
         org_id: orgId,
         user_id: m.user_id,
@@ -38,7 +45,13 @@ export async function notifyOrgMembers({
         link: link || null,
       }))
     )
+
+    if (insertErr) {
+      console.error("[notify-org] failed to insert notifications:", insertErr)
+    } else {
+      console.log(`[notify-org] inserted ${members.length} notification(s) for org ${orgId}`)
+    }
   } catch (err) {
-    console.error("[notify-org] failed:", err)
+    console.error("[notify-org] unexpected error:", err)
   }
 }

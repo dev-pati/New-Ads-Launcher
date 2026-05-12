@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
+import { mapCreativeForClient } from "@/lib/creative-media"
 import { createClient } from "@/lib/supabase/server"
 
 export async function GET(
@@ -21,7 +22,7 @@ export async function GET(
       .single()
 
     if (error) return NextResponse.json({ error: "Creative not found" }, { status: 404 })
-    return NextResponse.json({ creative: data })
+    return NextResponse.json({ creative: mapCreativeForClient(data) })
   } catch (err) {
     console.error("Failed to fetch creative:", err)
     return NextResponse.json({ error: "Failed to fetch creative" }, { status: 500 })
@@ -41,7 +42,7 @@ export async function PATCH(
     const supabase = await createClient()
 
     const allowedFields = ["headline", "primary_text", "description", "cta", "link_url", "file_name", "status"]
-    const updates: Record<string, any> = {}
+    const updates: Record<string, unknown> = {}
     for (const field of allowedFields) {
       if (body[field] !== undefined) updates[field] = body[field]
     }
@@ -55,7 +56,7 @@ export async function PATCH(
       .single()
 
     if (error) return NextResponse.json({ error: "Failed to update creative" }, { status: 500 })
-    return NextResponse.json({ creative: data })
+    return NextResponse.json({ creative: mapCreativeForClient(data) })
   } catch (err) {
     console.error("Failed to update creative:", err)
     return NextResponse.json({ error: "Failed to update creative" }, { status: 500 })
