@@ -35,6 +35,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invitation expired" }, { status: 400 })
     }
 
+    // Verify the logged-in user's email matches the invited email
+    if (user.email?.toLowerCase() !== invitation.email.toLowerCase()) {
+      return NextResponse.json(
+        { error: "This invitation was sent to a different email address" },
+        { status: 403 }
+      )
+    }
+
     // Check if already a member
     const { data: existing } = await supabase
       .from("org_members")

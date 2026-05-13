@@ -69,7 +69,13 @@ export async function POST(
     const { id: orgId } = await params
     const { email, role } = await request.json()
 
-    if (!email) return NextResponse.json({ error: "email is required" }, { status: 400 })
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!email || !emailRegex.test(email)) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 })
+    }
+
+    const VALID_ROLES = ["admin", "editor"]
+    const sanitizedRole: string = VALID_ROLES.includes(role) ? role : "editor"
 
     const supabase = createAdminClient()
 
@@ -87,9 +93,14 @@ export async function POST(
 
     const adminSupabase = createAdminClient()
 
-    // Check if user with this email already exists
-    const { data: existingUsers } = await adminSupabase.auth.admin.listUsers({ perPage: 1000 })
-    const existingUser = existingUsers?.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase())
+    // Check if user with this email already exists — paginate to handle >1000 users
+    let existingUser: any = null
+    for (let page = 1; !existingUser; page++) {
+      const { data: batch } = await adminSupabase.auth.admin.listUsers({ page, perPage: 1000 })
+      const found = (batch?.users || []).find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
+      if (found) { existingUser = found; break }
+      if ((batch?.users?.length ?? 0) < 1000) break
+    }
 
     if (existingUser) {
       const { data: existingMember } = await supabase
@@ -107,7 +118,7 @@ export async function POST(
       await adminSupabase.from("org_members").insert({
         org_id: orgId,
         user_id: existingUser.id,
-        role: role || "editor",
+        role: sanitizedRole,
         invited_by: user.id,
       })
 
@@ -149,7 +160,7 @@ export async function POST(
         {
           org_id: orgId,
           email,
-          role: role || "editor",
+          role: sanitizedRole,
           invited_by: user.id,
         },
         { onConflict: "org_id,email" }
