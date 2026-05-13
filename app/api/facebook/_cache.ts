@@ -17,6 +17,10 @@ function getStore() {
   return globalThis.__adlauncherFacebookMetadataCache
 }
 
+export function clearCachedFacebookMetadata(key: string) {
+  getStore().delete(key)
+}
+
 export async function getCachedFacebookMetadata<T>(
   key: string,
   ttlMs: number,

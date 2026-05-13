@@ -19,6 +19,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
+import { TopPerformingTab } from "@/components/templates/TopPerformingTab"
+import { AINamingTab } from "@/components/templates/AINamingTab"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -125,11 +127,12 @@ function TemplateCard({
 // ─── Template Form Dialog ───────────────────────────────────────────────────────
 
 function TemplateFormDialog({
-  open, onClose, initial, onSave, saving,
+  open, onClose, initial, prefill, onSave, saving,
 }: {
   open: boolean
   onClose: () => void
   initial?: AdCopyTemplate | null
+  prefill?: Partial<ReturnType<typeof emptyForm>>
   onSave: (data: ReturnType<typeof emptyForm>) => void
   saving: boolean
 }) {
@@ -144,9 +147,9 @@ function TemplateFormDialog({
         description: initial.description || "",
         link: initial.link || "",
         cta: initial.cta || "SHOP_NOW",
-      } : emptyForm())
+      } : { ...emptyForm(), ...(prefill || {}) })
     }
-  }, [open, initial])
+  }, [open, initial, prefill])
 
   const set = (k: keyof ReturnType<typeof emptyForm>, v: string) => setForm(p => ({ ...p, [k]: v }))
 
@@ -223,10 +226,18 @@ export default function TemplatesPage() {
   // Dialogs
   const [formOpen, setFormOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<AdCopyTemplate | null>(null)
+  const [prefillData, setPrefillData] = useState<Partial<ReturnType<typeof emptyForm>> | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [accountDropOpen, setAccountDropOpen] = useState(false)
+
+  const openCreateFromCopy = useCallback((copy: { headline: string; primaryText: string }) => {
+    setPrefillData({ headline: copy.headline, primary_text: copy.primaryText, name: "" })
+    setEditTarget(null)
+    setFormOpen(true)
+    setTab("ad-setup")
+  }, [])
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true)
@@ -564,27 +575,21 @@ export default function TemplatesPage() {
         )}
 
         {tab === "top-performing" && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-            <IconChartBar className="size-12 text-muted-foreground/30 mb-4" />
-            <h3 className="text-lg font-bold mb-1">Analyzing Performance</h3>
-            <p className="text-sm text-muted-foreground">Your top performing ad copy will appear here once you have live campaign data.</p>
-          </div>
+          <TopPerformingTab
+            adAccountId={selectedAccountId}
+            onCreateFromCopy={openCreateFromCopy}
+          />
         )}
 
-        {tab === "ai-naming" && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-            <IconSparkles className="size-12 text-muted-foreground/30 mb-4" />
-            <h3 className="text-lg font-bold mb-1">AI Naming Conventions</h3>
-            <p className="text-sm text-muted-foreground">Configure AI to generate consistent, professional names for your campaigns and ad sets.</p>
-          </div>
-        )}
+        {tab === "ai-naming" && <AINamingTab />}
       </div>
 
       {/* ── Create / Edit Dialog ── */}
       <TemplateFormDialog
         open={formOpen}
-        onClose={() => setFormOpen(false)}
+        onClose={() => { setFormOpen(false); setPrefillData(null) }}
         initial={editTarget?.id ? editTarget : null}
+        prefill={prefillData ?? undefined}
         onSave={handleSave}
         saving={saving}
       />
