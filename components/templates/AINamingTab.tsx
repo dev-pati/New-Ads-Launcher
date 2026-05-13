@@ -133,7 +133,10 @@ function CategoryCard({
         "border rounded-xl p-4 bg-white dark:bg-card transition-colors",
         dragProps.isDragTarget && "border-blue-400 bg-blue-50 dark:bg-blue-950/20"
       )}
-      {...dragProps}
+      draggable={dragProps.draggable}
+      onDragOver={dragProps.onDragOver}
+      onDrop={dragProps.onDrop}
+      onDragEnd={dragProps.onDragEnd}
     >
       {/* Header */}
       <div className="flex items-start gap-2 mb-2">
