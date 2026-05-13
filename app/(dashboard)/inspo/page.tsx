@@ -35,6 +35,7 @@ import {
 } from "@tabler/icons-react"
 import { BoardSidebar, type InspoSection } from "@/components/inspo/BoardSidebar"
 import { InspoDiscoveryPage } from "@/components/inspo/InspoDiscoveryPage"
+import { BrandSpyPage } from "@/components/inspo/BrandSpyPage"
 import type { InspoBoard, DiscoveryAd } from "@/types/inspo"
 import { MOCK_ADS } from "@/lib/inspo-mock-data"
 
@@ -533,6 +534,7 @@ export default function InspoPage() {
   const [boards,        setBoards]        = useState<InspoBoard[]>([])
   const [boardsLoading, setBoardsLoading] = useState(true)
   const [activeBoardId, setActiveBoardId] = useState<string | null>(null)
+  const [activeBrand,   setActiveBrand]   = useState<string | null>(null)
   // savedMap: adId → Set of boardIds where saved
   const [savedMap, setSavedMap] = useState<Map<string, Set<string>>>(new Map())
 
@@ -774,6 +776,7 @@ export default function InspoPage() {
             onCreateBoard={handleCreateBoard}
             activeBoardId={activeBoardId}
             onAnalyzeAd={handleAnalyzeAd}
+            onBrandClick={name => { setActiveBrand(name); setActiveSection("brand-spy") }}
           />
         )}
 
@@ -1207,18 +1210,24 @@ export default function InspoPage() {
           </div>
         )}
 
+        {/* ── Brand Spy ── */}
+        {activeSection === "brand-spy" && (
+          <BrandSpyPage
+            initialBrand={activeBrand}
+            onBrandChange={name => setActiveBrand(name)}
+          />
+        )}
+
         {/* ── Coming Soon ── */}
-        {(activeSection === "create" || activeSection === "brand-spy") && (
+        {activeSection === "create" && (
           <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
             <div className="size-16 rounded-2xl bg-muted/50 flex items-center justify-center">
-              {activeSection === "create"    && <IconPencil className="size-8 text-muted-foreground/40" />}
-              {activeSection === "brand-spy" && <IconBinoculars className="size-8 text-muted-foreground/40" />}
+              <IconPencil className="size-8 text-muted-foreground/40" />
             </div>
             <div>
               <h2 className="text-lg font-semibold">Coming Soon</h2>
               <p className="text-sm text-muted-foreground mt-2 max-w-xs">
-                {activeSection === "create"    && "Generate ad creatives and copy directly from your saved inspiration"}
-                {activeSection === "brand-spy" && "Monitor competitor brands and track their ad strategy over time"}
+                Generate ad creatives and copy directly from your saved inspiration
               </p>
             </div>
           </div>

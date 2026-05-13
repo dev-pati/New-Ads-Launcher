@@ -65,10 +65,11 @@ interface Props {
   activeBoardId: string | null
   boardAds?: DiscoveryAd[]  // ads in the active board (from DB)
   onAnalyzeAd?: (body: string, title?: string) => void
+  onBrandClick?: (brandName: string) => void
 }
 
 export function InspoDiscoveryPage({
-  boards, savedMap, onSave, onUnsave, onCreateBoard, activeBoardId, boardAds, onAnalyzeAd,
+  boards, savedMap, onSave, onUnsave, onCreateBoard, activeBoardId, boardAds, onAnalyzeAd, onBrandClick,
 }: Props) {
   const [activeTab, setActiveTab] = useState<InspoTab>("explore")
   const [search,    setSearch]    = useState("")
@@ -147,6 +148,7 @@ export function InspoDiscoveryPage({
           onUnsave={onUnsave}
           onCreateBoard={onCreateBoard}
           onAdClick={setSelected}
+          onBrandClick={onBrandClick}
         />
       </div>
 

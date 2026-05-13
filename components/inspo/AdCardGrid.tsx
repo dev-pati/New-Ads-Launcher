@@ -12,10 +12,11 @@ interface Props {
   onUnsave: (adId: string, boardId: string) => Promise<void>
   onCreateBoard: (name: string) => Promise<InspoBoard>
   onAdClick: (ad: DiscoveryAd) => void
+  onBrandClick?: (brandName: string) => void
   loading?: boolean
 }
 
-export function AdCardGrid({ ads, boards, savedMap, onSave, onUnsave, onCreateBoard, onAdClick, loading }: Props) {
+export function AdCardGrid({ ads, boards, savedMap, onSave, onUnsave, onCreateBoard, onAdClick, onBrandClick, loading }: Props) {
   if (loading) {
     return (
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
@@ -64,6 +65,7 @@ export function AdCardGrid({ ads, boards, savedMap, onSave, onUnsave, onCreateBo
           onUnsave={boardId => onUnsave(ad.id, boardId)}
           onCreateBoard={onCreateBoard}
           onClick={() => onAdClick(ad)}
+          onBrandClick={onBrandClick}
         />
       ))}
     </div>

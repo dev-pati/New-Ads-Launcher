@@ -32,9 +32,10 @@ interface Props {
   onUnsave: (boardId: string) => Promise<void>
   onCreateBoard: (name: string) => Promise<InspoBoard>
   onClick: () => void
+  onBrandClick?: (brandName: string) => void
 }
 
-export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBoard, onClick }: Props) {
+export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBoard, onClick, onBrandClick }: Props) {
   const isSaved = savedBoardIds.size > 0
 
   return (
@@ -115,9 +116,19 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
       <div className="px-3 pt-2.5 pb-3 space-y-2">
         {/* Brand + meta row */}
         <div className="flex items-center gap-2">
-          <BrandAvatar name={ad.brandName} src={ad.brandAvatar} />
+          <button
+            onClick={e => { e.stopPropagation(); onBrandClick?.(ad.brandName) }}
+            className={onBrandClick ? "shrink-0 hover:opacity-80 transition-opacity" : "shrink-0 cursor-default"}
+            tabIndex={onBrandClick ? 0 : -1}
+          >
+            <BrandAvatar name={ad.brandName} src={ad.brandAvatar} />
+          </button>
           <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-semibold text-foreground truncate leading-tight">{ad.brandName}</p>
+            <button
+              onClick={e => { e.stopPropagation(); onBrandClick?.(ad.brandName) }}
+              className={onBrandClick ? "text-[12px] font-semibold text-foreground truncate leading-tight hover:text-primary transition-colors block w-full text-left" : "text-[12px] font-semibold text-foreground truncate leading-tight block w-full text-left"}
+              tabIndex={onBrandClick ? 0 : -1}
+            >{ad.brandName}</button>
             <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
               {[
                 ad.firstSeenAt ? timeAgo(ad.firstSeenAt) : null,
