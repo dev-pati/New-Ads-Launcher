@@ -21,14 +21,11 @@ export function useNotifications() {
   const fetchNotifications = useCallback(async () => {
     setLoading(true)
     const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    console.log("[notifications] session uid:", session?.user?.id ?? "NO SESSION")
     const { data, error } = await supabase
       .from("notifications")
       .select("id, type, title, body, link, actor_name, is_read, created_at")
       .order("created_at", { ascending: false })
       .limit(30)
-    console.log("[notifications] result:", { count: data?.length, error, rows: data })
     if (error) console.error("[notifications] fetch error:", error)
     setNotifications(data || [])
     setLoading(false)
@@ -39,11 +36,55 @@ export function useNotifications() {
     fetchNotifications()
   }, [fetchNotifications])
 
-  // Poll every 30s
+  // Supabase Realtime subscription — INSERT prepends, UPDATE patches in place
   useEffect(() => {
-    const interval = setInterval(fetchNotifications, 30_000)
-    return () => clearInterval(interval)
-  }, [fetchNotifications])
+    const supabase = createClient()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const userId = session?.user?.id
+      if (!userId) return
+
+      channel = supabase
+        .channel("notifications:user")
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const n = payload.new as AppNotification
+            setNotifications(prev => {
+              if (prev.some(x => x.id === n.id)) return prev
+              return [n, ...prev].slice(0, 30)
+            })
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "notifications",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const updated = payload.new as AppNotification
+            setNotifications(prev =>
+              prev.map(x => x.id === updated.id ? { ...x, ...updated } : x)
+            )
+          }
+        )
+        .subscribe()
+    })
+
+    return () => {
+      if (channel) supabase.removeChannel(channel)
+    }
+  }, [])
 
   const markRead = useCallback(async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
