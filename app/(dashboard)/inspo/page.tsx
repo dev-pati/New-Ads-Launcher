@@ -33,6 +33,10 @@ import {
   IconFileText,
   IconPlayerPlay,
 } from "@tabler/icons-react"
+import { BoardSidebar, type InspoSection } from "@/components/inspo/BoardSidebar"
+import { InspoDiscoveryPage } from "@/components/inspo/InspoDiscoveryPage"
+import type { InspoBoard, DiscoveryAd } from "@/types/inspo"
+import { MOCK_ADS } from "@/lib/inspo-mock-data"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -448,9 +452,11 @@ function AnalysisResult({ analysis, onReset }: { analysis: Analysis; onReset: ()
 
 export default function InspoPage() {
   const searchParams = useSearchParams()
-  const [subTab, setSubTab] = useState<SubTab>(() => {
+  const [activeSection, setActiveSection] = useState<InspoSection>(() => {
     const tab = searchParams.get("tab")
-    return (tab === "saved" || tab === "ai" || tab === "adscan") ? tab : "adscan"
+    if (tab === "ai")    return "ai"
+    if (tab === "saved") return "saved"
+    return "discovery"
   })
   const [savedSearch, setSavedSearch] = useState(() => searchParams.get("q") || "")
 
@@ -523,6 +529,79 @@ export default function InspoPage() {
     }
   }, [aiMode, aiSubMode, genMode, loadCreatives])
 
+  // ── Boards (Discovery) state ──────────────────────────────────────────────
+  const [boards,        setBoards]        = useState<InspoBoard[]>([])
+  const [boardsLoading, setBoardsLoading] = useState(true)
+  const [activeBoardId, setActiveBoardId] = useState<string | null>(null)
+  // savedMap: adId → Set of boardIds where saved
+  const [savedMap, setSavedMap] = useState<Map<string, Set<string>>>(new Map())
+
+  const loadBoards = useCallback(async () => {
+    setBoardsLoading(true)
+    try {
+      const [boardsRes, savesRes] = await Promise.all([
+        fetch("/api/inspo/boards"),
+        fetch("/api/inspo/boards/all-saves").catch(() => null),
+      ])
+      const boardsData = await boardsRes.json()
+      setBoards(boardsData.boards || [])
+
+      // Build savedMap from all board saves if available
+      if (savesRes?.ok) {
+        const savesData = await savesRes.json()
+        const map = new Map<string, Set<string>>()
+        for (const { board_id, ad_id } of savesData.saves || []) {
+          if (!map.has(ad_id)) map.set(ad_id, new Set())
+          map.get(ad_id)!.add(board_id)
+        }
+        setSavedMap(map)
+      }
+    } catch { /* silent */ }
+    finally { setBoardsLoading(false) }
+  }, [])
+
+  useEffect(() => { loadBoards() }, [loadBoards])
+
+  const handleCreateBoard = useCallback(async (name: string): Promise<InspoBoard> => {
+    const res  = await fetch("/api/inspo/boards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || "Failed to create board")
+    setBoards(prev => [...prev, data.board])
+    return data.board
+  }, [])
+
+  const handleDiscoverySave = useCallback(async (adId: string, boardId: string) => {
+    const ad = MOCK_ADS.find(a => a.id === adId)
+    if (!ad) return
+    await fetch(`/api/inspo/boards/${boardId}/saves`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ad }),
+    })
+    setSavedMap(prev => {
+      const next = new Map(prev)
+      if (!next.has(adId)) next.set(adId, new Set())
+      next.get(adId)!.add(boardId)
+      return next
+    })
+    setBoards(prev => prev.map(b => b.id === boardId ? { ...b, ad_count: (b.ad_count || 0) + 1 } : b))
+  }, [])
+
+  const handleDiscoveryUnsave = useCallback(async (adId: string, boardId: string) => {
+    await fetch(`/api/inspo/boards/${boardId}/saves?ad_id=${adId}`, { method: "DELETE" })
+    setSavedMap(prev => {
+      const next = new Map(prev)
+      next.get(adId)?.delete(boardId)
+      if (next.get(adId)?.size === 0) next.delete(adId)
+      return next
+    })
+    setBoards(prev => prev.map(b => b.id === boardId ? { ...b, ad_count: Math.max(0, (b.ad_count || 1) - 1) } : b))
+  }, [])
+
   const handleSearch = async () => {
     if (!query.trim()) return
     setSearching(true)
@@ -576,7 +655,7 @@ export default function InspoPage() {
     setAiTitle(title || "")
     setAnalysis(null)
     setAiError(null)
-    setSubTab("ai")
+    setActiveSection("ai")
   }
 
   const handleAnalyze = async () => {
@@ -666,41 +745,39 @@ export default function InspoPage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="px-6 py-5 border-b shrink-0">
+      <div className="px-6 py-4 border-b shrink-0">
         <h1 className="font-heading text-xl font-bold">Inspo</h1>
-        <p className="text-sm text-muted-foreground mt-1">Research competitors, scan winning ads, and generate creative inspiration.</p>
+        <p className="text-sm text-muted-foreground mt-0.5">Research competitors, scan winning ads, and generate creative inspiration.</p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-0 px-6 border-b shrink-0">
-        {([
-          { id: "adscan",    label: "Ad Scan",   icon: IconScan },
-          { id: "ai",        label: "AI",         icon: IconSparkles },
-          { id: "create",    label: "Create",     icon: IconPencil },
-          { id: "brand-spy", label: "Brand Spy",  icon: IconBinoculars },
-          { id: "saved",     label: "Saved Ads",  icon: IconBookmark },
-        ] as const).map(t => (
-          <button key={t.id} onClick={() => setSubTab(t.id)}
-            className={cn("flex items-center gap-1.5 px-0 py-3 mr-7 text-sm border-b-2 transition-colors",
-              subTab === t.id ? "border-foreground font-medium text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}>
-            <t.icon className="size-3.5" />
-            {t.label}
-            {t.id === "saved" && savedIds.size > 0 && (
-              <span className="ml-0.5 min-w-[18px] h-[18px] text-xs bg-primary text-primary-foreground rounded-full flex items-center justify-center px-1">
-                {savedIds.size}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      {/* Sidebar + Content */}
+      <div className="flex flex-1 overflow-hidden">
+        <BoardSidebar
+          activeSection={activeSection}
+          onSectionChange={s => { setActiveSection(s); if (s !== "discovery") setActiveBoardId(null) }}
+          activeBoardId={activeBoardId}
+          onBoardSelect={id => { setActiveBoardId(id); setActiveSection("discovery") }}
+          boards={boards}
+          boardsLoading={boardsLoading}
+          onCreateBoard={handleCreateBoard}
+        />
 
-      {/* Content */}
       <div className="flex-1 overflow-hidden">
 
-        {/* ── Ad Scan ── */}
-        {subTab === "adscan" && (
+        {/* ── Discovery ── */}
+        {activeSection === "discovery" && (
+          <InspoDiscoveryPage
+            boards={boards}
+            savedMap={savedMap}
+            onSave={handleDiscoverySave}
+            onUnsave={handleDiscoveryUnsave}
+            onCreateBoard={handleCreateBoard}
+            activeBoardId={activeBoardId}
+          />
+        )}
+
+        {/* ── Ad Scan (hidden behind Discovery, keep for backward compat) ── */}
+        {activeSection === ("adscan" as any) && (
           <div className="h-full flex flex-col">
             <div className="px-6 py-4 border-b shrink-0">
               <div className="flex gap-3 flex-wrap">
@@ -807,7 +884,7 @@ export default function InspoPage() {
         )}
 
         {/* ── AI Tab ── */}
-        {subTab === "ai" && (
+        {activeSection === "ai" && (
           <div className="h-full flex flex-col overflow-y-auto">
             <div className="flex-1 p-6 space-y-6 max-w-5xl mx-auto w-full">
 
@@ -1056,7 +1133,7 @@ export default function InspoPage() {
         )}
 
         {/* ── Saved Ads ── */}
-        {subTab === "saved" && (
+        {activeSection === "saved" && (
           <div className="h-full flex flex-col">
             <div className="px-6 py-4 border-b shrink-0 flex items-center gap-3">
               <div className="flex-1 min-w-0">
@@ -1073,8 +1150,8 @@ export default function InspoPage() {
                 />
               </div>
               {savedAds.length > 0 && (
-                <Button size="sm" variant="outline" className="gap-2 text-xs shrink-0" onClick={() => setSubTab("adscan")}>
-                  <IconScan className="size-3.5" />Scan more
+                <Button size="sm" variant="outline" className="gap-2 text-xs shrink-0" onClick={() => setActiveSection("discovery")}>
+                  <IconScan className="size-3.5" />Discover more
                 </Button>
               )}
             </div>
@@ -1092,8 +1169,8 @@ export default function InspoPage() {
                     <h3 className="font-semibold">No saved ads yet</h3>
                     <p className="text-sm text-muted-foreground mt-1">Scan competitors and save ads that inspire you</p>
                   </div>
-                  <Button size="sm" variant="outline" className="gap-2 mt-1" onClick={() => setSubTab("adscan")}>
-                    <IconScan className="size-3.5" />Go to Ad Scan
+                  <Button size="sm" variant="outline" className="gap-2 mt-1" onClick={() => setActiveSection("discovery")}>
+                    <IconScan className="size-3.5" />Go to Discovery
                   </Button>
                 </div>
               ) : (() => {
@@ -1130,23 +1207,24 @@ export default function InspoPage() {
         )}
 
         {/* ── Coming Soon ── */}
-        {(subTab === "create" || subTab === "brand-spy") && (
+        {(activeSection === "create" || activeSection === "brand-spy") && (
           <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
             <div className="size-16 rounded-2xl bg-muted/50 flex items-center justify-center">
-              {subTab === "create" && <IconPencil className="size-8 text-muted-foreground/40" />}
-              {subTab === "brand-spy" && <IconBinoculars className="size-8 text-muted-foreground/40" />}
+              {activeSection === "create"    && <IconPencil className="size-8 text-muted-foreground/40" />}
+              {activeSection === "brand-spy" && <IconBinoculars className="size-8 text-muted-foreground/40" />}
             </div>
             <div>
               <h2 className="text-lg font-semibold">Coming Soon</h2>
               <p className="text-sm text-muted-foreground mt-2 max-w-xs">
-                {subTab === "create" && "Generate ad creatives and copy directly from your saved inspiration"}
-                {subTab === "brand-spy" && "Monitor competitor brands and track their ad strategy over time"}
+                {activeSection === "create"    && "Generate ad creatives and copy directly from your saved inspiration"}
+                {activeSection === "brand-spy" && "Monitor competitor brands and track their ad strategy over time"}
               </p>
             </div>
           </div>
         )}
 
-      </div>
+      </div>{/* end main content */}
+      </div>{/* end sidebar+content row */}
     </div>
   )
 }
