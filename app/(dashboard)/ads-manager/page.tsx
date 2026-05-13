@@ -274,6 +274,7 @@ export default function AdsManagerPage() {
   const [customizeColsOpen, setCustomizeColsOpen] = useState(false)
   const [breakdown,         setBreakdown]         = useState("none")
   const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
+  const [breakdownError,    setBreakdownError]    = useState("")
 
   const router = useRouter()
 
@@ -364,6 +365,7 @@ export default function AdsManagerPage() {
       : `date_preset=${datePreset}`
 
     setBreakdownRows([])
+    setBreakdownError("")
 
     try {
       if (tab === "campaigns") {
@@ -397,9 +399,12 @@ export default function AdsManagerPage() {
         try {
           const ir = await fetch(insUrl)
           const id = await ir.json()
-          if (ir.ok && Array.isArray(id.data)) {
+          console.log("[breakdown-insights] status:", ir.status, "url:", insUrl, "data:", id)
+          if (!ir.ok) {
+            setBreakdownError(id.error || `Breakdown API error (${ir.status})`)
+          } else if (Array.isArray(id.data)) {
             const idKey = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id"
-            setBreakdownRows(id.data
+            const rows = id.data
               .filter((item: any) => item[idKey])
               .map((item: any) => ({
                 parentId: item[idKey] as string,
@@ -413,9 +418,13 @@ export default function AdsManagerPage() {
                   cost_per_action_type: item.cost_per_action_type,
                 } as Insight,
               }))
-            )
+            console.log("[breakdown-insights] mapped rows:", rows.length, rows.slice(0, 3))
+            setBreakdownRows(rows)
           }
-        } catch { /* breakdown fetch failure is non-fatal */ }
+        } catch (err) {
+          console.error("[breakdown-insights] fetch error:", err)
+          setBreakdownError("Failed to fetch breakdown data")
+        }
       }
 
       setLoadedMs(Date.now() - t0)
@@ -1204,6 +1213,11 @@ export default function AdsManagerPage() {
       <div className="flex-1 overflow-auto">
         {error && (
           <div className="m-4 px-4 py-3 bg-destructive/10 border border-destructive/30 rounded-lg text-xs text-destructive">{error}</div>
+        )}
+        {breakdownError && (
+          <div className="mx-4 mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-amber-700 dark:text-amber-400">
+            Breakdown error: {breakdownError}
+          </div>
         )}
 
         {loading ? (
