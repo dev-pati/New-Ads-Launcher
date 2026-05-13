@@ -29,10 +29,10 @@ export async function GET(request: NextRequest) {
   if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 401 })
 
   const idField = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id"
-  const breakdownFields = breakdowns ? breakdowns.split(",").map(s => s.trim()) : []
+  // Breakdown dimension fields (age, country, etc.) must NOT be in `fields` —
+  // Meta automatically includes them in the response when `breakdowns` param is set.
   const fields = [
     idField,
-    ...breakdownFields,
     "date_start",
     "date_stop",
     "spend",
