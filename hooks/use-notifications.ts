@@ -31,30 +31,29 @@ export function useNotifications() {
     setLoading(false)
   }, [])
 
-  // Initial fetch
   useEffect(() => {
     fetchNotifications()
   }, [fetchNotifications])
 
-  // Supabase Realtime subscription — INSERT prepends, UPDATE patches in place
+  // Realtime — mount guard prevents React StrictMode double-invoke from subscribing
+  // to an already-subscribed channel (which would throw "cannot add callbacks after subscribe")
   useEffect(() => {
     const supabase = createClient()
     let channel: ReturnType<typeof supabase.channel> | null = null
+    let mounted = true
 
     supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return
       const userId = session?.user?.id
       if (!userId) return
 
+      // Channel name includes userId so multiple tabs share the same logical channel
+      // without conflicting with other users' channels.
       channel = supabase
-        .channel("notifications:user")
+        .channel(`notifs-${userId}`)
         .on(
           "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${userId}`,
-          },
+          { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
           (payload) => {
             const n = payload.new as AppNotification
             setNotifications(prev => {
@@ -65,12 +64,7 @@ export function useNotifications() {
         )
         .on(
           "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "notifications",
-            filter: `user_id=eq.${userId}`,
-          },
+          { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
           (payload) => {
             const updated = payload.new as AppNotification
             setNotifications(prev =>
@@ -82,6 +76,7 @@ export function useNotifications() {
     })
 
     return () => {
+      mounted = false
       if (channel) supabase.removeChannel(channel)
     }
   }, [])

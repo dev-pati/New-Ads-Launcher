@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { COLUMN_DEFS, COLUMN_MAP, ColumnDef, ColumnTab } from "@/lib/column-config"
-import { IconSearch, IconX, IconGripVertical, IconChevronDown } from "@tabler/icons-react"
+import { IconSearch, IconX, IconGripVertical, IconChevronDown, IconChevronLeft } from "@tabler/icons-react"
 
 const TABS: { id: ColumnTab; label: string }[] = [
   { id: "key_metrics",  label: "Key metrics"  },
@@ -43,6 +43,7 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
       setLocalCols([...columnOrder])
       setSearchQuery("")
       setActiveTab("key_metrics")
+      setCollapsed({})
       setShowSaveInput(false)
       setSavePresetName("")
     }
@@ -56,19 +57,36 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
     )
   }
 
-  // Filter + group by section
-  const filteredDefs = COLUMN_DEFS.filter(c =>
-    searchQuery
-      ? c.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  // Custom tab: all columns sorted alphabetically as one flat group
+  const filteredDefs: ColumnDef[] = searchQuery
+    ? COLUMN_DEFS.filter(c =>
+        c.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.headerLabel.toLowerCase().includes(searchQuery.toLowerCase())
-      : c.tab === activeTab
-  )
-  const sectionOrder = Array.from(new Set(filteredDefs.map(c => c.section)))
-  const sectionGroups = sectionOrder.map(s => ({
-    section:   s,
-    label:     filteredDefs.find(c => c.section === s)!.sectionLabel,
-    cols:      filteredDefs.filter(c => c.section === s),
-  }))
+      )
+    : activeTab === "custom"
+      ? [...COLUMN_DEFS].sort((a, b) => a.label.localeCompare(b.label))
+      : COLUMN_DEFS.filter(c => c.tab === activeTab)
+
+  const sectionGroups = (activeTab === "custom" && !searchQuery)
+    ? [{ section: "all_columns", label: "All columns", cols: filteredDefs }]
+    : (() => {
+        const order = Array.from(new Set(filteredDefs.map(c => c.section)))
+        return order.map(s => ({
+          section: s,
+          label:   filteredDefs.find(c => c.section === s)!.sectionLabel,
+          cols:    filteredDefs.filter(c => c.section === s),
+        }))
+      })()
+
+  const allCollapsed = sectionGroups.length > 0 && sectionGroups.every(g => !!collapsed[g.section])
+
+  const toggleCollapseAll = () => {
+    if (allCollapsed) {
+      setCollapsed({})
+    } else {
+      setCollapsed(Object.fromEntries(sectionGroups.map(g => [g.section, true])))
+    }
+  }
 
   // Drag & drop handlers (right panel)
   const handleDragStart = (idx: number) => { dragStartIdx.current = idx }
@@ -117,17 +135,24 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
         <div className="flex flex-1 min-h-0">
           {/* ── Left panel ── */}
           <div className="flex flex-col w-[58%] border-r min-h-0">
-            {/* Search */}
-            <div className="px-4 pt-4 pb-3 shrink-0">
-              <div className="relative">
+            {/* Search + Collapse all */}
+            <div className="px-4 pt-4 pb-3 shrink-0 flex items-center gap-2">
+              <div className="relative flex-1">
                 <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50 pointer-events-none" />
                 <input
                   value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
+                  onChange={e => { setSearchQuery(e.target.value); setCollapsed({}) }}
                   placeholder="Search for metrics or column settings"
                   className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg outline-none focus:ring-1 focus:ring-ring bg-background"
                 />
               </div>
+              <button
+                onClick={toggleCollapseAll}
+                className="flex items-center gap-1.5 h-9 px-3 text-[13px] border rounded-lg hover:bg-muted/50 transition-colors text-[#65676b] dark:text-muted-foreground whitespace-nowrap shrink-0"
+              >
+                <IconChevronLeft className={cn("size-3.5 transition-transform", allCollapsed && "rotate-180")} />
+                {allCollapsed ? "Expand all" : "Collapse all"}
+              </button>
             </div>
 
             {/* Tab pills — hide when searching */}
@@ -136,7 +161,7 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
                 {TABS.map(t => (
                   <button
                     key={t.id}
-                    onClick={() => setActiveTab(t.id)}
+                    onClick={() => { setActiveTab(t.id); setCollapsed({}) }}
                     className={cn(
                       "px-3 py-1.5 text-[13px] rounded-lg transition-colors font-medium",
                       activeTab === t.id
@@ -201,6 +226,10 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
                             </div>
                           </label>
                         ))}
+                        {/* Pad odd-count grids so last row always has 2 cells */}
+                        {cols.length % 2 !== 0 && (
+                          <div className="px-4 py-3 bg-[#fafafa] dark:bg-muted/5" />
+                        )}
                       </div>
                     )}
                   </div>
