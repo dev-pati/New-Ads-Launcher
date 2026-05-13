@@ -60,7 +60,7 @@ interface FacebookPage { id: string; name: string; picture?: { data: { url: stri
 interface AdAccountItem { id: string; name: string; account_id?: string }
 interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string }
 interface CreatedAd { adId: string; adSetId: string; adSetName: string; creativeId?: string; fileName?: string; thumbnailUrl?: string | null; mediaType?: "image" | "video"; mode?: string; multiGroup?: string; flexibleAd?: string; carousel?: string }
-interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; adAccountId: string; adAccountName: string; timestamp: string }
+interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; pageName?: string; adAccountId: string; adAccountName: string; timestamp: string }
 interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[]; scheduled?: { at: string; end: string | null } | null; createdAds: CreatedAd[]; batchId?: string | null; launchMeta?: LaunchMeta }
 interface UploadItem {
   id: string
@@ -10729,7 +10729,7 @@ function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
               {launchMeta?.webLink && <DetailItem label="Web Link" value={launchMeta.webLink} copyable />}
               <DetailItem label="Ad ID" value={ad.adId} copyable mono />
               {ad.thumbnailUrl && <DetailItem label="Media URL" value={ad.thumbnailUrl} copyable />}
-              {launchMeta?.pageId && <DetailItem label="Page" value={launchMeta.pageId} />}
+              {launchMeta?.pageId && <DetailItem label="Page" value={launchMeta.pageName || launchMeta.pageId} />}
               {launchMeta?.headline && <DetailItem label="Headline" value={launchMeta.headline} />}
               {launchMeta?.primaryText && <DetailItem label="Primary Text" value={launchMeta.primaryText} />}
             </div>
@@ -11239,7 +11239,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
 
 // ─── Launch History Section ───────────────────────────────────────────────────
 
-function LaunchHistorySection({ reloadTrigger, onRelaunch }: { reloadTrigger: number; onRelaunch: (b: LaunchBatch) => void }) {
+function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloadTrigger: number; onRelaunch: (b: LaunchBatch) => void; pages?: any[] }) {
   const [tab, setTab] = useState<"launches" | "drafts" | "scheduled">("launches")
   const [batches, setBatches] = useState<LaunchBatch[]>([])
   const [loading, setLoading] = useState(false)
@@ -11303,6 +11303,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch }: { reloadTrigger: nu
         headline: b.headline || "",
         primaryText: b.primary_text || "",
         pageId: b.page_id || "",
+        pageName: pages.find(p => p.id === b.page_id)?.name || "",
         adAccountId: b.ad_account_id,
         adAccountName: b.ad_account_name,
         timestamp: b.created_at,
@@ -12883,6 +12884,7 @@ export default function LaunchPage() {
           headline: headlines.find((h: string) => h.trim()) || "",
           primaryText: primaryTexts.find((t: string) => t.trim()) || "",
           pageId: selectedPageId || "",
+          pageName: pages.find(p => p.id === selectedPageId)?.name || "",
           adAccountId: selectedAccountId || "",
           adAccountName: selectedAccount?.name || selectedAccountId || "",
           timestamp: new Date().toISOString(),
@@ -13430,7 +13432,7 @@ export default function LaunchPage() {
                 {relaunchBanner}
               </div>
             )}
-            <LaunchHistorySection reloadTrigger={historyReload} onRelaunch={handleRelaunch} />
+            <LaunchHistorySection reloadTrigger={historyReload} onRelaunch={handleRelaunch} pages={pages} />
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
