@@ -3,7 +3,7 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { createClient } from "@/lib/supabase/server"
-import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
+import { uploadImageToMeta, uploadVideoToMeta, pollVideoReady } from "@/lib/facebook"
 import { notifyOrgMembers } from "@/lib/notify-org"
 
 // Large media uploads (videos can be 100MB+) — use Node runtime + extended timeout
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const contentType = request.headers.get("content-type") || ""
 
-    // New flow: client uploaded directly to Meta, just save metadata
+    // Case 1: Metadata update or JSON-based upload (already uploaded on client)
     if (contentType.includes("application/json")) {
       const body = await request.json()
       const supabase = await createClient()
@@ -107,23 +107,13 @@ export async function POST(request: NextRequest) {
 
       if (insertError) {
         console.error("DB insert error:", insertError)
-        return NextResponse.json({ error: "Failed to save creative" }, { status: 500 })
+        return NextResponse.json({ error: "Failed to save creative metadata" }, { status: 500 })
       }
-
-      const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-      await notifyOrgMembers({
-        orgId: ctx.orgId,
-        actorId: ctx.user.id,
-        actorName,
-        type: "asset_uploaded",
-        title: `${actorName} uploaded "${body.file_name}"`,
-        link: "/assets",
-      })
 
       return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
     }
 
-    // Old flow: file uploaded through server (for duplicate row etc.)
+    // Case 2: Binary file upload through server
     const formData = await request.formData()
     const file = formData.get("file") as File
     const headline = formData.get("headline") as string
@@ -131,6 +121,7 @@ export async function POST(request: NextRequest) {
     const description = formData.get("description") as string
     const cta = formData.get("cta") as string
     const linkUrl = formData.get("link_url") as string
+    const adAccountIdParam = formData.get("adAccountId") as string | null
 
     if (!file) {
       return NextResponse.json({ error: "file is required" }, { status: 400 })
@@ -140,8 +131,6 @@ export async function POST(request: NextRequest) {
     if (!connection) {
       return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
     }
-
-    const adAccountIdParam = formData.get("adAccountId") as string | null
 
     const supabase = await createClient()
     let fbAdAccountId = adAccountIdParam
@@ -166,26 +155,43 @@ export async function POST(request: NextRequest) {
     const isVideo = file.type.startsWith("video/")
     const mediaType = isVideo ? "video" : "image"
     const fileBuffer = await file.arrayBuffer()
-    const storedOriginal = await uploadOriginalToStorage({
-      orgId: ctx.orgId,
-      fileName: file.name,
-      contentType: file.type || "application/octet-stream",
-      buffer: fileBuffer,
-    })
 
     let fbImageHash: string | null = null
     let fbImageUrl: string | null = null
     let fbThumbnailUrl: string | null = null
     let fbVideoId: string | null = null
+    let publicUrl = ""
+    let storagePath: string | null = null
 
-    if (mediaType === "image") {
+    if (mediaType === "video") {
+      // Direct Meta Upload for Video (No intermediate storage)
+      try {
+        const uploadResult = await uploadVideoToMeta(fbAdAccountId, connection.access_token, fileBuffer, file.name)
+        fbVideoId = uploadResult.videoId
+
+      } catch (err: any) {
+        console.error("Meta video upload error:", err)
+        const msg = err?.message || "Meta Video Upload failed"
+        if (msg.includes("permission") || msg.includes("OAuth")) {
+          return NextResponse.json({ error: "Meta Permission Error: Please check your Ad Account access." }, { status: 403 })
+        }
+        return NextResponse.json({ error: msg }, { status: 500 })
+      }
+    } else {
+      // Image Flow: Still using Supabase for reliable previews as Meta image URLs are volatile
+      const storedOriginal = await uploadOriginalToStorage({
+        orgId: ctx.orgId,
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        buffer: fileBuffer,
+      })
+      publicUrl = storedOriginal.publicUrl
+      storagePath = storedOriginal.storagePath
+
       const result = await uploadImageToMeta(fbAdAccountId, connection.access_token, fileBuffer, file.name)
       fbImageHash = result.hash
       fbImageUrl = result.url
       fbThumbnailUrl = result.url_128
-    } else {
-      const result = await uploadVideoToMeta(fbAdAccountId, connection.access_token, fileBuffer, file.name)
-      fbVideoId = result.videoId
     }
 
     const { data: creative, error: insertError } = await supabase
@@ -195,19 +201,20 @@ export async function POST(request: NextRequest) {
         user_id: ctx.user.id,
         ad_account_id: fbAdAccountId || null,
         file_name: file.name,
-        file_url: storedOriginal.publicUrl,
-        storage_path: storedOriginal.storagePath,
+        file_url: publicUrl,
+        storage_path: storagePath,
         media_type: mediaType,
         file_size: file.size,
-        headline,
-        primary_text: primaryText,
-        description,
+        headline: headline || "",
+        primary_text: primaryText || "",
+        description: description || "",
         cta: cta || "LEARN_MORE",
-        link_url: linkUrl,
+        link_url: linkUrl || "",
         fb_image_hash: fbImageHash,
         fb_image_url: fbImageUrl,
         fb_thumbnail_url: fbThumbnailUrl,
         fb_video_id: fbVideoId,
+        status: isVideo ? "processing" : "ready",
       })
       .select()
       .single()

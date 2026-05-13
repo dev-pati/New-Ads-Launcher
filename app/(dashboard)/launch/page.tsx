@@ -53,7 +53,7 @@ import { CreativeCardMedia } from "@/components/creative-card-media"
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AdSet { id: string; name: string; status: string; effective_status: string; campaign_id: string; daily_budget?: string }
-interface Creative { id: string; file_name: string; file_url: string; media_type: "image" | "video"; headline?: string; primary_text?: string; cta?: string; link_url?: string; fb_image_url?: string; fb_thumbnail_url?: string; fb_image_hash?: string; fb_video_id?: string; created_at?: string; transcript?: string; tags?: string[] }
+interface Creative { id: string; file_name: string; file_url: string; media_type: "image" | "video"; headline?: string; primary_text?: string; cta?: string; link_url?: string; fb_image_url?: string; fb_thumbnail_url?: string; fb_image_hash?: string; fb_video_id?: string; created_at?: string; transcript?: string; tags?: string[]; status?: "processing" | "ready" | "error" }
 interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "image" | "video"; duration?: number | null; width?: number; height?: number; dimensions?: string | null; date_added?: string; status?: string | null; thumbnail_url?: string; fb_video_id?: string; fb_image_hash?: string; fb_image_url?: string }
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
@@ -10272,7 +10272,7 @@ function AdSetupPanel({
               {adSourceMode === "new_ad" && (
                 <div className="px-3 pb-3 flex gap-2 flex-wrap">
                   {selectedCreatives.map(c => {
-                    const ready = !!(c.fb_video_id || c.fb_image_hash)
+                    const ready = c.media_type === "video" ? (!!c.fb_video_id && c.status === "ready") : !!c.fb_image_hash
                     return (
                       <div key={c.id} className="relative" title={c.file_name}>
                         <div className="size-10 rounded overflow-hidden bg-muted border">
@@ -12151,143 +12151,134 @@ export default function LaunchPage() {
   const uploadVideoChunked = async (item: UploadItem): Promise<Creative | null> => {
     const currentPrimary = primaryTexts.find(t => t.trim()) || ""
     const currentHeadline = headlines.find(h => h.trim()) || ""
-    const fallbackChunkSize = 4 * 1024 * 1024
+    const CHUNK_SIZE = 4 * 1024 * 1024 // 4MB chunks
 
-    const safeJson = async (res: Response) => {
-      const text = await res.text()
-      try { return JSON.parse(text) } catch { return { error: text.slice(0, 200) } }
-    }
+    try {
+      // 1. Get credentials
+      const credRes = await fetch(`/api/facebook/upload-credentials?adAccountId=${selectedAccountId}`)
+      if (!credRes.ok) throw new Error("Failed to get upload credentials")
+      const { accessToken, adAccountId: normAccountId } = await credRes.json()
+      const cleanId = normAccountId.replace(/^act_/, "")
+      const FB_API = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
 
-    const startRes = await fetch("/api/facebook/video-upload/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ad_account_id: selectedAccountId, file_name: item.file.name, file_size: item.file.size }),
-    })
-    const startData = await safeJson(startRes)
-    if (!startRes.ok) {
-      updateUpload(item.id, { status: "error", error: startData.error || "Failed to start upload" })
-      return null
-    }
-    const {
-      ad_account_id: normAccountId,
-      upload_session_id: uploadSessionId,
-      video_id,
-      start_offset: initialStartOffset,
-      end_offset: initialEndOffset,
-    } = startData as {
-      ad_account_id: string
-      upload_session_id: string
-      video_id: string
-      start_offset: string
-      end_offset: string
-    }
-    if (!normAccountId || !uploadSessionId || !video_id) {
-      updateUpload(item.id, { status: "error", error: "Upload session did not start correctly" })
-      return null
-    }
+      // 2. Start session
+      const startFormData = new FormData()
+      startFormData.append("upload_phase", "start")
+      startFormData.append("file_size", String(item.file.size))
+      startFormData.append("access_token", accessToken)
 
-    // 2. Upload entire file directly to Facebook (client → FB, bypasses Vercel completely)
-    updateUpload(item.id, { uploaded: 0, fileSize: item.file.size })
-    const startedAt = Date.now()
-    let lastTick = startedAt
-    let lastLoaded = 0
-    let startOffset = Number(initialStartOffset || "0")
-    let endOffset = Number(initialEndOffset || "0")
+      const startRes = await fetch(FB_API, { method: "POST", body: startFormData })
+      const startData = await startRes.json()
+      if (startData.error) throw new Error(startData.error.message || "Failed to start upload")
 
-    while (startOffset < item.file.size) {
-      const chunkEnd =
-        Number.isFinite(endOffset) && endOffset > startOffset
-          ? Math.min(endOffset, item.file.size)
-          : Math.min(startOffset + fallbackChunkSize, item.file.size)
-      const chunk = item.file.slice(startOffset, chunkEnd)
+      const { upload_session_id, video_id } = startData
+      let startOffset = Number(startData.start_offset || "0")
 
-      const chunkRes = await fetch(
-        `/api/facebook/video-upload/chunk?ad_account_id=${encodeURIComponent(normAccountId)}&upload_session_id=${encodeURIComponent(uploadSessionId)}&start_offset=${encodeURIComponent(String(startOffset))}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/octet-stream" },
-          body: chunk,
+      // 3. Transfer chunks
+      updateUpload(item.id, { uploaded: 0, fileSize: item.file.size })
+      const startedAt = Date.now()
+      let lastTick = startedAt
+      let lastLoaded = 0
+
+      while (startOffset < item.file.size) {
+        const endOffset = Math.min(startOffset + CHUNK_SIZE, item.file.size)
+        const chunk = item.file.slice(startOffset, endOffset)
+
+        const transferFormData = new FormData()
+        transferFormData.append("upload_phase", "transfer")
+        transferFormData.append("upload_session_id", upload_session_id)
+        transferFormData.append("start_offset", String(startOffset))
+        transferFormData.append("access_token", accessToken)
+        transferFormData.append("video_file_chunk", chunk, item.file.name)
+
+        const transferRes = await fetch(FB_API, { method: "POST", body: transferFormData })
+        const transferData = await transferRes.json()
+        if (transferData.error) throw new Error(transferData.error.message || "Chunk upload failed")
+
+        startOffset = Number(transferData.start_offset)
+        
+        // Update progress
+        const now = Date.now()
+        const dt = (now - lastTick) / 1000
+        const dl = startOffset - lastLoaded
+        const speed = dt > 0 ? dl / dt : 0
+        const remaining = item.file.size - startOffset
+        const eta = speed > 0 ? remaining / speed : 0
+        lastTick = now
+        lastLoaded = startOffset
+        updateUpload(item.id, { uploaded: startOffset, fileSize: item.file.size, speed, eta })
+      }
+
+      // 4. Finish session on Meta
+      const finishMetaFormData = new FormData()
+      finishMetaFormData.append("upload_phase", "finish")
+      finishMetaFormData.append("upload_session_id", upload_session_id)
+      finishMetaFormData.append("access_token", accessToken)
+      finishMetaFormData.append("title", item.file.name)
+
+      const finishMetaRes = await fetch(FB_API, { method: "POST", body: finishMetaFormData })
+      const finishMetaData = await finishMetaRes.json()
+      if (finishMetaData.error) throw new Error(finishMetaData.error.message || "Failed to finalize Meta upload")
+
+      // 5. Save to our DB via our server's finish route
+      const finishRes = await fetch("/api/facebook/video-upload/finish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ad_account_id: selectedAccountId,
+          video_id,
+          file_name: item.file.name,
+          file_size: item.file.size,
+          headline: currentHeadline || null,
+          primary_text: currentPrimary || null,
+          description: description || null,
+          link_url: webLink || null,
+          cta: cta || "LEARN_MORE",
+        }),
+      })
+      const finishData = await finishRes.json()
+      if (!finishRes.ok) throw new Error(finishData.error || "Failed to save creative to database")
+
+      const creative: Creative = finishData.creative
+      const totalDurationSeconds = Math.max((Date.now() - startedAt) / 1000, 1)
+      updateUpload(item.id, {
+        status: "completed",
+        uploaded: item.fileSize,
+        eta: 0,
+        speed: item.file.size / totalDurationSeconds,
+        creativeId: creative.id,
+      })
+
+      // Poll Meta for thumbnail in background
+      ;(async () => {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          await new Promise(r => setTimeout(r, attempt === 0 ? 3000 : 5000))
+          try {
+            const tRes = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
+            const tData = await tRes.json()
+            if (tData.status === "ready" || tData.thumbnail_url || tData.source_url) {
+              setSelectedCreatives(prev => prev.map(c =>
+                c.id === creative.id
+                  ? { 
+                      ...c, 
+                      fb_thumbnail_url: tData.thumbnail_url || c.fb_thumbnail_url, 
+                      file_url: tData.source_url || c.file_url || tData.thumbnail_url,
+                      status: tData.status || "ready"
+                    }
+                  : c
+              ))
+              if (tData.status === "ready") break
+            }
+          } catch {}
         }
-      )
-      const chunkData = await safeJson(chunkRes)
-      if (!chunkRes.ok) {
-        updateUpload(item.id, { status: "error", error: chunkData.error || "Chunk upload failed" })
-        return null
-      }
+      })()
 
-      const uploaded = chunkEnd
-      const now = Date.now()
-      const dt = (now - lastTick) / 1000
-      const dl = uploaded - lastLoaded
-      const speed = dt > 0 ? dl / dt : 0
-      const remaining = item.file.size - uploaded
-      const eta = speed > 0 ? remaining / speed : 0
-      lastTick = now
-      lastLoaded = uploaded
-      updateUpload(item.id, { uploaded, fileSize: item.file.size, speed, eta })
-
-      const nextStartOffset = Number(chunkData.start_offset)
-      const nextEndOffset = Number(chunkData.end_offset)
-      startOffset = Number.isFinite(nextStartOffset) && nextStartOffset > uploaded
-        ? nextStartOffset
-        : uploaded
-      endOffset = Number.isFinite(nextEndOffset) && nextEndOffset > startOffset
-        ? nextEndOffset
-        : Math.min(startOffset + fallbackChunkSize, item.file.size)
-    }
-
-    // 3. Finish session (tiny JSON body)
-    const finishRes = await fetch("/api/facebook/video-upload/finish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ad_account_id: selectedAccountId,
-        video_id,
-        file_name: item.file.name,
-        file_size: item.file.size,
-        headline: currentHeadline || null,
-        primary_text: currentPrimary || null,
-        description: description || null,
-        link_url: webLink || null,
-        cta: cta || "LEARN_MORE",
-      }),
-    })
-    const finishData = await safeJson(finishRes)
-    if (!finishRes.ok) {
-      updateUpload(item.id, { status: "error", error: finishData.error || "Failed to finalize upload" })
+      return creative
+    } catch (err: any) {
+      console.error("Direct upload error:", err)
+      updateUpload(item.id, { status: "error", error: err.message || "Upload failed" })
       return null
     }
-
-    const creative: Creative = finishData.creative
-    const totalDurationSeconds = Math.max((Date.now() - startedAt) / 1000, 1)
-    updateUpload(item.id, {
-      status: "completed",
-      uploaded: item.fileSize,
-      eta: 0,
-      speed: item.file.size / totalDurationSeconds,
-      creativeId: creative.id,
-    })
-
-    // Poll Meta for thumbnail in background
-    ;(async () => {
-      for (let attempt = 0; attempt < 6; attempt++) {
-        await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 4000))
-        try {
-          const tRes = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
-          const tData = await tRes.json()
-          if (tData.thumbnail_url || tData.source_url) {
-            setSelectedCreatives(prev => prev.map(c =>
-              c.id === creative.id
-                ? { ...c, fb_thumbnail_url: tData.thumbnail_url || c.fb_thumbnail_url, file_url: tData.source_url || c.file_url || tData.thumbnail_url }
-                : c
-            ))
-            if (tData.thumbnail_url && tData.source_url) break
-          }
-        } catch {}
-      }
-    })()
-
-    return creative
   }
 
   const uploadOneFile = (item: UploadItem): Promise<Creative | null> => {

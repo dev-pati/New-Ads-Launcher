@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
         link_url,
         cta,
         fb_video_id: video_id,
+        status: "processing",
       })
       .select()
       .single()

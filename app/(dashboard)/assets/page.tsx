@@ -38,6 +38,7 @@ interface Creative {
   tags?: string[]
   created_at?: string
   ad_account_id?: string
+  status?: "processing" | "ready" | "error"
 }
 
 interface Board {
@@ -161,7 +162,13 @@ export default function AssetsPage() {
         file_url: data.creative.file_url,
         fb_image_url: data.creative.fb_image_url,
         fb_thumbnail_url: data.creative.fb_thumbnail_url,
+        status: data.creative.status,
       })
+
+      // If still processing, check again in 5 seconds
+      if (data.creative.status === "processing") {
+        setTimeout(() => refreshVideoPreview(creativeId), 5000)
+      }
     } catch {}
   }, [applyCreativePreviewUpdate])
 
@@ -170,7 +177,8 @@ export default function AssetsPage() {
       creative.media_type === "video"
       && creative.fb_video_id
       && (
-        !creative.fb_thumbnail_url
+        creative.status === "processing"
+        || !creative.fb_thumbnail_url
         || (
           !/^https?:/.test(creative.fb_thumbnail_url)
           && !creative.fb_thumbnail_url.startsWith("/api/creatives/")

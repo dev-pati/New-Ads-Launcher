@@ -743,6 +743,36 @@ export async function pollVideoReady(
   }
 }
 
+// Perform a single check of a video's status on Meta
+export async function checkVideoStatus(
+  videoId: string,
+  accessToken: string
+): Promise<{ ready: boolean; status: string; errorMsg?: string }> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`
+    )
+    if (!res.ok) {
+      return { ready: false, status: "unknown", errorMsg: "Failed to fetch status from Meta" }
+    }
+    const data = await res.json()
+    const vstatus = data.status?.video_status as string | undefined
+    
+    if (vstatus === "ready") {
+      return { ready: true, status: vstatus }
+    }
+    if (vstatus === "error") {
+      const errMsg = data.status?.processing_phase?.errors?.[0]?.message
+        || data.status?.uploading_phase?.errors?.[0]?.message
+        || "Video processing failed on Meta"
+      return { ready: false, status: vstatus, errorMsg: errMsg }
+    }
+    return { ready: false, status: vstatus || "unknown" }
+  } catch (err) {
+    return { ready: false, status: "error", errorMsg: err instanceof Error ? err.message : "Unknown error" }
+  }
+}
+
 // Fetch a video's playable source URL from Facebook
 export async function getVideoSource(videoId: string, accessToken: string): Promise<string | null> {
   try {

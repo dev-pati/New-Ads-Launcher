@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
+import { uploadImageToMeta, uploadVideoToMeta, pollVideoReady } from "@/lib/facebook"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
@@ -49,28 +49,20 @@ export async function POST(request: NextRequest) {
     const fileType = sp.get("type") || request.headers.get("content-type") || "application/octet-stream"
     const fileSize = parseInt(sp.get("size") || "0", 10)
     const adAccountIdParam = sp.get("ad_account_id") || sp.get("adAccountId")
-    // Optional ad-text metadata sent from launch flow — saved with creative for reuse
-    const headline = sp.get("headline") || null
-    const primaryText = sp.get("primary_text") || null
-    const description = sp.get("description") || null
-    const linkUrl = sp.get("link_url") || null
+    
+    // Optional ad-text metadata
+    const headline = sp.get("headline") || ""
+    const primaryText = sp.get("primary_text") || ""
+    const description = sp.get("description") || ""
+    const linkUrl = sp.get("link_url") || ""
     const ctaParam = sp.get("cta") || "LEARN_MORE"
 
     if (!filename) return NextResponse.json({ error: "filename required (URL param)" }, { status: 400 })
 
-    // File type whitelist
     const isVideo = fileType.startsWith("video/")
     const isImage = fileType.startsWith("image/")
     if (!isVideo && !isImage) {
-      return NextResponse.json({ error: `Unsupported file type: ${fileType}. Only image/* and video/* allowed.` }, { status: 400 })
-    }
-
-    // Size guard from header (avoid wasting bandwidth before we even read body)
-    const MAX_SIZE = isVideo ? 1024 * 1024 * 1024 : 30 * 1024 * 1024 // 1GB video, 30MB image (Meta limits)
-    if (fileSize && fileSize > MAX_SIZE) {
-      return NextResponse.json({
-        error: `File too large: ${(fileSize / 1024 / 1024).toFixed(1)}MB. Max ${isVideo ? "1GB for video" : "30MB for image"}.`
-      }, { status: 413 })
+      return NextResponse.json({ error: `Unsupported file type: ${fileType}` }, { status: 400 })
     }
 
     const connection = await getFacebookConnection(ctx.orgId)
@@ -88,61 +80,54 @@ export async function POST(request: NextRequest) {
         .maybeSingle()
 
       if (!firstOrgAdAccount?.fb_ad_account_id) {
-        return NextResponse.json({ error: "No ad account found in workspace" }, { status: 400 })
+        return NextResponse.json({ error: "No ad account found" }, { status: 400 })
       }
       fbAdAccountId = firstOrgAdAccount.fb_ad_account_id
     } else {
       const account = await getOrgAdAccountInfo(ctx.orgId, fbAdAccountId, connection.access_token)
       if (!account) {
-        return NextResponse.json({ error: `Ad account ${fbAdAccountId} not in your workspace` }, { status: 403 })
+        return NextResponse.json({ error: `Ad account ${fbAdAccountId} not found` }, { status: 403 })
       }
       fbAdAccountId = account.id
     }
 
-    const mediaType: "image" | "video" = isVideo ? "video" : "image"
-
-    // Read raw body as ArrayBuffer (no FormData parsing)
     const fileBuffer = await request.arrayBuffer()
     if (fileBuffer.byteLength === 0) {
       return NextResponse.json({ error: "Empty body" }, { status: 400 })
     }
-    // Re-check actual size (header could be wrong/missing)
-    if (fileBuffer.byteLength > MAX_SIZE) {
-      return NextResponse.json({
-        error: `File too large: ${(fileBuffer.byteLength / 1024 / 1024).toFixed(1)}MB. Max ${isVideo ? "1GB for video" : "30MB for image"}.`
-      }, { status: 413 })
-    }
-
-    const storedOriginalPromise = uploadOriginalToStorage({
-      orgId: ctx.orgId,
-      fileName: filename,
-      contentType: fileType,
-      buffer: fileBuffer,
-    })
 
     let fbImageHash: string | null = null
     let fbImageUrl: string | null = null
     let fbThumbnailUrl: string | null = null
     let fbVideoId: string | null = null
-    const storedOriginal = await (async () => {
-      if (mediaType === "image") {
-        const [stored, uploadedImage] = await Promise.all([
-          storedOriginalPromise,
-          uploadImageToMeta(fbAdAccountId!, connection.access_token, fileBuffer, filename),
-        ])
-        fbImageHash = uploadedImage.hash
-        fbImageUrl = uploadedImage.url
-        fbThumbnailUrl = uploadedImage.url_128
-        return stored
-      }
+    let publicUrl = ""
+    let storagePath: string | null = null
 
-      const [stored, uploadedVideo] = await Promise.all([
-        storedOriginalPromise,
-        uploadVideoToMeta(fbAdAccountId!, connection.access_token, fileBuffer, filename),
-      ])
-      fbVideoId = uploadedVideo.videoId
-      return stored
-    })()
+    if (isVideo) {
+      // 1. Direct Meta Upload (No intermediate storage)
+      try {
+        const uploadedVideo = await uploadVideoToMeta(fbAdAccountId, connection.access_token, fileBuffer, filename)
+        fbVideoId = uploadedVideo.videoId
+      } catch (err: any) {
+        console.error("Meta video upload error:", err)
+        return NextResponse.json({ error: err?.message || "Meta Video Upload failed" }, { status: 500 })
+      }
+    } else {
+      // Image Flow: Use Supabase storage for reliable thumbnails
+      const stored = await uploadOriginalToStorage({
+        orgId: ctx.orgId,
+        fileName: filename,
+        contentType: fileType,
+        buffer: fileBuffer,
+      })
+      publicUrl = stored.publicUrl
+      storagePath = stored.storagePath
+
+      const uploadedImage = await uploadImageToMeta(fbAdAccountId, connection.access_token, fileBuffer, filename)
+      fbImageHash = uploadedImage.hash
+      fbImageUrl = uploadedImage.url
+      fbThumbnailUrl = uploadedImage.url_128
+    }
 
     const { data: creative, error: insertError } = await supabase
       .from("creatives")
@@ -151,9 +136,9 @@ export async function POST(request: NextRequest) {
         user_id: ctx.user.id,
         ad_account_id: fbAdAccountId,
         file_name: filename,
-        file_url: storedOriginal.publicUrl,
-        storage_path: storedOriginal.storagePath,
-        media_type: mediaType,
+        file_url: publicUrl,
+        storage_path: storagePath,
+        media_type: isVideo ? "video" : "image",
         file_size: fileSize || fileBuffer.byteLength,
         headline,
         primary_text: primaryText,
@@ -164,6 +149,7 @@ export async function POST(request: NextRequest) {
         fb_image_url: fbImageUrl,
         fb_thumbnail_url: fbThumbnailUrl,
         fb_video_id: fbVideoId,
+        status: isVideo ? "processing" : "ready",
       })
       .select()
       .single()
@@ -180,7 +166,6 @@ export async function POST(request: NextRequest) {
       actorName,
       type: "asset_uploaded",
       title: `${actorName} uploaded "${filename}"`,
-      body: mediaType === "video" ? "Video" : "Image",
       link: "/assets",
     })
 
