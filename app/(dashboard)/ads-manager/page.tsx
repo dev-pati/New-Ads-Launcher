@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from "react"
 import { useRouter } from "next/navigation"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
@@ -79,6 +79,12 @@ interface Ad {
   insights?: { data: Insight[] }
 }
 
+interface BreakdownRow {
+  parentId: string
+  breakdownLabel: string
+  ins: Insight
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 
@@ -94,6 +100,21 @@ const OBJECTIVE_RESULT: Record<string, { type: string; actionType: string }> = {
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getBreakdownLabel(item: Record<string, string>, apiParam: string): string {
+  if (apiParam.includes("time_increment=")) {
+    if (!item.date_start) return "—"
+    return new Date(item.date_start + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+  }
+  const match = apiParam.match(/breakdowns=([^&]+)/)
+  if (!match) return "—"
+  return match[1].split(",")
+    .map(f => f.trim())
+    .map(f => item[f] ?? "")
+    .filter(Boolean)
+    .map(v => v.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()))
+    .join(" / ") || "—"
+}
 
 function fmtBudget(cents?: string) {
   if (!cents) return "—"
@@ -252,6 +273,7 @@ export default function AdsManagerPage() {
   const [colsOpen,          setColsOpen]          = useState(false)
   const [customizeColsOpen, setCustomizeColsOpen] = useState(false)
   const [breakdown,         setBreakdown]         = useState("none")
+  const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
 
   const router = useRouter()
 
@@ -341,27 +363,61 @@ export default function AdsManagerPage() {
         }))}`
       : `date_preset=${datePreset}`
 
-    const breakdownParam = breakdown !== "none" && BREAKDOWN_API_MAP[breakdown]
-      ? `&${BREAKDOWN_API_MAP[breakdown]}`
-      : ""
+    setBreakdownRows([])
 
     try {
       if (tab === "campaigns") {
-        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${breakdownParam}`)
+        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setCampaigns(d.campaigns || [])
       } else if (tab === "adsets") {
-        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${breakdownParam}`)
+        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
       } else {
-        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${breakdownParam}`)
+        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
       }
+
+      // Fetch breakdown rows separately via Insights API
+      if (breakdown !== "none" && BREAKDOWN_API_MAP[breakdown]) {
+        const apiParam = BREAKDOWN_API_MAP[breakdown]
+        const bdsMatch = apiParam.match(/breakdowns=([^&]+)/)
+        const tiMatch  = apiParam.match(/time_increment=([^&]+)/)
+        const levelMap: Record<string, string> = { campaigns: "campaign", adsets: "adset", ads: "ad" }
+        const level = levelMap[tab]
+        let insUrl = `/api/facebook/breakdown-insights?ad_account_id=${encodeURIComponent(selectedAccountId)}&level=${level}&${dateParam}`
+        if (bdsMatch) insUrl += `&breakdowns=${encodeURIComponent(bdsMatch[1])}`
+        if (tiMatch)  insUrl += `&time_increment=${encodeURIComponent(tiMatch[1])}`
+
+        try {
+          const ir = await fetch(insUrl)
+          const id = await ir.json()
+          if (ir.ok && Array.isArray(id.data)) {
+            const idKey = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id"
+            setBreakdownRows(id.data
+              .filter((item: any) => item[idKey])
+              .map((item: any) => ({
+                parentId: item[idKey] as string,
+                breakdownLabel: getBreakdownLabel(item as Record<string, string>, apiParam),
+                ins: {
+                  spend: item.spend || "0",
+                  impressions: item.impressions || "0",
+                  clicks: item.clicks || "0",
+                  reach: item.reach,
+                  actions: item.actions,
+                  cost_per_action_type: item.cost_per_action_type,
+                } as Insight,
+              }))
+            )
+          }
+        } catch { /* breakdown fetch failure is non-fatal */ }
+      }
+
       setLoadedMs(Date.now() - t0)
     } catch (e: any) {
       setError(e.message || "Failed to load")
@@ -372,8 +428,8 @@ export default function AdsManagerPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Reset page & row selection when tab/search/date changes
-  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, datePreset, customDateRange])
+  // Reset page & row selection when tab/search/date/breakdown changes
+  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, datePreset, customDateRange, breakdown])
 
   // ─── Tab switch: if items checked, capture as filter for the next level ─────
   // Badge appears only on the NEXT tab, not on all 3 at once
@@ -737,6 +793,55 @@ export default function AdsManagerPage() {
 
       default:
         return <span className="text-[13px]">—</span>
+    }
+  }
+
+  function renderBreakdownCell(colId: string, ins: Insight, objective?: string) {
+    const spend = parseFloat(ins.spend || "0")
+    const getVal = (type: string) => parseInt(ins.actions?.find(a => a.action_type === type)?.value || "0")
+    switch (colId) {
+      case "spend":
+        return <span className="text-[13px] tabular-nums">{ins.spend ? `$${spend.toFixed(2)}` : "—"}</span>
+      case "results": {
+        const obj = OBJECTIVE_RESULT[objective || ""]
+        if (!obj) return <span className="text-[13px]">—</span>
+        const action = ins.actions?.find(a => a.action_type === obj.actionType)
+        const count = parseInt(action?.value || "0")
+        return <><span className="text-[13px] tabular-nums">{count || "—"}</span>{count > 0 && <p className="text-[11px] text-[#65676b]">{obj.type}</p>}</>
+      }
+      case "cost_per_result": {
+        const obj = OBJECTIVE_RESULT[objective || ""]
+        if (!obj) return <span className="text-[13px]">—</span>
+        const cpa = ins.cost_per_action_type?.find(a => a.action_type === obj.actionType)
+        if (!cpa) return <span className="text-[13px]">—</span>
+        return <><span className="text-[13px] tabular-nums">${parseFloat(cpa.value).toFixed(2)}</span><p className="text-[11px] text-[#65676b]">Per {obj.type}</p></>
+      }
+      case "impressions": return <span className="text-[13px] tabular-nums">{ins.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
+      case "clicks":      return <span className="text-[13px] tabular-nums">{ins.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
+      case "reach":       return <span className="text-[13px] tabular-nums">{ins.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
+      case "cpm": {
+        if (!ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">${((spend / parseFloat(ins.impressions)) * 1000).toFixed(2)}</span>
+      }
+      case "ctr": {
+        if (!ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">{((parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100).toFixed(2)}%</span>
+      }
+      case "cpc": {
+        if (!ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
+      }
+      case "purchases":        { const p = getVal("omni_purchase"); return <span className="text-[13px] tabular-nums">{p || "—"}</span> }
+      case "cost_per_purchase":{ const p = getVal("omni_purchase"); return <span className="text-[13px] tabular-nums">{p ? `$${(spend/p).toFixed(2)}` : "—"}</span> }
+      case "leads":            { const l = getVal("lead"); return <span className="text-[13px] tabular-nums">{l || "—"}</span> }
+      case "cost_per_lead":    { const l = getVal("lead"); return <span className="text-[13px] tabular-nums">{l ? `$${(spend/l).toFixed(2)}` : "—"}</span> }
+      case "add_to_cart":      { const atc = getVal("add_to_cart"); return <span className="text-[13px] tabular-nums">{atc || "—"}</span> }
+      case "video_views_3s":   { const v = getVal("video_view"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
+      case "video_25":         { const v = getVal("video_p25_watched_actions"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
+      case "video_50":         { const v = getVal("video_p50_watched_actions"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
+      case "video_75":         { const v = getVal("video_p75_watched_actions"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
+      case "video_100":        { const v = getVal("video_p100_watched_actions"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
+      default: return <span className="text-[13px]">—</span>
     }
   }
 
@@ -1158,124 +1263,96 @@ export default function AdsManagerPage() {
               ) : tab === "campaigns" ? (
                 (pagedData as Campaign[]).map(c => {
                   const isSel = selectedIds.has(c.id)
+                  const rowBDs = breakdown !== "none" ? breakdownRows.filter(br => br.parentId === c.id) : []
                   return (
-                    <tr key={c.id} className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                      <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
-                          onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(c.id) : s.add(c.id); return s })} />
-                      </td>
-                      <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        {toggling.has(c.id)
-                          ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" />
-                          : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />
-                        }
-                      </td>
-                      <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        {inlineEditingId === c.id ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={inlineEditingName}
-                              onChange={e => setInlineEditingName(e.target.value)}
-                              onBlur={() => saveInlineRename(c.id)}
-                              onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)}
-                              className="h-7 text-[13px] py-1"
-                              autoFocus
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => drillToAdSets(c)}
-                                className="text-[#1877f2] hover:underline text-[13px] font-semibold text-left line-clamp-2"
-                              >
-                                {c.name}
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setInlineEditingId(c.id);
-                                  setInlineEditingName(c.name);
-                                }}
-                                className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"
-                              >
-                                <IconPencil className="size-3 text-[#65676b]" />
-                              </button>
+                    <Fragment key={c.id}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
+                            onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(c.id) : s.add(c.id); return s })} />
+                        </td>
+                        <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          {toggling.has(c.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />}
+                        </td>
+                        <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          {inlineEditingId === c.id ? (
+                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(c.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)} className="h-7 text-[13px] py-1" autoFocus /></div>
+                          ) : (
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => drillToAdSets(c)} className="text-[#1877f2] hover:underline text-[13px] font-semibold text-left line-clamp-2">{c.name}</button>
+                                <button onClick={e => { e.stopPropagation(); setInlineEditingId(c.id); setInlineEditingName(c.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
+                              </div>
+                              <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(c)}>Edit</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                              </div>
+                              <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{c.id}</p>
                             </div>
-                            
-                            <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(c)}>Edit</button>
-                              <span className="text-[#ccd0d5]">·</span>
-                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
-                            </div>
-                            <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{c.id}</p>
-                          </div>
-                        )}
-                      </td>
-                      {columnOrder.map(colId => (
-                        <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, c)}</td>
+                          )}
+                        </td>
+                        {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, c)}</td>)}
+                      </tr>
+                      {rowBDs.map((br, i) => (
+                        <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
+                          <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
+                          <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
+                          <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
+                            <span className="pl-6 text-[13px] text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
+                          </td>
+                          {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
+                        </tr>
                       ))}
-                    </tr>
+                    </Fragment>
                   )
                 })
               ) : tab === "adsets" ? (
                 (pagedData as AdSet[]).map(a => {
                   const isSel = selectedIds.has(a.id)
+                  const objective = campaigns.find(c => c.id === a.campaign_id)?.objective
+                  const rowBDs = breakdown !== "none" ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
-                    <tr key={a.id} className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                      <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
-                          onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
-                      </td>
-                      <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        {toggling.has(a.id)
-                          ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" />
-                          : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />
-                        }
-                      </td>
-                      <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        {inlineEditingId === a.id ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={inlineEditingName}
-                              onChange={e => setInlineEditingName(e.target.value)}
-                              onBlur={() => saveInlineRename(a.id)}
-                              onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)}
-                              className="h-7 text-[13px] py-1"
-                              autoFocus
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-2">
-                              <button onClick={() => drillToAds(a)} className="text-[#1877f2] hover:underline text-[13px] font-semibold text-left line-clamp-2">
-                                {a.name}
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setInlineEditingId(a.id);
-                                  setInlineEditingName(a.name);
-                                }}
-                                className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"
-                              >
-                                <IconPencil className="size-3 text-[#65676b]" />
-                              </button>
+                    <Fragment key={a.id}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
+                            onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
+                        </td>
+                        <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
+                        </td>
+                        <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          {inlineEditingId === a.id ? (
+                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-[13px] py-1" autoFocus /></div>
+                          ) : (
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => drillToAds(a)} className="text-[#1877f2] hover:underline text-[13px] font-semibold text-left line-clamp-2">{a.name}</button>
+                                <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
+                              </div>
+                              <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                              </div>
+                              <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
                             </div>
-                            
-                            <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
-                              <span className="text-[#ccd0d5]">·</span>
-                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
-                            </div>
-                            <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
-                          </div>
-                        )}
-                      </td>
-                      {columnOrder.map(colId => (
-                        <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>
+                          )}
+                        </td>
+                        {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>)}
+                      </tr>
+                      {rowBDs.map((br, i) => (
+                        <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
+                          <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
+                          <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
+                          <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
+                            <span className="pl-6 text-[13px] text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
+                          </td>
+                          {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                        </tr>
                       ))}
-                    </tr>
+                    </Fragment>
                   )
                 })
               ) : (
@@ -1283,66 +1360,54 @@ export default function AdsManagerPage() {
                   const adSet = adSets.find(s => s.id === a.adset_id)
                   const isSel = selectedIds.has(a.id)
                   const thumb = a.creative?.thumbnail_url || a.creative?.image_url
+                  const objective = campaigns.find(c => c.id === a.campaign_id)?.objective
+                  const rowBDs = breakdown !== "none" ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
-                    <tr key={a.id} className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                      <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
-                          onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
-                      </td>
-                      <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        {toggling.has(a.id)
-                          ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" />
-                          : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />
-                        }
-                      </td>
-                      <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
-                        {inlineEditingId === a.id ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={inlineEditingName}
-                              onChange={e => setInlineEditingName(e.target.value)}
-                              onBlur={() => saveInlineRename(a.id)}
-                              onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)}
-                              className="h-7 text-[13px] py-1"
-                              autoFocus
-                            />
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-2">
-                              <p className="text-[13px] font-semibold text-[#1c2b33] dark:text-gray-200 line-clamp-2">{a.name}</p>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setInlineEditingId(a.id);
-                                  setInlineEditingName(a.name);
-                                }}
-                                className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"
-                              >
-                                <IconPencil className="size-3 text-[#65676b]" />
-                              </button>
+                    <Fragment key={a.id}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
+                            onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
+                        </td>
+                        <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
+                        </td>
+                        <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                          {inlineEditingId === a.id ? (
+                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-[13px] py-1" autoFocus /></div>
+                          ) : (
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-2">
+                                <p className="text-[13px] font-semibold text-[#1c2b33] dark:text-gray-200 line-clamp-2">{a.name}</p>
+                                <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
+                              </div>
+                              <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                              </div>
+                              <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
+                              {adSet && <p className="text-[10px] text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
                             </div>
-                            
-                            <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
-                              <span className="text-[#ccd0d5]">·</span>
-                              <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
-                            </div>
-                            <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
-                            {adSet && <p className="text-[10px] text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        {thumb
-                          ? <img src={thumb} alt="" className="size-12 rounded object-cover border" />
-                          : <div className="size-12 rounded bg-muted border flex items-center justify-center text-[10px] text-muted-foreground">No img</div>
-                        }
-                      </td>
-                      {columnOrder.map(colId => (
-                        <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {thumb ? <img src={thumb} alt="" className="size-12 rounded object-cover border" /> : <div className="size-12 rounded bg-muted border flex items-center justify-center text-[10px] text-muted-foreground">No img</div>}
+                        </td>
+                        {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>)}
+                      </tr>
+                      {rowBDs.map((br, i) => (
+                        <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
+                          <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
+                          <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
+                          <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
+                            <span className="pl-6 text-[13px] text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
+                          </td>
+                          <td className="px-3 py-2 bg-[#f5f6f7] dark:bg-muted/10" />
+                          {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                        </tr>
                       ))}
-                    </tr>
+                    </Fragment>
                   )
                 })
               )}

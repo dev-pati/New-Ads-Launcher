@@ -146,7 +146,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
           <rect x="2" y="11.5" width="5"  height="2" rx="1"/>
         </svg>
         <span className="whitespace-nowrap">
-          {isActive ? `Breakdown: ${selectedLabel}` : "Breakdown"}
+          {isActive ? "Breakdown: 1 Selected" : "Breakdown"}
         </span>
         <IconChevronDown className="size-3 shrink-0 opacity-60" />
       </button>
