@@ -1,6 +1,17 @@
 const GRAPH_API_VERSION = "v25.0"
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`
 
+// Error codes Meta returns for rate limits (HTTP 200 body OR non-OK status).
+const META_RATE_LIMIT_CODES = new Set([4, 17, 32, 613])
+
+function throwMetaError(data: any, fallback: string): never {
+  const code: number = data?.error?.code ?? 0
+  const msg: string  = data?.error?.message ?? fallback
+  const err = new Error(msg)
+  if (META_RATE_LIMIT_CODES.has(code)) err.name = "MetaRateLimitError"
+  throw err
+}
+
 // NOTE: ads_management, ads_read, business_management, pages_manage_ads,
 // catalog_management require App Review OR must be added in Facebook Developer
 // Dashboard under Use Cases → Customize for dev mode to work.
@@ -234,14 +245,11 @@ export async function getCampaigns(
     "adsets.limit(0).summary(true)",
   ].join(",")
 
-  const res = await fetch(
+  const res  = await fetch(
     `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
   )
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to get campaigns")
-  }
   const data = await res.json()
+  if (data?.error || !res.ok) throwMetaError(data, "Failed to get campaigns")
   return data.data || []
 }
 
@@ -290,12 +298,9 @@ export async function getAdSets(
     url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
   }
 
-  const res = await fetch(url)
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to get ad sets")
-  }
+  const res  = await fetch(url)
   const data = await res.json()
+  if (data?.error || !res.ok) throwMetaError(data, "Failed to get ad sets")
   return data.data || []
 }
 
@@ -336,12 +341,9 @@ export async function getAds(
     url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
   }
 
-  const res = await fetch(url)
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to get ads")
-  }
+  const res  = await fetch(url)
   const data = await res.json()
+  if (data?.error || !res.ok) throwMetaError(data, "Failed to get ads")
   return data.data || []
 }
 
