@@ -132,28 +132,13 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
 
   useEffect(() => {
     if (!activeOrg?.id) return
-    const supabase = createClient()
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-
-    supabase
-      .from("launch_batches")
-      .select("id, total_ads, failed_ads")
-      .eq("org_id", activeOrg.id)
-      .gte("created_at", since)
-      .then(({ data }) => {
-        const batches = data || []
-        const ads = batches.reduce((sum: number, b: any) => sum + ((b.total_ads || 0) - (b.failed_ads || 0)), 0)
-        setLaunchStats(prev => ({ ...prev, ads, batches: batches.length }))
+    fetch("/api/team-stats?days=30")
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d) return
+        setLaunchStats({ ads: d.ads, batches: d.batches, saved: d.templates })
       })
-
-    supabase
-      .from("ad_copy_templates")
-      .select("id")
-      .eq("org_id", activeOrg.id)
-      .gte("created_at", since)
-      .then(({ data }) => {
-        setLaunchStats(prev => ({ ...prev, saved: (data || []).length }))
-      })
+      .catch(() => {})
   }, [activeOrg?.id])
 
   useEffect(() => {
