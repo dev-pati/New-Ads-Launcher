@@ -2,21 +2,35 @@
 
 import { useState, useRef, useEffect } from "react"
 import { cn } from "@/lib/utils"
-import { IconSearch, IconChevronDown, IconChevronRight } from "@tabler/icons-react"
+import { IconSearch, IconChevronDown, IconChevronRight, IconX } from "@tabler/icons-react"
 import {
   BREAKDOWN_GROUPS, POPULAR_BREAKDOWNS, ALL_BREAKDOWN_OPTIONS,
   BreakdownOption,
 } from "@/lib/breakdown-config"
 
-// ─── Radio dot ────────────────────────────────────────────────────────────────
+// Time breakdown IDs are mutually exclusive (only one time_increment at a time)
+const TIME_IDS = new Set(
+  (BREAKDOWN_GROUPS.find(g => g.id === "time")?.options ?? [])
+    .filter(o => o.id !== "none")
+    .map(o => o.id)
+)
 
-function RadioDot({ active }: { active: boolean }) {
+// ─── Checkbox dot ─────────────────────────────────────────────────────────────
+
+function CheckBox({ active }: { active: boolean }) {
   return (
     <span className={cn(
-      "shrink-0 size-[14px] rounded-full border-2 flex items-center justify-center transition-colors",
-      active ? "border-[#1877f2]" : "border-[#ccd0d5] dark:border-gray-500"
+      "shrink-0 size-[14px] rounded border-2 flex items-center justify-center transition-colors",
+      active
+        ? "border-[#1877f2] bg-[#1877f2]"
+        : "border-[#ccd0d5] dark:border-gray-500 bg-white dark:bg-card"
     )}>
-      {active && <span className="size-[6px] rounded-full bg-[#1877f2]" />}
+      {active && (
+        <svg viewBox="0 0 10 8" className="size-[8px]" fill="none" stroke="white"
+          strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M1 4L3.5 6.5L9 1.5" />
+        </svg>
+      )}
     </span>
   )
 }
@@ -24,11 +38,11 @@ function RadioDot({ active }: { active: boolean }) {
 // ─── Submenu panel ────────────────────────────────────────────────────────────
 
 function BreakdownSubmenu({
-  options, selected, onSelect,
+  options, selected, onToggle,
 }: {
   options: BreakdownOption[]
-  selected: string
-  onSelect: (id: string) => void
+  selected: string[]
+  onToggle: (id: string) => void
 }) {
   return (
     <div
@@ -36,17 +50,17 @@ function BreakdownSubmenu({
       style={{ width: 248, maxHeight: 420 }}
     >
       <div className="py-1.5">
-        {options.map(opt => (
+        {options.filter(o => o.id !== "none").map(opt => (
           <button
             key={opt.id}
-            onClick={() => onSelect(opt.id)}
+            onClick={() => onToggle(opt.id)}
             className={cn(
               "w-full flex flex-col items-start px-3 py-[7px] text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
-              selected === opt.id && "bg-[#e7f3ff] dark:bg-blue-950/30"
+              selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
             )}
           >
             <span className="flex items-center gap-2.5 text-[13px] text-[#1c2b33] dark:text-foreground">
-              <RadioDot active={selected === opt.id} />
+              <CheckBox active={selected.includes(opt.id)} />
               {opt.label}
             </span>
             {opt.description && (
@@ -64,17 +78,17 @@ function BreakdownSubmenu({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface Props {
-  selected: string
-  onChange: (id: string) => void
+  selected: string[]
+  onChange: (ids: string[]) => void
 }
 
 export function BreakdownDropdown({ selected, onChange }: Props) {
   const [open,        setOpen]        = useState(false)
   const [search,      setSearch]      = useState("")
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
-  const wrapRef        = useRef<HTMLDivElement>(null)
-  const searchRef      = useRef<HTMLInputElement>(null)
-  const closeTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wrapRef       = useRef<HTMLDivElement>(null)
+  const searchRef     = useRef<HTMLInputElement>(null)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const scheduleCloseGroup = () => {
     if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
@@ -83,47 +97,45 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
   const cancelCloseGroup = () => {
     if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null }
   }
-
   useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current) }, [])
 
   // Close on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false)
-        setActiveGroup(null)
-        setSearch("")
+        setOpen(false); setActiveGroup(null); setSearch("")
       }
     }
     document.addEventListener("mousedown", h)
     return () => document.removeEventListener("mousedown", h)
   }, [])
 
-  // Auto-focus search when opened
   useEffect(() => {
     if (open) setTimeout(() => searchRef.current?.focus(), 50)
     else { setSearch(""); setActiveGroup(null) }
   }, [open])
 
-  const selectOption = (id: string) => {
-    onChange(id)
-    setOpen(false)
-    setActiveGroup(null)
-    setSearch("")
+  const toggleOption = (id: string) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter(s => s !== id))
+    } else {
+      // Time breakdowns are mutually exclusive
+      if (TIME_IDS.has(id)) {
+        onChange([...selected.filter(s => !TIME_IDS.has(s)), id])
+      } else {
+        onChange([...selected, id])
+      }
+    }
+    // Keep dropdown open for multi-select
   }
 
-  // Derived
+  const clearAll = () => { onChange([]); setOpen(false) }
+
+  const isActive       = selected.length > 0
   const activeGroupData = BREAKDOWN_GROUPS.find(g => g.id === activeGroup)
   const searchResults   = search.trim()
     ? ALL_BREAKDOWN_OPTIONS.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
     : null
-
-  const selectedLabel = (() => {
-    if (selected === "none") return null
-    return ALL_BREAKDOWN_OPTIONS.find(o => o.id === selected)?.label ?? null
-  })()
-
-  const isActive = selected !== "none"
 
   return (
     <div ref={wrapRef} className="relative">
@@ -139,30 +151,37 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
               : "hover:bg-muted/50 text-[#1c2b33] dark:text-foreground"
         )}
       >
-        {/* Stacked bars icon */}
         <svg className="size-3.5 shrink-0" viewBox="0 0 16 16" fill="currentColor">
           <rect x="2" y="2.5"  width="12" height="2" rx="1"/>
           <rect x="2" y="7"    width="8"  height="2" rx="1"/>
           <rect x="2" y="11.5" width="5"  height="2" rx="1"/>
         </svg>
         <span className="whitespace-nowrap">
-          {isActive ? "Breakdown: 1 Selected" : "Breakdown"}
+          {isActive ? `Breakdown: ${selected.length} Selected` : "Breakdown"}
         </span>
-        <IconChevronDown className="size-3 shrink-0 opacity-60" />
+        {isActive ? (
+          <span
+            role="button"
+            onClick={e => { e.stopPropagation(); clearAll() }}
+            className="size-3.5 flex items-center justify-center rounded-full hover:bg-[#1877f2]/20 transition-colors"
+          >
+            <IconX className="size-2.5" />
+          </span>
+        ) : (
+          <IconChevronDown className="size-3 shrink-0 opacity-60" />
+        )}
       </button>
 
       {/* ── Dropdown ── */}
       {open && (
-        <div
-          className="absolute right-0 top-full mt-1 z-[60] flex items-start gap-1"
-        >
-          {/* Submenu — to the LEFT of main dropdown */}
+        <div className="absolute right-0 top-full mt-1 z-[60] flex items-start gap-1">
+          {/* Submenu — to the LEFT */}
           {activeGroup && !search && activeGroupData && (
             <div onMouseEnter={cancelCloseGroup} onMouseLeave={scheduleCloseGroup}>
               <BreakdownSubmenu
                 options={activeGroupData.options}
                 selected={selected}
-                onSelect={selectOption}
+                onToggle={toggleOption}
               />
             </div>
           )}
@@ -188,27 +207,26 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
 
             <div className="flex-1 overflow-y-auto pb-1.5">
               {searchResults ? (
-                /* Search results */
                 searchResults.length === 0 ? (
                   <p className="text-[12px] text-muted-foreground text-center py-8">No results</p>
                 ) : (
                   searchResults.map(opt => (
                     <button
                       key={opt.id}
-                      onClick={() => selectOption(opt.id)}
+                      onClick={() => toggleOption(opt.id)}
                       className={cn(
                         "w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
-                        selected === opt.id && "bg-[#e7f3ff] dark:bg-blue-950/30"
+                        selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
                       )}
                     >
-                      <RadioDot active={selected === opt.id} />
+                      <CheckBox active={selected.includes(opt.id)} />
                       <span className="text-[#1c2b33] dark:text-foreground">{opt.label}</span>
                     </button>
                   ))
                 )
               ) : (
                 <>
-                  {/* "View breakdown charts" — disabled */}
+                  {/* View breakdown charts — disabled */}
                   <button
                     disabled
                     className="w-full flex items-center gap-2 px-3 py-[7px] text-[13px] text-muted-foreground/50 cursor-not-allowed"
@@ -230,14 +248,14 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                   {POPULAR_BREAKDOWNS.map(opt => (
                     <button
                       key={opt.id}
-                      onClick={() => selectOption(opt.id)}
+                      onClick={() => toggleOption(opt.id)}
                       onMouseEnter={scheduleCloseGroup}
                       className={cn(
                         "w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
-                        selected === opt.id && "bg-[#e7f3ff] dark:bg-blue-950/30"
+                        selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
                       )}
                     >
-                      <RadioDot active={selected === opt.id} />
+                      <CheckBox active={selected.includes(opt.id)} />
                       <span className="text-[#1c2b33] dark:text-foreground">{opt.label}</span>
                     </button>
                   ))}
@@ -246,7 +264,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
 
                   {/* Groups */}
                   {BREAKDOWN_GROUPS.map(group => {
-                    const hasSelected = group.options.some(o => o.id === selected)
+                    const selCount = group.options.filter(o => o.id !== "none" && selected.includes(o.id)).length
                     return (
                       <button
                         key={group.id}
@@ -256,15 +274,20 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                           activeGroup === group.id
                             ? "bg-[#f0f2f5] dark:bg-muted/60"
                             : "hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
-                          hasSelected && "text-[#1877f2]"
                         )}
                       >
-                        <span className="text-[#1c2b33] dark:text-foreground"
-                          style={hasSelected ? { color: "#1877f2" } : undefined}
+                        <span
+                          className="text-[#1c2b33] dark:text-foreground"
+                          style={selCount > 0 ? { color: "#1877f2" } : undefined}
                         >
                           {group.label}
                         </span>
-                        <IconChevronRight className="size-3.5 text-muted-foreground shrink-0" />
+                        <span className="flex items-center gap-1">
+                          {selCount > 0 && (
+                            <span className="text-[11px] text-[#1877f2] font-bold">{selCount}</span>
+                          )}
+                          <IconChevronRight className="size-3.5 text-muted-foreground shrink-0" />
+                        </span>
                       </button>
                     )
                   })}

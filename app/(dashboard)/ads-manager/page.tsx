@@ -101,19 +101,27 @@ const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getBreakdownLabel(item: Record<string, string>, apiParam: string): string {
-  if (apiParam.includes("time_increment=")) {
-    if (!item.date_start) return "—"
-    return new Date(item.date_start + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+function getBreakdownLabel(item: Record<string, string>, selectedIds: string[]): string {
+  const allBdsFields: string[] = []
+  let tiValue: string | null = null
+  for (const id of selectedIds) {
+    const param = BREAKDOWN_API_MAP[id]
+    if (!param) continue
+    const bdsM = param.match(/breakdowns=([^&]+)/)
+    const tiM  = param.match(/time_increment=([^&]+)/)
+    if (bdsM) allBdsFields.push(...bdsM[1].split(",").map(s => s.trim()))
+    if (tiM) tiValue = tiM[1]
   }
-  const match = apiParam.match(/breakdowns=([^&]+)/)
-  if (!match) return "—"
-  return match[1].split(",")
-    .map(f => f.trim())
+  const parts: string[] = []
+  if (tiValue && item.date_start) {
+    parts.push(new Date(item.date_start + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }))
+  }
+  allBdsFields
     .map(f => item[f] ?? "")
     .filter(Boolean)
     .map(v => v.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()))
-    .join(" / ") || "—"
+    .forEach(v => parts.push(v))
+  return parts.join(" / ") || "—"
 }
 
 function fmtBudget(cents?: string) {
@@ -272,7 +280,7 @@ export default function AdsManagerPage() {
   const [customPresets,     setCustomPresets]     = useState<ColumnPreset[]>([])
   const [colsOpen,          setColsOpen]          = useState(false)
   const [customizeColsOpen, setCustomizeColsOpen] = useState(false)
-  const [breakdown,         setBreakdown]         = useState("none")
+  const [breakdowns,        setBreakdowns]        = useState<string[]>([])
   const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
   const [breakdownError,    setBreakdownError]    = useState("")
 
@@ -386,44 +394,53 @@ export default function AdsManagerPage() {
       }
 
       // Fetch breakdown rows separately via Insights API
-      if (breakdown !== "none" && BREAKDOWN_API_MAP[breakdown]) {
-        const apiParam = BREAKDOWN_API_MAP[breakdown]
-        const bdsMatch = apiParam.match(/breakdowns=([^&]+)/)
-        const tiMatch  = apiParam.match(/time_increment=([^&]+)/)
-        const levelMap: Record<string, string> = { campaigns: "campaign", adsets: "adset", ads: "ad" }
-        const level = levelMap[tab]
-        let insUrl = `/api/facebook/breakdown-insights?ad_account_id=${encodeURIComponent(selectedAccountId)}&level=${level}&${dateParam}`
-        if (bdsMatch) insUrl += `&breakdowns=${encodeURIComponent(bdsMatch[1])}`
-        if (tiMatch)  insUrl += `&time_increment=${encodeURIComponent(tiMatch[1])}`
+      if (breakdowns.length > 0) {
+        const allBdsFields: string[] = []
+        let tiValue: string | null = null
+        for (const id of breakdowns) {
+          const param = BREAKDOWN_API_MAP[id]
+          if (!param) continue
+          const bdsM = param.match(/breakdowns=([^&]+)/)
+          const tiM  = param.match(/time_increment=([^&]+)/)
+          if (bdsM) allBdsFields.push(...bdsM[1].split(",").map(s => s.trim()))
+          if (tiM) tiValue = tiM[1]
+        }
+        if (allBdsFields.length > 0 || tiValue) {
+          const levelMap: Record<string, string> = { campaigns: "campaign", adsets: "adset", ads: "ad" }
+          const level = levelMap[tab]
+          let insUrl = `/api/facebook/breakdown-insights?ad_account_id=${encodeURIComponent(selectedAccountId)}&level=${level}&${dateParam}`
+          if (allBdsFields.length > 0) insUrl += `&breakdowns=${encodeURIComponent(allBdsFields.join(","))}`
+          if (tiValue) insUrl += `&time_increment=${encodeURIComponent(tiValue)}`
 
-        try {
-          const ir = await fetch(insUrl)
-          const id = await ir.json()
-          console.log("[breakdown-insights] status:", ir.status, "url:", insUrl, "data:", id)
-          if (!ir.ok) {
-            setBreakdownError(id.error || `Breakdown API error (${ir.status})`)
-          } else if (Array.isArray(id.data)) {
-            const idKey = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id"
-            const rows = id.data
-              .filter((item: any) => item[idKey])
-              .map((item: any) => ({
-                parentId: item[idKey] as string,
-                breakdownLabel: getBreakdownLabel(item as Record<string, string>, apiParam),
-                ins: {
-                  spend: item.spend || "0",
-                  impressions: item.impressions || "0",
-                  clicks: item.clicks || "0",
-                  reach: item.reach,
-                  actions: item.actions,
-                  cost_per_action_type: item.cost_per_action_type,
-                } as Insight,
-              }))
-            console.log("[breakdown-insights] mapped rows:", rows.length, rows.slice(0, 3))
-            setBreakdownRows(rows)
+          try {
+            const ir = await fetch(insUrl)
+            const id = await ir.json()
+            console.log("[breakdown-insights] status:", ir.status, "url:", insUrl, "data:", id)
+            if (!ir.ok) {
+              setBreakdownError(id.error || `Breakdown API error (${ir.status})`)
+            } else if (Array.isArray(id.data)) {
+              const idKey = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id"
+              const rows = id.data
+                .filter((item: any) => item[idKey])
+                .map((item: any) => ({
+                  parentId: item[idKey] as string,
+                  breakdownLabel: getBreakdownLabel(item as Record<string, string>, breakdowns),
+                  ins: {
+                    spend: item.spend || "0",
+                    impressions: item.impressions || "0",
+                    clicks: item.clicks || "0",
+                    reach: item.reach,
+                    actions: item.actions,
+                    cost_per_action_type: item.cost_per_action_type,
+                  } as Insight,
+                }))
+              console.log("[breakdown-insights] mapped rows:", rows.length, rows.slice(0, 3))
+              setBreakdownRows(rows)
+            }
+          } catch (err) {
+            console.error("[breakdown-insights] fetch error:", err)
+            setBreakdownError("Failed to fetch breakdown data")
           }
-        } catch (err) {
-          console.error("[breakdown-insights] fetch error:", err)
-          setBreakdownError("Failed to fetch breakdown data")
         }
       }
 
@@ -433,12 +450,12 @@ export default function AdsManagerPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedAccountId, tab, datePreset, customDateRange, breakdown])
+  }, [selectedAccountId, tab, datePreset, customDateRange, breakdowns])
 
   useEffect(() => { fetchData() }, [fetchData])
 
   // Reset page & row selection when tab/search/date/breakdown changes
-  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, datePreset, customDateRange, breakdown])
+  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, datePreset, customDateRange, breakdowns])
 
   // ─── Tab switch: if items checked, capture as filter for the next level ─────
   // Badge appears only on the NEXT tab, not on all 3 at once
@@ -1135,7 +1152,7 @@ export default function AdsManagerPage() {
             <IconTrash className="size-3.5 text-muted-foreground" />
           </button>
           {/* Breakdown */}
-          <BreakdownDropdown selected={breakdown} onChange={setBreakdown} />
+          <BreakdownDropdown selected={breakdowns} onChange={setBreakdowns} />
 
           {/* Columns preset picker */}
           <div ref={colsDropRef} className="relative">
@@ -1277,7 +1294,7 @@ export default function AdsManagerPage() {
               ) : tab === "campaigns" ? (
                 (pagedData as Campaign[]).map(c => {
                   const isSel = selectedIds.has(c.id)
-                  const rowBDs = breakdown !== "none" ? breakdownRows.filter(br => br.parentId === c.id) : []
+                  const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === c.id) : []
                   return (
                     <Fragment key={c.id}>
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
@@ -1325,7 +1342,7 @@ export default function AdsManagerPage() {
                 (pagedData as AdSet[]).map(a => {
                   const isSel = selectedIds.has(a.id)
                   const objective = campaigns.find(c => c.id === a.campaign_id)?.objective
-                  const rowBDs = breakdown !== "none" ? breakdownRows.filter(br => br.parentId === a.id) : []
+                  const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
                     <Fragment key={a.id}>
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
@@ -1375,7 +1392,7 @@ export default function AdsManagerPage() {
                   const isSel = selectedIds.has(a.id)
                   const thumb = a.creative?.thumbnail_url || a.creative?.image_url
                   const objective = campaigns.find(c => c.id === a.campaign_id)?.objective
-                  const rowBDs = breakdown !== "none" ? breakdownRows.filter(br => br.parentId === a.id) : []
+                  const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
                     <Fragment key={a.id}>
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
