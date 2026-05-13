@@ -136,13 +136,26 @@ export async function POST(request: NextRequest) {
       await Promise.all(ready.map(async (r) => {
         const cr: any = creatives.find((c: any) => c.id === r.creativeId)
         if (!cr) return
+        
         try {
-          const thumbUrl = await getVideoThumbnail(r.videoId, token)
+          // Meta sometimes needs a few extra seconds to generate thumbnails even after video_status is "ready"
+          let thumbUrl: string | null = null
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            thumbUrl = await getVideoThumbnail(r.videoId, token)
+            if (thumbUrl) break
+            console.log(`[launch-direct] Thumbnail not ready yet for ${r.videoId}, attempt ${attempt}/3. Waiting 3s...`)
+            await new Promise(res => setTimeout(res, 3000))
+          }
+
           if (thumbUrl) {
             cr.fb_thumbnail_url = thumbUrl
             await supabase.from("creatives").update({ fb_thumbnail_url: thumbUrl }).eq("id", r.creativeId)
+          } else {
+            console.warn(`[launch-direct] WARNING: No thumbnail found for video ${r.videoId} after 3 attempts. Ad delivery might fail.`)
           }
-        } catch {}
+        } catch (err) {
+          console.error(`[launch-direct] Failed to get/save thumbnail for ${r.videoId}:`, err)
+        }
       }))
     }
 

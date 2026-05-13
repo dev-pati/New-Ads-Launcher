@@ -4324,9 +4324,9 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
     setResults([])
     const newCreatives: Creative[] = []
 
-    for (const url of urls) {
+    await Promise.allSettled(urls.map(async (url) => {
       const parsed = extractFileId(url)
-      if (!parsed) { setResults(p => [...p, { name: url, status: "error", error: "Invalid Drive URL" }]); continue }
+      if (!parsed) { setResults(p => [...p, { name: url, status: "error", error: "Invalid Drive URL" }]); return }
 
       if (parsed.type === "file") {
         try {
@@ -4370,7 +4370,8 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
           setResults(p => [...p, { name: url, status: "error", error: e.message }])
         }
       }
-    }
+    }))
+
     if (newCreatives.length > 0) onImported(newCreatives)
     setImporting(false)
   }
@@ -12151,8 +12152,12 @@ export default function LaunchPage() {
   const uploadVideoChunked = async (item: UploadItem): Promise<Creative | null> => {
     const currentPrimary = primaryTexts.find(t => t.trim()) || ""
     const currentHeadline = headlines.find(h => h.trim()) || ""
-    const CHUNK_SIZE = 4 * 1024 * 1024 // 4MB chunks
-
+    let CHUNK_SIZE = 4 * 1024 * 1024 // 4MB
+    if (item.file.size > 150 * 1024 * 1024) {
+      CHUNK_SIZE = 20 * 1024 * 1024 // 20MB
+    } else if (item.file.size > 50 * 1024 * 1024) {
+      CHUNK_SIZE = 10 * 1024 * 1024 // 10MB
+    }
     try {
       // 1. Get credentials
       const credRes = await fetch(`/api/facebook/upload-credentials?adAccountId=${selectedAccountId}`)

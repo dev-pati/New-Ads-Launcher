@@ -17,15 +17,46 @@ export async function POST(request: NextRequest) {
     }
 
     // Download file from Google Drive
-    const driveRes = await fetch(
+    // For large files, Google Drive might return a virus scan warning (HTML). 
+    // We try to handle it by checking the content type and looking for confirmation tokens.
+    let driveRes = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
+
+    // Check if we got an HTML response instead of binary (common for large files / warnings)
+    const contentType = driveRes.headers.get("content-type") || ""
+    if (contentType.includes("text/html")) {
+      const html = await driveRes.text()
+      // Look for confirmation token in the HTML (e.g. name="confirm" value="xxxx")
+      const match = html.match(/name="confirm" value="([^"]+)"/)
+      if (match) {
+        const confirmToken = match[1]
+        console.log(`[import-drive] Large file detected, retrying with confirm token: ${confirmToken}`)
+        driveRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&confirm=${confirmToken}`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        )
+      } else {
+        console.error("[import-drive] Received HTML instead of media and no confirm token found.")
+        return NextResponse.json({ error: "Google Drive returned an HTML page instead of the video file. This usually happens with very large files or restricted permissions." }, { status: 400 })
+      }
+    }
+
     if (!driveRes.ok) {
       const err = await driveRes.text()
+      console.error("[import-drive] Drive download failed:", driveRes.status, err)
       return NextResponse.json({ error: `Drive download failed: ${err}` }, { status: 400 })
     }
     const fileBuffer = await driveRes.arrayBuffer()
+    
+    // Final sanity check: if buffer is very small and contains HTML-like tags, it's likely a failure
+    if (fileBuffer.byteLength < 5000) {
+      const head = new TextDecoder().decode(fileBuffer.slice(0, 100))
+      if (head.toLowerCase().includes("<!doctype html") || head.toLowerCase().includes("<html")) {
+        return NextResponse.json({ error: "Downloaded content appears to be HTML, not a video file." }, { status: 400 })
+      }
+    }
 
     // Get Facebook connection
     const connection = await getFacebookConnection(ctx.orgId)
@@ -70,10 +101,16 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (insertError) return NextResponse.json({ error: insertError.message }, { status: 500 })
+    if (insertError) {
+      console.error("[import-drive] Supabase Insert Error:", insertError)
+      return NextResponse.json({ error: `Database error: ${insertError.message}` }, { status: 500 })
+    }
+    
     return NextResponse.json({ creative }, { status: 201 })
   } catch (err: any) {
-    console.error("[import-drive]", err)
-    return NextResponse.json({ error: err.message || "Import failed" }, { status: 500 })
+    console.error("[import-drive] Critical Error:", err)
+    // If the error is a SyntaxError from JSON.parse somewhere, include the full stack
+    const errorMessage = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+    return NextResponse.json({ error: errorMessage, details: err?.stack }, { status: 500 })
   }
 }

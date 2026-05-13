@@ -409,6 +409,7 @@ export async function uploadImageToMeta(
   fileBuffer: ArrayBuffer,
   fileName: string
 ): Promise<{ hash: string; url: string; url_128: string }> {
+  const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const base64 = Buffer.from(fileBuffer).toString("base64")
 
   const formData = new FormData()
@@ -417,19 +418,25 @@ export async function uploadImageToMeta(
   formData.append("bytes", base64)
 
   const res = await fetch(
-    `${GRAPH_API_BASE}/${adAccountId}/adimages`,
+    `${GRAPH_API_BASE}/${normId}/adimages`,
     { method: "POST", body: formData }
   )
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to upload image to Meta")
+  const resText = await res.text()
+  let data: any = {}
+  try { data = JSON.parse(resText) } catch (e) {
+    throw new Error(`Meta Image Upload failed to parse JSON. Status: ${res.status}, Body: ${resText}`)
   }
-  const data = await res.json()
-  const images = data.images
+
+  if (!res.ok) {
+    throw new Error(data.error?.message || "Failed to upload image to Meta")
+  }
+
+  const images = data.images || {}
   const firstKey = Object.keys(images)[0]
-  const img = images[firstKey]
+  const img = images[firstKey] || {}
+  
   return {
-    hash: img.hash,
+    hash: img.hash || "",
     url: img.url || "",
     url_128: img.url_128 || "",
   }
@@ -443,6 +450,7 @@ export async function uploadVideoToMeta(
   fileBuffer: ArrayBuffer,
   fileName: string
 ): Promise<{ videoId: string }> {
+  const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const fileSize = fileBuffer.byteLength
   
   // Phase 1: START
@@ -452,35 +460,61 @@ export async function uploadVideoToMeta(
     file_size: fileSize.toString(),
   })
   
-  const startRes = await fetch(`${GRAPH_API_BASE}/${adAccountId}/advideos`, {
+  const startRes = await fetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: startParams,
   })
   
-  if (!startRes.ok) {
-    const error = await startRes.json()
-    throw new Error(`Meta Video Upload START failed: ${error.error?.message || "Unknown error"}`)
+  const startText = await startRes.text()
+  let startData: any = {}
+  try { startData = JSON.parse(startText) } catch (e) {
+    throw new Error(`Meta Video Upload START failed to parse JSON. Status: ${startRes.status}, Body: ${startText}`)
   }
   
-  const { upload_session_id, video_id } = await startRes.json()
+  if (!startRes.ok) {
+    throw new Error(`Meta Video Upload START failed: ${startData.error?.message || "Unknown error"}`)
+  }
+  
+  const { upload_session_id, video_id } = startData
   
   // Phase 2: TRANSFER
-  // We send the entire buffer in one chunk for simplicity, but using the session makes it stable
-  const formData = new FormData()
-  formData.append("access_token", accessToken)
-  formData.append("upload_phase", "transfer")
-  formData.append("upload_session_id", upload_session_id)
-  formData.append("start_offset", "0")
-  formData.append("video_file_chunk", new Blob([fileBuffer]), fileName)
+  // Dynamically calculate chunk size to optimize for large files (like 200MB-300MB)
+  let CHUNK_SIZE = 4 * 1024 * 1024 // Default 4MB
+  if (fileSize > 150 * 1024 * 1024) {
+    CHUNK_SIZE = 20 * 1024 * 1024 // 20MB chunks for files > 150MB
+  } else if (fileSize > 50 * 1024 * 1024) {
+    CHUNK_SIZE = 10 * 1024 * 1024 // 10MB chunks for files > 50MB
+  }
   
-  const transferRes = await fetch(`${GRAPH_API_BASE}/${adAccountId}/advideos`, {
-    method: "POST",
-    body: formData,
-  })
-  
-  if (!transferRes.ok) {
-    const error = await transferRes.json()
-    throw new Error(`Meta Video Upload TRANSFER failed: ${error.error?.message || "Unknown error"}`)
+  let startOffset = Number(startData.start_offset || "0")
+
+  while (startOffset < fileSize) {
+    const endOffset = Math.min(startOffset + CHUNK_SIZE, fileSize)
+    const chunkBuffer = fileBuffer.slice(startOffset, endOffset)
+
+    const formData = new FormData()
+    formData.append("access_token", accessToken)
+    formData.append("upload_phase", "transfer")
+    formData.append("upload_session_id", upload_session_id)
+    formData.append("start_offset", String(startOffset))
+    formData.append("video_file_chunk", new Blob([chunkBuffer]), fileName)
+    
+    const transferRes = await fetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
+      method: "POST",
+      body: formData,
+    })
+    
+    const transferText = await transferRes.text()
+    let transferData: any = {}
+    try { transferData = JSON.parse(transferText) } catch (e) {
+      throw new Error(`Meta Video Upload TRANSFER failed to parse JSON at offset ${startOffset}. Status: ${transferRes.status}, Body: ${transferText}`)
+    }
+    
+    if (!transferRes.ok) {
+      throw new Error(`Meta Video Upload TRANSFER failed at offset ${startOffset}: ${transferData.error?.message || "Unknown error"}`)
+    }
+    
+    startOffset = Number(transferData.start_offset)
   }
   
   // Phase 3: FINISH
@@ -491,14 +525,19 @@ export async function uploadVideoToMeta(
     title: fileName,
   })
   
-  const finishRes = await fetch(`${GRAPH_API_BASE}/${adAccountId}/advideos`, {
+  const finishRes = await fetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: finishParams,
   })
   
+  const finishText = await finishRes.text()
+  let finishData: any = {}
+  try { finishData = JSON.parse(finishText) } catch (e) {
+    throw new Error(`Meta Video Upload FINISH failed to parse JSON. Status: ${finishRes.status}, Body: ${finishText}`)
+  }
+  
   if (!finishRes.ok) {
-    const error = await finishRes.json()
-    throw new Error(`Meta Video Upload FINISH failed: ${error.error?.message || "Unknown error"}`)
+    throw new Error(`Meta Video Upload FINISH failed: ${finishData.error?.message || "Unknown error"}`)
   }
   
   return { videoId: video_id }
@@ -874,7 +913,8 @@ export async function createAd(
       status: params.status || "PAUSED",
       access_token: accessToken,
     })
-    const r = await fetch(`${GRAPH_API_BASE}/${adAccountId}/ads`, { method: "POST", body: b })
+    const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+    const r = await fetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b })
     const rText = await r.text()
     let rData: any = {}
     try { rData = JSON.parse(rText) } catch {}
@@ -898,7 +938,8 @@ export async function createAd(
       status: params.status || "PAUSED",
       access_token: accessToken,
     })
-    const r = await fetch(`${GRAPH_API_BASE}/${adAccountId}/ads`, { method: "POST", body: b })
+    const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+    const r = await fetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b })
     const rText = await r.text()
     let rData: any = {}
     try { rData = JSON.parse(rText) } catch {}
@@ -1119,8 +1160,9 @@ export async function createAd(
     status: params.status || "PAUSED",
     access_token: accessToken,
   })
-  console.log("[createAd] POST /act_X/ads with creative spec:", JSON.stringify(creativeJson, null, 2))
-  const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/ads`, { method: "POST", body })
+  const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+  console.log(`[createAd] POST /${normId}/ads with creative spec:`, JSON.stringify(creativeJson, null, 2))
+  const res = await fetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body })
   const respText = await res.text()
   let respData: any = {}
   try { respData = JSON.parse(respText) } catch {}
@@ -1128,7 +1170,7 @@ export async function createAd(
     const fb = respData.error
     const detail = fb?.error_user_msg || fb?.error_user_title || ""
     const msg = [fb?.message || "Failed to create ad", detail].filter(Boolean).join(" — ")
-    console.error("[createAd] FAILED:", res.status, respText)
+    console.error(`[createAd] FAILED (Status ${res.status}):`, JSON.stringify(respData, null, 2))
     throw new Error(msg)
   }
   console.log("[createAd] OK:", respData.id)
