@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     if (isVideo) {
       // 1. Direct Meta Upload (No intermediate storage)
       try {
-        const uploadedVideo = await uploadVideoToMeta(fbAdAccountId, connection.access_token, fileBuffer, filename)
+        const uploadedVideo = await uploadVideoToMeta(fbAdAccountId as string, connection.access_token, fileBuffer, filename)
         fbVideoId = uploadedVideo.videoId
       } catch (err: any) {
         console.error("Meta video upload error:", err)
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       publicUrl = stored.publicUrl
       storagePath = stored.storagePath
 
-      const uploadedImage = await uploadImageToMeta(fbAdAccountId, connection.access_token, fileBuffer, filename)
+      const uploadedImage = await uploadImageToMeta(fbAdAccountId as string, connection.access_token, fileBuffer, filename)
       fbImageHash = uploadedImage.hash
       fbImageUrl = uploadedImage.url
       fbThumbnailUrl = uploadedImage.url_128
