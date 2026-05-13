@@ -374,8 +374,6 @@ export default function AdsManagerPage() {
     if (!selectedAccountId) return
     setLoading(true)
     setError("")
-    setBreakdownRows([])
-    setBreakdownError("")
     const t0 = Date.now()
     const dateParam = buildDateParam()
 
