@@ -14,10 +14,11 @@ interface Props {
   onCreateBoard: (name: string) => Promise<InspoBoard>
   size?: "sm" | "md"
   overlayMode?: boolean
+  variant?: "icon" | "block"   // block = full-width labeled button
 }
 
 export function SaveToBoardButton({
-  ad, boards, savedBoardIds, onSave, onUnsave, onCreateBoard, size = "md", overlayMode = false,
+  ad, boards, savedBoardIds, onSave, onUnsave, onCreateBoard, size = "md", overlayMode = false, variant = "icon",
 }: Props) {
   const [open, setOpen]             = useState(false)
   const [loading, setLoading]       = useState<string | null>(null)
@@ -71,22 +72,35 @@ export function SaveToBoardButton({
       <button
         onClick={e => { e.stopPropagation(); setOpen(p => !p) }}
         className={cn(
-          "flex items-center justify-center rounded-lg transition-colors",
-          size === "sm" ? "size-7" : "size-8",
-          overlayMode
-            ? isSaved
-              ? "bg-primary text-white shadow border-0 hover:bg-primary/90"
-              : "bg-white/90 backdrop-blur-sm text-neutral-700 shadow border-0 hover:bg-white hover:text-neutral-900"
-            : isSaved
-              ? "border bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
-              : "border bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+          "flex items-center justify-center transition-colors",
+          variant === "block"
+            ? cn(
+                "w-full h-9 rounded-xl gap-2 text-sm font-medium",
+                isSaved
+                  ? "bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              )
+            : cn(
+                "rounded-lg",
+                size === "sm" ? "size-7" : "size-8",
+                overlayMode
+                  ? isSaved
+                    ? "bg-primary text-white shadow border-0 hover:bg-primary/90"
+                    : "bg-white/90 backdrop-blur-sm text-neutral-700 shadow border-0 hover:bg-white hover:text-neutral-900"
+                  : isSaved
+                    ? "border bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+                    : "border bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+              )
         )}
         title={isSaved ? "Saved" : "Save to board"}
       >
         {isSaved
-          ? <IconBookmarkFilled className={size === "sm" ? "size-3.5" : "size-4"} />
-          : <IconBookmark className={size === "sm" ? "size-3.5" : "size-4"} />
+          ? <IconBookmarkFilled className={variant === "block" ? "size-4" : size === "sm" ? "size-3.5" : "size-4"} />
+          : <IconBookmark className={variant === "block" ? "size-4" : size === "sm" ? "size-3.5" : "size-4"} />
         }
+        {variant === "block" && (
+          <span>{isSaved ? "Saved to Board" : "Save to Board"}</span>
+        )}
       </button>
 
       {open && (

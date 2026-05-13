@@ -64,10 +64,11 @@ interface Props {
   onCreateBoard: (name: string) => Promise<InspoBoard>
   activeBoardId: string | null
   boardAds?: DiscoveryAd[]  // ads in the active board (from DB)
+  onAnalyzeAd?: (body: string, title?: string) => void
 }
 
 export function InspoDiscoveryPage({
-  boards, savedMap, onSave, onUnsave, onCreateBoard, activeBoardId, boardAds,
+  boards, savedMap, onSave, onUnsave, onCreateBoard, activeBoardId, boardAds, onAnalyzeAd,
 }: Props) {
   const [activeTab, setActiveTab] = useState<InspoTab>("explore")
   const [search,    setSearch]    = useState("")
@@ -152,12 +153,15 @@ export function InspoDiscoveryPage({
       {/* Detail modal */}
       <AdDetailModal
         ad={selected}
+        ads={filteredAds}
         boards={boards}
         savedMap={savedMap}
         onSave={onSave}
         onUnsave={onUnsave}
         onCreateBoard={onCreateBoard}
         onClose={() => setSelected(null)}
+        onAdChange={setSelected}
+        onCloneWithAI={ad => onAnalyzeAd?.(ad.primaryText, ad.headline)}
       />
     </div>
   )

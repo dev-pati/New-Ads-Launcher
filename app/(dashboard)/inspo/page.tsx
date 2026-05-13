@@ -773,6 +773,7 @@ export default function InspoPage() {
             onUnsave={handleDiscoveryUnsave}
             onCreateBoard={handleCreateBoard}
             activeBoardId={activeBoardId}
+            onAnalyzeAd={handleAnalyzeAd}
           />
         )}
 
