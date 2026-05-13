@@ -72,8 +72,19 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
   const [open,        setOpen]        = useState(false)
   const [search,      setSearch]      = useState("")
   const [activeGroup, setActiveGroup] = useState<string | null>(null)
-  const wrapRef     = useRef<HTMLDivElement>(null)
-  const searchRef   = useRef<HTMLInputElement>(null)
+  const wrapRef        = useRef<HTMLDivElement>(null)
+  const searchRef      = useRef<HTMLInputElement>(null)
+  const closeTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const scheduleCloseGroup = () => {
+    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    closeTimerRef.current = setTimeout(() => setActiveGroup(null), 200)
+  }
+  const cancelCloseGroup = () => {
+    if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null }
+  }
+
+  useEffect(() => () => { if (closeTimerRef.current) clearTimeout(closeTimerRef.current) }, [])
 
   // Close on outside click
   useEffect(() => {
@@ -147,11 +158,13 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
         >
           {/* Submenu — to the LEFT of main dropdown */}
           {activeGroup && !search && activeGroupData && (
-            <BreakdownSubmenu
-              options={activeGroupData.options}
-              selected={selected}
-              onSelect={selectOption}
-            />
+            <div onMouseEnter={cancelCloseGroup} onMouseLeave={scheduleCloseGroup}>
+              <BreakdownSubmenu
+                options={activeGroupData.options}
+                selected={selected}
+                onSelect={selectOption}
+              />
+            </div>
           )}
 
           {/* Main dropdown */}
@@ -218,7 +231,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                     <button
                       key={opt.id}
                       onClick={() => selectOption(opt.id)}
-                      onMouseEnter={() => setActiveGroup(null)}
+                      onMouseEnter={scheduleCloseGroup}
                       className={cn(
                         "w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
                         selected === opt.id && "bg-[#e7f3ff] dark:bg-blue-950/30"
@@ -237,7 +250,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                     return (
                       <button
                         key={group.id}
-                        onMouseEnter={() => setActiveGroup(group.id)}
+                        onMouseEnter={() => { cancelCloseGroup(); setActiveGroup(group.id) }}
                         className={cn(
                           "w-full flex items-center justify-between px-3 py-[7px] text-[13px] text-left transition-colors",
                           activeGroup === group.id
