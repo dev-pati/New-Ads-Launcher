@@ -20,19 +20,21 @@ export function AdCardGrid({ ads, boards, savedMap, onSave, onUnsave, onCreateBo
     return (
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
         {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className="rounded-xl border border-border overflow-hidden animate-pulse">
-            <div className="p-3 pb-2 flex gap-2">
-              <div className="size-7 rounded-full bg-muted" />
-              <div className="flex-1 space-y-1.5">
-                <div className="h-3 bg-muted rounded w-2/3" />
-                <div className="h-2.5 bg-muted rounded w-1/2" />
-              </div>
-            </div>
-            <div className="px-3 pb-2"><div className="h-3 bg-muted rounded" /></div>
+          <div key={i} className="rounded-2xl border border-border/60 overflow-hidden animate-pulse bg-card">
             <div className="aspect-[4/3] bg-muted" />
-            <div className="px-3 py-2.5 flex justify-between">
-              <div className="h-6 w-16 bg-muted rounded" />
-              <div className="flex gap-1"><div className="size-7 bg-muted rounded-lg" /><div className="size-7 bg-muted rounded-lg" /></div>
+            <div className="px-3 pt-2.5 pb-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="size-6 rounded-full bg-muted" />
+                <div className="flex-1 space-y-1">
+                  <div className="h-2.5 bg-muted rounded w-1/2" />
+                  <div className="h-2 bg-muted rounded w-1/3" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="h-2.5 bg-muted rounded w-full" />
+                <div className="h-2.5 bg-muted rounded w-3/4" />
+              </div>
+              <div className="h-6 w-20 bg-muted rounded-lg" />
             </div>
           </div>
         ))}

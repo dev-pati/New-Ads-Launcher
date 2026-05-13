@@ -1,16 +1,15 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { IconArrowsSort, IconChevronDown, IconCheck, IconX } from "@tabler/icons-react"
+import { IconAdjustmentsHorizontal, IconChevronDown, IconCheck, IconX } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import type { SortOption } from "@/types/inspo"
 import { hasActiveFilters, type FilterState } from "@/types/inspo"
-import { DEFAULT_FILTERS } from "@/types/inspo"
 
 const SORT_OPTIONS: { value: SortOption; label: string }[] = [
   { value: "recommended",     label: "Recommended" },
   { value: "most_views",      label: "Most Views" },
-  { value: "newest",          label: "Newest" },
+  { value: "newest",          label: "Newest First" },
   { value: "longest_running", label: "Longest Running" },
 ]
 
@@ -36,45 +35,47 @@ export function InspoSortControl({ sort, onSortChange, filters, onClearFilters }
   }, [])
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5 shrink-0">
+      {filtersActive && (
+        <button
+          onClick={onClearFilters}
+          className="flex items-center gap-1 h-9 px-3 text-sm rounded-xl border border-border/60 bg-muted/50 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <IconX className="size-3.5" />
+          Clear filters
+        </button>
+      )}
       <div ref={ref} className="relative">
         <button
           onClick={() => setOpen(p => !p)}
-          className="flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border bg-background hover:bg-muted border-border transition-colors"
+          className="flex items-center gap-1.5 h-9 px-3 text-sm rounded-xl border border-border/60 bg-muted/50 hover:bg-muted transition-colors"
         >
-          <IconArrowsSort className="size-3.5 text-muted-foreground" />
-          <span>Sort: {currentLabel}</span>
+          <IconAdjustmentsHorizontal className="size-4 text-muted-foreground" />
+          <span className="text-foreground/80">{currentLabel}</span>
           <IconChevronDown className={cn("size-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
         </button>
 
         {open && (
-          <div className="absolute top-full left-0 mt-1 z-50 bg-popover border rounded-xl shadow-lg min-w-[180px] py-1">
+          <div className="absolute top-full right-0 mt-1.5 z-50 bg-popover border border-border/80 rounded-xl shadow-xl min-w-[180px] py-1.5 overflow-hidden">
+            <p className="px-3 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Sort by</p>
             {SORT_OPTIONS.map(opt => (
               <button
                 key={opt.value}
                 onClick={() => { onSortChange(opt.value); setOpen(false) }}
                 className={cn(
-                  "flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted text-left",
-                  sort === opt.value && "text-primary font-medium"
+                  "flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted text-left transition-colors",
+                  sort === opt.value ? "text-primary font-medium" : "text-foreground/80"
                 )}
               >
-                {sort === opt.value ? <IconCheck className="size-3.5" /> : <span className="size-3.5" />}
+                <span className={cn("size-4 flex items-center justify-center shrink-0")}>
+                  {sort === opt.value && <IconCheck className="size-3.5" />}
+                </span>
                 {opt.label}
               </button>
             ))}
           </div>
         )}
       </div>
-
-      {filtersActive && (
-        <button
-          onClick={onClearFilters}
-          className="flex items-center gap-1 h-8 px-3 text-sm rounded-lg border border-border bg-background hover:bg-muted text-muted-foreground transition-colors"
-        >
-          <IconX className="size-3.5" />
-          Clear
-        </button>
-      )}
     </div>
   )
 }

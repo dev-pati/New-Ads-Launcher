@@ -8,15 +8,16 @@ import type { InspoBoard, DiscoveryAd } from "@/types/inspo"
 interface Props {
   ad: DiscoveryAd
   boards: InspoBoard[]
-  savedBoardIds: Set<string>        // board IDs where this ad is saved
+  savedBoardIds: Set<string>
   onSave: (boardId: string) => Promise<void>
   onUnsave: (boardId: string) => Promise<void>
   onCreateBoard: (name: string) => Promise<InspoBoard>
   size?: "sm" | "md"
+  overlayMode?: boolean
 }
 
 export function SaveToBoardButton({
-  ad, boards, savedBoardIds, onSave, onUnsave, onCreateBoard, size = "md",
+  ad, boards, savedBoardIds, onSave, onUnsave, onCreateBoard, size = "md", overlayMode = false,
 }: Props) {
   const [open, setOpen]             = useState(false)
   const [loading, setLoading]       = useState<string | null>(null)
@@ -70,11 +71,15 @@ export function SaveToBoardButton({
       <button
         onClick={e => { e.stopPropagation(); setOpen(p => !p) }}
         className={cn(
-          "flex items-center justify-center rounded-lg border transition-colors",
+          "flex items-center justify-center rounded-lg transition-colors",
           size === "sm" ? "size-7" : "size-8",
-          isSaved
-            ? "bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
-            : "bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+          overlayMode
+            ? isSaved
+              ? "bg-primary text-white shadow border-0 hover:bg-primary/90"
+              : "bg-white/90 backdrop-blur-sm text-neutral-700 shadow border-0 hover:bg-white hover:text-neutral-900"
+            : isSaved
+              ? "border bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+              : "border bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted"
         )}
         title={isSaved ? "Saved" : "Save to board"}
       >

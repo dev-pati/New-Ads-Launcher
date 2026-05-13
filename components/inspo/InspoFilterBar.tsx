@@ -67,32 +67,36 @@ function MultiSelectDropdown({ label, options, selected, onChange }: DropdownPro
       <button
         onClick={() => setOpen(p => !p)}
         className={cn(
-          "flex items-center gap-1 h-8 px-3 text-sm rounded-lg border whitespace-nowrap transition-colors",
+          "flex items-center gap-1 h-7 px-2.5 text-[12px] rounded-lg border whitespace-nowrap transition-colors font-medium",
           active
-            ? "bg-primary text-primary-foreground border-primary"
-            : "bg-background hover:bg-muted border-border text-foreground"
+            ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15"
+            : "bg-muted/40 hover:bg-muted border-border/60 text-foreground/70 hover:text-foreground"
         )}
       >
         {label}
-        {active && <span className="ml-0.5 text-xs font-bold">({selected.length})</span>}
-        <IconChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+        {active && (
+          <span className="inline-flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold leading-none">
+            {selected.length}
+          </span>
+        )}
+        <IconChevronDown className={cn("size-3 transition-transform text-current opacity-60", open && "rotate-180")} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-popover border rounded-xl shadow-lg min-w-[160px] max-h-60 overflow-y-auto py-1">
+        <div className="absolute top-full left-0 mt-1.5 z-50 bg-popover border border-border/80 rounded-xl shadow-xl min-w-[160px] max-h-60 overflow-y-auto py-1.5">
           {options.map(opt => (
             <button
               key={opt}
               onClick={() => toggle(opt)}
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted text-left"
+              className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted text-left transition-colors"
             >
               <span className={cn(
-                "size-4 rounded border flex items-center justify-center shrink-0",
+                "size-4 rounded-[4px] border flex items-center justify-center shrink-0 transition-colors",
                 selected.includes(opt) ? "bg-primary border-primary" : "border-border"
               )}>
                 {selected.includes(opt) && <IconCheck className="size-3 text-primary-foreground" />}
               </span>
-              {opt}
+              <span className="text-foreground/85">{opt}</span>
             </button>
           ))}
         </div>
@@ -124,29 +128,30 @@ function ViewsDropdown({ value, onChange }: ViewsDropdownProps) {
       <button
         onClick={() => setOpen(p => !p)}
         className={cn(
-          "flex items-center gap-1 h-8 px-3 text-sm rounded-lg border whitespace-nowrap transition-colors",
+          "flex items-center gap-1 h-7 px-2.5 text-[12px] rounded-lg border whitespace-nowrap transition-colors font-medium",
           value !== "all"
-            ? "bg-primary text-primary-foreground border-primary"
-            : "bg-background hover:bg-muted border-border text-foreground"
+            ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15"
+            : "bg-muted/40 hover:bg-muted border-border/60 text-foreground/70 hover:text-foreground"
         )}
       >
         {label}
-        <IconChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+        <IconChevronDown className={cn("size-3 transition-transform opacity-60", open && "rotate-180")} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-popover border rounded-xl shadow-lg min-w-[140px] py-1">
+        <div className="absolute top-full left-0 mt-1.5 z-50 bg-popover border border-border/80 rounded-xl shadow-xl min-w-[140px] py-1.5">
           {VIEW_OPTIONS.map(opt => (
             <button
               key={opt.value}
               onClick={() => { onChange(opt.value); setOpen(false) }}
               className={cn(
-                "flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted text-left",
-                value === opt.value && "text-primary font-medium"
+                "flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted text-left transition-colors",
+                value === opt.value ? "text-primary font-medium" : "text-foreground/80"
               )}
             >
-              {value === opt.value && <IconCheck className="size-3.5" />}
-              {value !== opt.value && <span className="size-3.5" />}
+              <span className="size-4 flex items-center justify-center shrink-0">
+                {value === opt.value && <IconCheck className="size-3.5" />}
+              </span>
               {opt.label}
             </button>
           ))}

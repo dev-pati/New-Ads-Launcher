@@ -98,39 +98,46 @@ export function InspoDiscoveryPage({
   const activeBoard = activeBoardId ? boards.find(b => b.id === activeBoardId) : null
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Tabs */}
-      <div className="flex items-center justify-between px-5 pt-3 border-b border-border shrink-0">
+    <div className="flex flex-col h-full overflow-hidden bg-background">
+      {/* Top bar: Tabs + board label */}
+      <div className="flex items-center justify-between px-5 pt-1 border-b border-border shrink-0">
         <InspoTabs active={activeTab} onChange={setActiveTab} />
         {activeBoard && (
-          <div className="flex items-center gap-1.5 pb-2 text-sm font-medium text-primary">
-            <IconBookmarkFilled className="size-4" />
+          <div className="flex items-center gap-1.5 pb-2.5 text-[13px] font-semibold text-primary">
+            <IconBookmarkFilled className="size-3.5" />
             {activeBoard.name}
             <span className="text-xs text-muted-foreground font-normal ml-0.5">
-              ({activeBoard.ad_count ?? 0} ads)
+              · {activeBoard.ad_count ?? 0} ads
             </span>
           </div>
         )}
       </div>
 
-      {/* Search + Sort row */}
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-border shrink-0">
-        <InspoSearchBar value={search} onChange={setSearch} />
-        <InspoSortControl
-          sort={sort}
-          onSortChange={setSort}
-          filters={filters}
-          onClearFilters={() => setFilters(DEFAULT_FILTERS)}
-        />
+      {/* Search + Sort + Filters combined row */}
+      <div className="px-5 py-2.5 border-b border-border shrink-0 space-y-2">
+        <div className="flex items-center gap-2">
+          <InspoSearchBar value={search} onChange={setSearch} />
+          <InspoSortControl
+            sort={sort}
+            onSortChange={setSort}
+            filters={filters}
+            onClearFilters={() => setFilters(DEFAULT_FILTERS)}
+          />
+        </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+          <InspoFilterBar filters={filters} onChange={setFilters} />
+        </div>
       </div>
 
-      {/* Filter bar */}
-      <div className="flex items-center gap-1.5 px-5 py-2 border-b border-border overflow-x-auto shrink-0 scrollbar-none">
-        <InspoFilterBar filters={filters} onChange={setFilters} />
+      {/* Results count */}
+      <div className="px-5 py-1.5 shrink-0">
+        <p className="text-[11px] text-muted-foreground/60">
+          {filteredAds.length} ad{filteredAds.length !== 1 ? "s" : ""}
+        </p>
       </div>
 
       {/* Grid */}
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div className="flex-1 overflow-y-auto px-5 pb-6">
         <AdCardGrid
           ads={filteredAds}
           boards={boards}
