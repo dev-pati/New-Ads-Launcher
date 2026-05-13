@@ -359,21 +359,25 @@ export default function AdsManagerPage() {
 
   // ─── Data fetch (fetch all, filter client-side) ──────────────────────────────
 
-  const fetchData = useCallback(async () => {
-    if (!selectedAccountId) return
-    setLoading(true)
-    setError("")
-    const t0 = Date.now()
-
-    const dateParam = datePreset === "custom" && customDateRange
+  const buildDateParam = useCallback(() => {
+    return datePreset === "custom" && customDateRange
       ? `time_range=${encodeURIComponent(JSON.stringify({
           since: customDateRange.start.toISOString().split("T")[0],
           until: customDateRange.end.toISOString().split("T")[0],
         }))}`
       : `date_preset=${datePreset}`
+  }, [datePreset, customDateRange])
 
+  // Fetches campaigns/adsets/ads only — `breakdowns` intentionally excluded from
+  // deps so that toggling a breakdown never triggers a redundant main-data refetch.
+  const fetchMainData = useCallback(async () => {
+    if (!selectedAccountId) return
+    setLoading(true)
+    setError("")
     setBreakdownRows([])
     setBreakdownError("")
+    const t0 = Date.now()
+    const dateParam = buildDateParam()
 
     try {
       if (tab === "campaigns") {
@@ -392,67 +396,83 @@ export default function AdsManagerPage() {
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
       }
-
-      // Fetch breakdown rows separately via Insights API
-      if (breakdowns.length > 0) {
-        const allBdsFields: string[] = []
-        let tiValue: string | null = null
-        for (const id of breakdowns) {
-          const param = BREAKDOWN_API_MAP[id]
-          if (!param) continue
-          const bdsM = param.match(/breakdowns=([^&]+)/)
-          const tiM  = param.match(/time_increment=([^&]+)/)
-          if (bdsM) allBdsFields.push(...bdsM[1].split(",").map(s => s.trim()))
-          if (tiM) tiValue = tiM[1]
-        }
-        if (allBdsFields.length > 0 || tiValue) {
-          const levelMap: Record<string, string> = { campaigns: "campaign", adsets: "adset", ads: "ad" }
-          const level = levelMap[tab]
-          let insUrl = `/api/facebook/breakdown-insights?ad_account_id=${encodeURIComponent(selectedAccountId)}&level=${level}&${dateParam}`
-          if (allBdsFields.length > 0) insUrl += `&breakdowns=${encodeURIComponent(allBdsFields.join(","))}`
-          if (tiValue) insUrl += `&time_increment=${encodeURIComponent(tiValue)}`
-
-          try {
-            const ir = await fetch(insUrl)
-            const id = await ir.json()
-            console.log("[breakdown-insights] status:", ir.status, "url:", insUrl, "data:", id)
-            if (!ir.ok) {
-              setBreakdownError(id.error || `Breakdown API error (${ir.status})`)
-            } else if (Array.isArray(id.data)) {
-              const idKey = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id"
-              const rows = id.data
-                .filter((item: any) => item[idKey])
-                .map((item: any) => ({
-                  parentId: item[idKey] as string,
-                  breakdownLabel: getBreakdownLabel(item as Record<string, string>, breakdowns),
-                  ins: {
-                    spend: item.spend || "0",
-                    impressions: item.impressions || "0",
-                    clicks: item.clicks || "0",
-                    reach: item.reach,
-                    actions: item.actions,
-                    cost_per_action_type: item.cost_per_action_type,
-                  } as Insight,
-                }))
-              console.log("[breakdown-insights] mapped rows:", rows.length, rows.slice(0, 3))
-              setBreakdownRows(rows)
-            }
-          } catch (err) {
-            console.error("[breakdown-insights] fetch error:", err)
-            setBreakdownError("Failed to fetch breakdown data")
-          }
-        }
-      }
-
       setLoadedMs(Date.now() - t0)
     } catch (e: any) {
       setError(e.message || "Failed to load")
     } finally {
       setLoading(false)
     }
-  }, [selectedAccountId, tab, datePreset, customDateRange, breakdowns])
+  }, [selectedAccountId, tab, buildDateParam])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  // Fetches breakdown-insights rows — only when breakdowns are selected.
+  // Receives the current breakdown list as an arg so callers can pass the
+  // latest value directly (avoids stale-closure issues in the debounce).
+  const fetchBreakdownData = useCallback(async (bds: string[]) => {
+    setBreakdownRows([])
+    setBreakdownError("")
+    if (bds.length === 0 || !selectedAccountId) return
+
+    const allBdsFields: string[] = []
+    let tiValue: string | null = null
+    for (const id of bds) {
+      const param = BREAKDOWN_API_MAP[id]
+      if (!param) continue
+      const bdsM = param.match(/breakdowns=([^&]+)/)
+      const tiM  = param.match(/time_increment=([^&]+)/)
+      if (bdsM) allBdsFields.push(...bdsM[1].split(",").map(s => s.trim()))
+      if (tiM) tiValue = tiM[1]
+    }
+    if (allBdsFields.length === 0 && !tiValue) return
+
+    const dateParam = buildDateParam()
+    const levelMap: Record<string, string> = { campaigns: "campaign", adsets: "adset", ads: "ad" }
+    const level = levelMap[tab]
+    let insUrl = `/api/facebook/breakdown-insights?ad_account_id=${encodeURIComponent(selectedAccountId)}&level=${level}&${dateParam}`
+    if (allBdsFields.length > 0) insUrl += `&breakdowns=${encodeURIComponent(allBdsFields.join(","))}`
+    if (tiValue) insUrl += `&time_increment=${encodeURIComponent(tiValue)}`
+
+    try {
+      const ir = await fetch(insUrl)
+      const id = await ir.json()
+      if (!ir.ok) {
+        setBreakdownError(id.error || `Breakdown API error (${ir.status})`)
+      } else if (Array.isArray(id.data)) {
+        const idKey = level === "campaign" ? "campaign_id" : level === "adset" ? "adset_id" : "ad_id"
+        const rows = id.data
+          .filter((item: any) => item[idKey])
+          .map((item: any) => ({
+            parentId: item[idKey] as string,
+            breakdownLabel: getBreakdownLabel(item as Record<string, string>, bds),
+            ins: {
+              spend: item.spend || "0",
+              impressions: item.impressions || "0",
+              clicks: item.clicks || "0",
+              reach: item.reach,
+              actions: item.actions,
+              cost_per_action_type: item.cost_per_action_type,
+            } as Insight,
+          }))
+        setBreakdownRows(rows)
+      }
+    } catch (err) {
+      console.error("[breakdown-insights] fetch error:", err)
+      setBreakdownError("Failed to fetch breakdown data")
+    }
+  }, [selectedAccountId, tab, buildDateParam])
+
+  const breakdownDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Main data: account / tab / date change → immediate refetch
+  useEffect(() => { fetchMainData() }, [fetchMainData])
+
+  // Breakdown data: debounced 300ms so rapid multi-select fires only one request
+  useEffect(() => {
+    if (breakdownDebounceRef.current) clearTimeout(breakdownDebounceRef.current)
+    breakdownDebounceRef.current = setTimeout(() => fetchBreakdownData(breakdowns), 300)
+    return () => {
+      if (breakdownDebounceRef.current) clearTimeout(breakdownDebounceRef.current)
+    }
+  }, [breakdowns, fetchBreakdownData])
 
   // Reset page & row selection when tab/search/date/breakdown changes
   useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, datePreset, customDateRange, breakdowns])
@@ -516,7 +536,7 @@ export default function AdsManagerPage() {
       if (!r.ok) throw new Error("Failed to update name")
     } catch (err) {
       console.error(err)
-      fetchData() // revert on fail
+      fetchMainData() // revert on fail
     }
   }
 
@@ -542,7 +562,7 @@ export default function AdsManagerPage() {
       }
       setDuplicateDialogOpen(false)
       setSelectedIds(new Set())
-      await fetchData()
+      await fetchMainData()
     } catch (err) {
       console.error(err)
     } finally {
@@ -575,7 +595,7 @@ export default function AdsManagerPage() {
       if (!r.ok) throw new Error("Failed to update")
     } catch (err) {
       console.error(err)
-      fetchData() // revert on fail
+      fetchMainData() // revert on fail
     }
   }
 
@@ -926,7 +946,7 @@ export default function AdsManagerPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
-      <CreateCampaignModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={fetchData} />
+      <CreateCampaignModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={fetchMainData} />
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
@@ -957,7 +977,7 @@ export default function AdsManagerPage() {
             <IconHistory className="size-3.5" />History
           </button>
           <button
-            onClick={fetchData}
+            onClick={fetchMainData}
             disabled={loading}
             className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors"
           >
@@ -1103,7 +1123,7 @@ export default function AdsManagerPage() {
         )}
 
         {/* Sync pair */}
-        <button onClick={fetchData} className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Sync">
+        <button onClick={fetchMainData} className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Sync">
           <IconRefresh className="size-3.5 text-muted-foreground" />
         </button>
         <button className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Refresh">
