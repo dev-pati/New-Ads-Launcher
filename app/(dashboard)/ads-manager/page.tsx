@@ -17,6 +17,11 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { CreateCampaignModal } from "@/components/ads-manager/create-flow/CreateCampaignModal"
+import { CustomizeColumnsModal } from "@/components/ads-manager/CustomizeColumnsModal"
+import { AdsDateRangePicker, getPresetRange } from "@/components/ads-manager/AdsDateRangePicker"
+import { COLUMN_MAP, DEFAULT_PRESETS, ColumnPreset, getActivePreset } from "@/lib/column-config"
+import { BreakdownDropdown } from "@/components/ads-manager/BreakdownDropdown"
+import { BREAKDOWN_API_MAP } from "@/lib/breakdown-config"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,16 +81,6 @@ interface Ad {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DATE_PRESETS = [
-  { value: "today", label: "Today" },
-  { value: "yesterday", label: "Yesterday" },
-  { value: "last_7d", label: "Last 7 days" },
-  { value: "last_14d", label: "Last 14 days" },
-  { value: "last_28d", label: "Last 28 days" },
-  { value: "last_30d", label: "Last 30 days" },
-  { value: "this_month", label: "This month" },
-  { value: "last_month", label: "Last month" },
-]
 
 const OBJECTIVE_RESULT: Record<string, { type: string; actionType: string }> = {
   OUTCOME_SALES: { type: "Purchases", actionType: "omni_purchase" },
@@ -214,15 +209,15 @@ export default function AdsManagerPage() {
 
   // Filters & search
   const [search, setSearch] = useState("")
-  const [datePreset, setDatePreset] = useState("last_7d")
-  const [dateDropOpen, setDateDropOpen] = useState(false)
-  const dateDropRef = useRef<HTMLDivElement>(null)
+  const [datePreset,     setDatePreset]     = useState("last_7d")
+  const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | null>(null)
 
   // Pagination
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(30)
   const pageSizeRef = useRef<HTMLDivElement>(null)
   const [pageSizeOpen, setPageSizeOpen] = useState(false)
+  const colsDropRef = useRef<HTMLDivElement>(null)
 
   // Sort
   const [sortField, setSortField] = useState<string | null>(null)
@@ -252,8 +247,11 @@ export default function AdsManagerPage() {
   const [defaultHeadline, setDefaultHeadline] = useState("")
   const [defaultCta, setDefaultCta] = useState("SHOP_NOW")
   const [defaultLink, setDefaultLink] = useState("")
-  const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set(["spend", "budget", "results", "cpr", "schedule", "delivery"]))
-  const [colsOpen, setColsOpen] = useState(false)
+  const [columnOrder,       setColumnOrder]       = useState<string[]>(DEFAULT_PRESETS[1].columns)
+  const [customPresets,     setCustomPresets]     = useState<ColumnPreset[]>([])
+  const [colsOpen,          setColsOpen]          = useState(false)
+  const [customizeColsOpen, setCustomizeColsOpen] = useState(false)
+  const [breakdown,         setBreakdown]         = useState("none")
 
   const router = useRouter()
 
@@ -289,15 +287,40 @@ export default function AdsManagerPage() {
     } catch {} finally { setHistoryLoading(false) }
   }
 
-  const toggleCol = (col: string) =>
-    setVisibleCols(prev => { const s = new Set(prev); s.has(col) ? s.delete(col) : s.add(col); return s })
+  // Load / save column state from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("adsmanager_col_order")
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[]
+        const valid = parsed.filter(id => id in COLUMN_MAP)
+        if (valid.length > 0) setColumnOrder(valid)
+      }
+      const rawPresets = localStorage.getItem("adsmanager_col_presets")
+      if (rawPresets) setCustomPresets(JSON.parse(rawPresets))
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try { localStorage.setItem("adsmanager_col_order", JSON.stringify(columnOrder)) } catch {}
+  }, [columnOrder])
+
+  useEffect(() => {
+    try { localStorage.setItem("adsmanager_col_presets", JSON.stringify(customPresets)) } catch {}
+  }, [customPresets])
+
+  const saveCustomPreset = (name: string, cols: string[]) => {
+    setCustomPresets(prev => [
+      ...prev.filter(p => p.label !== name),
+      { id: `custom_${Date.now()}`, label: name, columns: cols },
+    ])
+  }
 
   // Close dropdowns on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (dateDropRef.current && !dateDropRef.current.contains(e.target as Node)) setDateDropOpen(false)
       if (pageSizeRef.current && !pageSizeRef.current.contains(e.target as Node)) setPageSizeOpen(false)
-      setColsOpen(false)
+      if (colsDropRef.current && !colsDropRef.current.contains(e.target as Node)) setColsOpen(false)
     }
     document.addEventListener("mousedown", h)
     return () => document.removeEventListener("mousedown", h)
@@ -310,19 +333,31 @@ export default function AdsManagerPage() {
     setLoading(true)
     setError("")
     const t0 = Date.now()
+
+    const dateParam = datePreset === "custom" && customDateRange
+      ? `time_range=${encodeURIComponent(JSON.stringify({
+          since: customDateRange.start.toISOString().split("T")[0],
+          until: customDateRange.end.toISOString().split("T")[0],
+        }))}`
+      : `date_preset=${datePreset}`
+
+    const breakdownParam = breakdown !== "none" && BREAKDOWN_API_MAP[breakdown]
+      ? `&${BREAKDOWN_API_MAP[breakdown]}`
+      : ""
+
     try {
       if (tab === "campaigns") {
-        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&date_preset=${datePreset}`)
+        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${breakdownParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setCampaigns(d.campaigns || [])
       } else if (tab === "adsets") {
-        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&date_preset=${datePreset}`)
+        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${breakdownParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
       } else {
-        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&date_preset=${datePreset}`)
+        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${breakdownParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
@@ -333,12 +368,12 @@ export default function AdsManagerPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedAccountId, tab, datePreset])
+  }, [selectedAccountId, tab, datePreset, customDateRange, breakdown])
 
   useEffect(() => { fetchData() }, [fetchData])
 
   // Reset page & row selection when tab/search/date changes
-  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, datePreset])
+  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, datePreset, customDateRange])
 
   // ─── Tab switch: if items checked, capture as filter for the next level ─────
   // Badge appears only on the NEXT tab, not on all 3 at once
@@ -534,6 +569,14 @@ export default function AdsManagerPage() {
 
   // Totals
   const totalSpend = currentData.reduce((s, item) => s + getSpend(item), 0)
+
+  const totalResultsCount = useMemo(() => currentData.reduce((sum, item) => {
+    const objective = tab === "campaigns"
+      ? (item as Campaign).objective
+      : campaigns.find(c => c.id === (item as AdSet | Ad).campaign_id)?.objective
+    return sum + getResults(item, objective).count
+  }, 0), [currentData, tab, campaigns])
+
   const allSelected = pagedData.length > 0 && pagedData.every(r => selectedIds.has(r.id))
   const someSelected = !allSelected && pagedData.some(r => selectedIds.has(r.id))
   const toggleAll = () => {
@@ -547,7 +590,155 @@ export default function AdsManagerPage() {
     if (headerCheckRef.current) headerCheckRef.current.indeterminate = someSelected
   }, [someSelected])
 
-  const dateLabel = DATE_PRESETS.find(d => d.value === datePreset)?.label || datePreset
+  // ─── Config-driven cell renderer ─────────────────────────────────────────────
+
+  function getActionValue(ins: Insight | null, actionType: string): number {
+    if (!ins?.actions) return 0
+    return parseInt(ins.actions.find(a => a.action_type === actionType)?.value || "0")
+  }
+
+  function renderCellContent(colId: string, row: Campaign | AdSet | Ad) {
+    const ins   = getInsight(row)
+    const spend = getSpend(row)
+    const objective =
+      tab === "campaigns" ? (row as Campaign).objective
+      : tab === "adsets"  ? campaigns.find(c => c.id === (row as AdSet).campaign_id)?.objective
+      :                     campaigns.find(c => c.id === (row as Ad).campaign_id)?.objective
+
+    switch (colId) {
+      case "spend":
+        return <span className="text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</span>
+
+      case "results": {
+        const { count, type } = getResults(row, objective)
+        return <>
+          <span className="text-[13px] tabular-nums">{ins ? count : "—"}</span>
+          {ins && <p className="text-[11px] text-[#65676b]">{type}</p>}
+        </>
+      }
+
+      case "cost_per_result": {
+        const { type } = getResults(row, objective)
+        const cpr = getCostPerResult(row, objective)
+        return <>
+          <span className="text-[13px] tabular-nums">{cpr || "—"}</span>
+          {cpr && <p className="text-[11px] text-[#65676b]">Per {type}</p>}
+        </>
+      }
+
+      case "budget":
+        return <span className="text-[13px] tabular-nums">{(row as any).daily_budget ? fmtBudget((row as any).daily_budget) : "—"}</span>
+
+      case "lifetime_budget":
+        return <span className="text-[13px] tabular-nums">{(row as any).lifetime_budget ? fmtBudget((row as any).lifetime_budget) : "—"}</span>
+
+      case "delivery":
+        return <DeliveryBadge effective_status={row.effective_status} />
+
+      case "effective_status":
+        return <span className="text-[13px]">{row.effective_status.charAt(0) + row.effective_status.slice(1).toLowerCase()}</span>
+
+      case "impressions":
+        return <span className="text-[13px] tabular-nums">{ins?.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
+
+      case "clicks":
+        return <span className="text-[13px] tabular-nums">{ins?.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
+
+      case "reach":
+        return <span className="text-[13px] tabular-nums">{ins?.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
+
+      case "cpm": {
+        if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-[13px]">—</span>
+        const cpmVal = (parseFloat(ins.spend || "0") / parseFloat(ins.impressions)) * 1000
+        return <span className="text-[13px] tabular-nums">${cpmVal.toFixed(2)}</span>
+      }
+
+      case "frequency":
+        return <span className="text-[13px]">—</span>
+
+      case "ctr": {
+        if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-[13px]">—</span>
+        const ctrVal = (parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100
+        return <span className="text-[13px] tabular-nums">{ctrVal.toFixed(2)}%</span>
+      }
+
+      case "cpc": {
+        if (!ins || !ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
+      }
+
+      case "purchases":
+        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "omni_purchase") : "—"}</span>
+
+      case "purchase_value": {
+        const val = ins?.actions?.find(a => a.action_type === "omni_purchase_roas" || a.action_type === "purchase_roas")?.value
+        return <span className="text-[13px] tabular-nums">{val ? `$${parseFloat(val).toFixed(2)}` : "—"}</span>
+      }
+
+      case "avg_order_value": {
+        const purchasesN = getActionValue(ins, "omni_purchase")
+        const pv = ins?.actions?.find(a => a.action_type === "omni_purchase_roas")
+        if (!ins || purchasesN === 0 || !pv) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">${(parseFloat(pv.value) / purchasesN).toFixed(2)}</span>
+      }
+
+      case "roas": {
+        const purchasesN = getActionValue(ins, "omni_purchase")
+        if (!ins || spend === 0 || purchasesN === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">{(purchasesN / spend).toFixed(2)}x</span>
+      }
+
+      case "cost_per_purchase": {
+        const p = getActionValue(ins, "omni_purchase")
+        if (!ins || p === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">${(spend / p).toFixed(2)}</span>
+      }
+
+      case "cost_per_lead": {
+        const l = getActionValue(ins, "lead")
+        if (!ins || l === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">${(spend / l).toFixed(2)}</span>
+      }
+
+      case "leads":
+        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "lead") : "—"}</span>
+
+      case "add_to_cart":
+        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "add_to_cart") : "—"}</span>
+
+      case "purchase_conv_rate": {
+        const p = getActionValue(ins, "omni_purchase")
+        const cl = ins ? parseInt(ins.clicks || "0") : 0
+        if (!ins || cl === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">{((p / cl) * 100).toFixed(2)}%</span>
+      }
+
+      case "video_views_3s":
+        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_view") : "—"}</span>
+      case "video_25":
+        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_p25_watched_actions") : "—"}</span>
+      case "video_50":
+        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_p50_watched_actions") : "—"}</span>
+      case "video_75":
+        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_p75_watched_actions") : "—"}</span>
+      case "video_100":
+        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_p100_watched_actions") : "—"}</span>
+
+      case "schedule_start":
+        return <span className="text-[13px] text-[#65676b]">{fmtDate((row as any).start_time)}</span>
+      case "schedule_end":
+        return <span className="text-[13px] text-[#65676b]">{fmtDate((row as any).stop_time || (row as any).end_time)}</span>
+      case "optimization_goal":
+        return <span className="text-[13px] text-[#65676b]">{(row as AdSet).optimization_goal?.replace(/_/g, " ").toLowerCase() || "—"}</span>
+      case "bid_strategy":
+        return <span className="text-[13px] text-[#65676b]">{(row as any).bid_strategy?.replace(/_/g, " ").toLowerCase() || "—"}</span>
+      case "objective":
+        return <span className="text-[13px] text-[#65676b]">{(row as Campaign).objective?.replace(/OUTCOME_/g, "").replace(/_/g, " ").toLowerCase() || "—"}</span>
+
+      default:
+        return <span className="text-[13px]">—</span>
+    }
+  }
 
   // ─── Drill-down helpers (click name → single-item filter) ────────────────────
 
@@ -726,21 +917,15 @@ export default function AdsManagerPage() {
           </div>
 
           {/* Date range */}
-          <div ref={dateDropRef} className="relative">
-            <button onClick={() => setDateDropOpen(o => !o)} className="flex items-center gap-1.5 h-6 px-2 text-xs border rounded hover:bg-muted/50 whitespace-nowrap">
-              <IconCalendar className="size-3" />{dateLabel} <IconChevronDown className="size-3" />
-            </button>
-            {dateDropOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 py-1 w-44">
-                {DATE_PRESETS.map(d => (
-                  <button key={d.value} onClick={() => { setDatePreset(d.value); setDateDropOpen(false) }}
-                    className={cn("w-full px-3 py-1.5 text-xs text-left hover:bg-accent", datePreset === d.value && "text-primary font-medium")}>
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <AdsDateRangePicker
+            preset={datePreset}
+            customStart={customDateRange?.start}
+            customEnd={customDateRange?.end}
+            onChange={(p, cs, ce) => {
+              setDatePreset(p)
+              setCustomDateRange(p === "custom" && cs && ce ? { start: cs, end: ce } : null)
+            }}
+          />
         </div>
       </div>
 
@@ -835,33 +1020,75 @@ export default function AdsManagerPage() {
           >
             <IconTrash className="size-3.5 text-muted-foreground" />
           </button>
-          <div className="relative">
-            <button onClick={() => setColsOpen(v => !v)} className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground">
-              <IconTable className="size-3.5" />Columns <IconChevronDown className="size-3" />
+          {/* Breakdown */}
+          <BreakdownDropdown selected={breakdown} onChange={setBreakdown} />
+
+          {/* Columns preset picker */}
+          <div ref={colsDropRef} className="relative">
+            <button
+              onClick={() => setColsOpen(v => !v)}
+              className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground"
+            >
+              <IconTable className="size-3.5 shrink-0" />
+              <span className="max-w-[160px] truncate">
+                Columns: {getActivePreset(columnOrder, customPresets)?.label || "Custom"}
+              </span>
+              <IconChevronDown className="size-3 shrink-0" />
             </button>
+
             {colsOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-52 p-2" onClick={e => e.stopPropagation()}>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 mb-1.5">Toggle columns</p>
-                {[
-                  { key: "spend", label: "Amount Spent" },
-                  { key: "budget", label: "Budget" },
-                  { key: "results", label: "Results" },
-                  { key: "cpr", label: "Cost per Result" },
-                  { key: "schedule", label: "Schedule / Ends" },
-                  { key: "delivery", label: "Delivery" },
-                  { key: "impressions", label: "Impressions" },
-                  { key: "clicks", label: "Clicks" },
-                  { key: "ctr", label: "CTR" },
-                  { key: "cpc", label: "CPC" },
-                ].map(col => (
-                  <button key={col.key} onClick={() => toggleCol(col.key)}
-                    className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-muted/50 transition-colors text-left">
-                    <span className={cn("size-4 rounded border flex items-center justify-center shrink-0 transition-colors", visibleCols.has(col.key) ? "bg-primary border-primary" : "border-muted-foreground/30")}>
-                      {visibleCols.has(col.key) && <IconCheck className="size-2.5 text-primary-foreground" />}
-                    </span>
-                    <span className="text-xs">{col.label}</span>
-                  </button>
-                ))}
+              <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-64 py-2">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">POPULAR</p>
+                {DEFAULT_PRESETS.map(preset => {
+                  const isActive = getActivePreset(columnOrder, customPresets)?.id === preset.id
+                  return (
+                    <button
+                      key={preset.id}
+                      onClick={() => { setColumnOrder(preset.columns); setColsOpen(false) }}
+                      className="w-full flex items-center gap-3 px-3 py-1.5 hover:bg-muted/50 transition-colors"
+                    >
+                      <span className={cn(
+                        "size-3.5 rounded-full border-2 shrink-0 transition-colors",
+                        isActive ? "border-[#1877f2] bg-[#1877f2]" : "border-muted-foreground/40"
+                      )} />
+                      <span className="text-[13px]">{preset.label}</span>
+                    </button>
+                  )
+                })}
+
+                <div className="border-t my-1.5" />
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">SAVED IN YOUR ORG</p>
+                {customPresets.length === 0
+                  ? <p className="text-[12px] text-muted-foreground px-3 py-1.5">No saved presets yet.</p>
+                  : customPresets.map(preset => {
+                      const isActive = getActivePreset(columnOrder, customPresets)?.id === preset.id
+                      return (
+                        <button
+                          key={preset.id}
+                          onClick={() => { setColumnOrder(preset.columns); setColsOpen(false) }}
+                          className="w-full flex items-center gap-3 px-3 py-1.5 hover:bg-muted/50 transition-colors"
+                        >
+                          <span className={cn(
+                            "size-3.5 rounded-full border-2 shrink-0",
+                            isActive ? "border-[#1877f2] bg-[#1877f2]" : "border-muted-foreground/40"
+                          )} />
+                          <span className="text-[13px]">{preset.label}</span>
+                        </button>
+                      )
+                    })
+                }
+
+                <div className="border-t my-1.5" />
+                <button
+                  onClick={() => { setColsOpen(false); setCustomizeColsOpen(true) }}
+                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/50 transition-colors"
+                >
+                  <span className="flex items-center gap-2 text-[13px]">
+                    <IconTable className="size-3.5 text-muted-foreground" />
+                    Customize columns
+                  </span>
+                  <IconDrillRight className="size-3.5 text-muted-foreground" />
+                </button>
               </div>
             )}
           </div>
@@ -886,41 +1113,38 @@ export default function AdsManagerPage() {
                   <input ref={headerCheckRef} type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
                 </th>
                 <th className="w-16 px-2 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Off/On</th>
-
-                {tab === "campaigns" && <>
-                  <SortTh label="Campaign" field="name" sortField={sortField} sortDir={sortDir} onSort={handleSort} className="min-w-[220px]" />
-                  {visibleCols.has("spend") && <SortTh label="Amount spent" field="spend" sortField={sortField} sortDir={sortDir} onSort={handleSort} />}
-                  {visibleCols.has("budget") && <SortTh label="Daily budget" field="budget" sortField={sortField} sortDir={sortDir} onSort={handleSort} />}
-                  {visibleCols.has("results") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Results</th>}
-                  {visibleCols.has("cpr") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Cost per result</th>}
-                  {visibleCols.has("schedule") && <>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Schedule</th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Ends</th>
-                  </>}
-                  {visibleCols.has("delivery") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Delivery</th>}
-                </>}
-
-                {tab === "adsets" && <>
-                  <SortTh label="Ad set" field="name" sortField={sortField} sortDir={sortDir} onSort={handleSort} className="min-w-[220px]" />
-                  {visibleCols.has("spend") && <SortTh label="Amount spent" field="spend" sortField={sortField} sortDir={sortDir} onSort={handleSort} />}
-                  {visibleCols.has("budget") && <SortTh label="Budget" field="budget" sortField={sortField} sortDir={sortDir} onSort={handleSort} />}
-                  {visibleCols.has("results") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Results</th>}
-                  {visibleCols.has("cpr") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Cost per result</th>}
-                  {visibleCols.has("schedule") && <>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Optimization</th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Schedule</th>
-                  </>}
-                  {visibleCols.has("delivery") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Delivery</th>}
-                </>}
-
-                {tab === "ads" && <>
-                  <SortTh label="Ad name" field="name" sortField={sortField} sortDir={sortDir} onSort={handleSort} className="min-w-[220px]" />
+                <SortTh
+                  label={tab === "ads" ? "Ad name" : tab === "adsets" ? "Ad set" : "Campaign"}
+                  field="name"
+                  sortField={sortField}
+                  sortDir={sortDir}
+                  onSort={handleSort}
+                  className="min-w-[220px]"
+                />
+                {tab === "ads" && (
                   <th className="w-20 px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Preview</th>
-                  {visibleCols.has("spend") && <SortTh label="Amount spent" field="spend" sortField={sortField} sortDir={sortDir} onSort={handleSort} />}
-                  {visibleCols.has("results") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Results</th>}
-                  {visibleCols.has("cpr") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Cost per result</th>}
-                  {visibleCols.has("delivery") && <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Delivery</th>}
-                </>}
+                )}
+                {columnOrder.map(colId => {
+                  const col = COLUMN_MAP[colId]
+                  if (!col) return null
+                  if (col.sortKey) {
+                    return (
+                      <SortTh
+                        key={colId}
+                        label={col.headerLabel}
+                        field={col.sortKey}
+                        sortField={sortField}
+                        sortDir={sortDir}
+                        onSort={handleSort}
+                      />
+                    )
+                  }
+                  return (
+                    <th key={colId} className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
+                      {col.headerLabel}
+                    </th>
+                  )
+                })}
               </tr>
             </thead>
 
@@ -933,10 +1157,6 @@ export default function AdsManagerPage() {
                 </tr>
               ) : tab === "campaigns" ? (
                 (pagedData as Campaign[]).map(c => {
-                  const ins = getInsight(c)
-                  const spend = getSpend(c)
-                  const { count: resultCount, type: resultType } = getResults(c, c.objective)
-                  const cpr = getCostPerResult(c, c.objective)
                   const isSel = selectedIds.has(c.id)
                   return (
                     <tr key={c.id} className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
@@ -992,33 +1212,14 @@ export default function AdsManagerPage() {
                           </div>
                         )}
                       </td>
-                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
-                      {visibleCols.has("budget") && <td className="px-3 py-2.5 text-[13px] tabular-nums">
-                        {c.daily_budget ? fmtBudget(c.daily_budget) : c.lifetime_budget ? fmtBudget(c.lifetime_budget) : "—"}
-                      </td>}
-                      {visibleCols.has("results") && <td className="px-3 py-2.5">
-                        <span className="text-[13px] tabular-nums">{ins ? resultCount : "—"}</span>
-                        {ins && <p className="text-[11px] text-[#65676b]">{resultType}</p>}
-                      </td>}
-                      {visibleCols.has("cpr") && <td className="px-3 py-2.5">
-                        <span className="text-[13px] tabular-nums">{cpr || "—"}</span>
-                        {cpr && <p className="text-[11px] text-[#65676b]">Per {resultType}</p>}
-                      </td>}
-                      {visibleCols.has("schedule") && <>
-                        <td className="px-3 py-2.5 text-[13px] text-[#65676b]">{fmtDate(c.start_time)}</td>
-                        <td className="px-3 py-2.5 text-[13px] text-[#65676b]">{fmtDate(c.stop_time)}</td>
-                      </>}
-                      {visibleCols.has("delivery") && <td className="px-3 py-2.5"><DeliveryBadge effective_status={c.effective_status} /></td>}
+                      {columnOrder.map(colId => (
+                        <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, c)}</td>
+                      ))}
                     </tr>
                   )
                 })
               ) : tab === "adsets" ? (
                 (pagedData as AdSet[]).map(a => {
-                  const ins = getInsight(a)
-                  const spend = getSpend(a)
-                  const campaign = campaigns.find(c => c.id === a.campaign_id)
-                  const { count: resultCount, type: resultType } = getResults(a, campaign?.objective)
-                  const cpr = getCostPerResult(a, campaign?.objective)
                   const isSel = selectedIds.has(a.id)
                   return (
                     <tr key={a.id} className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
@@ -1071,34 +1272,15 @@ export default function AdsManagerPage() {
                           </div>
                         )}
                       </td>
-                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
-                      {visibleCols.has("budget") && <td className="px-3 py-2.5 text-[13px] tabular-nums">
-                        {a.daily_budget ? fmtBudget(a.daily_budget) : a.lifetime_budget ? fmtBudget(a.lifetime_budget) : "—"}
-                      </td>}
-                      {visibleCols.has("results") && <td className="px-3 py-2.5">
-                        <span className="text-[13px]">{ins ? resultCount : "—"}</span>
-                        {ins && <p className="text-[11px] text-[#65676b]">{resultType}</p>}
-                      </td>}
-                      {visibleCols.has("cpr") && <td className="px-3 py-2.5">
-                        <span className="text-[13px]">{cpr || "—"}</span>
-                        {cpr && <p className="text-[11px] text-[#65676b]">Per {resultType}</p>}
-                      </td>}
-                      {visibleCols.has("schedule") && <>
-                        <td className="px-3 py-2.5 text-[13px] text-[#65676b]">{a.optimization_goal?.replace(/_/g, " ").toLowerCase() || "—"}</td>
-                        <td className="px-3 py-2.5 text-[13px] text-[#65676b]">{fmtDate(a.start_time)}</td>
-                      </>}
-                      {visibleCols.has("delivery") && <td className="px-3 py-2.5"><DeliveryBadge effective_status={a.effective_status} /></td>}
+                      {columnOrder.map(colId => (
+                        <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>
+                      ))}
                     </tr>
                   )
                 })
               ) : (
                 (pagedData as Ad[]).map(a => {
-                  const ins = getInsight(a)
-                  const spend = getSpend(a)
                   const adSet = adSets.find(s => s.id === a.adset_id)
-                  const campaign = campaigns.find(c => c.id === a.campaign_id)
-                  const { count: resultCount, type: resultType } = getResults(a, campaign?.objective)
-                  const cpr = getCostPerResult(a, campaign?.objective)
                   const isSel = selectedIds.has(a.id)
                   const thumb = a.creative?.thumbnail_url || a.creative?.image_url
                   return (
@@ -1157,16 +1339,9 @@ export default function AdsManagerPage() {
                           : <div className="size-12 rounded bg-muted border flex items-center justify-center text-[10px] text-muted-foreground">No img</div>
                         }
                       </td>
-                      {visibleCols.has("spend") && <td className="px-3 py-2.5 text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</td>}
-                      {visibleCols.has("results") && <td className="px-3 py-2.5">
-                        <span className="text-[13px]">{ins ? resultCount : "—"}</span>
-                        {ins && <p className="text-[11px] text-[#65676b]">{resultType}</p>}
-                      </td>}
-                      {visibleCols.has("cpr") && <td className="px-3 py-2.5">
-                        <span className="text-[13px]">{cpr || "—"}</span>
-                        {cpr && <p className="text-[11px] text-[#65676b]">Per {resultType}</p>}
-                      </td>}
-                      {visibleCols.has("delivery") && <td className="px-3 py-2.5"><DeliveryBadge effective_status={a.effective_status} /></td>}
+                      {columnOrder.map(colId => (
+                        <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>
+                      ))}
                     </tr>
                   )
                 })
@@ -1176,15 +1351,31 @@ export default function AdsManagerPage() {
             {/* ── Totals row ── */}
             {pagedData.length > 0 && (
               <tfoot>
-                <tr className="border-t bg-muted/10">
-                  <td colSpan={3} className="px-3 py-2.5 text-xs text-muted-foreground font-medium">
+                <tr className="border-t-2 border-[#e4e6eb] dark:border-gray-800 bg-[#f7f8fa] dark:bg-muted/20">
+                  <td colSpan={tab === "ads" ? 4 : 3} className="px-3 py-2.5 text-xs text-muted-foreground font-medium">
                     Results from {currentData.length} {tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"}
                   </td>
-                  {visibleCols.has("spend") && <td className="px-3 py-2.5 text-xs font-semibold tabular-nums">
-                    ${totalSpend.toFixed(2)}
-                    <p className="text-muted-foreground font-normal">Total spent</p>
-                  </td>}
-                  <td colSpan={99} />
+                  {columnOrder.map(colId => {
+                    if (colId === "spend") return (
+                      <td key={colId} className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white">
+                        ${totalSpend.toFixed(2)}
+                        <p className="text-[11px] text-muted-foreground font-normal">Total spent</p>
+                      </td>
+                    )
+                    if (colId === "results") return (
+                      <td key={colId} className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white">
+                        {totalResultsCount > 0 ? totalResultsCount.toLocaleString() : "—"}
+                        <p className="text-[11px] text-muted-foreground font-normal">Total</p>
+                      </td>
+                    )
+                    if (colId === "cost_per_result") return (
+                      <td key={colId} className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white">
+                        {totalResultsCount > 0 ? `$${(totalSpend / totalResultsCount).toFixed(2)}` : "—"}
+                        <p className="text-[11px] text-muted-foreground font-normal">Average</p>
+                      </td>
+                    )
+                    return <td key={colId} />
+                  })}
                 </tr>
               </tfoot>
             )}
@@ -1323,6 +1514,15 @@ export default function AdsManagerPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Customize Columns Modal ── */}
+      <CustomizeColumnsModal
+        open={customizeColsOpen}
+        columnOrder={columnOrder}
+        onApply={setColumnOrder}
+        onSavePreset={saveCustomPreset}
+        onClose={() => setCustomizeColsOpen(false)}
+      />
 
       {/* ── Edit Side Panel (Sheet) ── */}
       <Sheet open={!!editingNode} onOpenChange={(open) => !open && setEditingNode(null)}>
