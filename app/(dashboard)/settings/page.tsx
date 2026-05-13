@@ -214,7 +214,11 @@ function SettingsContent() {
       })
       const data = await res.json()
       if (!res.ok) { setMessageType("error"); setMessage(data.error || "Failed to invite"); return }
-      setMessageType("success"); setMessage(data.added ? "Member added successfully!" : "Invitation sent!")
+      if (data.emailWarning) {
+        setMessageType("error"); setMessage(data.emailWarning)
+      } else {
+        setMessageType("success"); setMessage(data.added ? "Member added successfully!" : "Invitation sent!")
+      }
       setInviteEmail("")
       fetchMembers()
     } catch {

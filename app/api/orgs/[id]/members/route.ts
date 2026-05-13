@@ -180,7 +180,8 @@ export async function POST(
       .eq("id", orgId)
       .single()
 
-    // Send invite email via Resend
+    // Send invite email via Resend — surface delivery errors so the user knows
+    let emailError: string | null = null
     try {
       await sendInviteEmail({
         to: email,
@@ -188,11 +189,15 @@ export async function POST(
         inviterName: user.user_metadata?.full_name || user.email || "Someone",
         token: invitation.token,
       })
-    } catch (emailErr) {
-      console.error("Failed to send invite email:", emailErr)
+    } catch (emailErr: any) {
+      emailError = emailErr?.message || "Failed to send email"
     }
 
-    return NextResponse.json({ success: true, invitation })
+    return NextResponse.json({
+      success: true,
+      invitation,
+      ...(emailError && { emailWarning: `Invitation created but email delivery failed: ${emailError}` }),
+    })
   } catch (err) {
     console.error("Failed to invite member:", err)
     return NextResponse.json({ error: "Failed to invite member" }, { status: 500 })
