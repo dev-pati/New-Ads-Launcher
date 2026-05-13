@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -800,6 +801,7 @@ function CreateAutomationModal({
 
 export default function AutomatePage() {
   const { adAccounts, selectedAccountId } = useAdAccount()
+  const router = useRouter()
   const [tab, setTab] = useState<AutomateTab>("automations")
   const [templateCategory, setTemplateCategory] = useState<TemplateCategory>("All")
   const [search, setSearch] = useState("")
@@ -894,9 +896,7 @@ export default function AutomatePage() {
       setFbRuleOpen(true)
       return
     }
-    setSelectedTemplate(tpl)
-    setCreateOpen(true)
-    setTab("automations")
+    router.push(`/automate/new?template=${tpl.id}`)
   }
 
   const filtered = automations.filter(a =>
@@ -951,7 +951,7 @@ export default function AutomatePage() {
                 <Button variant="outline" size="sm" className="gap-1.5">
                   <IconSettings className="size-3.5" />View settings
                 </Button>
-                <Button size="sm" className="gap-1.5" onClick={() => { setSelectedTemplate(null); setCreateOpen(true) }}>
+                <Button size="sm" className="gap-1.5" onClick={() => router.push("/automate/new")}>
                   <IconPlus className="size-3.5" />Create
                 </Button>
               </div>
@@ -975,7 +975,7 @@ export default function AutomatePage() {
                   <Button variant="outline" size="sm" onClick={() => setTab("templates")}>
                     <IconTemplate className="size-4 mr-1.5" />Browse templates
                   </Button>
-                  <Button size="sm" className="gap-1.5" onClick={() => { setSelectedTemplate(null); setCreateOpen(true) }}>
+                  <Button size="sm" className="gap-1.5" onClick={() => router.push("/automate/new")}>
                     <IconPlus className="size-4" />Create Automation
                   </Button>
                 </div>
@@ -1003,6 +1003,12 @@ export default function AutomatePage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => router.push(`/automate/${a.id}`)}
+                        className="size-8 rounded-lg hover:bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                        title="Edit">
+                        <IconEdit className="size-4" />
+                      </button>
                       <button onClick={() => toggleStatus(a)} disabled={togglingId === a.id}
                         className="size-8 rounded-lg hover:bg-muted/50 flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                         title={a.status === "active" ? "Pause" : "Resume"}>
