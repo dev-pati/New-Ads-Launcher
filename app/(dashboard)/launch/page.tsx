@@ -2659,7 +2659,7 @@ function CarouselAdsModal({
                         return (
                           <div key={card.creativeId} className="border rounded-lg p-2 flex gap-2">
                             <div className="size-14 rounded overflow-hidden bg-muted shrink-0 relative">
-                              {thumb ? <img src={thumb} className="w-full h-full object-cover" alt="" />
+                              {thumb ? <img src={thumb} className="w-full h-full object-cover" alt="" onError={e => e.currentTarget.style.display="none"} />
                                 : <div className="w-full h-full flex items-center justify-center"><IconPhoto className="size-4 text-muted-foreground/40" /></div>}
                               {c?.media_type === "video" && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/10 pointer-events-none">
@@ -3430,6 +3430,7 @@ function MediaArea({ thumb, creative, isVideo, aspect = "aspect-square", roundBo
           aria-hidden="true"
           className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60 pointer-events-none"
           alt=""
+          onError={e => e.currentTarget.style.display="none"}
         />
       )}
       <div className="relative w-full h-full z-10">
@@ -5327,7 +5328,7 @@ function LoadMediaModal({
                       <div className="flex items-center gap-2.5 min-w-0 pr-3">
                         <div className="size-9 rounded overflow-hidden bg-muted shrink-0 relative">
                           {m.thumbnail_url
-                            ? <img src={m.thumbnail_url} className="w-full h-full object-cover" alt="" />
+                            ? <img src={m.thumbnail_url} className="w-full h-full object-cover" alt="" onError={e => e.currentTarget.style.display="none"} />
                             : <div className="w-full h-full flex items-center justify-center"><IconPhoto className="size-4 text-muted-foreground/40" /></div>
                           }
                           {m.media_type === "video" && (
@@ -5582,7 +5583,7 @@ function LoadMediaModal({
                           </td>
                           <td className="px-2 py-2">
                             <div className="relative size-9 rounded overflow-hidden bg-muted">
-                              {ad.thumb_url ? <img src={ad.thumb_url} className="w-full h-full object-cover" alt="" />
+                              {ad.thumb_url ? <img src={ad.thumb_url} className="w-full h-full object-cover" alt="" onError={e => e.currentTarget.style.display="none"} />
                                 : <div className="w-full h-full flex items-center justify-center">
                                   {isVideo ? <IconVideo className="size-3.5 text-muted-foreground/40" /> : <IconPhoto className="size-3.5 text-muted-foreground/40" />}
                                 </div>}
@@ -10697,7 +10698,7 @@ function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
         </td>
         <td className="px-1 py-1.5 w-10">
           {ad.thumbnailUrl
-            ? <img src={ad.thumbnailUrl} className="size-8 rounded object-cover" />
+            ? <img src={ad.thumbnailUrl} className="size-8 rounded object-cover" onError={e => e.currentTarget.style.display="none"} />
             : <div className="size-8 rounded bg-muted flex items-center justify-center">{ad.mediaType === "video" ? <IconVideo className="size-3 text-muted-foreground" /> : <IconPhoto className="size-3 text-muted-foreground" />}</div>}
         </td>
         <td className="px-2 py-1.5 text-xs font-medium max-w-[140px] truncate" title={displayName}>{displayName}</td>
@@ -10984,7 +10985,7 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                             <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
                             <td className="px-1 py-1.5">
                               {createdAd?.thumbnailUrl
-                                ? <img src={createdAd.thumbnailUrl} className="size-8 rounded object-cover" />
+                                ? <img src={createdAd.thumbnailUrl} className="size-8 rounded object-cover" onError={e => e.currentTarget.style.display="none"} />
                                 : <div className="size-8 rounded bg-muted" />}
                             </td>
                             <td className="px-2 py-1.5 font-medium max-w-[140px] truncate" title={row.name}>{row.name}</td>
@@ -11125,7 +11126,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
               <div className="flex gap-2 flex-wrap">
                 {batch.creative_thumbs.map((thumb, i) => (
                   <div key={i} className="size-16 rounded-lg overflow-hidden bg-muted border shrink-0">
-                    {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" /> :
+                    {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" onError={e => e.currentTarget.style.display="none"} /> :
                       <div className="w-full h-full flex items-center justify-center"><IconVideo className="size-4 text-muted-foreground/40" /></div>}
                   </div>
                 ))}

@@ -396,8 +396,9 @@ function AdSetViewer({ cell }: { cell: CellBase | undefined }) {
 
 // Image preview viewer
 function ImageViewer({ cell }: { cell: CellBase | undefined }) {
+  const [failed, setFailed] = useState(false)
   const url = String(cell?.value || "")
-  if (!url) {
+  if (!url || failed) {
     return (
       <div className="flex h-full items-center justify-center">
         <IconPhoto className="size-5 text-muted-foreground" />
@@ -406,7 +407,7 @@ function ImageViewer({ cell }: { cell: CellBase | undefined }) {
   }
   return (
     <div className="flex h-full items-center justify-center">
-      <img src={url} alt="" className="size-9 rounded object-cover" />
+      <img src={url} alt="" className="size-9 rounded object-cover" onError={() => setFailed(true)} />
     </div>
   )
 }

@@ -974,9 +974,10 @@ export default function InspoPage() {
                                     selectedCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
                                   )}>
                                   {c.fb_thumbnail_url
-                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" />
-                                    : <div className="w-full h-full flex items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
+                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "flex") }} />
+                                    : null
                                   }
+                                  <div style={{ display: c.fb_thumbnail_url ? "none" : "flex" }} className="w-full h-full items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
                                   {selectedCreative?.id === c.id && (
                                     <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
                                       <IconCheck className="size-5 text-primary" />
@@ -1088,9 +1089,10 @@ export default function InspoPage() {
                                     genCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
                                   )}>
                                   {c.fb_thumbnail_url
-                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" />
-                                    : <div className="w-full h-full flex items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
+                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "flex") }} />
+                                    : null
                                   }
+                                  <div style={{ display: c.fb_thumbnail_url ? "none" : "flex" }} className="w-full h-full items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
                                   {genCreative?.id === c.id && (
                                     <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
                                       <IconCheck className="size-5 text-primary" />
