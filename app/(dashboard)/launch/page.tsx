@@ -59,7 +59,7 @@ interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "im
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
-interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string }
+interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean }
 interface CreatedAd { adId: string; adSetId: string; adSetName: string; creativeId?: string; fileName?: string; thumbnailUrl?: string | null; mediaType?: "image" | "video"; mode?: string; multiGroup?: string; flexibleAd?: string; carousel?: string }
 interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; pageName?: string; adAccountId: string; adAccountName: string; timestamp: string }
 interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[]; scheduled?: { at: string; end: string | null } | null; createdAds: CreatedAd[]; batchId?: string | null; launchMeta?: LaunchMeta }
@@ -11458,7 +11458,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
 
 function TableMode({
   rows, adSets, onAddRow, onUpdateRow, onDeleteRow, onDuplicateRow,
-  selectedPage, igAccountCache, selectedIgPageId, searchQuery,
+  selectedPage, igAccountCache, selectedIgPageId, searchQuery, launchAsActive,
 }: {
   rows: TableRow[]
   adSets: AdSet[]
@@ -11470,6 +11470,7 @@ function TableMode({
   igAccountCache: Record<string, IgAccount[]>
   selectedIgPageId: string
   searchQuery: string
+  launchAsActive: boolean
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedVar, setExpandedVar] = useState<Record<string, { primary: boolean; headline: boolean; description: boolean }>>({})
@@ -11575,6 +11576,10 @@ function TableMode({
                 </span>
               </th>
               <th className="w-20 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profile</th>
+              <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
+              <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
+              <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
+              <th className="w-24 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Launch Status</th>
               <th className="w-14 px-3 py-2.5" />
             </tr>
           </thead>
@@ -11854,6 +11859,66 @@ function TableMode({
                           <IconBrandInstagram className="size-3.5 text-muted-foreground/40" />
                         </div>
                       )}
+                    </div>
+                  </td>
+
+                  {/* CTA */}
+                  <td className="px-3 py-2">
+                    <Select
+                      value={row.cta || "__inherit__"}
+                      onValueChange={v => onUpdateRow(row.id, "cta", v === "__inherit__" ? undefined : v)}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-full">
+                        <SelectValue placeholder="From gallery" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__inherit__" className="text-xs text-muted-foreground">From gallery</SelectItem>
+                        {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </td>
+
+                  {/* LINK */}
+                  <td className="px-3 py-2">
+                    <textarea
+                      value={row.webLink || ""}
+                      onChange={e => onUpdateRow(row.id, "webLink", e.target.value)}
+                      placeholder="From gallery..."
+                      rows={2}
+                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 resize-none"
+                    />
+                  </td>
+
+                  {/* URL TAGS */}
+                  <td className="px-3 py-2">
+                    <textarea
+                      value={row.urlTags || ""}
+                      onChange={e => onUpdateRow(row.id, "urlTags", e.target.value)}
+                      placeholder="utm_source=fb..."
+                      rows={2}
+                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 resize-none"
+                    />
+                  </td>
+
+                  {/* LAUNCH STATUS */}
+                  <td className="px-3 pt-3 pb-2">
+                    <div className="flex flex-col items-start gap-1">
+                      <button
+                        onClick={() => onUpdateRow(row.id, "launchAsActive", row.launchAsActive === false ? true : row.launchAsActive === true ? false : !launchAsActive)}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
+                          (row.launchAsActive ?? launchAsActive) ? "bg-blue-500" : "bg-muted-foreground/30"
+                        )}
+                        title={(row.launchAsActive ?? launchAsActive) ? "Active" : "Paused"}
+                      >
+                        <span className={cn(
+                          "inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
+                          (row.launchAsActive ?? launchAsActive) ? "translate-x-[18px]" : "translate-x-0.5"
+                        )} />
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">
+                        {(row.launchAsActive ?? launchAsActive) ? "Active" : "Paused"}
+                      </span>
                     </div>
                   </td>
 
@@ -12988,6 +13053,109 @@ export default function LaunchPage() {
     })
   }
 
+  // Table mode: launch each row individually using per-row settings
+  const doTableLaunch = useCallback(async (scheduledTime?: string, scheduleEndTime?: string) => {
+    const validRows = tableRows.filter(r => r.creative?.id && r.adSetIds.length > 0)
+    if (!validRows.length) {
+      setError("No rows with both a creative and ad sets selected")
+      return
+    }
+
+    setLaunching(true)
+    setLaunchResult(null)
+    setError("")
+
+    let savedEnhancements: DefaultAdSettings["enhancements"] | undefined
+    let savedLaunchSettings: DefaultAdSettings["launch"] | undefined
+    try {
+      const raw = localStorage.getItem(`default_ad_settings_${selectedAccountId}`)
+      if (raw) {
+        const s: DefaultAdSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
+        savedEnhancements = s.enhancements
+        savedLaunchSettings = s.launch
+      }
+    } catch {}
+
+    const globalPrimaryText = primaryTexts.find(t => t.trim()) || ""
+    const globalHeadline = headlines.find(h => h.trim()) || ""
+
+    let totalCreated = 0
+    let totalFailed = 0
+    const allErrors: { adSetId: string; fileName: string; error: string }[] = []
+    const allCreatedAds: CreatedAd[] = []
+    let lastBatchId: string | null = null
+
+    for (const row of validRows) {
+      const rowLink = (row.webLink || webLink).trim()
+      const rowUtm = (row.urlTags || utmParams).trim()
+      const rowWebLink = rowUtm
+        ? `${rowLink}${rowLink.includes("?") ? "&" : "?"}${rowUtm}`
+        : rowLink
+
+      try {
+        const res = await fetch("/api/facebook/launch-direct", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            adAccountId: selectedAccountId,
+            adAccountName: selectedAccount?.name || selectedAccountId,
+            adSetIds: row.adSetIds,
+            adSetNames: row.adSetIds.map(id => allAdSets.find(a => a.id === id)?.name || id),
+            creativeIds: [row.creative!.id],
+            pageId: selectedPageId,
+            headline: (row.headline || globalHeadline).trim(),
+            primaryText: (row.primaryText || globalPrimaryText).trim(),
+            cta: row.cta || cta,
+            webLink: rowWebLink,
+            createPaused: row.launchAsActive !== undefined ? !row.launchAsActive : !launchAsActive,
+            startTime: scheduledTime,
+            endTime: scheduleEndTime,
+            enhancements: savedEnhancements,
+            launchSettings: savedLaunchSettings,
+          }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          totalCreated += data.created?.length ?? 0
+          totalFailed += data.errors?.length ?? 0
+          allErrors.push(...(data.errors || []))
+          allCreatedAds.push(...(data.created || []))
+          if (data.batchId) lastBatchId = data.batchId
+        } else {
+          totalFailed += row.adSetIds.length
+          allErrors.push({ adSetId: row.adSetIds[0] || "", fileName: row.creative?.file_name || "", error: data.error || "Launch failed" })
+        }
+      } catch (err: any) {
+        totalFailed += row.adSetIds.length
+        allErrors.push({ adSetId: row.adSetIds[0] || "", fileName: row.creative?.file_name || "", error: err.message || "Network error" })
+      }
+    }
+
+    const result: LaunchResult = {
+      created: totalCreated,
+      failed: totalFailed,
+      durationMs: 0,
+      errors: allErrors,
+      scheduled: scheduledTime ? { at: scheduledTime, end: scheduleEndTime || null } : null,
+      createdAds: allCreatedAds,
+      batchId: lastBatchId,
+      launchMeta: {
+        cta,
+        webLink: webLink.trim(),
+        headline: globalHeadline,
+        primaryText: globalPrimaryText,
+        pageId: selectedPageId || "",
+        pageName: pages.find(p => p.id === selectedPageId)?.name || "",
+        adAccountId: selectedAccountId || "",
+        adAccountName: selectedAccount?.name || selectedAccountId || "",
+        timestamp: new Date().toISOString(),
+      },
+    }
+    setLaunchResult(result)
+    setHistoryReload(n => n + 1)
+    setLaunching(false)
+  }, [tableRows, selectedAccountId, selectedAccount, selectedPageId, primaryTexts, headlines, cta, webLink, utmParams, launchAsActive, allAdSets, pages])
+
   const handleSheetsImport = useCallback((rows: ImportedRow[]) => {
     const newRows = rows.map(r => ({
       id: String(Date.now() + Math.random()),
@@ -12997,8 +13165,11 @@ export default function LaunchPage() {
       headline: r.headline,
       description: r.description,
       adSetIds: selectedAdSets.map((a: AdSet) => a.id),
-      cta: r.cta || cta,
-      webLink: r.webLink || webLink,
+      cta: r.cta || undefined,
+      webLink: r.webLink || undefined,
+      urlTags: r.urlTags || undefined,
+      promoCode: r.promoCode || undefined,
+      launchAsActive: r.launchAsActive,
     }))
     setTableRows(prev => {
       const hasContent = prev.some(r => r.creative || r.adName.trim() || r.primaryText.trim())
@@ -13646,6 +13817,7 @@ export default function LaunchPage() {
               igAccountCache={igAccountCache}
               selectedIgPageId={selectedIgPageId}
               searchQuery={tableSearchQuery}
+              launchAsActive={launchAsActive}
             />
 
             {error && (
@@ -13660,7 +13832,14 @@ export default function LaunchPage() {
               <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setScheduleModalOpen(true)}>
                 <IconCalendar className="size-3.5" />Schedule
               </Button>
-              <Button className="flex-1 gap-2 font-medium" onClick={() => doLaunch()} disabled={launching}>
+              <Button
+                className="flex-1 gap-2 font-medium"
+                onClick={() => {
+                  const hasRowCreatives = tableRows.some(r => r.creative?.id && r.adSetIds.length > 0)
+                  hasRowCreatives ? doTableLaunch() : doLaunch()
+                }}
+                disabled={launching}
+              >
                 {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
                 {launching ? "Launching..." : "Launch Ads"}
               </Button>

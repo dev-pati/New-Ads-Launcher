@@ -49,6 +49,9 @@ export interface ImportedRow {
   description: string
   cta: string
   webLink: string
+  urlTags: string
+  promoCode: string
+  launchAsActive: boolean | undefined
   creative: Creative | null
 }
 
@@ -61,27 +64,33 @@ interface Props {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-type FieldKey = "creative_url" | "ad_name" | "primary_text" | "headline" | "description" | "cta" | "web_link"
+type FieldKey = "creative_url" | "ad_name" | "primary_text" | "headline" | "description" | "cta" | "web_link" | "url_tags" | "promo_code" | "launch_status"
 
 const AD_FIELDS: Array<{ key: FieldKey; label: string }> = [
-  { key: "creative_url", label: "Creative (Drive URL)" },
-  { key: "ad_name",      label: "Ad Name" },
-  { key: "primary_text", label: "Primary Text" },
-  { key: "headline",     label: "Headline" },
-  { key: "description",  label: "Description" },
-  { key: "cta",          label: "CTA" },
-  { key: "web_link",     label: "Destination URL" },
+  { key: "creative_url",  label: "Creative (Drive URL)" },
+  { key: "ad_name",       label: "Ad Name" },
+  { key: "primary_text",  label: "Primary Text" },
+  { key: "headline",      label: "Headline" },
+  { key: "description",   label: "Description" },
+  { key: "cta",           label: "CTA" },
+  { key: "web_link",      label: "Link (Destination URL)" },
+  { key: "url_tags",      label: "URL Tags (UTM)" },
+  { key: "promo_code",    label: "Promo Code" },
+  { key: "launch_status", label: "Launch Status (active/paused)" },
 ]
 
 // Keyword patterns for auto-detect column → field mapping
 const AUTO_DETECT: Record<FieldKey, string[]> = {
-  creative_url: ["creative", "drive", "media", "image", "video", "file", "url creative", "creative url"],
-  ad_name:      ["ad name", "name", "tên", "tên quảng cáo", "ad title"],
-  primary_text: ["primary text", "body", "body copy", "text", "caption", "nội dung", "primary", "copy"],
-  headline:     ["headline", "title", "tiêu đề", "heading"],
-  description:  ["description", "mô tả", "desc"],
-  cta:          ["cta", "call to action", "button", "action"],
-  web_link:     ["url", "link", "destination", "website", "web link", "landing", "web"],
+  creative_url:  ["creative", "drive", "media", "image", "video", "file", "url creative", "creative url"],
+  ad_name:       ["ad name", "name", "tên", "tên quảng cáo", "ad title"],
+  primary_text:  ["primary text", "body", "body copy", "text", "caption", "nội dung", "primary", "copy"],
+  headline:      ["headline", "title", "tiêu đề", "heading"],
+  description:   ["description", "mô tả", "desc"],
+  cta:           ["cta", "call to action", "button", "action"],
+  web_link:      ["link", "destination", "website", "web link", "landing", "web url", "url"],
+  url_tags:      ["url tags", "utm", "url parameters", "tracking", "tags", "query"],
+  promo_code:    ["promo", "promo code", "coupon", "discount code", "offer code"],
+  launch_status: ["status", "launch status", "active", "paused", "trạng thái"],
 }
 
 function autoDetect(headers: string[]): Record<FieldKey, number | null> {
@@ -158,6 +167,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
   const [mapping, setMapping] = useState<Record<FieldKey, number | null>>({
     creative_url: null, ad_name: null, primary_text: null,
     headline: null, description: null, cta: null, web_link: null,
+    url_tags: null, promo_code: null, launch_status: null,
   })
 
   // Step 3: selection + import
@@ -331,13 +341,23 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
         }
       }
 
+      // Parse launch_status: "active"/"paused"/"true"/"false"/1/0
+      const launchStatusRaw = getCell(row, mapping.launch_status).toLowerCase()
+      let launchAsActive: boolean | undefined = undefined
+      if (launchStatusRaw) {
+        launchAsActive = ["active", "true", "1", "yes", "on"].includes(launchStatusRaw)
+      }
+
       results.push({
-        adName:      getCell(row, mapping.ad_name),
-        primaryText: getCell(row, mapping.primary_text),
-        headline:    getCell(row, mapping.headline),
-        description: getCell(row, mapping.description),
-        cta:         getCell(row, mapping.cta),
-        webLink:     getCell(row, mapping.web_link),
+        adName:       getCell(row, mapping.ad_name),
+        primaryText:  getCell(row, mapping.primary_text),
+        headline:     getCell(row, mapping.headline),
+        description:  getCell(row, mapping.description),
+        cta:          getCell(row, mapping.cta).toUpperCase().replace(/ /g, "_") || "",
+        webLink:      getCell(row, mapping.web_link),
+        urlTags:      getCell(row, mapping.url_tags),
+        promoCode:    getCell(row, mapping.promo_code),
+        launchAsActive,
         creative,
       })
 
