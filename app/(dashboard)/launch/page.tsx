@@ -49,6 +49,7 @@ import {
   IconSparkles,
 } from "@tabler/icons-react"
 import { CreativeCardMedia } from "@/components/creative-card-media"
+import { SheetsImportDialog, type ImportedRow } from "@/components/sheets-import-dialog"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12054,6 +12055,7 @@ export default function LaunchPage() {
   ])
   const [allAdSets, setAllAdSets] = useState<AdSet[]>([])
 
+  const [sheetsImportOpen, setSheetsImportOpen] = useState(false)
   const [mediaModalOpen, setMediaModalOpen] = useState(false)
   // Increment to force LoadMediaModal Library tab to re-fetch (used after a new upload completes)
   const [mediaRefreshSignal, setMediaRefreshSignal] = useState(0)
@@ -12986,6 +12988,25 @@ export default function LaunchPage() {
     })
   }
 
+  const handleSheetsImport = useCallback((rows: ImportedRow[]) => {
+    const newRows = rows.map(r => ({
+      id: String(Date.now() + Math.random()),
+      creative: r.creative,
+      adName: r.adName,
+      primaryText: r.primaryText,
+      headline: r.headline,
+      description: r.description,
+      adSetIds: selectedAdSets.map((a: AdSet) => a.id),
+      cta: r.cta || cta,
+      webLink: r.webLink || webLink,
+    }))
+    setTableRows(prev => {
+      const hasContent = prev.some(r => r.creative || r.adName.trim() || r.primaryText.trim())
+      return hasContent ? [...prev, ...newRows] : newRows
+    })
+    setMode("table")
+  }, [selectedAdSets, cta, webLink])
+
   const exportTableCSV = () => {
     const headers = ["Ad Name", "Primary Text", "Headline", "Description", "Ad Sets", "CTA", "Web Link"]
     const csv = [
@@ -13598,6 +13619,9 @@ export default function LaunchPage() {
                       <button onClick={() => { exportTableCSV(); setTableMoreOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2">
                         <IconDownload className="size-3.5" />Export CSV
                       </button>
+                      <button onClick={() => { setSheetsImportOpen(true); setTableMoreOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2">
+                        <IconTable className="size-3.5 text-emerald-600" />Import from Google Sheets
+                      </button>
                       <button onClick={() => { syncTableFromGallery(); setTableMoreOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors flex items-center gap-2">
                         <IconRefresh className="size-3.5" />Sync from Gallery
                       </button>
@@ -13645,6 +13669,13 @@ export default function LaunchPage() {
         )}
 
       </div>
+
+      <SheetsImportDialog
+        open={sheetsImportOpen}
+        onOpenChange={setSheetsImportOpen}
+        adAccountId={selectedAccountId || ""}
+        onImport={handleSheetsImport}
+      />
     </>
   )
 }
