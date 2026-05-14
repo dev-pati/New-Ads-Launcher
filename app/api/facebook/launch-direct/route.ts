@@ -466,11 +466,7 @@ export async function POST(request: NextRequest) {
       .map((c: any) => c.fb_thumbnail_url || c.fb_image_url || c.file_url || null)
       .filter(Boolean) as string[]
 
-    // Get user display name
-    const { data: profile } = await supabase.auth.getUser()
-    const userName = profile?.user?.user_metadata?.full_name
-      || profile?.user?.email?.split("@")[0]
-      || "Unknown"
+    const userName = ctx.user.full_name || ctx.user.email?.split("@")[0] || "Unknown"
 
     const adminDb = createAdminClient()
     const { data: batchRecord, error: batchErr } = await adminDb.from("launch_batches").insert({

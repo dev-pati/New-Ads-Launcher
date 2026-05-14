@@ -265,7 +265,7 @@ export default function AssetsPage() {
   useEffect(() => { loadBoards() }, [loadBoards])
 
   useEffect(() => {
-    createClient().auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null))
+    fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => setCurrentUserId(d?.user?.id || null))
     const stored = localStorage.getItem("assets_saved_searches")
     if (stored) setSavedSearches(JSON.parse(stored))
   }, [])

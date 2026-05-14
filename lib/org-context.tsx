@@ -1,7 +1,6 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
 
 interface Org {
   id: string
@@ -40,25 +39,19 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const fetchOrgs = useCallback(async () => {
-    const supabase = createClient()
-    const { data: { session } } = await supabase.auth.getSession()
-    const user = session?.user
-    if (!user) {
+    const res = await fetch("/api/orgs")
+    if (!res.ok) {
       setLoading(false)
       return
     }
+    const { orgs: data } = await res.json()
 
-    const { data: memberships } = await supabase
-      .from("org_members")
-      .select("role, org:organizations(id, name, slug)")
-      .eq("user_id", user.id)
-
-    if (memberships && memberships.length > 0) {
-      const orgList = memberships.map((m: any) => ({
-        id: m.org.id,
-        name: m.org.name,
-        slug: m.org.slug,
-        role: m.role,
+    if (data && data.length > 0) {
+      const orgList: Org[] = data.map((o: any) => ({
+        id: o.id,
+        name: o.name,
+        slug: o.slug,
+        role: o.role,
       }))
       setOrgs(orgList)
 
@@ -78,6 +71,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
 
     setLoading(false)
   }, [])
+
 
   useEffect(() => {
     fetchOrgs()

@@ -3,7 +3,6 @@
 import { Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -34,20 +33,15 @@ function RegisterForm() {
     setError("")
     setLoading(true)
 
-    const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          invite_token: inviteToken || undefined,
-        },
-      },
+    const res = await fetch("/api/auth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, password, fullName, inviteToken }),
     })
 
-    if (error) {
-      setError(error.message)
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      setError(data?.error || "Unable to create account")
       setLoading(false)
       return
     }
@@ -60,8 +54,8 @@ function RegisterForm() {
       }
     }
 
-    setSuccess(true)
-    setLoading(false)
+    router.push("/projects")
+    router.refresh()
   }
 
   if (success) {
@@ -76,8 +70,7 @@ function RegisterForm() {
             <CardHeader>
               <CardTitle>Check your email</CardTitle>
               <CardDescription>
-                We&apos;ve sent a confirmation link to <strong>{email}</strong>.
-                Click the link to activate your account.
+                Your account has been created.
                 {inviteToken && " After confirming, you'll be added to the organization."}
               </CardDescription>
             </CardHeader>

@@ -555,15 +555,12 @@ export default function AdsManagerPage() {
 
   useEffect(() => {
     async function getUser() {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const res = await fetch("/api/auth/me")
+      if (!res.ok) return
+      const { user } = await res.json()
       if (user) {
         setUserId(user.id)
-        setUserName(
-          user.user_metadata?.full_name || user.email?.split("@")[0] || "User"
-        )
+        setUserName(user.full_name || user.email?.split("@")[0] || "User")
       }
     }
     getUser()

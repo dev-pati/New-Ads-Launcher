@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -28,8 +27,8 @@ function AcceptInviteContent() {
     }
 
     async function acceptInvite() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const res = await fetch("/api/auth/me")
+      const { user } = res.ok ? await res.json() : { user: null }
 
       if (!user) {
         // Not logged in - redirect to register with invite token

@@ -1,13 +1,12 @@
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+import { getSessionAccount } from "@/lib/custom-auth"
 import { cookies } from "next/headers"
 
 /**
  * Get the authenticated Supabase user.
  */
 export async function getAuthUser() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
+  return getSessionAccount()
 }
 
 /**
@@ -21,7 +20,7 @@ export async function getAuthContext() {
   const cookieStore = await cookies()
   const orgIdFromCookie = cookieStore.get("active_org_id")?.value
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   if (orgIdFromCookie) {
     // Verify user is member of this org
@@ -56,7 +55,7 @@ export async function getAuthContext() {
  * Get the Facebook access token for the org.
  */
 export async function getFacebookConnection(orgId: string) {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from("facebook_connections")
     .select("id, fb_user_id, fb_user_name, fb_picture_url, access_token, token_expires_at")

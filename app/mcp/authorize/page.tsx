@@ -2,7 +2,6 @@
 
 import { useEffect, useState, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   IconBolt,
@@ -35,14 +34,14 @@ function AuthorizeContent() {
 
   useEffect(() => {
     async function checkAuth() {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+      const res = await fetch("/api/auth/me")
+      if (!res.ok) {
         const returnUrl = encodeURIComponent(window.location.href)
         router.push(`/auth/login?redirect=${returnUrl}`)
         return
       }
-      setUser(session.user)
+      const { user: me } = await res.json()
+      setUser(me)
       setLoading(false)
     }
     checkAuth()

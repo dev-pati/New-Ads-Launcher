@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { createClient, getUserIdFromClientToken } from "@/lib/supabase/client"
 
 export type AppNotification = {
   id: string
@@ -42,38 +42,35 @@ export function useNotifications() {
     let channel: ReturnType<typeof supabase.channel> | null = null
     let mounted = true
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return
-      const userId = session?.user?.id
-      if (!userId) return
+    const userId = getUserIdFromClientToken()
+    if (!mounted || !userId) return
 
-      // Channel name includes userId so multiple tabs share the same logical channel
-      // without conflicting with other users' channels.
-      channel = supabase
-        .channel(`notifs-${userId}`)
-        .on(
-          "postgres_changes",
-          { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
-          (payload) => {
-            const n = payload.new as AppNotification
-            setNotifications(prev => {
-              if (prev.some(x => x.id === n.id)) return prev
-              return [n, ...prev].slice(0, 30)
-            })
-          }
-        )
-        .on(
-          "postgres_changes",
-          { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
-          (payload) => {
-            const updated = payload.new as AppNotification
-            setNotifications(prev =>
-              prev.map(x => x.id === updated.id ? { ...x, ...updated } : x)
-            )
-          }
-        )
-        .subscribe()
-    })
+    const dbSchema = process.env.NEXT_PUBLIC_SUPABASE_DB_SCHEMA || "ads_launcher"
+
+    channel = supabase
+      .channel(`notifs-${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: dbSchema, table: "notifications", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const n = payload.new as AppNotification
+          setNotifications(prev => {
+            if (prev.some(x => x.id === n.id)) return prev
+            return [n, ...prev].slice(0, 30)
+          })
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: dbSchema, table: "notifications", filter: `user_id=eq.${userId}` },
+        (payload) => {
+          const updated = payload.new as AppNotification
+          setNotifications(prev =>
+            prev.map(x => x.id === updated.id ? { ...x, ...updated } : x)
+          )
+        }
+      )
+      .subscribe()
 
     return () => {
       mounted = false

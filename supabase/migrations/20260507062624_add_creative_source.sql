@@ -1,0 +1,1 @@
+-- creative_source column was planned but not implemented; this migration is intentionally empty.

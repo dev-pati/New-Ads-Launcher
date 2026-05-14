@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -53,12 +52,12 @@ export default function HomePage() {
 
   useEffect(() => {
     async function init() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const me = await fetch("/api/auth/me")
+      const { user } = me.ok ? await me.json() : { user: null }
 
       if (user) {
         setUser({
-          name: user.user_metadata?.full_name || user.email?.split("@")[0],
+          name: user.full_name || user.email?.split("@")[0],
           email: user.email,
         })
       }
@@ -107,8 +106,7 @@ export default function HomePage() {
   }
 
   const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    await fetch("/api/auth/logout", { method: "POST" })
     router.push("/auth/login")
   }
 

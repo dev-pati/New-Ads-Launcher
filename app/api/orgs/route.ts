@@ -9,7 +9,7 @@ export async function GET() {
     const user = await getAuthUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data } = await supabase
       .from("org_members")
       .select("role, org:organizations(id, name, slug, created_at)")

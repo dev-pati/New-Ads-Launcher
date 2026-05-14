@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
-import { createClient } from "@/lib/supabase/client"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { OrgProvider, useOrg } from "@/lib/org-context"
 import { AdAccountProvider } from "@/lib/ad-account-context"
@@ -50,11 +49,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     async function getUser() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
+      const res = await fetch("/api/auth/me")
+      if (res.ok) {
+        const { user } = await res.json()
         setUser({
-          name: user.user_metadata?.full_name || user.email?.split("@")[0],
+          name: user.full_name || user.email?.split("@")[0],
           email: user.email,
         })
       }

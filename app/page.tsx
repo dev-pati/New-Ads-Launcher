@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase/client"
 import {
   IconRocket,
   IconBolt,
@@ -25,8 +24,8 @@ export default function LandingPage() {
 
   useEffect(() => {
     async function checkAuth() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
+      const res = await fetch("/api/auth/me")
+      const { user } = res.ok ? await res.json() : { user: null }
       setIsSignedIn(!!user)
     }
     checkAuth()

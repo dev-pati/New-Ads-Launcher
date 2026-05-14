@@ -12,7 +12,15 @@ export function createAdminClient() {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set')
   }
 
+  const cfHeaders: Record<string, string> = {}
+  const cfId = process.env.CF_ACCESS_CLIENT_ID
+  const cfSecret = process.env.CF_ACCESS_CLIENT_SECRET
+  if (cfId) cfHeaders["CF-Access-Client-Id"] = cfId
+  if (cfSecret) cfHeaders["CF-Access-Client-Secret"] = cfSecret
+
   return createClient(url, serviceRoleKey, {
     auth: { persistSession: false },
+    db: { schema: process.env.NEXT_PUBLIC_SUPABASE_DB_SCHEMA || "ads_launcher" },
+    global: Object.keys(cfHeaders).length ? { headers: cfHeaders } : undefined,
   })
 }

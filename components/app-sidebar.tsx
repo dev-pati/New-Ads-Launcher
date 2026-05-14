@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { useOrg } from "@/lib/org-context"
 import { useTheme } from "next-themes"
 import { useUserSettings } from "@/hooks/use-user-settings"
@@ -146,8 +145,7 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
   }, [settings?.theme, setTheme])
 
   const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    await fetch("/api/auth/logout", { method: "POST" })
     router.push("/auth/login")
     router.refresh()
   }
