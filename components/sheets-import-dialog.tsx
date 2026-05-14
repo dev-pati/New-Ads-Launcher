@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useMemo } from "react"
 import {
   Dialog,
   DialogContent,
@@ -25,6 +25,8 @@ import {
   IconAlertCircle,
   IconFileSpreadsheet,
   IconLink,
+  IconArrowsMaximize,
+  IconArrowsMinimize,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 
@@ -175,6 +177,37 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 })
   const [importError, setImportError] = useState("")
+  const [tableExpanded, setTableExpanded] = useState(false)
+  const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set())
+
+  // Drag-to-scroll
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const dragState = useRef({ dragging: false, startX: 0, scrollLeft: 0 })
+
+  const onMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = tableScrollRef.current
+    if (!el) return
+    dragState.current = { dragging: true, startX: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft }
+    el.style.cursor = "grabbing"
+    el.style.userSelect = "none"
+  }, [])
+
+  const onMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!dragState.current.dragging) return
+    const el = tableScrollRef.current
+    if (!el) return
+    const x = e.pageX - el.offsetLeft
+    const walk = (x - dragState.current.startX) * 1.2
+    el.scrollLeft = dragState.current.scrollLeft - walk
+  }, [])
+
+  const onMouseUp = useCallback(() => {
+    dragState.current.dragging = false
+    if (tableScrollRef.current) {
+      tableScrollRef.current.style.cursor = "grab"
+      tableScrollRef.current.style.userSelect = ""
+    }
+  }, [])
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
@@ -383,6 +416,8 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
     setSelectedRows(new Set())
     setImporting(false)
     setImportError("")
+    setTableExpanded(false)
+    setExpandedCells(new Set())
     onOpenChange(false)
   }, [onOpenChange])
 
@@ -604,37 +639,75 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                     </button>
                   </div>
 
-                  <div className="border rounded-xl overflow-x-auto">
-                    <table className="w-full text-xs">
+                  {/* Table toolbar */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      {previewCols.length} column{previewCols.length !== 1 ? "s" : ""} mapped
+                      {tableExpanded ? " · expanded" : " · compact"}
+                    </span>
+                    <button
+                      onClick={() => setTableExpanded(v => !v)}
+                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted/50"
+                      title={tableExpanded ? "Compact view" : "Expand cells"}
+                    >
+                      {tableExpanded
+                        ? <><IconArrowsMinimize className="size-3" />Compact</>
+                        : <><IconArrowsMaximize className="size-3" />Expand</>
+                      }
+                    </button>
+                  </div>
+
+                  <div
+                    ref={tableScrollRef}
+                    className="border rounded-xl overflow-x-auto select-none"
+                    style={{ cursor: "grab" }}
+                    onMouseDown={onMouseDown}
+                    onMouseMove={onMouseMove}
+                    onMouseUp={onMouseUp}
+                    onMouseLeave={onMouseUp}
+                  >
+                    <table className="text-xs border-collapse" style={{ minWidth: "max-content" }}>
                       <thead>
                         <tr className="border-b bg-muted/50">
-                          <th className="w-8 px-3 py-2.5 text-left">
+                          {/* Sticky checkbox + # */}
+                          <th className="sticky left-0 z-10 bg-muted/50 w-8 px-3 py-2.5 text-left border-r border-border/40">
                             <input
                               type="checkbox"
                               checked={selectedRows.size === rawRows.length && rawRows.length > 0}
                               onChange={toggleAll}
+                              onClick={e => e.stopPropagation()}
                               className="rounded"
                             />
                           </th>
-                          <th className="px-2 py-2.5 text-left font-semibold text-muted-foreground w-6 shrink-0">#</th>
+                          <th className="sticky left-8 z-10 bg-muted/50 px-2 py-2.5 text-left font-semibold text-muted-foreground border-r border-border/40 w-8">#</th>
                           {previewCols.map(f => (
-                            <th key={f.key} className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap">
+                            <th
+                              key={f.key}
+                              className="px-3 py-2.5 text-left font-semibold text-muted-foreground whitespace-nowrap border-r border-border/20 last:border-r-0"
+                              style={{ minWidth: tableExpanded ? 240 : 160 }}
+                            >
                               {f.label}
                             </th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {rawRows.slice(0, 100).map((row, i) => (
+                        {rawRows.slice(0, 200).map((row, i) => (
                           <tr
                             key={i}
                             onClick={() => toggleRow(i)}
                             className={cn(
-                              "border-b last:border-0 cursor-pointer transition-colors",
-                              selectedRows.has(i) ? "bg-primary/4" : "hover:bg-muted/30"
+                              "border-b last:border-0 cursor-pointer transition-colors group",
+                              selectedRows.has(i) ? "bg-primary/[0.04]" : "hover:bg-muted/30"
                             )}
                           >
-                            <td className="px-3 py-2">
+                            {/* Sticky checkbox */}
+                            <td
+                              className={cn(
+                                "sticky left-0 z-10 px-3 py-2 border-r border-border/40",
+                                selectedRows.has(i) ? "bg-primary/[0.04]" : "bg-background group-hover:bg-muted/30"
+                              )}
+                            >
                               <input
                                 type="checkbox"
                                 checked={selectedRows.has(i)}
@@ -643,18 +716,55 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                                 className="rounded"
                               />
                             </td>
-                            <td className="px-2 py-2 text-muted-foreground">{i + 1}</td>
+                            {/* Sticky row number */}
+                            <td
+                              className={cn(
+                                "sticky left-8 z-10 px-2 py-2 text-muted-foreground border-r border-border/40 text-center",
+                                selectedRows.has(i) ? "bg-primary/[0.04]" : "bg-background group-hover:bg-muted/30"
+                              )}
+                            >
+                              {i + 1}
+                            </td>
                             {previewCols.map(f => {
                               const val = mapping[f.key] !== null ? String(row[mapping[f.key]!] ?? "").trim() : ""
+                              const cellKey = `${i}-${f.key}`
+                              const isExpanded = expandedCells.has(cellKey)
                               return (
-                                <td key={f.key} className="px-3 py-2 max-w-[180px]">
-                                  {f.key === "creative_url" && val ? (
-                                    <span className="text-primary truncate block max-w-[160px]" title={val}>
-                                      {val.length > 30 ? val.slice(0, 30) + "…" : val}
+                                <td
+                                  key={f.key}
+                                  className="px-3 py-2 border-r border-border/20 last:border-r-0 align-top"
+                                  style={{ minWidth: tableExpanded ? 240 : 160 }}
+                                  onClick={e => {
+                                    e.stopPropagation()
+                                    setExpandedCells(prev => {
+                                      const next = new Set(prev)
+                                      next.has(cellKey) ? next.delete(cellKey) : next.add(cellKey)
+                                      return next
+                                    })
+                                  }}
+                                >
+                                  {!val ? (
+                                    <span className="text-muted-foreground/40 italic text-[11px]">—</span>
+                                  ) : f.key === "creative_url" ? (
+                                    <span
+                                      className={cn(
+                                        "text-primary text-[11px] cursor-pointer",
+                                        !isExpanded && !tableExpanded && "block truncate"
+                                      )}
+                                      style={!isExpanded && !tableExpanded ? { maxWidth: 150 } : undefined}
+                                      title={val}
+                                    >
+                                      {val}
                                     </span>
                                   ) : (
-                                    <span className={cn("block truncate max-w-[160px]", !val && "text-muted-foreground italic")} title={val}>
-                                      {val || "—"}
+                                    <span
+                                      className={cn(
+                                        "text-[11px] leading-relaxed cursor-pointer",
+                                        !isExpanded && !tableExpanded && "line-clamp-2"
+                                      )}
+                                      title={!isExpanded && !tableExpanded ? val : undefined}
+                                    >
+                                      {val}
                                     </span>
                                   )}
                                 </td>
@@ -664,9 +774,9 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                         ))}
                       </tbody>
                     </table>
-                    {rawRows.length > 100 && (
+                    {rawRows.length > 200 && (
                       <div className="px-4 py-2 text-xs text-muted-foreground border-t bg-muted/30">
-                        Showing first 100 of {rawRows.length} rows
+                        Showing first 200 of {rawRows.length} rows
                       </div>
                     )}
                   </div>
