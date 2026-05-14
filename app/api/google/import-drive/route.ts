@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 // POST /api/google/import-drive
 // Downloads a file from Google Drive using the user's OAuth token,
@@ -79,10 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Save creative to Supabase
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    )
+    const supabase = createAdminClient()
     const { data: creative, error: insertError } = await supabase
       .from("creatives")
       .insert({
