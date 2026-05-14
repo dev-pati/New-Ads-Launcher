@@ -12638,10 +12638,26 @@ export default function LaunchPage() {
   // Fetch pages 1 lần khi mount — cache 10 min in sessionStorage to avoid rate limits
   const [pagesError, setPagesError] = useState<string>("")
   const [needsReconnect, setNeedsReconnect] = useState(false)
-  const PAGES_CACHE_KEY = "fb_pages_cache"
-  const PAGES_CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+  const PAGES_CACHE_KEY    = "fb_pages_cache"
+  const PAGES_CACHE_TTL    = 10 * 60 * 1000 // 10 minutes
+  const PAGES_RL_KEY       = "fb_pages_ratelimit"
+  const PAGES_RL_COOLDOWN  = 5 * 60 * 1000  // 5 minutes — don't re-hit after 429
   useEffect(() => {
-    // Try cache first
+    // Respect active rate-limit cooldown (avoids hammering Facebook on rapid refreshes)
+    try {
+      const rl = sessionStorage.getItem(PAGES_RL_KEY)
+      if (rl) {
+        const since = Date.now() - parseInt(rl, 10)
+        if (since < PAGES_RL_COOLDOWN) {
+          const remaining = Math.ceil((PAGES_RL_COOLDOWN - since) / 1000 / 60)
+          setPagesError(`Facebook API rate limit active. Try again in ~${remaining} min.`)
+          return
+        }
+        sessionStorage.removeItem(PAGES_RL_KEY)
+      }
+    } catch {}
+
+    // Try page cache first
     try {
       const cached = sessionStorage.getItem(PAGES_CACHE_KEY)
       if (cached) {
@@ -12659,8 +12675,8 @@ export default function LaunchPage() {
         const d = await r.json().catch(() => ({}))
         if (!r.ok || d.error) {
           console.error(`[pages] API ${r.status}:`, d.error || r.statusText)
-          // Special handling for rate limit
-          if (/request limit|rate limit|too many|#4/i.test(d.error || "")) {
+          if (r.status === 429 || d.rateLimited || /request limit|rate limit|too many|#4/i.test(d.error || "")) {
+            try { sessionStorage.setItem(PAGES_RL_KEY, String(Date.now())) } catch {}
             setPagesError("Facebook API rate limit reached. Please wait 5-10 minutes and refresh.")
           } else {
             setPagesError(d.error || `HTTP ${r.status}`)
