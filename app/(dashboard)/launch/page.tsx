@@ -11243,6 +11243,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [resultModal, setResultModal] = useState<LaunchResult | null>(null)
+  const [displayCount, setDisplayCount] = useState(10)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -11256,6 +11257,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
   }, [statusFilter])
 
   useEffect(() => { load() }, [load, reloadTrigger])
+  useEffect(() => { setDisplayCount(10) }, [search, statusFilter])
 
   const filtered = batches.filter(b => {
     if (!search) return true
@@ -11367,74 +11369,85 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
           <div className="flex items-center justify-center py-10 text-xs text-muted-foreground/50">
             No launches yet
           </div>
-        ) : filtered.map(b => (
-          <div key={b.id}
-            className="grid items-center px-4 py-2 border-b text-sm hover:bg-muted/20 transition-colors"
-            style={{ gridTemplateColumns: "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+        ) : <>
+          {filtered.slice(0, displayCount).map(b => (
+            <div key={b.id}
+              className="grid items-center px-4 py-2 border-b text-sm hover:bg-muted/20 transition-colors"
+              style={{ gridTemplateColumns: "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
 
-            {/* Creatives */}
-            <ThumbStack thumbs={b.creative_thumbs || []} count={b.creative_ids?.length || 0} />
+              {/* Creatives */}
+              <ThumbStack thumbs={b.creative_thumbs || []} count={b.creative_ids?.length || 0} />
 
-            {/* Ad Sets */}
-            <span className="text-xs text-muted-foreground truncate pr-2">
-              {b.adset_names?.slice(0, 2).join(", ")}
-              {(b.adset_names?.length || 0) > 2 && ` +${(b.adset_names?.length || 0) - 2}`}
-            </span>
+              {/* Ad Sets */}
+              <span className="text-xs text-muted-foreground truncate pr-2">
+                {b.adset_names?.slice(0, 2).join(", ")}
+                {(b.adset_names?.length || 0) > 2 && ` +${(b.adset_names?.length || 0) - 2}`}
+              </span>
 
-            {/* Account */}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <IconBrandMeta className="size-3.5 text-[#1877F2] shrink-0" />
-              <span className="text-xs text-muted-foreground truncate">{b.ad_account_name || b.ad_account_id}</span>
+              {/* Account */}
+              <div className="flex items-center gap-1.5 min-w-0">
+                <IconBrandMeta className="size-3.5 text-[#1877F2] shrink-0" />
+                <span className="text-xs text-muted-foreground truncate">{b.ad_account_name || b.ad_account_id}</span>
+              </div>
+
+              {/* Ads count */}
+              <span className="text-xs font-medium">{b.total_ads}</span>
+
+              {/* AdSets count */}
+              <span className="text-xs font-medium">{b.adset_ids?.length || 0}</span>
+
+              {/* Date */}
+              <span className="text-xs text-muted-foreground">{formatDate(b.created_at)}</span>
+
+              {/* User */}
+              <div className="flex items-center gap-1.5">
+                <UserAvatar name={b.user_name || "?"} />
+                <span className="text-xs text-muted-foreground truncate">{b.user_name}</span>
+              </div>
+
+              {/* Time taken */}
+              <span className="text-xs text-muted-foreground">
+                {b.duration_ms ? formatDuration(b.duration_ms) : "—"}
+              </span>
+
+              {/* Status */}
+              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold w-fit",
+                b.status === "success" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                b.status === "partial" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400")}>
+                {b.status === "success" ? "Success" : b.status === "partial" ? "Partial" : "Failed"}
+              </span>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-6 text-xs gap-0.5 px-2"
+                  onClick={() => openDetails(b)}
+                >
+                  Details
+                </Button>
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                  title="Re-launch this batch"
+                  onClick={() => onRelaunch(b)}
+                >
+                  <IconRocket className="size-3" />
+                </Button>
+              </div>
             </div>
-
-            {/* Ads count */}
-            <span className="text-xs font-medium">{b.total_ads}</span>
-
-            {/* AdSets count */}
-            <span className="text-xs font-medium">{b.adset_ids?.length || 0}</span>
-
-            {/* Date */}
-            <span className="text-xs text-muted-foreground">{formatDate(b.created_at)}</span>
-
-            {/* User */}
-            <div className="flex items-center gap-1.5">
-              <UserAvatar name={b.user_name || "?"} />
-              <span className="text-xs text-muted-foreground truncate">{b.user_name}</span>
-            </div>
-
-            {/* Time taken */}
-            <span className="text-xs text-muted-foreground">
-              {b.duration_ms ? formatDuration(b.duration_ms) : "—"}
-            </span>
-
-            {/* Status */}
-            <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold w-fit",
-              b.status === "success" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-              b.status === "partial" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
-              "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400")}>
-              {b.status === "success" ? "Success" : b.status === "partial" ? "Partial" : "Failed"}
-            </span>
-
-            {/* Actions */}
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost" size="sm"
-                className="h-6 text-xs gap-0.5 px-2"
-                onClick={() => openDetails(b)}
-              >
-                Details
+          ))}
+          {displayCount < filtered.length && (
+            <div className="flex justify-center py-3 border-t">
+              <Button variant="ghost" size="sm" className="text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+                onClick={() => setDisplayCount(c => c + 15)}>
+                <IconChevronDown className="size-3.5" />
+                Load more ({filtered.length - displayCount} more)
               </Button>
-              <Button
-                variant="ghost" size="sm"
-                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                title="Re-launch this batch"
-                onClick={() => onRelaunch(b)}
-              >
-                <IconRocket className="size-3" />
-              </Button>
             </div>
-          </div>
-        ))}
+          )}
+        </>}
       </div>
     </div>
   )
