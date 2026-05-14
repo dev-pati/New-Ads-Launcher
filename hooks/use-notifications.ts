@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { createClient, getUserIdFromClientToken } from "@/lib/supabase/client"
+import { createClient } from "@/lib/supabase/client"
 
 export type AppNotification = {
   id: string
@@ -34,49 +34,6 @@ export function useNotifications() {
   useEffect(() => {
     fetchNotifications()
   }, [fetchNotifications])
-
-  // Realtime — mount guard prevents React StrictMode double-invoke from subscribing
-  // to an already-subscribed channel (which would throw "cannot add callbacks after subscribe")
-  useEffect(() => {
-    const supabase = createClient()
-    let channel: ReturnType<typeof supabase.channel> | null = null
-    let mounted = true
-
-    const userId = getUserIdFromClientToken()
-    if (!mounted || !userId) return
-
-    const dbSchema = process.env.NEXT_PUBLIC_SUPABASE_DB_SCHEMA || "ads_launcher"
-
-    channel = supabase
-      .channel(`notifs-${userId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: dbSchema, table: "notifications", filter: `user_id=eq.${userId}` },
-        (payload) => {
-          const n = payload.new as AppNotification
-          setNotifications(prev => {
-            if (prev.some(x => x.id === n.id)) return prev
-            return [n, ...prev].slice(0, 30)
-          })
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: dbSchema, table: "notifications", filter: `user_id=eq.${userId}` },
-        (payload) => {
-          const updated = payload.new as AppNotification
-          setNotifications(prev =>
-            prev.map(x => x.id === updated.id ? { ...x, ...updated } : x)
-          )
-        }
-      )
-      .subscribe()
-
-    return () => {
-      mounted = false
-      if (channel) supabase.removeChannel(channel)
-    }
-  }, [])
 
   const markRead = useCallback(async (id: string) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n))
