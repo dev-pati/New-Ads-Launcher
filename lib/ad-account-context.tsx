@@ -7,6 +7,9 @@ interface AdAccount {
   account_id: string
   name: string
   currency: string
+  account_status?: number
+  amount_spent?: string
+  balance?: string
 }
 
 interface AdAccountContextType {

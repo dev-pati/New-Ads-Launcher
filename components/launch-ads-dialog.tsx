@@ -207,13 +207,28 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
         }
       })
 
-    fetch("/api/facebook/pages")
-      .then((r) => r.json())
-      .then((d) => {
-        const pl = d.pages || []
-        setPages(pl)
-        if (pl.length > 0) setSelectedPageId(pl[0].id)
-      })
+    // Check shared sessionStorage cache before fetching pages
+    ;(async () => {
+      try {
+        const cached = sessionStorage.getItem("fb_pages_cache")
+        if (cached) {
+          const { ts, pages: p } = JSON.parse(cached)
+          if (Date.now() - ts < 10 * 60 * 1000 && Array.isArray(p)) {
+            setPages(p)
+            if (p.length > 0) setSelectedPageId(p[0].id)
+            return
+          }
+        }
+      } catch {}
+      fetch("/api/facebook/pages")
+        .then((r) => r.json())
+        .then((d) => {
+          const pl = d.pages || []
+          setPages(pl)
+          if (pl.length > 0) setSelectedPageId(pl[0].id)
+          try { sessionStorage.setItem("fb_pages_cache", JSON.stringify({ ts: Date.now(), pages: pl })) } catch {}
+        })
+    })()
 
     setLoadingPixels(true)
     fetch(`/api/facebook/pixels?ad_account_id=${adAccountId}`)

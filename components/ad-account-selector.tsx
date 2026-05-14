@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -8,9 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { IconCheck, IconLoader2, IconCurrencyDollar } from "@tabler/icons-react"
+import { IconCheck, IconCurrencyDollar, IconLoader2 } from "@tabler/icons-react"
+import { useAdAccount } from "@/lib/ad-account-context"
 
 interface AdAccount {
   id: string
@@ -29,14 +29,14 @@ interface AdAccountSelectorProps {
 }
 
 const ACCOUNT_STATUS_MAP: Record<number, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  1: { label: "Active", variant: "default" },
-  2: { label: "Disabled", variant: "destructive" },
-  3: { label: "Unsettled", variant: "secondary" },
-  7: { label: "Pending Review", variant: "outline" },
-  8: { label: "Pending Closure", variant: "destructive" },
-  9: { label: "In Grace Period", variant: "secondary" },
-  100: { label: "Temporarily Unavailable", variant: "secondary" },
-  101: { label: "Closed", variant: "destructive" },
+  1:   { label: "Active",                 variant: "default" },
+  2:   { label: "Disabled",               variant: "destructive" },
+  3:   { label: "Unsettled",              variant: "secondary" },
+  7:   { label: "Pending Review",         variant: "outline" },
+  8:   { label: "Pending Closure",        variant: "destructive" },
+  9:   { label: "In Grace Period",        variant: "secondary" },
+  100: { label: "Temporarily Unavailable",variant: "secondary" },
+  101: { label: "Closed",                 variant: "destructive" },
 }
 
 export function AdAccountSelector({
@@ -44,32 +44,8 @@ export function AdAccountSelector({
   selectedAccountId,
   onAccountSelected,
 }: AdAccountSelectorProps) {
-  const [accounts, setAccounts] = useState<AdAccount[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!isConnected) return
-
-    async function fetchAccounts() {
-      setLoading(true)
-      setError(null)
-      try {
-        const res = await fetch("/api/facebook/ad-accounts")
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error)
-        setAccounts(data.adAccounts)
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load ad accounts"
-        )
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchAccounts()
-  }, [isConnected])
+  // Read from shared context — no independent fetch needed
+  const { adAccounts, loading } = useAdAccount()
 
   if (!isConnected) {
     return (
@@ -106,24 +82,18 @@ export function AdAccountSelector({
           </div>
         )}
 
-        {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
-        {!loading && !error && accounts.length === 0 && (
+        {!loading && adAccounts.length === 0 && (
           <p className="py-4 text-center text-sm text-muted-foreground">
             No ad accounts found. Make sure you have access to at least one
             Facebook Ad Account.
           </p>
         )}
 
-        {!loading && accounts.length > 0 && (
+        {!loading && adAccounts.length > 0 && (
           <div className="space-y-2">
-            {accounts.map((account) => {
+            {adAccounts.map((account) => {
               const isSelected = selectedAccountId === account.id
-              const status = ACCOUNT_STATUS_MAP[account.account_status] || {
+              const status = ACCOUNT_STATUS_MAP[account.account_status ?? 0] || {
                 label: "Unknown",
                 variant: "secondary" as const,
               }
@@ -161,7 +131,7 @@ export function AdAccountSelector({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onAccountSelected?.(account)}
+                      onClick={() => onAccountSelected?.(account as AdAccount)}
                       disabled={account.account_status !== 1}
                     >
                       Select

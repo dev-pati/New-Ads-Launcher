@@ -3,7 +3,7 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getAdAccounts } from "@/lib/facebook"
 import { getCachedFacebookMetadata } from "../_cache"
 
-const AD_ACCOUNTS_TTL_MS = 2 * 60 * 1000
+const AD_ACCOUNTS_TTL_MS = 15 * 60 * 1000
 
 export async function GET() {
   try {

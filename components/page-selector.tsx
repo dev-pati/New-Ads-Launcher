@@ -40,6 +40,24 @@ export function PageSelector({
     if (!isConnected) return
 
     async function fetchPages() {
+      // Check shared sessionStorage cache (same key as launch/page.tsx)
+      try {
+        const cached = sessionStorage.getItem("fb_pages_cache")
+        if (cached) {
+          const { ts, pages: p } = JSON.parse(cached)
+          if (Date.now() - ts < 10 * 60 * 1000 && Array.isArray(p)) {
+            setPages(p)
+            return
+          }
+        }
+        // Also respect rate-limit cooldown
+        const rl = sessionStorage.getItem("fb_pages_ratelimit")
+        if (rl && Date.now() - parseInt(rl, 10) < 5 * 60 * 1000) {
+          setError("Facebook API rate limit active. Try again in a few minutes.")
+          return
+        }
+      } catch {}
+
       setLoading(true)
       setError(null)
       try {
@@ -47,6 +65,7 @@ export function PageSelector({
         const data = await res.json()
         if (!res.ok) throw new Error(data.error)
         setPages(data.pages)
+        try { sessionStorage.setItem("fb_pages_cache", JSON.stringify({ ts: Date.now(), pages: data.pages })) } catch {}
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load pages")
       } finally {

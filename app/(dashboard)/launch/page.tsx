@@ -304,12 +304,8 @@ function PlatformStatusPopover() {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  // Auto-check on mount, then every 5 minutes
-  useEffect(() => {
-    checkStatus()
-    const interval = setInterval(checkStatus, 5 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
+  // Check once on mount — polling every 5 min was hitting /api/facebook/ad-accounts too frequently
+  useEffect(() => { checkStatus() }, [])
 
   const allOk = metaApi.status === "operational" && adsManager.status === "operational"
 
