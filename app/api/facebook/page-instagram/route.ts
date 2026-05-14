@@ -5,8 +5,8 @@ import { getCachedFacebookMetadata } from "../_cache"
 import { adAccountBelongsToOrg } from "../_utils"
 
 export const dynamic = "force-dynamic"
-const PAGES_TTL_MS = 2 * 60 * 1000
-const INSTAGRAM_TTL_MS = 2 * 60 * 1000
+const PAGES_TTL_MS = 10 * 60 * 1000
+const INSTAGRAM_TTL_MS = 15 * 60 * 1000
 
 export async function GET(request: NextRequest) {
   try {
