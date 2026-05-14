@@ -105,16 +105,33 @@ export interface FacebookPage {
   instagram_accounts?: { data: InstagramAccount[] }
 }
 
+function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)) }
+
 export async function getFacebookPages(accessToken: string): Promise<FacebookPage[]> {
-  const res = await fetch(
-    `${GRAPH_API_BASE}/me/accounts?fields=id,name,access_token,category,picture&access_token=${accessToken}`
-  )
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to get pages")
+  const url = `${GRAPH_API_BASE}/me/accounts?fields=id,name,access_token,category,picture&access_token=${accessToken}`
+  const MAX_RETRIES = 3
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(1000 * Math.pow(2, attempt - 1)) // 1s → 2s → 4s
+
+    const res  = await fetch(url)
+    const data = await res.json()
+
+    if (data?.error) {
+      const code: number = data.error.code ?? 0
+      const msg: string  = data.error.message ?? "Failed to get pages"
+      if (META_RATE_LIMIT_CODES.has(code) && attempt < MAX_RETRIES) {
+        console.warn(`[getFacebookPages] rate limit code=${code} attempt=${attempt}/${MAX_RETRIES}, retrying...`)
+        continue
+      }
+      throwMetaError(data, msg)
+    }
+
+    if (!res.ok) throw new Error(`Failed to get pages (HTTP ${res.status})`)
+    return data.data || []
   }
-  const data = await res.json()
-  return data.data || []
+
+  throw new Error("Facebook API rate limit reached — /me/accounts")
 }
 
 // Fetch pages filtered by the business that owns the given ad account.
