@@ -11949,7 +11949,7 @@ function TableMode({
                           {isOpen && (
                             <div
                               ref={profilePopoverRef}
-                              className="absolute left-0 bottom-full mb-1 z-50 bg-popover border rounded-xl shadow-xl w-64 py-1 overflow-hidden max-h-80 overflow-y-auto"
+                              className="absolute left-0 top-full mt-1 z-50 bg-popover border rounded-xl shadow-xl w-64 py-1 overflow-hidden max-h-80 overflow-y-auto"
                             >
                               {/* FB Pages */}
                               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Facebook Page</p>
