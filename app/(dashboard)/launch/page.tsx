@@ -11603,7 +11603,7 @@ function TableMode({
         onMouseUp={onTableMouseUp}
         onMouseLeave={onTableMouseUp}
       >
-        <table className="w-full text-sm border-collapse" style={{ minWidth: 1400 }}>
+        <table className="w-full text-sm border-collapse" style={{ minWidth: 1340 }}>
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b">
               <th className="w-10 px-3 py-2.5 text-left">
@@ -11635,17 +11635,17 @@ function TableMode({
               >
                 <span className="flex items-center gap-0.5">Description <SortIcon field="description" /></span>
               </th>
-              <th className="w-52 px-3 py-2.5 text-left">
-                <span className="flex items-center gap-0.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  Ad Sets <span className="text-destructive">Required</span>
+              <th className="w-48 px-3 py-2.5 text-left">
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  Ad Sets <span className="text-[9px] font-medium text-amber-500 normal-case tracking-normal">required</span>
                   <IconArrowsUpDown className="size-3 opacity-30 ml-0.5" />
                 </span>
               </th>
-              <th className="w-36 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
+              <th className="w-40 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
               <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
-              <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
-              <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
-              <th className="w-24 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Launch Status</th>
+              <th className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
+              <th className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
+              <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Launch Status</th>
               <th className="w-14 px-3 py-2.5" />
             </tr>
           </thead>
@@ -11680,35 +11680,26 @@ function TableMode({
 
                   {/* CREATIVE */}
                   <td className="px-3 py-2">
-                    <div className="flex flex-col gap-1.5 items-start">
-                      {/* Format badge — green for SINGLE */}
-                      <Select value="single" onValueChange={() => {}}>
-                        <SelectTrigger className="h-5 w-[82px] text-[10px] px-1.5 border-green-200 bg-green-50 text-green-700 font-semibold dark:bg-green-900/30 dark:border-green-800 dark:text-green-400">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="single" className="text-xs">SINGLE</SelectItem>
-                          <SelectItem value="carousel" className="text-xs">CAROUSEL</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      {/* Thumbnail */}
-                      <div className="size-16 rounded overflow-hidden bg-muted/60 border border-border/50 shrink-0 relative">
-                        {mediaSrc
-                          ? <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
-                          : <div className="w-full h-full flex items-center justify-center">
-                              {row.creative
-                                ? <IconPhoto className="size-5 text-muted-foreground/40" />
-                                : <IconPlus className="size-5 text-muted-foreground/30" />
-                              }
-                            </div>
-                        }
-                        {row.creative?.media_type === "video" && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
-                              <IconPlayerPlay className="size-2.5 text-white fill-white" />
-                            </div>
+                    <div className="relative size-14 rounded-lg overflow-hidden bg-muted/60 border border-border/50 shrink-0">
+                      {mediaSrc
+                        ? <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
+                        : <div className="w-full h-full flex items-center justify-center">
+                            {row.creative
+                              ? <IconPhoto className="size-5 text-muted-foreground/40" />
+                              : <IconPlus className="size-5 text-muted-foreground/30" />
+                            }
                           </div>
-                        )}
+                      }
+                      {row.creative?.media_type === "video" && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
+                            <IconPlayerPlay className="size-2.5 text-white fill-white" />
+                          </div>
+                        </div>
+                      )}
+                      {/* Format badge overlaid bottom */}
+                      <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[8px] font-bold text-center py-0.5 leading-none tracking-wide">
+                        SINGLE
                       </div>
                     </div>
                   </td>
@@ -11719,7 +11710,7 @@ function TableMode({
                       value={row.adName}
                       onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
                       placeholder="Ad name..."
-                      rows={4}
+                      rows={2}
                       className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                     />
                   </td>
@@ -11731,7 +11722,7 @@ function TableMode({
                         value={row.primaryText}
                         onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
                         placeholder="Primary text..."
-                        rows={4}
+                        rows={2}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                       />
                       {exp.primary && ptVars.map((v, vi) => (
@@ -11777,7 +11768,7 @@ function TableMode({
                         value={row.headline}
                         onChange={e => onUpdateRow(row.id, "headline", e.target.value)}
                         placeholder="Headline..."
-                        rows={3}
+                        rows={2}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                       />
                       {exp.headline && hlVars.map((v, vi) => (
@@ -11822,7 +11813,7 @@ function TableMode({
                         value={row.description}
                         onChange={e => onUpdateRow(row.id, "description", e.target.value)}
                         placeholder="Description..."
-                        rows={3}
+                        rows={2}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                       />
                       {exp.description && descVars.map((v, vi) => (
@@ -12044,43 +12035,43 @@ function TableMode({
 
                   {/* LINK */}
                   <td className="px-3 py-2">
-                    <textarea
+                    <input
+                      type="text"
                       value={row.webLink || ""}
                       onChange={e => onUpdateRow(row.id, "webLink", e.target.value)}
-                      placeholder="From gallery..."
-                      rows={2}
-                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 resize-none"
+                      placeholder="https://..."
+                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 truncate"
                     />
                   </td>
 
                   {/* URL TAGS */}
                   <td className="px-3 py-2">
-                    <textarea
+                    <input
+                      type="text"
                       value={row.urlTags || ""}
                       onChange={e => onUpdateRow(row.id, "urlTags", e.target.value)}
                       placeholder="utm_source=fb..."
-                      rows={2}
-                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 resize-none"
+                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 truncate"
                     />
                   </td>
 
                   {/* LAUNCH STATUS */}
-                  <td className="px-3 pt-3 pb-2">
-                    <div className="flex flex-col items-start gap-1">
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => onUpdateRow(row.id, "launchAsActive", row.launchAsActive === false ? true : row.launchAsActive === true ? false : !launchAsActive)}
                         className={cn(
-                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
+                          "relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0",
                           (row.launchAsActive ?? launchAsActive) ? "bg-blue-500" : "bg-muted-foreground/30"
                         )}
                         title={(row.launchAsActive ?? launchAsActive) ? "Active" : "Paused"}
                       >
                         <span className={cn(
-                          "inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
+                          "inline-block size-3 rounded-full bg-white shadow-sm transition-transform",
                           (row.launchAsActive ?? launchAsActive) ? "translate-x-[18px]" : "translate-x-0.5"
                         )} />
                       </button>
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                         {(row.launchAsActive ?? launchAsActive) ? "Active" : "Paused"}
                       </span>
                     </div>
