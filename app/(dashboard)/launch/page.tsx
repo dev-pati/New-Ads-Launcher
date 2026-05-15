@@ -11502,6 +11502,7 @@ function TableMode({
   const [sortField, setSortField] = useState<"adName" | "primaryText" | "headline" | "description" | null>(null)
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [profilePopoverRow, setProfilePopoverRow] = useState<string | null>(null)
+  const [profilePopoverPos, setProfilePopoverPos] = useState<{ top: number; left: number } | null>(null)
   const profilePopoverRef = useRef<HTMLDivElement>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
@@ -11528,11 +11529,19 @@ function TableMode({
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (profilePopoverRef.current && !profilePopoverRef.current.contains(e.target as Node))
+      if (profilePopoverRef.current && !profilePopoverRef.current.contains(e.target as Node)) {
         setProfilePopoverRow(null)
+        setProfilePopoverPos(null)
+      }
     }
+    const onScroll = () => { setProfilePopoverRow(null); setProfilePopoverPos(null) }
     document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
+    const el = tableScrollRef.current
+    el?.addEventListener("scroll", onScroll)
+    return () => {
+      document.removeEventListener("mousedown", handler)
+      el?.removeEventListener("scroll", onScroll)
+    }
   }, [])
 
   const toggleSort = (field: "adName" | "primaryText" | "headline" | "description") => {
@@ -11916,9 +11925,18 @@ function TableMode({
                       const rowIg = rowIgAccounts.find(a => a.id === rowIgId) || igAccount
                       const isOpen = profilePopoverRow === row.id
                       return (
-                        <div className="relative" ref={isOpen ? profilePopoverRef : undefined}>
+                        <div className="relative">
                           <button
-                            onClick={() => setProfilePopoverRow(isOpen ? null : row.id)}
+                            onClick={e => {
+                              if (isOpen) {
+                                setProfilePopoverRow(null)
+                                setProfilePopoverPos(null)
+                              } else {
+                                const rect = (e.currentTarget as HTMLElement).closest("td")!.getBoundingClientRect()
+                                setProfilePopoverPos({ top: rect.bottom + 4, left: rect.left })
+                                setProfilePopoverRow(row.id)
+                              }
+                            }}
                             className="flex flex-col gap-1 hover:opacity-80 transition-opacity group/profile min-w-0 w-full"
                             title="Click to change page / IG account"
                           >
@@ -11946,10 +11964,11 @@ function TableMode({
                             </div>
                           </button>
 
-                          {isOpen && (
+                          {isOpen && profilePopoverPos && (
                             <div
                               ref={profilePopoverRef}
-                              className="absolute left-0 top-full mt-1 z-50 bg-popover border rounded-xl shadow-xl w-64 py-1 overflow-hidden max-h-80 overflow-y-auto"
+                              style={{ position: "fixed", top: profilePopoverPos.top, left: profilePopoverPos.left }}
+                              className="z-[9999] bg-popover border rounded-xl shadow-xl w-64 py-1 overflow-hidden max-h-72 overflow-y-auto"
                             >
                               {/* FB Pages */}
                               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Facebook Page</p>
@@ -12019,6 +12038,7 @@ function TableMode({
                                     onUpdateRow(row.id, "pageId", undefined)
                                     onUpdateRow(row.id, "igId", undefined)
                                     setProfilePopoverRow(null)
+                                    setProfilePopoverPos(null)
                                   }}
                                   className="text-[11px] text-muted-foreground hover:text-foreground"
                                 >
