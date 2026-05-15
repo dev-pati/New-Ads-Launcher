@@ -30,69 +30,64 @@ interface Creative {
   ad_account?: { id: string; name: string }
 }
 
+const PAGE_SIZE = 20
+
 export default function UploadAdsPage() {
   const { selectedAccountId: adAccountId } = useAdAccount()
   const [creatives, setCreatives] = useState<Creative[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
   const [launchOpen, setLaunchOpen] = useState(false)
-  
+
   const [gdriveImporting, setGdriveImporting] = useState(false)
   const gdriveScriptsReady = useRef(false)
   const gdriveTokenRef = useRef<string | null>(null)
 
+  const fetchCreatives = async (cursor: string | null, reset: boolean) => {
+    if (reset) setLoading(true); else setLoadingMore(true)
+    try {
+      const params = new URLSearchParams({ ad_account_id: adAccountId, limit: String(PAGE_SIZE) })
+      if (cursor) params.set("cursor", cursor)
+      const res = await fetch(`/api/creatives?${params}`)
+      const data = await res.json()
+      const list: Creative[] = data.creatives || []
+      setCreatives(prev => reset ? list : [...prev, ...list])
+      setNextCursor(data.nextCursor ?? null)
+      setHasMore(data.hasMore ?? false)
+
+      // Poll thumbnails only for videos in this batch with exponential backoff
+      const RETRY_DELAYS = [10_000, 30_000, 60_000, 120_000, 240_000]
+      const videosMissingThumb = list.filter(c => c.media_type === "video" && !c.fb_thumbnail_url)
+      for (const c of videosMissingThumb) {
+        let attempt = 0
+        const poll = () => {
+          if (attempt >= RETRY_DELAYS.length) return
+          setTimeout(async () => {
+            if (document.hidden) { poll(); return }  // skip API call when tab not visible, retry same delay
+            try {
+              const d = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" }).then(r => r.json())
+              if (d.thumbnail_url || d.source_url) {
+                setCreatives(prev => prev.map(x => x.id === c.id ? { ...x, fb_thumbnail_url: d.thumbnail_url || x.fb_thumbnail_url, file_url: d.source_url || x.file_url || d.thumbnail_url } : x))
+                if (d.thumbnail_url && d.source_url) return
+              }
+              attempt++; poll()
+            } catch { attempt++; poll() }
+          }, RETRY_DELAYS[attempt])
+        }
+        poll()
+      }
+    } catch { /* ignore */ } finally {
+      setLoading(false); setLoadingMore(false)
+    }
+  }
+
   useEffect(() => {
     if (!adAccountId) return
-    setCreatives([])
-    setSelected(new Set())
-    async function fetch_() {
-      try {
-        const res = await fetch(`/api/creatives?ad_account_id=${encodeURIComponent(adAccountId)}`)
-        const data = await res.json()
-        const list: Creative[] = data.creatives || []
-        setCreatives(list)
-
-        // Poll thumbnails for videos still being processed by Facebook.
-        // Retries at 10s, 30s, 60s, 120s, 240s intervals then gives up.
-        const RETRY_DELAYS = [10_000, 30_000, 60_000, 120_000, 240_000]
-        const videosMissingThumb = list.filter(c => c.media_type === "video" && !c.fb_thumbnail_url)
-        for (const c of videosMissingThumb) {
-          let attempt = 0
-          const poll = () => {
-            if (attempt >= RETRY_DELAYS.length) return
-            setTimeout(async () => {
-              try {
-                const d = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" }).then(r => r.json())
-                if (d.thumbnail_url || d.source_url) {
-                  setCreatives(prev => prev.map(x =>
-                    x.id === c.id ? { 
-                      ...x, 
-                      fb_thumbnail_url: d.thumbnail_url || x.fb_thumbnail_url,
-                      file_url: d.source_url || x.file_url || d.thumbnail_url
-                    } : x
-                  ))
-                  if (d.thumbnail_url && d.source_url) return
-                  attempt++
-                  poll()
-                } else {
-                  attempt++
-                  poll()
-                }
-              } catch {
-                attempt++
-                poll()
-              }
-            }, RETRY_DELAYS[attempt])
-          }
-          poll()
-        }
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetch_()
+    setCreatives([]); setSelected(new Set()); setNextCursor(null); setHasMore(false)
+    fetchCreatives(null, true)
   }, [adAccountId])
 
   // ── Google Drive Picker ──────────────────────────────────────────
@@ -336,6 +331,14 @@ export default function UploadAdsPage() {
               </Card>
             )
           })}
+        </div>
+      )}
+
+      {hasMore && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" size="sm" onClick={() => fetchCreatives(nextCursor, false)} disabled={loadingMore} className="gap-2 min-w-[140px]">
+            {loadingMore ? <><IconLoader2 className="size-3.5 animate-spin" />Loading…</> : `Load More (${creatives.length} loaded)`}
+          </Button>
         </div>
       )}
 

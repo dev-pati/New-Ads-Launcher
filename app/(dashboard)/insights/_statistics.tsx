@@ -2575,7 +2575,7 @@ function HookCard({ ad, rank }: { ad: any; rank: number }) {
         {/* Thumbnail */}
         <div className="relative w-[120px] h-[120px] rounded-lg bg-muted/30 overflow-hidden shrink-0">
           {ad.thumbnail ? (
-            <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" />
+            <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" loading="lazy" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
               <IconVideo className="size-8 text-muted-foreground/30" />
@@ -2893,7 +2893,7 @@ export function CreativeAuditView() {
                   <div key={ad.adId} className="rounded-lg border bg-muted/10 overflow-hidden group hover:shadow-md transition-shadow">
                     <div className="relative aspect-square bg-muted/30 overflow-hidden">
                       {ad.thumbnail ? (
-                        <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
                           {ad.format === "Video" ? <IconVideo className="size-8 text-muted-foreground/30" /> : <IconPhoto className="size-8 text-muted-foreground/30" />}

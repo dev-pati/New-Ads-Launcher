@@ -67,7 +67,7 @@ function ResultRow({ r, onClick }: { r: SearchResult; onClick: () => void }) {
     >
       <div className="size-9 rounded-lg overflow-hidden bg-muted flex items-center justify-center shrink-0 border">
         {r.thumb
-          ? <img src={r.thumb} alt={r.title} className="w-full h-full object-cover" />
+          ? <img src={r.thumb} alt={r.title} className="w-full h-full object-cover" loading="lazy" />
           : <Icon className="size-4 text-muted-foreground" />
         }
       </div>

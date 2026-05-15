@@ -59,7 +59,7 @@ interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "im
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
-interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean }
+interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string }
 interface CreatedAd { adId: string; adSetId: string; adSetName: string; creativeId?: string; fileName?: string; thumbnailUrl?: string | null; mediaType?: "image" | "video"; mode?: string; multiGroup?: string; flexibleAd?: string; carousel?: string }
 interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; pageName?: string; adAccountId: string; adAccountName: string; timestamp: string }
 interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[]; scheduled?: { at: string; end: string | null } | null; createdAds: CreatedAd[]; batchId?: string | null; launchMeta?: LaunchMeta }
@@ -1769,7 +1769,7 @@ function CollectionAdsModal({
                           {products.slice(0, 6).map(p => (
                             <div key={p.id} className="aspect-square rounded-md overflow-hidden border bg-muted">
                               {p.image_url
-                                ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                                ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
                                 : <div className="w-full h-full flex items-center justify-center"><IconPhoto className="size-4 text-muted-foreground/40" /></div>}
                             </div>
                           ))}
@@ -4201,7 +4201,7 @@ function PreviewModal({
                         )}
                       >
                         <div className="size-10 rounded overflow-hidden bg-muted shrink-0 relative">
-                          {ct ? <img src={ct} alt="" className="w-full h-full object-cover" /> :
+                          {ct ? <img src={ct} alt="" className="w-full h-full object-cover" loading="lazy" /> :
                             <div className="w-full h-full flex items-center justify-center"><IconVideo className="size-3 text-muted-foreground/40" /></div>}
                           {c.media_type === "video" && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/20">
@@ -4505,6 +4505,7 @@ function LoadMediaModal({
   const [existingAds, setExistingAds] = useState<ExistingAdRow[]>([])
   const [existingLoading, setExistingLoading] = useState(false)
   const [existingError, setExistingError] = useState<string>("")
+  const existingAbortRef = useRef<AbortController | null>(null)
   const [existingAfter, setExistingAfter] = useState<string>("")
   const [existingHasMore, setExistingHasMore] = useState(false)
   const [existingSearch, setExistingSearch] = useState("")
@@ -4529,6 +4530,10 @@ function LoadMediaModal({
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [mediaTab, setMediaTab] = useState<MediaTab>("library")
+  const libThumbRetryCounts = useRef<Map<string, number>>(new Map())
+  // Client-side cache: avoid re-fetching creatives if modal reopened within 90s
+  const creativesCache = useRef<{ accountId: string; data: Creative[]; at: number } | null>(null)
+  const CREATIVES_CACHE_TTL = 90_000
   // FB Media Library (from Facebook ad account)
   const [fbMedia, setFbMedia] = useState<FbMediaItem[]>([])
   const [fbMediaLoading, setFbMediaLoading] = useState(false)
@@ -4538,7 +4543,7 @@ function LoadMediaModal({
   const [fbMediaSaving, setFbMediaSaving] = useState(false)
   const [fbMediaTypeFilter, setFbMediaTypeFilter] = useState<"all" | "image" | "video">("all")
   const [fbMediaSort, setFbMediaSort] = useState<{ field: string; dir: "asc" | "desc" }>({ field: "date", dir: "desc" })
-  const FB_MEDIA_PAGE = 30
+  const FB_MEDIA_PAGE = 20
   const [selected, setSelected] = useState<Set<string>>(new Set(alreadySelected))
   // Filter chip values
   const [filters, setFilters] = useState<{
@@ -4612,45 +4617,49 @@ function LoadMediaModal({
     ]).then(() => { gdriveScriptsReady.current = true })
   }, [open])
 
-  // Re-fetch when parent signals new upload completed (so newly-uploaded media appears)
+  // Re-fetch when parent signals new upload completed — always force-refresh cache
   useEffect(() => {
     if (!open || !adAccountId || !refreshSignal) return
-    fetchCreatives()
+    creativesCache.current = null
+    fetchCreatives(true)
   }, [refreshSignal])
 
-  // Polling for missing thumbnails in Library tab
+  // Polling for missing thumbnails in Library tab (max 12 retries per video ~2min)
   useEffect(() => {
     if (!open || mediaTab !== "library" || allCreatives.length === 0) return
-    
+    const MAX_RETRIES = 12
     const pending = allCreatives.filter(c =>
       c.media_type === "video"
       && (!c.fb_thumbnail_url || (!/^https?:/.test(c.fb_thumbnail_url) && !c.fb_thumbnail_url.startsWith("/api/creatives/")))
+      && (libThumbRetryCounts.current.get(c.id) ?? 0) < MAX_RETRIES
     )
     if (pending.length === 0) return
 
-    const interval = setInterval(async () => {
-      // Check first 5 pending to avoid too many requests
-      const toCheck = pending.slice(0, 5)
+    const tick = async () => {
+      if (document.hidden) return  // pause when tab is not visible
+      const toCheck = pending.slice(0, 2)
       for (const c of toCheck) {
+        libThumbRetryCounts.current.set(c.id, (libThumbRetryCounts.current.get(c.id) ?? 0) + 1)
         try {
           const res = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" })
           const data = await res.json()
           if (data.thumbnail_url || data.source_url) {
-            setAllCreatives(prev => prev.map(x => 
-              x.id === c.id 
-                ? { 
-                    ...x, 
-                    fb_thumbnail_url: data.thumbnail_url || x.fb_thumbnail_url,
-                    file_url: data.source_url || x.file_url || data.thumbnail_url
-                  } 
+            setAllCreatives(prev => prev.map(x =>
+              x.id === c.id
+                ? { ...x, fb_thumbnail_url: data.thumbnail_url || x.fb_thumbnail_url, file_url: data.source_url || x.file_url || data.thumbnail_url }
                 : x
             ))
           }
         } catch {}
       }
-    }, 5000)
-    
-    return () => clearInterval(interval)
+    }
+
+    const interval = setInterval(tick, 15000)
+    // Resume immediately when user returns to this tab (don't wait up to 15s)
+    const onVisible = () => { if (!document.hidden) tick() }
+    document.addEventListener("visibilitychange", onVisible)
+
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible) }
   }, [open, mediaTab, allCreatives])
 
   // Sync existing ads ad-account when prop changes
@@ -4665,6 +4674,11 @@ function LoadMediaModal({
   }, [open, mediaTab, existingAccountId, existingDatePreset, existingActiveOnly, existingActiveAdSetOnly])
 
   const fetchExistingAds = async (reset: boolean) => {
+    // Cancel previous in-flight request when filter changes
+    existingAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    existingAbortRef.current = ctrl
+
     setExistingLoading(true)
     setExistingError("")
     try {
@@ -4676,7 +4690,8 @@ function LoadMediaModal({
       if (existingActiveOnly) params.set("active_only", "1")
       if (existingActiveAdSetOnly) params.set("active_adset_only", "1")
       if (!reset && existingAfter) params.set("after", existingAfter)
-      const res = await fetch(`/api/facebook/existing-ads?${params}`)
+      console.log(`[existing-ads] fetch reset=${reset} preset=${existingDatePreset} activeOnly=${existingActiveOnly}`)
+      const res = await fetch(`/api/facebook/existing-ads?${params}`, { signal: ctrl.signal })
       const d = await res.json()
       if (!res.ok) {
         setExistingError(d.error || "Failed to load")
@@ -4688,6 +4703,7 @@ function LoadMediaModal({
         if (reset) setExistingSelected(new Set())
       }
     } catch (e: any) {
+      if (e.name === "AbortError") return // silently ignore cancelled requests
       setExistingError(e.message)
     }
     setExistingLoading(false)
@@ -4867,12 +4883,20 @@ function LoadMediaModal({
     }
   }
 
-  const fetchCreatives = () => {
+  const fetchCreatives = (forceRefresh = false) => {
+    const cached = creativesCache.current
+    if (!forceRefresh && cached && cached.accountId === adAccountId && (Date.now() - cached.at) < CREATIVES_CACHE_TTL) {
+      console.log(`[creatives] client cache HIT (${Math.round((Date.now() - cached.at) / 1000)}s old) account=${adAccountId}`)
+      setAllCreatives(cached.data)
+      return
+    }
     setLoading(true)
-    fetch(`/api/creatives?ad_account_id=${encodeURIComponent(adAccountId)}`)
+    fetch(`/api/creatives?ad_account_id=${encodeURIComponent(adAccountId)}&limit=20`)
       .then(r => r.json())
       .then(d => {
         const list: Creative[] = d.creatives || []
+        creativesCache.current = { accountId: adAccountId, data: list, at: Date.now() }
+        console.log(`[creatives] fetched count=${list.length} total=${d.total ?? "?"} hasMore=${d.hasMore}`)
         setAllCreatives(list)
         // Background refresh: ONLY for videos that genuinely need it
         // (recent uploads OR no thumbnail at all). Throttled to 1 at a time
@@ -5329,7 +5353,7 @@ function LoadMediaModal({
                       <div className="flex items-center gap-2.5 min-w-0 pr-3">
                         <div className="size-9 rounded overflow-hidden bg-muted shrink-0 relative">
                           {m.thumbnail_url
-                            ? <img src={m.thumbnail_url} className="w-full h-full object-cover" alt="" onError={e => e.currentTarget.style.display="none"} />
+                            ? <img src={m.thumbnail_url} className="w-full h-full object-cover" alt="" loading="lazy" onError={e => e.currentTarget.style.display="none"} />
                             : <div className="w-full h-full flex items-center justify-center"><IconPhoto className="size-4 text-muted-foreground/40" /></div>
                           }
                           {m.media_type === "video" && (
@@ -5584,7 +5608,7 @@ function LoadMediaModal({
                           </td>
                           <td className="px-2 py-2">
                             <div className="relative size-9 rounded overflow-hidden bg-muted">
-                              {ad.thumb_url ? <img src={ad.thumb_url} className="w-full h-full object-cover" alt="" onError={e => e.currentTarget.style.display="none"} />
+                              {ad.thumb_url ? <img src={ad.thumb_url} className="w-full h-full object-cover" alt="" loading="lazy" onError={e => e.currentTarget.style.display="none"} />
                                 : <div className="w-full h-full flex items-center justify-center">
                                   {isVideo ? <IconVideo className="size-3.5 text-muted-foreground/40" /> : <IconPhoto className="size-3.5 text-muted-foreground/40" />}
                                 </div>}
@@ -11045,7 +11069,7 @@ function ThumbStack({ thumbs, count }: { thumbs: string[]; count: number }) {
       {shown.map((url, i) => (
         <div key={i} className="size-9 rounded-lg overflow-hidden border-2 border-background bg-muted shrink-0"
           style={{ zIndex: shown.length - i }}>
-          <img src={url} alt="" className="w-full h-full object-cover" />
+          <img src={url} alt="" className="w-full h-full object-cover" loading="lazy" />
         </div>
       ))}
       {extra > 0 && (
@@ -11127,7 +11151,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
               <div className="flex gap-2 flex-wrap">
                 {batch.creative_thumbs.map((thumb, i) => (
                   <div key={i} className="size-16 rounded-lg overflow-hidden bg-muted border shrink-0">
-                    {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" onError={e => e.currentTarget.style.display="none"} /> :
+                    {thumb ? <img src={thumb} alt="" className="w-full h-full object-cover" loading="lazy" onError={e => e.currentTarget.style.display="none"} /> :
                       <div className="w-full h-full flex items-center justify-center"><IconVideo className="size-4 text-muted-foreground/40" /></div>}
                   </div>
                 ))}
@@ -11458,7 +11482,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
 
 function TableMode({
   rows, adSets, onAddRow, onUpdateRow, onDeleteRow, onDuplicateRow,
-  selectedPage, igAccountCache, selectedIgPageId, searchQuery, launchAsActive,
+  selectedPage, igAccountCache, selectedIgPageId, searchQuery, launchAsActive, pages,
 }: {
   rows: TableRow[]
   adSets: AdSet[]
@@ -11471,11 +11495,45 @@ function TableMode({
   selectedIgPageId: string
   searchQuery: string
   launchAsActive: boolean
+  pages: FacebookPage[]
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedVar, setExpandedVar] = useState<Record<string, { primary: boolean; headline: boolean; description: boolean }>>({})
   const [sortField, setSortField] = useState<"adName" | "primaryText" | "headline" | "description" | null>(null)
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
+  const [profilePopoverRow, setProfilePopoverRow] = useState<string | null>(null)
+  const profilePopoverRef = useRef<HTMLDivElement>(null)
+  const tableScrollRef = useRef<HTMLDivElement>(null)
+  const isDragging = useRef(false)
+  const dragStartX = useRef(0)
+  const dragScrollLeft = useRef(0)
+
+  const onTableMouseDown = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.closest("input,textarea,select,button,[role=combobox],[data-radix-popper-content-wrapper]")) return
+    isDragging.current = true
+    dragStartX.current = e.pageX
+    dragScrollLeft.current = tableScrollRef.current?.scrollLeft || 0
+    if (tableScrollRef.current) tableScrollRef.current.style.cursor = "grabbing"
+  }
+  const onTableMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging.current || !tableScrollRef.current) return
+    e.preventDefault()
+    tableScrollRef.current.scrollLeft = dragScrollLeft.current - (e.pageX - dragStartX.current)
+  }
+  const onTableMouseUp = () => {
+    isDragging.current = false
+    if (tableScrollRef.current) tableScrollRef.current.style.cursor = ""
+  }
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (profilePopoverRef.current && !profilePopoverRef.current.contains(e.target as Node))
+        setProfilePopoverRow(null)
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [])
 
   const toggleSort = (field: "adName" | "primaryText" | "headline" | "description") => {
     if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc")
@@ -11536,8 +11594,16 @@ function TableMode({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-      <div className="flex-1 overflow-auto">
-        <table className="w-full text-sm border-collapse" style={{ minWidth: 1280 }}>
+      <div
+        ref={tableScrollRef}
+        className="flex-1 overflow-auto select-none"
+        style={{ cursor: "grab" }}
+        onMouseDown={onTableMouseDown}
+        onMouseMove={onTableMouseMove}
+        onMouseUp={onTableMouseUp}
+        onMouseLeave={onTableMouseUp}
+      >
+        <table className="w-full text-sm border-collapse" style={{ minWidth: 1400 }}>
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b">
               <th className="w-10 px-3 py-2.5 text-left">
@@ -11546,25 +11612,25 @@ function TableMode({
               <th className="w-7 px-1 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">#</th>
               <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
               <th
-                className="w-40 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("adName")}
               >
                 <span className="flex items-center gap-0.5">Ad Name <SortIcon field="adName" /></span>
               </th>
               <th
-                className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground min-w-[180px]"
+                className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground min-w-[260px]"
                 onClick={() => toggleSort("primaryText")}
               >
                 <span className="flex items-center gap-0.5">Primary Text <SortIcon field="primaryText" /></span>
               </th>
               <th
-                className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-56 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("headline")}
               >
                 <span className="flex items-center gap-0.5">Headline <SortIcon field="headline" /></span>
               </th>
               <th
-                className="w-40 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("description")}
               >
                 <span className="flex items-center gap-0.5">Description <SortIcon field="description" /></span>
@@ -11575,7 +11641,7 @@ function TableMode({
                   <IconArrowsUpDown className="size-3 opacity-30 ml-0.5" />
                 </span>
               </th>
-              <th className="w-20 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profile</th>
+              <th className="w-36 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
               <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
               <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
               <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
@@ -11628,7 +11694,7 @@ function TableMode({
                       {/* Thumbnail */}
                       <div className="size-16 rounded overflow-hidden bg-muted/60 border border-border/50 shrink-0 relative">
                         {mediaSrc
-                          ? <img src={mediaSrc} className="w-full h-full object-cover" alt="" />
+                          ? <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
                           : <div className="w-full h-full flex items-center justify-center">
                               {row.creative
                                 ? <IconPhoto className="size-5 text-muted-foreground/40" />
@@ -11653,7 +11719,7 @@ function TableMode({
                       value={row.adName}
                       onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
                       placeholder="Ad name..."
-                      rows={3}
+                      rows={4}
                       className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                     />
                   </td>
@@ -11665,7 +11731,7 @@ function TableMode({
                         value={row.primaryText}
                         onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
                         placeholder="Primary text..."
-                        rows={3}
+                        rows={4}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                       />
                       {exp.primary && ptVars.map((v, vi) => (
@@ -11707,11 +11773,12 @@ function TableMode({
                   {/* HEADLINE */}
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-1">
-                      <input
+                      <textarea
                         value={row.headline}
                         onChange={e => onUpdateRow(row.id, "headline", e.target.value)}
                         placeholder="Headline..."
-                        className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+                        rows={3}
+                        className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                       />
                       {exp.headline && hlVars.map((v, vi) => (
                         <div key={vi} className="flex items-center gap-1">
@@ -11751,11 +11818,12 @@ function TableMode({
                   {/* DESCRIPTION */}
                   <td className="px-3 py-2">
                     <div className="flex flex-col gap-1">
-                      <input
+                      <textarea
                         value={row.description}
                         onChange={e => onUpdateRow(row.id, "description", e.target.value)}
                         placeholder="Description..."
-                        className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+                        rows={3}
+                        className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                       />
                       {exp.description && descVars.map((v, vi) => (
                         <div key={vi} className="flex items-center gap-1">
@@ -11832,34 +11900,130 @@ function TableMode({
                     </div>
                   </td>
 
-                  {/* AD PROFILE */}
-                  <td className="px-3 pt-3 pb-2">
-                    <div className="flex items-center gap-1">
-                      {selectedPage ? (
-                        <div className="size-7 rounded-full overflow-hidden bg-blue-100 shrink-0 ring-1 ring-border" title={selectedPage.name}>
-                          {selectedPage.picture?.data?.url
-                            ? <img src={selectedPage.picture.data.url} className="w-full h-full object-cover" alt={selectedPage.name} />
-                            : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-4 text-blue-600" /></div>
-                          }
+                  {/* AD PROFILE — per-row selectable */}
+                  <td className="px-3 pt-2 pb-2">
+                    {(() => {
+                      const rowPageId = row.pageId || selectedPage?.id
+                      const rowPage = pages.find(p => p.id === rowPageId) || selectedPage
+                      const rowIgId = row.igId || selectedIgPageId
+                      const rowIgAccounts = igAccountCache[rowPageId || ""] || []
+                      const rowIg = rowIgAccounts.find(a => a.id === rowIgId) || igAccount
+                      const isOpen = profilePopoverRow === row.id
+                      return (
+                        <div className="relative" ref={isOpen ? profilePopoverRef : undefined}>
+                          <button
+                            onClick={() => setProfilePopoverRow(isOpen ? null : row.id)}
+                            className="flex flex-col gap-1 hover:opacity-80 transition-opacity group/profile min-w-0 w-full"
+                            title="Click to change page / IG account"
+                          >
+                            {/* FB Page row */}
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="size-5 rounded-full overflow-hidden bg-blue-100 shrink-0 ring-1 ring-border/60 group-hover/profile:ring-primary transition-all">
+                                {rowPage?.picture?.data?.url
+                                  ? <img src={rowPage.picture.data.url} className="w-full h-full object-cover" alt={rowPage.name} />
+                                  : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-3 text-blue-600" /></div>}
+                              </div>
+                              <span className="text-[11px] truncate max-w-[100px] text-foreground/80">
+                                {rowPage ? rowPage.name : <span className="text-muted-foreground/40">No page</span>}
+                              </span>
+                            </div>
+                            {/* IG row */}
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <div className="size-5 rounded-full overflow-hidden shrink-0 ring-1 ring-border/60 group-hover/profile:ring-primary transition-all bg-gradient-to-br from-pink-500 to-purple-600">
+                                {rowIg?.profile_pic
+                                  ? <img src={rowIg.profile_pic} className="w-full h-full object-cover" alt={rowIg.username || "IG"} />
+                                  : <div className="w-full h-full flex items-center justify-center"><IconBrandInstagram className="size-3 text-white" /></div>}
+                              </div>
+                              <span className="text-[11px] truncate max-w-[100px] text-foreground/60">
+                                {rowIg ? `@${rowIg.username || rowIg.id}` : <span className="text-muted-foreground/40">@Use Facebook</span>}
+                              </span>
+                            </div>
+                          </button>
+
+                          {isOpen && (
+                            <div
+                              ref={profilePopoverRef}
+                              className="absolute left-0 bottom-full mb-1 z-50 bg-popover border rounded-xl shadow-xl w-64 py-1 overflow-hidden max-h-80 overflow-y-auto"
+                            >
+                              {/* FB Pages */}
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Facebook Page</p>
+                              {pages.length === 0 && (
+                                <p className="text-xs text-muted-foreground px-3 py-2">No pages available</p>
+                              )}
+                              {pages.map(p => (
+                                <button
+                                  key={p.id}
+                                  onClick={() => {
+                                    onUpdateRow(row.id, "pageId", p.id)
+                                    onUpdateRow(row.id, "igId", undefined)
+                                  }}
+                                  className={cn(
+                                    "w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent transition-colors text-left",
+                                    (row.pageId === p.id || (!row.pageId && selectedPage?.id === p.id)) && "bg-primary/5 font-medium"
+                                  )}
+                                >
+                                  <div className="size-6 rounded-full overflow-hidden bg-blue-100 shrink-0">
+                                    {p.picture?.data?.url
+                                      ? <img src={p.picture.data.url} className="w-full h-full object-cover" alt={p.name} />
+                                      : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-3 text-blue-600" /></div>}
+                                  </div>
+                                  <span className="truncate">{p.name}</span>
+                                  {(row.pageId === p.id || (!row.pageId && selectedPage?.id === p.id)) && (
+                                    <IconCheck className="size-3 text-primary ml-auto shrink-0" />
+                                  )}
+                                </button>
+                              ))}
+
+                              {/* IG Accounts for selected page */}
+                              {(() => {
+                                const selPageId = row.pageId || selectedPage?.id || ""
+                                const igAccounts = igAccountCache[selPageId] || []
+                                if (!igAccounts.length) return null
+                                return (
+                                  <>
+                                    <div className="border-t my-1" />
+                                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Instagram Account</p>
+                                    {igAccounts.map(ig => (
+                                      <button
+                                        key={ig.id}
+                                        onClick={() => onUpdateRow(row.id, "igId", ig.id)}
+                                        className={cn(
+                                          "w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-accent transition-colors text-left",
+                                          (row.igId === ig.id || (!row.igId && selectedIgPageId === ig.id)) && "bg-primary/5 font-medium"
+                                        )}
+                                      >
+                                        <div className="size-6 rounded-full overflow-hidden bg-gradient-to-br from-pink-500 to-purple-600 shrink-0">
+                                          {ig.profile_pic
+                                            ? <img src={ig.profile_pic} className="w-full h-full object-cover" alt={ig.username || "IG"} />
+                                            : <div className="w-full h-full flex items-center justify-center"><IconBrandInstagram className="size-3 text-white" /></div>}
+                                        </div>
+                                        <span className="truncate">@{ig.username || ig.id}</span>
+                                        {(row.igId === ig.id || (!row.igId && selectedIgPageId === ig.id)) && (
+                                          <IconCheck className="size-3 text-primary ml-auto shrink-0" />
+                                        )}
+                                      </button>
+                                    ))}
+                                  </>
+                                )
+                              })()}
+
+                              <div className="border-t mt-1 px-3 py-1.5">
+                                <button
+                                  onClick={() => {
+                                    onUpdateRow(row.id, "pageId", undefined)
+                                    onUpdateRow(row.id, "igId", undefined)
+                                    setProfilePopoverRow(null)
+                                  }}
+                                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                                >
+                                  Reset to gallery default
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="size-7 rounded-full bg-muted flex items-center justify-center ring-1 ring-border/50" title="No FB page">
-                          <IconBrandFacebook className="size-3.5 text-muted-foreground/40" />
-                        </div>
-                      )}
-                      {igAccount ? (
-                        <div className="size-7 rounded-full overflow-hidden shrink-0 ring-1 ring-border" title={igAccount.username || "Instagram"}>
-                          {igAccount.profile_pic
-                            ? <img src={igAccount.profile_pic} className="w-full h-full object-cover" alt={igAccount.username || "IG"} />
-                            : <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-pink-500 to-purple-600"><IconBrandInstagram className="size-4 text-white" /></div>
-                          }
-                        </div>
-                      ) : (
-                        <div className="size-7 rounded-full bg-muted flex items-center justify-center ring-1 ring-border/50" title="No IG account">
-                          <IconBrandInstagram className="size-3.5 text-muted-foreground/40" />
-                        </div>
-                      )}
-                    </div>
+                      )
+                    })()}
                   </td>
 
                   {/* CTA */}
@@ -12012,6 +12176,7 @@ export default function LaunchPage() {
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set())
   const [selectedCreatives, setSelectedCreatives] = useState<Creative[]>([])
   const [adNameOverrides, setAdNameOverrides] = useState<Record<string, string>>({})
+  const thumbRetryCounts = useRef<Map<string, number>>(new Map())
 
   // ─── Persistence: save selected creative IDs per ad account in localStorage ───
   const SELECTION_KEY = "launch_selected_creatives"
@@ -12064,39 +12229,43 @@ export default function LaunchPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId])
 
-  // Continuous polling for missing thumbnails in selected creatives
+  // Polling for missing thumbnails in selected creatives (max 10 retries per video ~2.5min at 15s)
   useEffect(() => {
-    const pending = selectedCreatives.filter(c => 
-      c.media_type === "video" && 
-      c.fb_video_id && 
+    const MAX_RETRIES = 10
+    const pending = selectedCreatives.filter(c =>
+      c.media_type === "video" &&
+      c.fb_video_id &&
       !(c.fb_thumbnail_url && (/^https?:/.test(c.fb_thumbnail_url) || c.fb_thumbnail_url.startsWith("/api/creatives/"))) &&
-      !c.id.startsWith("temp_")
+      !c.id.startsWith("temp_") &&
+      (thumbRetryCounts.current.get(c.id) ?? 0) < MAX_RETRIES
     )
     if (pending.length === 0) return
 
-    const interval = setInterval(async () => {
-      // Check first 3 pending to be polite
-      const toCheck = pending.slice(0, 3)
+    const tick = async () => {
+      if (document.hidden) return  // pause when tab is not visible
+      const toCheck = pending.slice(0, 2)
       for (const c of toCheck) {
+        thumbRetryCounts.current.set(c.id, (thumbRetryCounts.current.get(c.id) ?? 0) + 1)
         try {
           const res = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" })
           const data = await res.json()
           if (data.thumbnail_url || data.source_url) {
-            setSelectedCreatives(prev => prev.map(x => 
-              x.id === c.id 
-                ? { 
-                    ...x, 
-                    fb_thumbnail_url: data.thumbnail_url || x.fb_thumbnail_url,
-                    file_url: data.source_url || x.file_url || data.thumbnail_url
-                  } 
+            setSelectedCreatives(prev => prev.map(x =>
+              x.id === c.id
+                ? { ...x, fb_thumbnail_url: data.thumbnail_url || x.fb_thumbnail_url, file_url: data.source_url || x.file_url || data.thumbnail_url }
                 : x
             ))
           }
         } catch {}
       }
-    }, 5000)
-    
-    return () => clearInterval(interval)
+    }
+
+    const interval = setInterval(tick, 15000)
+    // Resume immediately when user returns to this tab (don't wait up to 15s)
+    const onVisible = () => { if (!document.hidden) tick() }
+    document.addEventListener("visibilitychange", onVisible)
+
+    return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible) }
   }, [selectedCreatives])
 
   // Save selection whenever creatives or names change (debounced via effect cycle)
@@ -13102,7 +13271,8 @@ export default function LaunchPage() {
             adSetIds: row.adSetIds,
             adSetNames: row.adSetIds.map(id => allAdSets.find(a => a.id === id)?.name || id),
             creativeIds: [row.creative!.id],
-            pageId: selectedPageId,
+            pageId: row.pageId || selectedPageId,
+            instagramAccountId: row.igId || selectedIgPageId || undefined,
             headline: (row.headline || globalHeadline).trim(),
             primaryText: (row.primaryText || globalPrimaryText).trim(),
             cta: row.cta || cta,
@@ -13818,6 +13988,7 @@ export default function LaunchPage() {
               selectedIgPageId={selectedIgPageId}
               searchQuery={tableSearchQuery}
               launchAsActive={launchAsActive}
+              pages={pages}
             />
 
             {error && (

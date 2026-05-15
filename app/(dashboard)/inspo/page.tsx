@@ -974,7 +974,7 @@ export default function InspoPage() {
                                     selectedCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
                                   )}>
                                   {c.fb_thumbnail_url
-                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "flex") }} />
+                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" loading="lazy" onError={e => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "flex") }} />
                                     : null
                                   }
                                   <div style={{ display: c.fb_thumbnail_url ? "none" : "flex" }} className="w-full h-full items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>
@@ -1089,7 +1089,7 @@ export default function InspoPage() {
                                     genCreative?.id === c.id ? "border-primary ring-1 ring-primary" : "border-transparent hover:border-muted-foreground/40"
                                   )}>
                                   {c.fb_thumbnail_url
-                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" onError={e => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "flex") }} />
+                                    ? <img src={c.fb_thumbnail_url} alt={c.file_name} className="w-full h-full object-cover" loading="lazy" onError={e => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement)?.style.setProperty("display", "flex") }} />
                                     : null
                                   }
                                   <div style={{ display: c.fb_thumbnail_url ? "none" : "flex" }} className="w-full h-full items-center justify-center"><IconPlayerPlay className="size-5 text-muted-foreground/40" /></div>

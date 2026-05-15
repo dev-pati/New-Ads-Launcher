@@ -1441,7 +1441,7 @@ export default function AdsManagerPage() {
                           )}
                         </td>
                         <td className="px-3 py-2.5">
-                          {thumb ? <img src={thumb} alt="" className="size-12 rounded object-cover border" /> : <div className="size-12 rounded bg-muted border flex items-center justify-center text-[10px] text-muted-foreground">No img</div>}
+                          {thumb ? <img src={thumb} alt="" className="size-12 rounded object-cover border" loading="lazy" /> : <div className="size-12 rounded bg-muted border flex items-center justify-center text-[10px] text-muted-foreground">No img</div>}
                         </td>
                         {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>)}
                       </tr>
@@ -1721,7 +1721,7 @@ export default function AdsManagerPage() {
                     { (editingNode as Ad).creative?.thumbnail_url && (
                       <div className="mt-4">
                         <p className="text-[10px] text-muted-foreground uppercase font-bold mb-2">Creative Preview</p>
-                        <img src={(editingNode as Ad).creative?.thumbnail_url} className="w-full aspect-video rounded-lg object-cover border" />
+                        <img src={(editingNode as Ad).creative?.thumbnail_url} className="w-full aspect-video rounded-lg object-cover border" loading="lazy" />
                       </div>
                     )}
                   </>

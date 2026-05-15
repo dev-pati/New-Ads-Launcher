@@ -44,15 +44,20 @@ export async function GET(request: NextRequest) {
 
     const url = new URL(request.url)
     const adAccountId = url.searchParams.get("ad_account_id")
+    const limit  = Math.min(parseInt(url.searchParams.get("limit") || "20", 10), 200)
+    const cursor = url.searchParams.get("cursor") || null  // last item's created_at (ISO string)
 
     const supabase = await createClient()
     let query = supabase
       .from("creatives")
       .select("*")
       .eq("org_id", ctx.orgId)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit + 1)
 
     if (adAccountId) query = query.eq("ad_account_id", adAccountId)
+    if (cursor)      query = query.lt("created_at", cursor)
 
     const { data, error } = await query
 
@@ -61,7 +66,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch creatives" }, { status: 500 })
     }
 
-    return NextResponse.json({ creatives: (data || []).map((creative) => mapCreativeForClient(creative)) })
+    const hasMore  = (data?.length ?? 0) > limit
+    const items    = (data ?? []).slice(0, limit)
+    const nextCursor = hasMore ? (items[items.length - 1]?.created_at ?? null) : null
+
+    return NextResponse.json({
+      creatives:  items.map((creative) => mapCreativeForClient(creative)),
+      hasMore,
+      nextCursor,
+    })
   } catch (err) {
     console.error("Failed to fetch creatives:", err)
     return NextResponse.json({ error: "Failed to fetch creatives" }, { status: 500 })

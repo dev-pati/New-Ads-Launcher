@@ -208,9 +208,12 @@ export default function InsightsPage() {
   const [statTab, setStatTab] = useState<StatTab>("all-accounts")
 
   // ── Top Creatives state ───────────────────────────────────────────────
-  const [topAds, setTopAds]       = useState<TopAd[]>([])
+  const [topAds, setTopAds]         = useState<TopAd[]>([])
   const [loadingTop, setLoadingTop] = useState(false)
-  const [topError, setTopError]   = useState("")
+  const [loadingMoreTop, setLoadingMoreTop] = useState(false)
+  const [topError, setTopError]     = useState("")
+  const [topCursor, setTopCursor]   = useState<string | null>(null)
+  const [topHasMore, setTopHasMore] = useState(false)
 
   const [datePreset, setDatePreset] = useState("last_90d")
   const [dateOpen, setDateOpen]     = useState(false)
@@ -273,14 +276,22 @@ export default function InsightsPage() {
   }, [])
 
   // ── Load top creatives ────────────────────────────────────────────────
-  const loadTop = useCallback(() => {
+  const loadTop = useCallback((after?: string) => {
     if (!selectedAccountId) return
-    setLoadingTop(true); setTopError("")
-    fetch(`/api/insights/top-creatives?adAccountId=${encodeURIComponent(selectedAccountId)}&datePreset=${datePreset}&limit=50`)
+    const isLoadMore = !!after
+    if (isLoadMore) setLoadingMoreTop(true); else { setLoadingTop(true); setTopError("") }
+    const params = new URLSearchParams({ adAccountId: selectedAccountId, datePreset, limit: "20" })
+    if (after) params.set("after", after)
+    fetch(`/api/insights/top-creatives?${params}`)
       .then(r => r.json())
-      .then(d => { if (d.error) { setTopError(d.error); return }; setTopAds(d.ads || []) })
+      .then(d => {
+        if (d.error) { setTopError(d.error); return }
+        setTopAds(prev => isLoadMore ? [...prev, ...(d.ads || [])] : (d.ads || []))
+        setTopCursor(d.nextCursor || null)
+        setTopHasMore(d.hasMore ?? false)
+      })
       .catch(e => setTopError(e.message))
-      .finally(() => setLoadingTop(false))
+      .finally(() => { setLoadingTop(false); setLoadingMoreTop(false) })
   }, [selectedAccountId, datePreset])
 
   // ── Load dashboard metrics ────────────────────────────────────────────
@@ -298,7 +309,7 @@ export default function InsightsPage() {
   const loadDashTopAds = useCallback(() => {
     if (!selectedAccountId) return
     setLoadingDashTop(true)
-    fetch(`/api/insights/top-creatives?adAccountId=${encodeURIComponent(selectedAccountId)}&datePreset=${dashDatePreset}&limit=50`)
+    fetch(`/api/insights/top-creatives?adAccountId=${encodeURIComponent(selectedAccountId)}&datePreset=${dashDatePreset}&limit=20`)
       .then(r => r.json())
       .then(d => { setDashTopAds(d.ads || []) })
       .catch(() => {})
@@ -586,7 +597,7 @@ export default function InsightsPage() {
                     </div>
                   )}
                 </div>
-                <Button size="sm" variant="ghost" className="h-8" onClick={loadTop} disabled={loadingTop}>
+                <Button size="sm" variant="ghost" className="h-8" onClick={() => loadTop()} disabled={loadingTop}>
                   <IconRefresh className={cn("size-3.5", loadingTop && "animate-spin")} />
                 </Button>
               </div>
@@ -825,11 +836,20 @@ export default function InsightsPage() {
                   {displayedAds.length === 0 ? (
                     <EmptyState icon={IconMoodEmpty} title="No ads match current filters" desc="Try removing some filters." />
                   ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                      {displayedAds.map(ad => (
-                        <TopAdCard key={ad.adId} ad={ad} visibleMetrics={visibleMetrics} />
-                      ))}
-                    </div>
+                    <>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                        {displayedAds.map(ad => (
+                          <TopAdCard key={ad.adId} ad={ad} visibleMetrics={visibleMetrics} />
+                        ))}
+                      </div>
+                      {topHasMore && (
+                        <div className="flex justify-center mt-6">
+                          <Button variant="outline" size="sm" onClick={() => loadTop(topCursor ?? undefined)} disabled={loadingMoreTop} className="gap-2 min-w-[160px]">
+                            {loadingMoreTop ? <><IconLoader2 className="size-3.5 animate-spin" />Loading…</> : `Load More (${topAds.length} loaded)`}
+                          </Button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -1265,7 +1285,7 @@ function Top5RevenueWidget({ topAds, loading }: { topAds: TopAd[]; loading: bool
           {/* Thumbnail */}
           <div className="size-10 rounded-lg bg-muted overflow-hidden shrink-0">
             {ad.thumbnail
-              ? <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" />
+              ? <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" loading="lazy" />
               : <div className="w-full h-full flex items-center justify-center">
                   {ad.isVideo ? <IconPlayerPlay className="size-4 text-muted-foreground/30" /> : <IconPhoto className="size-4 text-muted-foreground/30" />}
                 </div>
@@ -1296,7 +1316,7 @@ function WinnersWidget({ topAds, loading }: { topAds: TopAd[]; loading: boolean 
       {ads.slice(0, max).map(a => (
         <div key={a.adId} className="size-9 rounded-md border-2 border-background bg-muted overflow-hidden shrink-0">
           {a.thumbnail
-            ? <img src={a.thumbnail} alt={a.adName} className="w-full h-full object-cover" />
+            ? <img src={a.thumbnail} alt={a.adName} className="w-full h-full object-cover" loading="lazy" />
             : <div className="w-full h-full flex items-center justify-center">
                 <IconPhoto className="size-3 text-muted-foreground/30" />
               </div>
@@ -1551,7 +1571,7 @@ function TopAdCard({ ad, visibleMetrics }: { ad: TopAd; visibleMetrics: SortFiel
     <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative aspect-[4/5] bg-muted">
         {ad.thumbnail
-          ? <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" />
+          ? <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center">
               {ad.isVideo ? <IconPlayerPlay className="size-8 text-muted-foreground/30" /> : <IconPhoto className="size-8 text-muted-foreground/30" />}
             </div>

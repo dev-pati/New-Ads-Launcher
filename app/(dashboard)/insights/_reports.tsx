@@ -252,7 +252,7 @@ function ReportAdCard({ ad, metricKeys }: { ad: ReportAd; metricKeys: string[] }
     <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow group">
       <div className="relative aspect-[4/5] bg-muted">
         {ad.thumbnail
-          ? <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" />
+          ? <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" loading="lazy" />
           : <div className="w-full h-full flex items-center justify-center">
               {ad.isVideo
                 ? <IconPlayerPlay className="size-8 text-muted-foreground/30" />
@@ -414,7 +414,7 @@ function TableView({
                 <div className="flex items-center gap-2">
                   <div className="size-8 rounded bg-muted shrink-0 overflow-hidden">
                     {ad.thumbnail
-                      ? <img src={ad.thumbnail} alt="" className="w-full h-full object-cover" />
+                      ? <img src={ad.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
                       : <div className="w-full h-full flex items-center justify-center">
                           {ad.isVideo ? <IconPlayerPlay className="size-3 text-muted-foreground/40" /> : <IconPhoto className="size-3 text-muted-foreground/40" />}
                         </div>}

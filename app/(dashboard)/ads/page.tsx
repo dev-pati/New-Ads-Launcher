@@ -407,7 +407,7 @@ function ImageViewer({ cell }: { cell: CellBase | undefined }) {
   }
   return (
     <div className="flex h-full items-center justify-center">
-      <img src={url} alt="" className="size-9 rounded object-cover" onError={() => setFailed(true)} />
+      <img src={url} alt="" className="size-9 rounded object-cover" loading="lazy" onError={() => setFailed(true)} />
     </div>
   )
 }

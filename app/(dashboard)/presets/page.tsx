@@ -297,7 +297,7 @@ function ImportDialog({ open, onClose, adAccountId, onImported }: {
                     <button key={a.id} onClick={() => setSelectedAd(selectedAd?.id === a.id ? null : a)}
                       className={`w-full text-left px-2 py-1.5 rounded text-xs hover:bg-muted flex items-center gap-2 ${selectedAd?.id === a.id ? "bg-primary/10 text-primary font-medium" : ""}`}>
                       {(a.creative?.thumbnail_url || a.creative?.image_url)
-                        ? <img src={a.creative.thumbnail_url || a.creative.image_url} alt="" className="size-8 rounded object-cover shrink-0" />
+                        ? <img src={a.creative.thumbnail_url || a.creative.image_url} alt="" className="size-8 rounded object-cover shrink-0" loading="lazy" />
                         : <div className="size-8 rounded bg-muted shrink-0" />}
                       <span className="break-words min-w-0 leading-tight">
                         {selectedAd?.id === a.id && <IconCheck className="inline size-3 mr-1" />}{a.name}

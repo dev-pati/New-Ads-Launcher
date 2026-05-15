@@ -111,6 +111,10 @@ export default function AssetsPage() {
   const [loadingRequests, setLoadingRequests]   = useState(false)
   const [loadingBoard, setLoadingBoard]         = useState(false)
   const [currentUserId, setCurrentUserId]       = useState<string | null>(null)
+  const [creativesNextCursor, setCreativesNextCursor] = useState<string | null>(null)
+  const [creativesHasMore, setCreativesHasMore]       = useState(false)
+  const [loadingMoreCreatives, setLoadingMoreCreatives] = useState(false)
+  const CREATIVES_PAGE = 20
 
   // Upload state
   const [uploadItems, setUploadItems]   = useState<UploadItem[]>([])
@@ -153,7 +157,20 @@ export default function AssetsPage() {
     setBoardCreatives((prev) => patch(prev))
   }, [])
 
-  const refreshVideoPreview = useCallback(async (creativeId: string) => {
+  const refreshVideoPreview = useCallback(async (creativeId: string, retries = 0) => {
+    const MAX_RETRIES = 10
+    if (retries >= MAX_RETRIES) return
+
+    // Defer when tab is hidden — resume immediately on next visibilitychange
+    if (document.hidden) {
+      const resume = () => {
+        document.removeEventListener("visibilitychange", resume)
+        if (!document.hidden) refreshVideoPreview(creativeId, retries)
+      }
+      document.addEventListener("visibilitychange", resume)
+      return
+    }
+
     try {
       const response = await fetch(`/api/creatives/${creativeId}/thumbnail`, { method: "POST" })
       const data = await response.json()
@@ -165,9 +182,8 @@ export default function AssetsPage() {
         status: data.creative.status,
       })
 
-      // If still processing, check again in 5 seconds
       if (data.creative.status === "processing") {
-        setTimeout(() => refreshVideoPreview(creativeId), 5000)
+        setTimeout(() => refreshVideoPreview(creativeId, retries + 1), 8000)
       }
     } catch {}
   }, [applyCreativePreviewUpdate])
@@ -200,22 +216,26 @@ export default function AssetsPage() {
 
   // ── Load helpers ──────────────────────────────────────────────────────────
 
-  const loadCreatives = useCallback(() => {
+  const loadCreatives = useCallback((cursor: string | null, reset: boolean) => {
     if (!selectedAccountId) { setLoadingCreatives(false); return }
-    setLoadingCreatives(true)
+    if (reset) setLoadingCreatives(true); else setLoadingMoreCreatives(true)
     setActionError("")
-    fetch(`/api/creatives?ad_account_id=${encodeURIComponent(selectedAccountId)}`)
+    const params = new URLSearchParams({ ad_account_id: selectedAccountId, limit: String(CREATIVES_PAGE) })
+    if (cursor) params.set("cursor", cursor)
+    fetch(`/api/creatives?${params}`)
       .then(r => r.json())
       .then(d => {
         if (d.error) throw new Error(d.error)
-        const nextCreatives = d.creatives || []
-        setCreatives(nextCreatives)
-        refreshVideoPreviews(nextCreatives)
+        const next: Creative[] = d.creatives || []
+        setCreatives(prev => reset ? next : [...prev, ...next])
+        setCreativesNextCursor(d.nextCursor ?? null)
+        setCreativesHasMore(d.hasMore ?? false)
+        refreshVideoPreviews(next)
       })
       .catch((error: unknown) => {
         setActionError(error instanceof Error ? error.message : "Failed to load assets")
       })
-      .finally(() => setLoadingCreatives(false))
+      .finally(() => { setLoadingCreatives(false); setLoadingMoreCreatives(false) })
   }, [refreshVideoPreviews, selectedAccountId])
 
   const loadBoards = useCallback(() => {
@@ -261,7 +281,7 @@ export default function AssetsPage() {
 
   // ── Initial loads ─────────────────────────────────────────────────────────
 
-  useEffect(() => { loadCreatives() }, [loadCreatives])
+  useEffect(() => { setCreativesNextCursor(null); setCreativesHasMore(false); loadCreatives(null, true) }, [selectedAccountId])
   useEffect(() => { loadBoards() }, [loadBoards])
 
   useEffect(() => {
@@ -964,7 +984,7 @@ export default function AssetsPage() {
                 )}
 
                 <button
-                  onClick={() => currentBoardId ? loadBoardCreatives(currentBoardId) : loadCreatives()}
+                  onClick={() => currentBoardId ? loadBoardCreatives(currentBoardId) : loadCreatives(null, true)}
                   className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 >
                   <IconRefresh className="size-4" />
@@ -1141,6 +1161,23 @@ export default function AssetsPage() {
                   <div className="px-4 py-2 text-xs text-muted-foreground border-t bg-muted/10">
                     {displayList.length} row{displayList.length !== 1 ? "s" : ""}
                   </div>
+                </div>
+              )}
+
+              {/* Load More — only show for "all" and "my-uploads" sections, not boards */}
+              {!currentBoardId && creativesHasMore && (
+                <div className="flex justify-center pt-2 pb-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadCreatives(creativesNextCursor, false)}
+                    disabled={loadingMoreCreatives}
+                    className="gap-2 min-w-[140px]"
+                  >
+                    {loadingMoreCreatives
+                      ? <><IconLoader2 className="size-3.5 animate-spin" /> Loading…</>
+                      : `Load More (${creatives.length} loaded)`}
+                  </Button>
                 </div>
               )}
             </div>
