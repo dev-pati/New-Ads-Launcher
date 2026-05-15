@@ -44,21 +44,24 @@ export async function GET(request: NextRequest) {
     const sp          = request.nextUrl.searchParams
     const adAccountId = sp.get("adAccountId") || sp.get("ad_account_id") || ""
     const datePreset  = sp.get("datePreset") || "last_90d"
-    const limit       = Math.min(parseInt(sp.get("limit") || "25"), 50)
+    const limit       = Math.min(parseInt(sp.get("limit") || "20"), 50)
+    const after       = sp.get("after") || ""
 
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
     const token       = connection.access_token
     const accountPath = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
 
     // ── Step 1: ad-level insights sorted by spend ────────────────────────
-    const insightParams = new URLSearchParams({
+    const insightParamsObj: Record<string, string> = {
       level: "ad",
       fields: "ad_id,ad_name,adset_name,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,actions,action_values,cost_per_action_type,date_start,date_stop",
       date_preset: datePreset,
       sort: "spend_descending",
       limit: String(limit),
       access_token: token,
-    })
+    }
+    if (after) insightParamsObj.after = after
+    const insightParams = new URLSearchParams(insightParamsObj)
 
     const insightRes  = await fetch(`${GRAPH}/${accountPath}/insights?${insightParams}`)
     const insightData = await insightRes.json()
@@ -162,7 +165,10 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ ads, datePreset })
+    const nextCursor = insightData.paging?.cursors?.after || null
+    const hasMore    = !!insightData.paging?.next
+
+    return NextResponse.json({ ads, datePreset, nextCursor, hasMore })
   } catch (err: any) {
     console.error("[insights/top-creatives]", err)
     return NextResponse.json({ error: err.message }, { status: 500 })

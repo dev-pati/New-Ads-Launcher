@@ -36,7 +36,7 @@ export async function sendInviteEmail({
   const acceptUrl = `${getAppUrl()}/invite?token=${token}`
 
   const { data, error } = await resend.emails.send({
-    from: "AdLauncher <team@pati.tuananhdo.site>",
+    from: "AdLauncher <team@sonkieu.site>",
     to,
     subject: `You're invited to join ${orgName}`,
     html: `

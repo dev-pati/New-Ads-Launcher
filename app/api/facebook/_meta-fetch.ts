@@ -22,7 +22,7 @@ export class MetaRateLimitError extends Error {
 
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613])
 const MAX_RETRIES = 3
-const BACKOFF_BASE_MS = 1000
+const BACKOFF_BASE_MS = 2000 // 2s → 4s → 8s (was 1s → 2s → 4s)
 
 function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms))

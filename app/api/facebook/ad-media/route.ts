@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getCachedFacebookMetadata } from "../_cache"
 
-const AD_MEDIA_TTL_MS = 5 * 60 * 1000 // 5 min — media library changes infrequently
+const AD_MEDIA_TTL_MS = 10 * 60 * 1000 // 10 min — media library changes infrequently
 
 // GET /api/facebook/ad-media?ad_account_id=act_xxx&type=all|image|video&limit=30&offset=0
 export async function GET(request: NextRequest) {

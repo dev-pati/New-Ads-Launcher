@@ -3,7 +3,7 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getExistingAds } from "@/lib/facebook"
 import { getCachedFacebookMetadata } from "../_cache"
 
-const EXISTING_ADS_TTL_MS = 3 * 60 * 1000 // 3 min — ads change more often than metadata
+const EXISTING_ADS_TTL_MS = 5 * 60 * 1000 // 5 min cache
 
 export async function GET(request: NextRequest) {
   try {
