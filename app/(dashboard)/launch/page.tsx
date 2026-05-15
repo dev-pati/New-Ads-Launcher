@@ -59,7 +59,7 @@ interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "im
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
-interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string; sitelinks?: string[]; partnershipAds?: boolean; multiLanguage?: string[]; catalogEnabled?: boolean; metaSchedule?: string }
+interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string; sitelinks?: string[]; partnership?: PartnershipState; multilanguage?: MultilanguageState; catalog?: CatalogAdsState; schedule?: { start: string; end?: string } }
 interface CreatedAd { adId: string; adSetId: string; adSetName: string; creativeId?: string; fileName?: string; thumbnailUrl?: string | null; mediaType?: "image" | "video"; mode?: string; multiGroup?: string; flexibleAd?: string; carousel?: string }
 interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; pageName?: string; adAccountId: string; adAccountName: string; timestamp: string }
 interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[]; scheduled?: { at: string; end: string | null } | null; createdAds: CreatedAd[]; batchId?: string | null; launchMeta?: LaunchMeta }
@@ -11480,9 +11480,15 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
 
 // ─── Table Mode ───────────────────────────────────────────────────────────────
 
+const DEFAULT_PARTNERSHIP: PartnershipState = { enabled: false, partnerPageId: "", partnerIgId: "", displayMode: "both", partnerFirstInDisplay: false }
+const DEFAULT_MULTILANGUAGE: MultilanguageState = { enabled: false, defaultLanguage: "en_US", translations: [] }
+const DEFAULT_CATALOG: CatalogAdsState = { enabled: false, formatMode: "automatic", format: "single", frameImageUrl: "", dynamicMedia: { optimizedMediaSelection: false, automaticVideoCropping: false, prioritizeVideo: false }, catalogId: "", catalogName: "", productSetId: "", productSetName: "", hideAutoCreatedSets: false }
+
+type RowModalType = "partnership" | "multilanguage" | "catalog" | "schedule"
+
 function TableMode({
   rows, adSets, onAddRow, onUpdateRow, onDeleteRow, onDuplicateRow,
-  selectedPage, igAccountCache, selectedIgPageId, searchQuery, launchAsActive, pages,
+  selectedPage, igAccountCache, selectedIgPageId, searchQuery, launchAsActive, pages, selectedAccountId,
 }: {
   rows: TableRow[]
   adSets: AdSet[]
@@ -11496,6 +11502,7 @@ function TableMode({
   searchQuery: string
   launchAsActive: boolean
   pages: FacebookPage[]
+  selectedAccountId: string
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedVar, setExpandedVar] = useState<Record<string, { primary: boolean; headline: boolean; description: boolean }>>({})
@@ -11503,6 +11510,7 @@ function TableMode({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
   const [profilePopoverRow, setProfilePopoverRow] = useState<string | null>(null)
   const [profilePopoverPos, setProfilePopoverPos] = useState<{ top: number; left: number } | null>(null)
+  const [rowModal, setRowModal] = useState<{ type: RowModalType; rowId: string } | null>(null)
   const profilePopoverRef = useRef<HTMLDivElement>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
@@ -11602,6 +11610,7 @@ function TableMode({
   const selectedCount = selectedIds.size
 
   return (
+    <>
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div
         ref={tableScrollRef}
@@ -11652,12 +11661,8 @@ function TableMode({
               </th>
               <th className="w-40 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
               <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
-              <th className="w-48 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort("webLink")}>
-                <span className="flex items-center gap-0.5">Link <SortIcon field="webLink" /></span>
-              </th>
-              <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort("urlTags")}>
-                <span className="flex items-center gap-0.5">URL Tags <SortIcon field="urlTags" /></span>
-              </th>
+              <th className="w-48 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
+              <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
               <th className="w-36 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sitelinks</th>
               <th className="w-36 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Partnership Ads</th>
               <th className="w-36 px-3 py-2.5 text-left">
@@ -12094,7 +12099,7 @@ function TableMode({
                   <td className="px-3 py-2">
                     <button
                       onClick={() => {}}
-                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium whitespace-nowrap"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/50 rounded px-2 py-1 whitespace-nowrap"
                     >
                       <IconPlus className="size-3" />Add sitelinks
                     </button>
@@ -12102,39 +12107,36 @@ function TableMode({
 
                   {/* PARTNERSHIP ADS */}
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => onUpdateRow(row.id, "partnershipAds", !row.partnershipAds)}
-                        className={cn(
-                          "relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0",
-                          row.partnershipAds ? "bg-blue-500" : "bg-muted-foreground/30"
-                        )}
-                      >
-                        <span className={cn(
-                          "inline-block size-3 rounded-full bg-white shadow-sm transition-transform",
-                          row.partnershipAds ? "translate-x-[18px]" : "translate-x-0.5"
-                        )} />
-                      </button>
-                      <span className="text-[10px] text-muted-foreground">{row.partnershipAds ? "On" : "Off"}</span>
-                    </div>
+                    {row.partnership?.enabled && row.partnership.partnerPageId
+                      ? <button
+                          onClick={() => setRowModal({ type: "partnership", rowId: row.id })}
+                          className="flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 max-w-[120px]"
+                        >
+                          <IconCheck className="size-3 shrink-0" />
+                          <span className="truncate">Connected</span>
+                        </button>
+                      : <button
+                          onClick={() => setRowModal({ type: "partnership", rowId: row.id })}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/50 rounded px-2 py-1 whitespace-nowrap"
+                        >
+                          <IconPlus className="size-3" />Add Partner
+                        </button>
+                    }
                   </td>
 
                   {/* MULTI-LANGUAGE */}
                   <td className="px-3 py-2">
-                    {row.multiLanguage && row.multiLanguage.length > 0
-                      ? <div className="flex flex-wrap gap-1">
-                          {row.multiLanguage.map((lang, li) => (
-                            <span key={li} className="inline-flex items-center gap-0.5 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
-                              {lang}
-                              <button onClick={() => onUpdateRow(row.id, "multiLanguage", (row.multiLanguage||[]).filter((_,j)=>j!==li))} className="ml-0.5 hover:text-blue-900">
-                                <IconX className="size-2.5" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
+                    {row.multilanguage?.enabled && row.multilanguage.translations.length > 0
+                      ? <button
+                          onClick={() => setRowModal({ type: "multilanguage", rowId: row.id })}
+                          className="flex items-center gap-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800"
+                        >
+                          <IconLanguage className="size-3" />
+                          {row.multilanguage.translations.length} lang{row.multilanguage.translations.length > 1 ? "s" : ""}
+                        </button>
                       : <button
-                          onClick={() => {}}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border/50 rounded px-2 py-1 whitespace-nowrap"
+                          onClick={() => setRowModal({ type: "multilanguage", rowId: row.id })}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/50 rounded px-2 py-1 whitespace-nowrap"
                         >
                           <IconLanguage className="size-3" />Add Languages
                         </button>
@@ -12143,36 +12145,35 @@ function TableMode({
 
                   {/* CATALOG */}
                   <td className="px-3 py-2">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => onUpdateRow(row.id, "catalogEnabled", !row.catalogEnabled)}
-                          className={cn(
-                            "relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0",
-                            row.catalogEnabled ? "bg-blue-500" : "bg-muted-foreground/30"
-                          )}
+                    {row.catalog?.enabled && row.catalog.catalogId
+                      ? <button
+                          onClick={() => setRowModal({ type: "catalog", rowId: row.id })}
+                          className="flex flex-col items-start gap-0.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 max-w-[120px]"
                         >
-                          <span className={cn(
-                            "inline-block size-3 rounded-full bg-white shadow-sm transition-transform",
-                            row.catalogEnabled ? "translate-x-[18px]" : "translate-x-0.5"
-                          )} />
+                          <span className="flex items-center gap-1 font-medium"><IconCheck className="size-3 shrink-0" />Enabled</span>
+                          <span className="truncate text-[10px] opacity-70">{row.catalog.catalogName || row.catalog.catalogId}</span>
                         </button>
-                        <span className="text-[10px] text-muted-foreground">{row.catalogEnabled ? "On" : "Off"}</span>
-                      </div>
-                      {row.catalogEnabled && (
-                        <button onClick={() => {}} className="text-[10px] text-blue-600 hover:text-blue-700 font-medium text-left">
+                      : <button
+                          onClick={() => setRowModal({ type: "catalog", rowId: row.id })}
+                          className="text-xs border border-dashed border-border/50 rounded px-2.5 py-1 hover:bg-muted/40 text-muted-foreground whitespace-nowrap"
+                        >
                           Configure
                         </button>
-                      )}
-                    </div>
+                    }
                   </td>
 
                   {/* META SCHEDULE */}
                   <td className="px-3 py-2">
-                    {row.metaSchedule
-                      ? <span className="text-[10px] text-foreground/70 break-all">{row.metaSchedule}</span>
+                    {row.schedule?.start
+                      ? <button
+                          onClick={() => setRowModal({ type: "schedule", rowId: row.id })}
+                          className="text-left text-[10px] text-blue-600 hover:text-blue-700 leading-snug"
+                        >
+                          <span className="block">{new Date(row.schedule.start).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                          {row.schedule.end && <span className="block opacity-70">→ {new Date(row.schedule.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
+                        </button>
                       : <button
-                          onClick={() => {}}
+                          onClick={() => setRowModal({ type: "schedule", rowId: row.id })}
                           className="text-xs border border-border/60 rounded px-2.5 py-1 hover:bg-muted/40 text-foreground/70 font-medium"
                         >
                           Set
@@ -12262,6 +12263,60 @@ function TableMode({
         </div>
       )}
     </div>
+
+    {/* ── Per-row modals ─────────────────────────────────────────────────────── */}
+    {(() => {
+      if (!rowModal) return null
+      const { type, rowId } = rowModal
+      const row = rows.find(r => r.id === rowId)
+      if (!row) return null
+      const close = () => setRowModal(null)
+
+      if (type === "partnership") return (
+        <PartnershipAdsModal
+          open onClose={close}
+          pages={pages}
+          selectedPageId={row.pageId || selectedPage?.id || ""}
+          selectedIgId={row.igId || selectedIgPageId}
+          igAccountCache={igAccountCache}
+          value={row.partnership || DEFAULT_PARTNERSHIP}
+          onConfirm={v => { onUpdateRow(rowId, "partnership", v); close() }}
+        />
+      )
+
+      if (type === "multilanguage") return (
+        <MultilanguageAdsModal
+          open onClose={close}
+          value={row.multilanguage || DEFAULT_MULTILANGUAGE}
+          basePrimaryText={row.primaryText}
+          baseHeadline={row.headline}
+          baseDescription={row.description}
+          onConfirm={v => { onUpdateRow(rowId, "multilanguage", v); close() }}
+        />
+      )
+
+      if (type === "catalog") return (
+        <CatalogAdsModal
+          open onClose={close}
+          adAccountId={selectedAccountId}
+          value={row.catalog || DEFAULT_CATALOG}
+          onConfirm={v => { onUpdateRow(rowId, "catalog", v); close() }}
+        />
+      )
+
+      if (type === "schedule") return (
+        <ScheduleModal
+          open onClose={close}
+          onConfirm={(start, end) => {
+            onUpdateRow(rowId, "schedule", { start, end: end || undefined })
+            close()
+          }}
+        />
+      )
+
+      return null
+    })()}
+    </>
   )
 }
 
@@ -13410,8 +13465,20 @@ export default function LaunchPage() {
             cta: row.cta || cta,
             webLink: rowWebLink,
             createPaused: row.launchAsActive !== undefined ? !row.launchAsActive : !launchAsActive,
-            startTime: scheduledTime,
-            endTime: scheduleEndTime,
+            // Per-row Partnership Ads
+            partnerPageId: row.partnership?.enabled && row.partnership.partnerPageId ? row.partnership.partnerPageId : undefined,
+            partnershipDisplayMode: row.partnership?.enabled && row.partnership.partnerPageId ? row.partnership.displayMode : undefined,
+            // Per-row Multi-Language
+            multilanguage: row.multilanguage?.enabled && row.multilanguage.translations.length > 0
+              ? { defaultLanguage: row.multilanguage.defaultLanguage, translations: row.multilanguage.translations }
+              : undefined,
+            // Per-row Catalog Ads
+            catalogAds: row.catalog?.enabled && row.catalog.catalogId
+              ? { catalogId: row.catalog.catalogId, productSetId: row.catalog.productSetId || undefined, formatMode: row.catalog.formatMode, format: row.catalog.format, frameImageUrl: row.catalog.frameImageUrl || undefined, dynamicMedia: row.catalog.dynamicMedia }
+              : undefined,
+            // Per-row schedule overrides global schedule
+            startTime: row.schedule?.start || scheduledTime,
+            endTime: row.schedule?.end || scheduleEndTime,
             enhancements: savedEnhancements,
             launchSettings: savedLaunchSettings,
           }),
@@ -14121,6 +14188,7 @@ export default function LaunchPage() {
               searchQuery={tableSearchQuery}
               launchAsActive={launchAsActive}
               pages={pages}
+              selectedAccountId={selectedAccountId || ""}
             />
 
             {error && (
