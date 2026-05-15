@@ -27,9 +27,15 @@ export async function POST(request: NextRequest) {
       adSetIds,
       adSetNames,
       creativeIds,
+      adName: rowAdName,
       pageId,
+      instagramAccountId,
       headline,
+      headlineVariations,
       primaryText,
+      primaryTextVariations,
+      description,
+      descriptionVariations,
       cta,
       webLink,
       createPaused,
@@ -353,7 +359,7 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        const adName = creative.file_name.replace(/\.[^/.]+$/, "")
+        const adName = (rowAdName?.trim()) || creative.file_name.replace(/\.[^/.]+$/, "")
         const sourceId = adSourceIds?.[creative.id] || ""
 
         // ── Post ID mode ──────────────────────────────────────────────────────
@@ -411,16 +417,28 @@ export async function POST(request: NextRequest) {
         }
 
         try {
+          const rowTitle = (headline || creative.headline || "").trim()
+          const rowBody  = (primaryText || creative.primary_text || "").trim()
+          const rowDesc  = (description || "").trim()
+
+          // Build text variation pools for asset_feed_spec Dynamic Creative A/B testing.
+          // Combine primary value + any extra variations, de-dup empty strings.
+          const allBodies = [rowBody, ...(primaryTextVariations || [])].map((s: string) => s.trim()).filter(Boolean)
+          const allTitles = [rowTitle, ...(headlineVariations || [])].map((s: string) => s.trim()).filter(Boolean)
+          const allDescs  = [rowDesc, ...(descriptionVariations || [])].map((s: string) => s.trim()).filter(Boolean)
+          const hasVariations = allBodies.length > 1 || allTitles.length > 1
+
           const ad = await createAd(adAccountId, token, {
             name: adName,
             adset_id: adSetId,
             page_id: pageId,
+            instagram_actor_id: instagramAccountId || undefined,
             image_hash: creative.fb_image_hash || undefined,
             video_id: creative.fb_video_id || undefined,
             thumbnail_url: thumbnailUrl,
-            title: headline || creative.headline || "",
-            body: primaryText || creative.primary_text || "",
-            description: "",
+            title: rowTitle,
+            body: rowBody,
+            description: rowDesc,
             cta: cta || creative.cta || "LEARN_MORE",
             link_url: webLink || creative.link_url || "",
             status: adStatus,
@@ -429,6 +447,9 @@ export async function POST(request: NextRequest) {
             multilanguage: multilanguage || undefined,
             catalog_ads: catalogAds || undefined,
             collection_ads: collectionAds || undefined,
+            ...(hasVariations ? {
+              text_variations: { bodies: allBodies, titles: allTitles, descriptions: allDescs },
+            } : {}),
             degrees_of_freedom_spec: degreesOfFreedom,
           })
 

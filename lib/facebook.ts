@@ -915,6 +915,13 @@ export async function createAd(
       videos: { video_id: string; thumbnail_url?: string }[]
       customRules: any[]
     }
+    instagram_actor_id?: string  // IG account to associate with this ad's creative
+    // Text variations — triggers asset_feed_spec for Dynamic Creative A/B testing
+    text_variations?: {
+      bodies: string[]       // all primary text versions (first = default)
+      titles: string[]       // all headline versions (first = default)
+      descriptions: string[] // all description versions
+    }
     // Ad Source modes
     object_story_id?: string   // Post ID mode: reuse existing dark post (carries social proof)
     reuse_creative_id?: string // Creative ID mode: reuse existing Meta creative_id
@@ -980,6 +987,7 @@ export async function createAd(
       call_to_action: { type: params.cta, value: { link: params.link_url } },
     },
   }
+  if (params.instagram_actor_id) creativeSpec.instagram_actor_id = params.instagram_actor_id
   if (params.display_url) creativeSpec.link_data.display_url = params.display_url
   if (params.image_hash) creativeSpec.link_data.image_hash = params.image_hash
   if (params.video_id) {
@@ -1060,6 +1068,28 @@ export async function createAd(
         video_indices: g.video_indices || [],
       })),
     }
+    delete creativeSpec.link_data
+    delete creativeSpec.video_data
+  }
+
+  // Text Variations — Dynamic Creative A/B testing via asset_feed_spec.
+  // Triggered when caller provides >1 body or >1 title. Meta automatically rotates
+  // and optimises delivery across all provided copy combinations.
+  if (params.text_variations && (params.text_variations.bodies.length > 1 || params.text_variations.titles.length > 1)) {
+    const tv = params.text_variations
+    const spec: any = {
+      bodies: tv.bodies.map(t => ({ text: t })),
+      titles: tv.titles.map(t => ({ text: t })),
+      call_to_action_types: [params.cta],
+      link_urls: [{ website_url: params.link_url }],
+      ad_formats: params.video_id ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"],
+    }
+    if (tv.descriptions.length > 0) spec.descriptions = tv.descriptions.map(t => ({ text: t }))
+    if (params.image_hash) spec.images = [{ hash: params.image_hash }]
+    if (params.video_id) {
+      spec.videos = [{ video_id: params.video_id, ...(params.thumbnail_url ? { thumbnail_url: params.thumbnail_url } : {}) }]
+    }
+    creativeJson.asset_feed_spec = spec
     delete creativeSpec.link_data
     delete creativeSpec.video_data
   }
