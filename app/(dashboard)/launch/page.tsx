@@ -59,7 +59,8 @@ interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "im
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
-interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string; sitelinks?: string[]; partnership?: PartnershipState; multilanguage?: MultilanguageState; catalog?: CatalogAdsState; schedule?: { start: string; end?: string } }
+interface SitelinkItem { title: string; url: string }
+interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string; sitelinks?: SitelinkItem[]; partnership?: PartnershipState; multilanguage?: MultilanguageState; catalog?: CatalogAdsState; schedule?: { start: string; end?: string } }
 interface CreatedAd { adId: string; adSetId: string; adSetName: string; creativeId?: string; fileName?: string; thumbnailUrl?: string | null; mediaType?: "image" | "video"; mode?: string; multiGroup?: string; flexibleAd?: string; carousel?: string }
 interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; pageName?: string; adAccountId: string; adAccountName: string; timestamp: string }
 interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[]; scheduled?: { at: string; end: string | null } | null; createdAds: CreatedAd[]; batchId?: string | null; launchMeta?: LaunchMeta }
@@ -1102,14 +1103,13 @@ function MultilanguageAdsModal({
 }) {
   const [local, setLocal] = useState<MultilanguageState>(value)
   const [collapsed, setCollapsed] = useState(false)
-  const [langPickerOpen, setLangPickerOpen] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [langSearch, setLangSearch] = useState("")
 
-  useEffect(() => { if (open) { setLocal(value); setLangPickerOpen(false); setLangSearch("") } }, [open, value])
+  useEffect(() => { if (open) { setLocal(value); setPickerOpen(false); setLangSearch("") } }, [open, value])
 
-  const usedCodes = new Set([local.defaultLanguage, ...local.translations.map(t => t.language)])
-  const availableLangs = FB_LANGUAGES.filter(l =>
-    !usedCodes.has(l.code) &&
+  const filteredLangs = FB_LANGUAGES.filter(l =>
+    l.code !== local.defaultLanguage &&
     (!langSearch || l.name.toLowerCase().includes(langSearch.toLowerCase()) || l.code.toLowerCase().includes(langSearch.toLowerCase()))
   )
 
@@ -1118,11 +1118,13 @@ function MultilanguageAdsModal({
       ...s,
       translations: [...s.translations, { language: code, primaryText: "", headline: "", description: "" }],
     }))
-    setLangPickerOpen(false)
-    setLangSearch("")
   }
   const removeLanguage = (code: string) => {
     setLocal(s => ({ ...s, translations: s.translations.filter(t => t.language !== code) }))
+  }
+  const toggleLanguage = (code: string) => {
+    if (local.translations.some(t => t.language === code)) removeLanguage(code)
+    else addLanguage(code)
   }
   const updateTranslation = (code: string, field: keyof Omit<LanguageTranslation, "language">, val: string) => {
     setLocal(s => ({
@@ -1144,7 +1146,7 @@ function MultilanguageAdsModal({
       <DialogContent className="max-w-3xl p-0 flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b shrink-0">
-          <DialogTitle className="text-base font-semibold">Multilanguage ads</DialogTitle>
+          <DialogTitle className="text-base font-semibold">Multi-Language Settings</DialogTitle>
         </div>
 
         {/* Body */}
@@ -1206,7 +1208,76 @@ function MultilanguageAdsModal({
                     </p>
                   </div>
 
-                  {/* Translations list */}
+                  {/* Multi-select language picker */}
+                  <div className="border rounded-xl overflow-hidden">
+                    {/* Toggle header */}
+                    <button
+                      onClick={() => setPickerOpen(o => !o)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 bg-muted/30 hover:bg-muted/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Select Languages to Add</span>
+                        {local.translations.length > 0 && (
+                          <span className="text-[11px] bg-primary/10 text-primary border border-primary/20 rounded-full px-1.5 py-0.5 font-semibold leading-none">{local.translations.length} selected</span>
+                        )}
+                      </div>
+                      {pickerOpen
+                        ? <IconChevronUp className="size-4 text-muted-foreground" />
+                        : <IconChevronDown className="size-4 text-muted-foreground" />}
+                    </button>
+
+                    {pickerOpen && (
+                      <div className="border-t p-3 space-y-2.5">
+                        {/* Chips */}
+                        {local.translations.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {local.translations.map(t => (
+                              <span key={t.language} className="flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary border border-primary/20 rounded-full text-xs font-medium">
+                                {langName(t.language)}
+                                <button onClick={() => removeLanguage(t.language)} className="hover:text-destructive transition-colors ml-0.5">
+                                  <IconX className="size-2.5" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {/* Search */}
+                        <div className="relative">
+                          <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+                          <input
+                            value={langSearch}
+                            onChange={e => setLangSearch(e.target.value)}
+                            placeholder="Search languages..."
+                            className="w-full pl-8 pr-3 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                          />
+                        </div>
+                        {/* Checkbox list */}
+                        <div className="max-h-44 overflow-y-auto bg-background border rounded-lg divide-y divide-border/40">
+                          {filteredLangs.length === 0 ? (
+                            <div className="px-3 py-3 text-xs text-muted-foreground text-center">No languages found</div>
+                          ) : filteredLangs.map(l => {
+                            const isChecked = local.translations.some(t => t.language === l.code)
+                            return (
+                              <button
+                                key={l.code}
+                                onClick={() => toggleLanguage(l.code)}
+                                className={cn("w-full flex items-center gap-3 px-3 py-2 hover:bg-muted/30 transition-colors text-left", isChecked && "bg-primary/5")}
+                              >
+                                <div className={cn("size-4 rounded flex items-center justify-center shrink-0 transition-colors border-2",
+                                  isChecked ? "bg-primary border-primary" : "border-border/70")}>
+                                  {isChecked && <IconCheck className="size-2.5 text-white" strokeWidth={3} />}
+                                </div>
+                                <span className="text-sm flex-1">{l.name}</span>
+                                <span className="text-[11px] text-muted-foreground font-mono">{l.code}</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Translations list — below picker */}
                   {local.translations.map(t => (
                     <div key={t.language} className="border rounded-xl p-3 space-y-2.5">
                       <div className="flex items-center justify-between">
@@ -1252,52 +1323,6 @@ function MultilanguageAdsModal({
                       </div>
                     </div>
                   ))}
-
-                  {/* Add Language */}
-                  {!langPickerOpen ? (
-                    <button
-                      onClick={() => setLangPickerOpen(true)}
-                      disabled={availableLangs.length === 0}
-                      className={cn(
-                        "w-full flex items-center justify-center gap-1.5 py-2.5 border rounded-lg text-sm transition-colors",
-                        availableLangs.length === 0
-                          ? "text-muted-foreground/50 cursor-not-allowed"
-                          : "text-foreground hover:bg-muted/40"
-                      )}
-                    >
-                      <IconPlus className="size-4" />Add Language
-                    </button>
-                  ) : (
-                    <div className="border rounded-xl p-3 space-y-2 bg-muted/20">
-                      <div className="relative">
-                        <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-                        <input
-                          autoFocus
-                          value={langSearch}
-                          onChange={e => setLangSearch(e.target.value)}
-                          placeholder="Search language..."
-                          className="w-full pl-8 pr-3 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-                        />
-                      </div>
-                      <div className="max-h-48 overflow-y-auto bg-background border rounded-lg">
-                        {availableLangs.length === 0 ? (
-                          <div className="px-3 py-3 text-xs text-muted-foreground">No more languages</div>
-                        ) : availableLangs.map(l => (
-                          <button
-                            key={l.code}
-                            onClick={() => addLanguage(l.code)}
-                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-muted/40 text-left transition-colors"
-                          >
-                            <span className="text-sm">{l.name}</span>
-                            <span className="text-[11px] text-muted-foreground font-mono">{l.code}</span>
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex justify-end">
-                        <button onClick={() => setLangPickerOpen(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
@@ -11261,14 +11286,29 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
 
 // ─── Launch History Section ───────────────────────────────────────────────────
 
-function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloadTrigger: number; onRelaunch: (b: LaunchBatch) => void; pages?: any[] }) {
+interface DraftRecord { id: string; name: string; ad_account_id: string; ad_account_name: string; row_count: number; creative_thumbs: string[]; user_name: string; created_at: string }
+
+function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverride, pages = [] }: {
+  reloadTrigger: number
+  onRelaunch: (b: LaunchBatch) => void
+  onLoadDraft?: (draftId: string) => void
+  tabOverride?: "launches" | "drafts" | "scheduled" | null
+  pages?: any[]
+}) {
   const [tab, setTab] = useState<"launches" | "drafts" | "scheduled">("launches")
   const [batches, setBatches] = useState<LaunchBatch[]>([])
+  const [drafts, setDrafts] = useState<DraftRecord[]>([])
   const [loading, setLoading] = useState(false)
+  const [draftsLoading, setDraftsLoading] = useState(false)
+  const [draftSearch, setDraftSearch] = useState("")
+  const [loadingDraftId, setLoadingDraftId] = useState<string | null>(null)
+  const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [resultModal, setResultModal] = useState<LaunchResult | null>(null)
   const [displayCount, setDisplayCount] = useState(10)
+
+  useEffect(() => { if (tabOverride) setTab(tabOverride) }, [tabOverride])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -11281,7 +11321,30 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
       .finally(() => setLoading(false))
   }, [statusFilter])
 
+  const loadDrafts = useCallback(() => {
+    setDraftsLoading(true)
+    fetch("/api/launch-drafts")
+      .then(r => r.json())
+      .then(d => setDrafts(d.drafts || []))
+      .catch(() => {})
+      .finally(() => setDraftsLoading(false))
+  }, [])
+
+  const deleteDraft = async (id: string) => {
+    setDeletingDraftId(id)
+    await fetch(`/api/launch-drafts?id=${id}`, { method: "DELETE" })
+    setDrafts(s => s.filter(d => d.id !== id))
+    setDeletingDraftId(null)
+  }
+
+  const doLoadDraft = async (id: string) => {
+    setLoadingDraftId(id)
+    await onLoadDraft?.(id)
+    setLoadingDraftId(null)
+  }
+
   useEffect(() => { load() }, [load, reloadTrigger])
+  useEffect(() => { if (tab === "drafts") loadDrafts() }, [tab, loadDrafts, reloadTrigger])
   useEffect(() => { setDisplayCount(10) }, [search, statusFilter])
 
   const filtered = batches.filter(b => {
@@ -11366,6 +11429,84 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
         </div>
       </div>
 
+      {/* Drafts tab content */}
+      {tab === "drafts" && (
+        <div className="flex flex-col flex-1 min-h-0">
+          {draftsLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <IconLoader2 className="size-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : drafts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-14 gap-2 text-muted-foreground/50">
+              <IconBookmark className="size-8 stroke-1" />
+              <span className="text-xs">No drafts saved yet. Click "Save Draft" to save current rows.</span>
+            </div>
+          ) : (
+            <>
+              {/* Drafts search */}
+              <div className="px-4 py-2 border-b shrink-0">
+                <div className="relative">
+                  <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50" />
+                  <input value={draftSearch} onChange={e => setDraftSearch(e.target.value)}
+                    placeholder="Search drafts..."
+                    className="pl-7 pr-3 py-1.5 text-xs bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring w-64 placeholder:text-muted-foreground/50" />
+                </div>
+              </div>
+              {/* Drafts header */}
+              <div className="grid text-[10px] font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
+                style={{ gridTemplateColumns: "120px 1fr 140px 70px 120px 90px 100px" }}>
+                <span>Creatives</span><span>Title</span><span>Account</span>
+                <span>Rows</span><span>Created</span><span>User</span><span>Actions</span>
+              </div>
+              {/* Drafts list */}
+              <div className="overflow-y-auto flex-1">
+                {drafts
+                  .filter(d => !draftSearch || d.name.toLowerCase().includes(draftSearch.toLowerCase()) || d.ad_account_name?.toLowerCase().includes(draftSearch.toLowerCase()))
+                  .map(d => (
+                    <div key={d.id} className="grid items-center px-4 py-2 border-b text-sm hover:bg-muted/20 transition-colors"
+                      style={{ gridTemplateColumns: "120px 1fr 140px 70px 120px 90px 100px" }}>
+                      {/* Thumbnails */}
+                      <ThumbStack thumbs={d.creative_thumbs || []} count={d.row_count} />
+                      {/* Name */}
+                      <span className="text-xs font-medium truncate pr-2">{d.name}</span>
+                      {/* Account */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <IconBrandMeta className="size-3.5 text-[#1877F2] shrink-0" />
+                        <span className="text-xs text-muted-foreground truncate">{d.ad_account_name || d.ad_account_id || "—"}</span>
+                      </div>
+                      {/* Row count */}
+                      <span className="text-xs font-medium">{d.row_count}</span>
+                      {/* Date */}
+                      <span className="text-xs text-muted-foreground">{formatDate(d.created_at)}</span>
+                      {/* User */}
+                      <div className="flex items-center gap-1.5">
+                        <UserAvatar name={d.user_name || "?"} />
+                        <span className="text-xs text-muted-foreground truncate">{d.user_name}</span>
+                      </div>
+                      {/* Actions */}
+                      <div className="flex items-center gap-1">
+                        <Button variant="default" size="sm" className="h-6 text-xs gap-1 px-2"
+                          disabled={loadingDraftId === d.id}
+                          onClick={() => doLoadDraft(d.id)}>
+                          {loadingDraftId === d.id ? <IconLoader2 className="size-3 animate-spin" /> : <IconRocket className="size-3" />}
+                          Load
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                          disabled={deletingDraftId === d.id}
+                          onClick={() => deleteDraft(d.id)} title="Delete draft">
+                          {deletingDraftId === d.id ? <IconLoader2 className="size-3 animate-spin" /> : <IconTrash className="size-3" />}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Launches + Scheduled tab content */}
+      {tab !== "drafts" && <>
       {/* Table header */}
       <div className="grid text-[10px] font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
         style={{ gridTemplateColumns: "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
@@ -11384,7 +11525,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
       <div>
         {tab !== "launches" ? (
           <div className="flex items-center justify-center py-10 text-xs text-muted-foreground/50">
-            {tab === "drafts" ? "No drafts saved" : "No scheduled ads"}
+            No scheduled ads
           </div>
         ) : loading ? (
           <div className="flex items-center justify-center py-10">
@@ -11474,7 +11615,78 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, pages = [] }: { reloa
           )}
         </>}
       </div>
+      </>}
     </div>
+  )
+}
+
+// ─── Sitelinks Modal ─────────────────────────────────────────────────────────
+
+function SitelinksModal({ open, onClose, value, onConfirm }: {
+  open: boolean
+  onClose: () => void
+  value: SitelinkItem[]
+  onConfirm: (v: SitelinkItem[]) => void
+}) {
+  const [local, setLocal] = useState<SitelinkItem[]>(value)
+  useEffect(() => { if (open) setLocal(value) }, [open, value])
+
+  const add = () => { if (local.length < 4) setLocal(s => [...s, { title: "", url: "" }]) }
+  const update = (idx: number, field: "title" | "url", val: string) =>
+    setLocal(s => s.map((l, i) => i === idx ? { ...l, [field]: val } : l))
+  const remove = (idx: number) => setLocal(s => s.filter((_, i) => i !== idx))
+
+  const handleSave = () => {
+    onConfirm(local.filter(l => l.title.trim() && l.url.trim()))
+    onClose()
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg p-0 flex flex-col max-h-[80vh]">
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b shrink-0">
+          <DialogTitle className="text-base font-semibold">Sitelinks</DialogTitle>
+        </div>
+        <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1 min-h-0">
+          <p className="text-xs text-muted-foreground">Thêm tối đa 4 sitelink hiển thị bên dưới ad. Mỗi sitelink cần title và URL.</p>
+          {local.map((link, idx) => (
+            <div key={idx} className="border rounded-xl p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground">Sitelink {idx + 1}</span>
+                <button onClick={() => remove(idx)} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <IconX className="size-3.5" />
+                </button>
+              </div>
+              <input
+                value={link.title}
+                onChange={e => update(idx, "title", e.target.value)}
+                placeholder="Title (vd: Shop Now)"
+                maxLength={25}
+                className="w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+              />
+              <input
+                value={link.url}
+                onChange={e => update(idx, "url", e.target.value)}
+                placeholder="https://example.com/page"
+                className="w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+              />
+            </div>
+          ))}
+          {local.length < 4 && (
+            <button
+              onClick={add}
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 border border-dashed rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+            >
+              <IconPlus className="size-4" />Add Sitelink ({local.length}/4)
+            </button>
+          )}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t bg-background shrink-0">
+          <Button variant="outline" onClick={onClose}><IconX className="size-3.5 mr-1" />Cancel</Button>
+          <Button onClick={handleSave}><IconCheck className="size-3.5 mr-1" />Save</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -11484,7 +11696,184 @@ const DEFAULT_PARTNERSHIP: PartnershipState = { enabled: false, partnerPageId: "
 const DEFAULT_MULTILANGUAGE: MultilanguageState = { enabled: false, defaultLanguage: "en_US", translations: [] }
 const DEFAULT_CATALOG: CatalogAdsState = { enabled: false, formatMode: "automatic", format: "single", frameImageUrl: "", dynamicMedia: { optimizedMediaSelection: false, automaticVideoCropping: false, prioritizeVideo: false }, catalogId: "", catalogName: "", productSetId: "", productSetName: "", hideAutoCreatedSets: false }
 
-type RowModalType = "partnership" | "multilanguage" | "catalog" | "schedule"
+type RowModalType = "partnership" | "multilanguage" | "catalog" | "schedule" | "sitelinks"
+
+function AdSetPickerCell({ selectedIds, adSets, onUpdate }: {
+  selectedIds: string[]
+  adSets: AdSet[]
+  onUpdate: (ids: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  const filtered = adSets.filter(a =>
+    a.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const toggle = (id: string) => {
+    onUpdate(selectedIds.includes(id)
+      ? selectedIds.filter(x => x !== id)
+      : [...selectedIds, id]
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {selectedIds.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selectedIds.map(id => {
+            const as = adSets.find(a => a.id === id)
+            if (!as) return null
+            return (
+              <span key={id} className="inline-flex items-center gap-0.5 text-[10px] bg-muted/80 border border-border/50 px-1.5 py-0.5 rounded-full max-w-full">
+                <span className="truncate max-w-[110px]">{as.name}</span>
+                <button
+                  onClick={e => { e.stopPropagation(); toggle(id) }}
+                  className="text-muted-foreground hover:text-foreground ml-0.5 shrink-0"
+                >
+                  <IconX className="size-2.5" />
+                </button>
+              </span>
+            )
+          })}
+        </div>
+      )}
+      <Popover open={open} onOpenChange={v => {
+        setOpen(v)
+        if (v) setTimeout(() => searchRef.current?.focus(), 50)
+        else setSearch("")
+      }}>
+        <PopoverTrigger asChild>
+          <button className="h-7 px-2 text-[11px] border border-dashed border-border/60 rounded-md flex items-center gap-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors w-full justify-center">
+            <IconPlus className="size-3 shrink-0" />
+            {selectedIds.length === 0 ? "Add ad set" : "Add more"}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-72 p-0 gap-0" align="start" sideOffset={4}>
+          {/* Search */}
+          <div className="px-2 py-2 border-b">
+            <div className="flex items-center gap-1.5 px-2 h-7 rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring/50">
+              <IconSearch className="size-3 text-muted-foreground shrink-0" />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search ad sets…"
+                className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                onKeyDown={e => e.stopPropagation()}
+              />
+              {search && (
+                <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground shrink-0">
+                  <IconX className="size-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="max-h-60 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <div className="px-3 py-5 text-xs text-muted-foreground text-center">No ad sets found</div>
+            ) : filtered.map(a => {
+              const isSelected = selectedIds.includes(a.id)
+              const isActive = a.effective_status === "ACTIVE"
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => toggle(a.id)}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors",
+                    isSelected ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/50"
+                  )}
+                >
+                  <div className={cn(
+                    "size-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                    isSelected ? "bg-primary border-primary" : "border-border/60"
+                  )}>
+                    {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
+                  </div>
+                  <span className={cn("flex-1 truncate", isSelected && "font-medium text-primary")}>{a.name}</span>
+                  <span className={cn(
+                    "text-[9px] px-1.5 py-0.5 rounded-sm font-semibold shrink-0",
+                    isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"
+                  )}>
+                    {isActive ? "Active" : "Paused"}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Footer */}
+          {selectedIds.length > 0 && (
+            <div className="border-t px-3 py-1.5 flex items-center justify-between bg-muted/20">
+              <span className="text-[11px] text-muted-foreground">{selectedIds.length} selected</span>
+              <button
+                onClick={() => { onUpdate([]); setOpen(false) }}
+                className="text-[11px] text-destructive hover:underline"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
+
+function CtaPickerCell({ value, onChange }: {
+  value: string | undefined
+  onChange: (v: string | undefined) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const current = CTA_OPTIONS.find(o => o.value === value)
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className={cn(
+          "h-7 w-full px-2 text-xs border rounded-md flex items-center justify-between gap-1 transition-colors",
+          open ? "border-ring ring-1 ring-ring/30" : "border-border/60 hover:border-border",
+          !current && "text-muted-foreground"
+        )}>
+          <span className="truncate">{current?.label ?? "From gallery"}</span>
+          <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-44 p-1 gap-0" align="start" sideOffset={4}>
+        <button
+          onClick={() => { onChange(undefined); setOpen(false) }}
+          className={cn(
+            "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-sm transition-colors text-left",
+            !value ? "bg-primary/5 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50"
+          )}
+        >
+          {!value && <IconCheck className="size-3 shrink-0" />}
+          <span className={!value ? "" : "ml-5"}>From gallery</span>
+        </button>
+        <div className="my-1 border-t" />
+        {CTA_OPTIONS.map(o => (
+          <button
+            key={o.value}
+            onClick={() => { onChange(o.value); setOpen(false) }}
+            className={cn(
+              "w-full flex items-center gap-2 px-2.5 py-1.5 text-xs rounded-sm transition-colors text-left",
+              value === o.value ? "bg-primary/5 text-primary font-medium" : "hover:bg-muted/50"
+            )}
+          >
+            {value === o.value
+              ? <IconCheck className="size-3 shrink-0" />
+              : <span className="size-3 shrink-0" />
+            }
+            {o.label}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 function TableMode({
   rows, adSets, onAddRow, onUpdateRow, onDeleteRow, onDuplicateRow,
@@ -11511,11 +11900,44 @@ function TableMode({
   const [profilePopoverRow, setProfilePopoverRow] = useState<string | null>(null)
   const [profilePopoverPos, setProfilePopoverPos] = useState<{ top: number; left: number } | null>(null)
   const [rowModal, setRowModal] = useState<{ type: RowModalType; rowId: string } | null>(null)
+  const [uploadingRowId, setUploadingRowId] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const profilePopoverRef = useRef<HTMLDivElement>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
+  const creativeFileInputRef = useRef<HTMLInputElement>(null)
+  const uploadTargetRowId = useRef<string | null>(null)
   const isDragging = useRef(false)
   const dragStartX = useRef(0)
   const dragScrollLeft = useRef(0)
+
+  const handleCreativeCellClick = (rowId: string) => {
+    uploadTargetRowId.current = rowId
+    setUploadError(null)
+    creativeFileInputRef.current?.click()
+  }
+
+  const handleCreativeFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file || !uploadTargetRowId.current) return
+    const rowId = uploadTargetRowId.current
+    setUploadingRowId(rowId)
+    setUploadError(null)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      if (selectedAccountId) formData.append("adAccountId", selectedAccountId)
+      const res = await fetch("/api/creatives", { method: "POST", body: formData })
+      const d = await res.json()
+      if (!res.ok) { setUploadError(d.error || "Upload failed"); return }
+      onUpdateRow(rowId, "creative", d.creative)
+    } catch (err: any) {
+      setUploadError(err.message || "Upload failed")
+    } finally {
+      setUploadingRowId(null)
+      uploadTargetRowId.current = null
+    }
+  }
 
   const onTableMouseDown = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement
@@ -11621,34 +12043,34 @@ function TableMode({
         onMouseUp={onTableMouseUp}
         onMouseLeave={onTableMouseUp}
       >
-        <table className="w-full text-sm border-collapse" style={{ minWidth: 2100 }}>
+        <table className="w-full text-sm border-collapse" style={{ minWidth: 2700 }}>
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b">
               <th className="w-10 px-3 py-2.5 text-left">
                 <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
               </th>
               <th className="w-7 px-1 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">#</th>
-              <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
+              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
               <th
-                className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-72 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("adName")}
               >
                 <span className="flex items-center gap-0.5">Ad Name <SortIcon field="adName" /></span>
               </th>
               <th
-                className="w-64 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-80 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("primaryText")}
               >
                 <span className="flex items-center gap-0.5">Primary Text <SortIcon field="primaryText" /></span>
               </th>
               <th
-                className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-64 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("headline")}
               >
                 <span className="flex items-center gap-0.5">Headline <SortIcon field="headline" /></span>
               </th>
               <th
-                className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("description")}
               >
                 <span className="flex items-center gap-0.5">Description <SortIcon field="description" /></span>
@@ -11712,24 +12134,48 @@ function TableMode({
                       <span className="text-[10px] bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">
                         SINGLE
                       </span>
-                      <div className="size-16 rounded border-2 border-dashed border-border/60 overflow-hidden relative flex items-center justify-center bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer">
-                        {mediaSrc
-                          ? <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
-                          : <div className="flex items-center justify-center w-full h-full">
-                              {row.creative
-                                ? <IconPhoto className="size-5 text-muted-foreground/40" />
-                                : <IconPlus className="size-5 text-muted-foreground/30" />
-                              }
+                      <div className="relative group/creative">
+                        <div
+                          onClick={() => handleCreativeCellClick(row.id)}
+                          className="size-20 rounded border-2 border-dashed border-border/60 overflow-hidden relative flex items-center justify-center bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer"
+                        >
+                          {uploadingRowId === row.id ? (
+                            <IconLoader2 className="size-5 text-muted-foreground animate-spin" />
+                          ) : mediaSrc ? (
+                            <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
+                          ) : (
+                            <div className="flex flex-col items-center gap-1">
+                              <IconUpload className="size-4 text-muted-foreground/40" />
+                              <span className="text-[9px] text-muted-foreground/40 leading-none">Upload</span>
                             </div>
-                        }
-                        {row.creative?.media_type === "video" && (
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
-                              <IconPlayerPlay className="size-2.5 text-white fill-white" />
+                          )}
+                          {row.creative?.media_type === "video" && !uploadingRowId && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
+                                <IconPlayerPlay className="size-2.5 text-white fill-white" />
+                              </div>
                             </div>
-                          </div>
+                          )}
+                          {/* Replace overlay on hover (when has creative) */}
+                          {row.creative && uploadingRowId !== row.id && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity">
+                              <span className="text-[9px] text-white font-medium">Replace</span>
+                            </div>
+                          )}
+                        </div>
+                        {/* Remove button */}
+                        {row.creative && uploadingRowId !== row.id && (
+                          <button
+                            onClick={e => { e.stopPropagation(); onUpdateRow(row.id, "creative", null) }}
+                            className="absolute -top-1.5 -right-1.5 size-4 bg-background border border-border rounded-full flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity hover:bg-destructive hover:border-destructive hover:text-white"
+                          >
+                            <IconX className="size-2.5" />
+                          </button>
                         )}
                       </div>
+                      {uploadError && uploadTargetRowId.current === row.id && (
+                        <p className="text-[9px] text-destructive max-w-[80px] leading-tight">{uploadError}</p>
+                      )}
                     </div>
                   </td>
 
@@ -11739,7 +12185,7 @@ function TableMode({
                       value={row.adName}
                       onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
                       placeholder="Ad name..."
-                      rows={2}
+                      rows={3}
                       className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                     />
                   </td>
@@ -11751,7 +12197,7 @@ function TableMode({
                         value={row.primaryText}
                         onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
                         placeholder="Primary text..."
-                        rows={2}
+                        rows={4}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                       />
                       {exp.primary && ptVars.map((v, vi) => (
@@ -11799,6 +12245,7 @@ function TableMode({
                         placeholder="Headline..."
                         rows={2}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
+                        style={{ minHeight: 52 }}
                       />
                       {exp.headline && hlVars.map((v, vi) => (
                         <div key={vi} className="flex items-center gap-1">
@@ -11844,6 +12291,7 @@ function TableMode({
                         placeholder="Description..."
                         rows={2}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
+                        style={{ minHeight: 52 }}
                       />
                       {exp.description && descVars.map((v, vi) => (
                         <div key={vi} className="flex items-center gap-1">
@@ -11882,42 +12330,11 @@ function TableMode({
 
                   {/* AD SETS */}
                   <td className="px-3 py-2">
-                    <div className="flex flex-col gap-1.5">
-                      {row.adSetIds.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {row.adSetIds.map(id => {
-                            const as = adSets.find(a => a.id === id)
-                            if (!as) return null
-                            return (
-                              <span key={id} className="inline-flex items-center gap-0.5 text-[10px] bg-muted/80 border border-border/50 px-1.5 py-0.5 rounded-full">
-                                <span className="max-w-[90px] truncate">{as.name}</span>
-                                <button
-                                  onClick={() => onUpdateRow(row.id, "adSetIds", row.adSetIds.filter(x => x !== id))}
-                                  className="text-muted-foreground hover:text-foreground ml-0.5"
-                                >
-                                  <IconX className="size-2.5" />
-                                </button>
-                              </span>
-                            )
-                          })}
-                        </div>
-                      )}
-                      <Select value="" onValueChange={v => {
-                        if (v && !row.adSetIds.includes(v)) onUpdateRow(row.id, "adSetIds", [...row.adSetIds, v])
-                      }}>
-                        <SelectTrigger className="h-7 text-[11px] border-dashed">
-                          <SelectValue placeholder="+ Add ad set" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {adSets.filter(a => !row.adSetIds.includes(a.id)).map(a => (
-                            <SelectItem key={a.id} value={a.id} className="text-xs">{a.name}</SelectItem>
-                          ))}
-                          {adSets.filter(a => !row.adSetIds.includes(a.id)).length === 0 && (
-                            <div className="text-xs text-muted-foreground px-2 py-1.5">All ad sets added</div>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <AdSetPickerCell
+                      selectedIds={row.adSetIds}
+                      adSets={adSets}
+                      onUpdate={ids => onUpdateRow(row.id, "adSetIds", ids)}
+                    />
                   </td>
 
                   {/* AD PROFILE — per-row selectable */}
@@ -12059,18 +12476,10 @@ function TableMode({
 
                   {/* CTA */}
                   <td className="px-3 py-2">
-                    <Select
-                      value={row.cta || "__inherit__"}
-                      onValueChange={v => onUpdateRow(row.id, "cta", v === "__inherit__" ? undefined : v)}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-full">
-                        <SelectValue placeholder="From gallery" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__inherit__" className="text-xs text-muted-foreground">From gallery</SelectItem>
-                        {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value} className="text-xs">{o.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <CtaPickerCell
+                      value={row.cta}
+                      onChange={v => onUpdateRow(row.id, "cta", v)}
+                    />
                   </td>
 
                   {/* LINK */}
@@ -12097,12 +12506,21 @@ function TableMode({
 
                   {/* SITELINKS */}
                   <td className="px-3 py-2">
-                    <button
-                      onClick={() => {}}
-                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/50 rounded px-2 py-1 whitespace-nowrap"
-                    >
-                      <IconPlus className="size-3" />Add sitelinks
-                    </button>
+                    {row.sitelinks && row.sitelinks.length > 0
+                      ? <button
+                          onClick={() => setRowModal({ type: "sitelinks", rowId: row.id })}
+                          className="flex items-center gap-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 whitespace-nowrap"
+                        >
+                          <IconExternalLink className="size-3 shrink-0" />
+                          {row.sitelinks.length} link{row.sitelinks.length > 1 ? "s" : ""}
+                        </button>
+                      : <button
+                          onClick={() => setRowModal({ type: "sitelinks", rowId: row.id })}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-dashed border-border/50 rounded px-2 py-1 whitespace-nowrap"
+                        >
+                          <IconPlus className="size-3" />Add sitelinks
+                        </button>
+                    }
                   </td>
 
                   {/* PARTNERSHIP ADS */}
@@ -12314,8 +12732,25 @@ function TableMode({
         />
       )
 
+      if (type === "sitelinks") return (
+        <SitelinksModal
+          open onClose={close}
+          value={row.sitelinks || []}
+          onConfirm={v => { onUpdateRow(rowId, "sitelinks", v); close() }}
+        />
+      )
+
       return null
     })()}
+
+    {/* Hidden file input for per-row creative upload */}
+    <input
+      ref={creativeFileInputRef}
+      type="file"
+      accept="image/*,video/*"
+      className="hidden"
+      onChange={handleCreativeFileChange}
+    />
     </>
   )
 }
@@ -12547,6 +12982,8 @@ export default function LaunchPage() {
   const [historyReload, setHistoryReload] = useState(0)
   const [error, setError] = useState("")
   const [relaunchBanner, setRelaunchBanner] = useState("")
+  const [savingDraft, setSavingDraft] = useState(false)
+  const [historyTabOverride, setHistoryTabOverride] = useState<"launches" | "drafts" | "scheduled" | null>(null)
 
   // Upload dock state — per-file progress tracking
   const [uploads, setUploads] = useState<UploadItem[]>([])
@@ -13198,6 +13635,70 @@ export default function LaunchPage() {
     return true
   }
 
+  // ── Draft: save lean rows to DB, load draft back into Table Mode ────────────
+
+  const saveDraft = async () => {
+    if (!tableRows.length) return
+    setSavingDraft(true)
+    try {
+      // Convert TableRow → lean row (strip creative object, keep only creativeId)
+      const leanRows = tableRows.map(({ creative, ...rest }) => ({
+        ...rest,
+        creativeId: creative?.id || null,
+      }))
+
+      // Collect thumbnails for list preview (first 5)
+      const thumbs = tableRows
+        .map(r => r.creative?.fb_thumbnail_url || r.creative?.fb_image_url || null)
+        .filter(Boolean)
+        .slice(0, 5) as string[]
+
+      const adAccount = adAccounts.find(a => a.id === selectedAccountId)
+      const name = `${tableRows.length} Ads — ${new Date().toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+
+      const res = await fetch("/api/launch-drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          adAccountId: selectedAccountId,
+          adAccountName: adAccount?.name || selectedAccountId,
+          rows: leanRows,
+          globalSettings: { adAccountId: selectedAccountId, pageId: selectedPageId, igPageId: selectedIgPageId, cta, webLink },
+          creativeThumbs: thumbs,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error || "Failed to save draft")
+        return
+      }
+      setHistoryReload(n => n + 1)
+      // Switch history tab to drafts
+      setHistoryTabOverride("drafts")
+      setTimeout(() => setHistoryTabOverride(null), 100)
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  const handleLoadDraft = async (draftId: string) => {
+    const res = await fetch(`/api/launch-drafts?id=${draftId}`)
+    if (!res.ok) return
+    const { draft } = await res.json()
+    if (!draft?.data?.rows) return
+
+    setMode("table")
+    setTableRows(draft.data.rows)
+    const gs = draft.data.globalSettings || {}
+    if (gs.adAccountId) setSelectedAccountId(gs.adAccountId)
+    if (gs.cta) setCta(gs.cta)
+    if (gs.webLink) setWebLink(gs.webLink)
+    if (gs.pageId) setSelectedPageId(gs.pageId)
+    if (gs.igPageId) setSelectedIgPageId(gs.igPageId)
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
   const handleRelaunch = (batch: LaunchBatch) => {
     if (batch.primary_text) setPrimaryTexts([batch.primary_text])
     if (batch.headline) setHeadlines([batch.headline])
@@ -13476,6 +13977,7 @@ export default function LaunchPage() {
             catalogAds: row.catalog?.enabled && row.catalog.catalogId
               ? { catalogId: row.catalog.catalogId, productSetId: row.catalog.productSetId || undefined, formatMode: row.catalog.formatMode, format: row.catalog.format, frameImageUrl: row.catalog.frameImageUrl || undefined, dynamicMedia: row.catalog.dynamicMedia }
               : undefined,
+            sitelinks: row.sitelinks && row.sitelinks.length > 0 ? row.sitelinks : undefined,
             // Per-row schedule overrides global schedule
             startTime: row.schedule?.start || scheduledTime,
             endTime: row.schedule?.end || scheduleEndTime,
@@ -13526,26 +14028,45 @@ export default function LaunchPage() {
   }, [tableRows, selectedAccountId, selectedAccount, selectedPageId, primaryTexts, headlines, cta, webLink, utmParams, launchAsActive, allAdSets, pages])
 
   const handleSheetsImport = useCallback((rows: ImportedRow[]) => {
-    const newRows = rows.map(r => ({
-      id: String(Date.now() + Math.random()),
-      creative: r.creative,
-      adName: r.adName,
-      primaryText: r.primaryText,
-      headline: r.headline,
-      description: r.description,
-      adSetIds: selectedAdSets.map((a: AdSet) => a.id),
-      cta: r.cta || undefined,
-      webLink: r.webLink || undefined,
-      urlTags: r.urlTags || undefined,
-      promoCode: r.promoCode || undefined,
-      launchAsActive: r.launchAsActive,
-    }))
+    const newRows = rows.map(r => {
+      // Resolve adSetName → adSetIds
+      let adSetIds: string[]
+      if (r.adSetName) {
+        const nameLower = r.adSetName.toLowerCase()
+        const matched = allAdSets.filter((a: AdSet) => a.name.toLowerCase() === nameLower).map((a: AdSet) => a.id)
+        adSetIds = matched.length > 0 ? matched : selectedAdSets.map((a: AdSet) => a.id)
+      } else {
+        adSetIds = selectedAdSets.map((a: AdSet) => a.id)
+      }
+      // Resolve pageName → pageId
+      let pageId: string | undefined = undefined
+      if (r.pageName) {
+        const nameLower = r.pageName.toLowerCase()
+        const matched = pages.find((p: FacebookPage) => p.name.toLowerCase() === nameLower)
+        if (matched) pageId = matched.id
+      }
+      return {
+        id: String(Date.now() + Math.random()),
+        creative: r.creative,
+        adName: r.adName,
+        primaryText: r.primaryText,
+        headline: r.headline,
+        description: r.description,
+        adSetIds,
+        pageId: pageId || undefined,
+        cta: r.cta || undefined,
+        webLink: r.webLink || undefined,
+        urlTags: r.urlTags || undefined,
+        promoCode: r.promoCode || undefined,
+        launchAsActive: r.launchAsActive,
+      }
+    })
     setTableRows(prev => {
       const hasContent = prev.some(r => r.creative || r.adName.trim() || r.primaryText.trim())
       return hasContent ? [...prev, ...newRows] : newRows
     })
     setMode("table")
-  }, [selectedAdSets, cta, webLink])
+  }, [selectedAdSets, allAdSets, pages, cta, webLink])
 
   const exportTableCSV = () => {
     const headers = ["Ad Name", "Primary Text", "Headline", "Description", "Ad Sets", "CTA", "Web Link"]
@@ -13698,7 +14219,7 @@ export default function LaunchPage() {
 
       <div className="flex flex-col">
         {/* ── Top bar ─────────────────────────────────────────────── */}
-        <div className="flex items-end gap-4 px-4 pt-2 pb-2.5 border-b shrink-0 bg-background sticky top-0 z-10">
+        <div className="flex items-end gap-4 px-4 pt-2 pb-2.5 border-b shrink-0 bg-background sticky top-0 z-[30]">
 
           {/* Ad Account custom dropdown */}
           <div className="flex flex-col gap-1">
@@ -14019,7 +14540,13 @@ export default function LaunchPage() {
                 {relaunchBanner}
               </div>
             )}
-            <LaunchHistorySection reloadTrigger={historyReload} onRelaunch={handleRelaunch} pages={pages} />
+            <LaunchHistorySection
+              reloadTrigger={historyReload}
+              onRelaunch={handleRelaunch}
+              onLoadDraft={handleLoadDraft}
+              tabOverride={historyTabOverride}
+              pages={pages}
+            />
           </div>
         ) : (
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -14199,7 +14726,16 @@ export default function LaunchPage() {
 
             <div className="flex items-center gap-2 px-4 py-3 border-t shrink-0">
               <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview Ads</Button>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs"><IconBookmark className="size-3.5" />Save</Button>
+              <Button
+                variant="outline" size="sm"
+                className="gap-1.5 text-xs"
+                onClick={saveDraft}
+                disabled={savingDraft || tableRows.length === 0}
+                title="Save current rows as draft — no ads created yet"
+              >
+                {savingDraft ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBookmark className="size-3.5" />}
+                {savingDraft ? "Saving..." : "Save Draft"}
+              </Button>
               <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setScheduleModalOpen(true)}>
                 <IconCalendar className="size-3.5" />Schedule
               </Button>

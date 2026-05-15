@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       enhancements,  // DefaultAdSettings["enhancements"] | undefined
       launchSettings, // DefaultAdSettings["launch"] | undefined
       collectionAds, // CollectionAds config | undefined
+      sitelinks,     // SitelinkItem[] | undefined
     } = body
 
     // Build degrees_of_freedom_spec from Creative Enhancement settings.
@@ -450,6 +451,7 @@ export async function POST(request: NextRequest) {
             ...(hasVariations ? {
               text_variations: { bodies: allBodies, titles: allTitles, descriptions: allDescs },
             } : {}),
+            sitelinks: sitelinks && sitelinks.length > 0 ? sitelinks : undefined,
             degrees_of_freedom_spec: degreesOfFreedom,
           })
 

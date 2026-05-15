@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback, useMemo } from "react"
+import { useState, useRef, useCallback } from "react"
 import {
   Dialog,
   DialogContent,
@@ -27,6 +27,8 @@ import {
   IconLink,
   IconArrowsMaximize,
   IconArrowsMinimize,
+  IconUpload,
+  IconFileText,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 
@@ -55,6 +57,11 @@ export interface ImportedRow {
   promoCode: string
   launchAsActive: boolean | undefined
   creative: Creative | null
+  // CSV-specific extras — resolved by the main page on import
+  adSetName?: string
+  pageName?: string
+  adAccountName?: string
+  campaignName?: string
 }
 
 interface Props {
@@ -66,40 +73,75 @@ interface Props {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-type FieldKey = "creative_url" | "ad_name" | "primary_text" | "headline" | "description" | "cta" | "web_link" | "url_tags" | "promo_code" | "launch_status"
+type FieldKey =
+  | "creative_url" | "creative_file"
+  | "ad_set_name" | "campaign_name" | "ad_account_name" | "page_name"
+  | "ad_name" | "primary_text" | "headline" | "description"
+  | "cta" | "web_link" | "url_tags" | "promo_code" | "launch_status"
 
 const AD_FIELDS: Array<{ key: FieldKey; label: string }> = [
-  { key: "creative_url",  label: "Creative (Drive URL)" },
-  { key: "ad_name",       label: "Ad Name" },
-  { key: "primary_text",  label: "Primary Text" },
-  { key: "headline",      label: "Headline" },
-  { key: "description",   label: "Description" },
-  { key: "cta",           label: "CTA" },
-  { key: "web_link",      label: "Link (Destination URL)" },
-  { key: "url_tags",      label: "URL Tags (UTM)" },
-  { key: "promo_code",    label: "Promo Code" },
-  { key: "launch_status", label: "Launch Status (active/paused)" },
+  { key: "ad_set_name",     label: "Ad Set Name" },
+  { key: "campaign_name",   label: "Campaign Name" },
+  { key: "ad_name",         label: "Ad Name" },
+  { key: "creative_url",    label: "Creative (Drive URL)" },
+  { key: "web_link",        label: "Link (Destination URL)" },  // must come before creative_file so "Link Ad Setting" isn't stolen by the "link" pattern
+  { key: "creative_file",   label: "Creative (Filename)" },
+  { key: "ad_account_name", label: "Ad Account Name" },
+  { key: "page_name",       label: "Page Name" },
+  { key: "headline",        label: "Headline" },
+  { key: "primary_text",    label: "Primary Text" },
+  { key: "description",     label: "Description" },
+  { key: "cta",             label: "CTA" },
+  { key: "url_tags",        label: "URL Tags (UTM)" },
+  { key: "promo_code",      label: "Promo Code" },
+  { key: "launch_status",   label: "Launch Status (active/paused)" },
 ]
 
-// Keyword patterns for auto-detect column → field mapping
-const AUTO_DETECT: Record<FieldKey, string[]> = {
-  creative_url:  ["creative", "drive", "media", "image", "video", "file", "url creative", "creative url"],
-  ad_name:       ["ad name", "name", "tên", "tên quảng cáo", "ad title"],
-  primary_text:  ["primary text", "body", "body copy", "text", "caption", "nội dung", "primary", "copy"],
-  headline:      ["headline", "title", "tiêu đề", "heading"],
-  description:   ["description", "mô tả", "desc"],
-  cta:           ["cta", "call to action", "button", "action"],
-  web_link:      ["link", "destination", "website", "web link", "landing", "web url", "url"],
-  url_tags:      ["url tags", "utm", "url parameters", "tracking", "tags", "query"],
-  promo_code:    ["promo", "promo code", "coupon", "discount code", "offer code"],
-  launch_status: ["status", "launch status", "active", "paused", "trạng thái"],
+// Auto-detect patterns for Google Sheets source
+const AUTO_DETECT_SHEETS: Record<FieldKey, string[]> = {
+  creative_url:     ["creative", "drive", "media", "image", "video", "file", "url creative", "creative url"],
+  creative_file:    ["filename", "file name", "video file", "media file", "creative file"],
+  ad_set_name:      ["ad set", "adset", "nhóm quảng cáo", "ad group"],
+  campaign_name:    ["campaign", "chiến dịch"],
+  ad_account_name:  ["ads account", "ad account", "account name"],
+  page_name:        ["fb page", "facebook page", "trang"],
+  ad_name:          ["ad name", "name", "tên", "tên quảng cáo", "ad title"],
+  primary_text:     ["primary text", "body", "body copy", "text", "caption", "nội dung", "primary", "copy"],
+  headline:         ["headline", "title", "tiêu đề", "heading"],
+  description:      ["description", "mô tả", "desc"],
+  cta:              ["cta", "call to action", "button", "action"],
+  web_link:         ["link", "destination", "website", "web link", "landing", "web url", "url"],
+  url_tags:         ["url tags", "utm", "url parameters", "tracking", "tags", "query"],
+  promo_code:       ["promo", "promo code", "coupon", "discount code", "offer code"],
+  launch_status:    ["status", "launch status", "active", "paused", "trạng thái"],
 }
 
-function autoDetect(headers: string[]): Record<FieldKey, number | null> {
+// Auto-detect patterns for CSV source (user's spreadsheet format)
+// Order of AD_FIELDS matters — earlier fields "claim" columns first
+const AUTO_DETECT_CSV: Record<FieldKey, string[]> = {
+  creative_url:     ["drive.google.com"],
+  creative_file:    ["link"],
+  ad_set_name:      ["1️⃣ ad set", "ad set", "adset", "nhóm quảng cáo"],
+  campaign_name:    ["2️⃣ campaign", "campaign", "chiến dịch"],
+  ad_account_name:  ["ads accounts", "ads account", "ad account", "account"],
+  page_name:        ["pages", "fb page", "facebook page", "trang"],
+  ad_name:          ["3️⃣ ads", "ads", "ad name", "name", "tên"],
+  primary_text:     ["primary text", "body", "body copy", "text", "caption", "nội dung", "primary", "copy"],
+  headline:         ["headline", "title", "tiêu đề", "heading"],
+  description:      ["description", "mô tả", "desc"],
+  cta:              ["cta", "call to action", "button", "action"],
+  web_link:         ["link ad", "destination", "web link", "landing", "web url", "website"],
+  url_tags:         ["url tags", "utm", "url parameters", "tracking", "tags", "query"],
+  promo_code:       ["promo", "promo code", "coupon", "discount code", "offer code"],
+  launch_status:    ["launched", "status", "launch status", "active", "paused", "trạng thái"],
+}
+
+function autoDetect(headers: string[], sourceType: "sheets" | "csv" = "sheets"): Record<FieldKey, number | null> {
+  const patterns = sourceType === "csv" ? AUTO_DETECT_CSV : AUTO_DETECT_SHEETS
   const result = {} as Record<FieldKey, number | null>
   const usedIdx = new Set<number>()
   for (const { key } of AD_FIELDS) {
-    const keywords = AUTO_DETECT[key]
+    const keywords = patterns[key]
     let found: number | null = null
     for (let i = 0; i < headers.length; i++) {
       if (usedIdx.has(i)) continue
@@ -110,6 +152,41 @@ function autoDetect(headers: string[]): Record<FieldKey, number | null> {
     if (found !== null) usedIdx.add(found)
   }
   return result
+}
+
+function parseCSVText(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let field = ""
+  let inQuotes = false
+  const len = text.length
+
+  for (let i = 0; i < len; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c === '"') {
+        if (i + 1 < len && text[i + 1] === '"') { field += '"'; i++ }
+        else inQuotes = false
+      } else {
+        field += c
+      }
+    } else {
+      if (c === '"') {
+        inQuotes = true
+      } else if (c === ',') {
+        row.push(field); field = ""
+      } else if (c === '\n') {
+        row.push(field); rows.push(row); row = []; field = ""
+      } else if (c !== '\r') {
+        field += c
+      }
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field)
+    rows.push(row)
+  }
+  return rows.filter(r => r.some(f => f.trim()))
 }
 
 function extractDriveFileId(url: string): string | null {
@@ -145,10 +222,22 @@ function getMimeGuess(name: string): string {
   return "image/jpeg"
 }
 
+const EMPTY_MAPPING: Record<FieldKey, number | null> = {
+  creative_url: null, creative_file: null,
+  ad_set_name: null, campaign_name: null, ad_account_name: null, page_name: null,
+  ad_name: null, primary_text: null, headline: null, description: null,
+  cta: null, web_link: null, url_tags: null, promo_code: null, launch_status: null,
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }: Props) {
   const [step, setStep] = useState<1 | 2 | 3>(1)
+
+  // Source selection
+  const [importSource, setImportSource] = useState<"sheets" | "csv">("sheets")
+  const [csvFileName, setCsvFileName] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Step 1: auth + pick
   const [pastedUrl, setPastedUrl] = useState("")
@@ -166,11 +255,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
   const [rawRows, setRawRows] = useState<string[][]>([])
 
   // Step 2: column mapping
-  const [mapping, setMapping] = useState<Record<FieldKey, number | null>>({
-    creative_url: null, ad_name: null, primary_text: null,
-    headline: null, description: null, cta: null, web_link: null,
-    url_tags: null, promo_code: null, launch_status: null,
-  })
+  const [mapping, setMapping] = useState<Record<FieldKey, number | null>>(EMPTY_MAPPING)
 
   // Step 3: selection + import
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set())
@@ -263,7 +348,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
       setHeaders(data.headers)
       setRawRows(data.rows || [])
 
-      const detected = autoDetect(data.headers)
+      const detected = autoDetect(data.headers, "sheets")
       setMapping(detected)
 
       const allIdx = new Set<number>((data.rows || []).map((_: any, i: number) => i))
@@ -276,7 +361,41 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
     }
   }, [])
 
-  // ─── Open Google Picker (Spreadsheets view) ───────────────────────────────
+  // ─── CSV file handler ─────────────────────────────────────────────────────
+
+  const handleCSVFile = useCallback((file: File) => {
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      setPickError("Please select a .csv file")
+      return
+    }
+    setCsvFileName(file.name)
+    setPickError("")
+    setLoadingSheet(true)
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string
+        const parsed = parseCSVText(text)
+        if (parsed.length < 2) { setPickError("CSV is empty or has only a header row"); setLoadingSheet(false); return }
+        const headerRow = parsed[0]
+        const dataRows = parsed.slice(1)
+        setHeaders(headerRow)
+        setRawRows(dataRows)
+        const detected = autoDetect(headerRow, "csv")
+        setMapping(detected)
+        setSelectedRows(new Set(dataRows.map((_, i) => i)))
+        setStep(2)
+      } catch (err: any) {
+        setPickError(err.message || "Failed to parse CSV")
+      } finally {
+        setLoadingSheet(false)
+      }
+    }
+    reader.onerror = () => { setPickError("Failed to read file"); setLoadingSheet(false) }
+    reader.readAsText(file, "utf-8")
+  }, [])
+
+  // ─── Open Google Picker ───────────────────────────────────────────────────
 
   const openPicker = useCallback(async () => {
     setPickError("")
@@ -337,44 +456,62 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
     const getCell = (row: string[], colIdx: number | null): string =>
       colIdx !== null ? String(row[colIdx] ?? "").trim() : ""
 
+    // CSV source: batch-fetch creatives by filename upfront (case-insensitive, org-wide)
+    let creativeByName: Record<string, Creative> = {}
+    if (importSource === "csv" && mapping.creative_file !== null) {
+      const fileNames = [...new Set(
+        rowsToImport.map(r => getCell(r, mapping.creative_file)).filter(Boolean)
+      )]
+      if (fileNames.length > 0) {
+        try {
+          const params = new URLSearchParams()
+          fileNames.forEach(fn => params.append("file_name", fn))
+          const res = await fetch(`/api/creatives?${params}`)
+          if (res.ok) {
+            const d = await res.json()
+            // Index by lowercase filename for case-insensitive lookup
+            for (const c of d.creatives || []) {
+              creativeByName[c.file_name.toLowerCase().trim()] = c
+            }
+          }
+        } catch {}
+      }
+    }
+
     const results: ImportedRow[] = []
 
     for (let i = 0; i < rowsToImport.length; i++) {
       const row = rowsToImport[i]
-      const creativeUrl = getCell(row, mapping.creative_url)
       let creative: Creative | null = null
 
-      if (creativeUrl && adAccountId) {
-        const fileId = extractDriveFileId(creativeUrl)
-        if (fileId) {
-          try {
-            const token = gTokenRef.current
-            if (token) {
-              const fileName = creativeUrl.split("/").pop() || `creative_${i + 1}`
-              const mimeType = getMimeGuess(fileName)
-              const res = await fetch("/api/google/import-drive", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  accessToken: token,
-                  fileId,
-                  fileName,
-                  mimeType,
-                  adAccountId,
-                }),
-              })
-              if (res.ok) {
-                const d = await res.json()
-                creative = d.creative || null
+      if (importSource === "csv") {
+        const fileName = getCell(row, mapping.creative_file)
+        if (fileName) creative = creativeByName[fileName.toLowerCase().trim()] || null
+      } else {
+        const creativeUrl = getCell(row, mapping.creative_url)
+        if (creativeUrl && adAccountId) {
+          const fileId = extractDriveFileId(creativeUrl)
+          if (fileId) {
+            try {
+              const token = gTokenRef.current
+              if (token) {
+                const fileName = creativeUrl.split("/").pop() || `creative_${i + 1}`
+                const mimeType = getMimeGuess(fileName)
+                const res = await fetch("/api/google/import-drive", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ accessToken: token, fileId, fileName, mimeType, adAccountId }),
+                })
+                if (res.ok) {
+                  const d = await res.json()
+                  creative = d.creative || null
+                }
               }
-            }
-          } catch {
-            // creative stays null — user can assign manually
+            } catch {}
           }
         }
       }
 
-      // Parse launch_status: "active"/"paused"/"true"/"false"/1/0
       const launchStatusRaw = getCell(row, mapping.launch_status).toLowerCase()
       let launchAsActive: boolean | undefined = undefined
       if (launchStatusRaw) {
@@ -382,16 +519,20 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
       }
 
       results.push({
-        adName:       getCell(row, mapping.ad_name),
-        primaryText:  getCell(row, mapping.primary_text),
-        headline:     getCell(row, mapping.headline),
-        description:  getCell(row, mapping.description),
-        cta:          getCell(row, mapping.cta).toUpperCase().replace(/ /g, "_") || "",
-        webLink:      getCell(row, mapping.web_link),
-        urlTags:      getCell(row, mapping.url_tags),
-        promoCode:    getCell(row, mapping.promo_code),
+        adName:         getCell(row, mapping.ad_name),
+        primaryText:    getCell(row, mapping.primary_text),
+        headline:       getCell(row, mapping.headline),
+        description:    getCell(row, mapping.description),
+        cta:            getCell(row, mapping.cta).toUpperCase().replace(/ /g, "_") || "",
+        webLink:        getCell(row, mapping.web_link),
+        urlTags:        getCell(row, mapping.url_tags),
+        promoCode:      getCell(row, mapping.promo_code),
         launchAsActive,
         creative,
+        adSetName:      getCell(row, mapping.ad_set_name) || undefined,
+        pageName:       getCell(row, mapping.page_name) || undefined,
+        adAccountName:  getCell(row, mapping.ad_account_name) || undefined,
+        campaignName:   getCell(row, mapping.campaign_name) || undefined,
       })
 
       setImportProgress({ done: i + 1, total: rowsToImport.length })
@@ -400,7 +541,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
     setImporting(false)
     onImport(results)
     handleClose()
-  }, [rawRows, selectedRows, mapping, adAccountId, onImport])
+  }, [rawRows, selectedRows, mapping, adAccountId, importSource, onImport])
 
   // ─── Reset on close ───────────────────────────────────────────────────────
 
@@ -414,6 +555,8 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
     setHeaders([])
     setRawRows([])
     setSelectedRows(new Set())
+    setMapping(EMPTY_MAPPING)
+    setCsvFileName("")
     setImporting(false)
     setImportError("")
     setTableExpanded(false)
@@ -449,16 +592,18 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
               <IconTable className="size-4 text-emerald-600" />
             </div>
             <div>
-              <DialogTitle className="text-base">Import from Google Sheets</DialogTitle>
-              {step > 1 && spreadsheetTitle && (
-                <p className="text-xs text-muted-foreground mt-0.5">{spreadsheetTitle}</p>
+              <DialogTitle className="text-base">Import Ad Copy</DialogTitle>
+              {step > 1 && (importSource === "csv" ? csvFileName : spreadsheetTitle) && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {importSource === "csv" ? csvFileName : spreadsheetTitle}
+                </p>
               )}
             </div>
           </div>
 
           {/* Step indicator */}
           <div className="flex items-center gap-2 mt-3">
-            {(["Pick Sheet", "Map Columns", "Preview & Import"] as const).map((label, idx) => {
+            {(["Pick Source", "Map Columns", "Preview & Import"] as const).map((label, idx) => {
               const n = idx + 1
               const active = step === n
               const done = step > n
@@ -482,56 +627,144 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
           </div>
         </DialogHeader>
 
-        {/* ── Step 1: Pick Sheet ─────────────────────────────────────────────── */}
+        {/* ── Step 1: Pick Source ────────────────────────────────────────────── */}
         {step === 1 && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 gap-6 min-h-0">
-            <div className="text-center">
-              <div className="size-14 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-                <IconFileSpreadsheet className="size-7 text-emerald-600" />
+          <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+            {/* Source tabs */}
+            <div className="flex gap-1 px-6 pt-5">
+              {(["sheets", "csv"] as const).map(src => (
+                <button
+                  key={src}
+                  onClick={() => { setImportSource(src); setPickError("") }}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                    importSource === src
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  )}
+                >
+                  {src === "sheets"
+                    ? <><IconBrandGoogleDrive className="size-3.5" />Google Sheets</>
+                    : <><IconFileText className="size-3.5" />CSV File</>
+                  }
+                </button>
+              ))}
+            </div>
+
+            {/* Google Sheets source */}
+            {importSource === "sheets" && (
+              <div className="flex flex-col items-center justify-center p-8 gap-6">
+                <div className="text-center">
+                  <div className="size-14 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-3">
+                    <IconFileSpreadsheet className="size-7 text-emerald-600" />
+                  </div>
+                  <h3 className="font-semibold mb-1">Connect Google Sheets</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm">
+                    Pick a spreadsheet from Google Drive or paste a sheet URL.
+                  </p>
+                </div>
+
+                <Button
+                  size="lg"
+                  className="gap-2 min-w-[220px]"
+                  onClick={openPicker}
+                  disabled={loadingSheet}
+                >
+                  {loadingSheet ? (
+                    <><IconLoader2 className="size-4 animate-spin" />Connecting…</>
+                  ) : (
+                    <><IconBrandGoogleDrive className="size-4" />Pick from Google Drive</>
+                  )}
+                </Button>
+
+                <div className="flex items-center gap-3 w-full max-w-md">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground">or paste URL</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+
+                <div className="flex gap-2 w-full max-w-md">
+                  <div className="flex-1 flex items-center gap-2 border rounded-lg px-3 h-9">
+                    <IconLink className="size-3.5 text-muted-foreground shrink-0" />
+                    <input
+                      value={pastedUrl}
+                      onChange={e => setPastedUrl(e.target.value)}
+                      placeholder="https://docs.google.com/spreadsheets/d/..."
+                      className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                      onKeyDown={e => e.key === "Enter" && loadFromUrl()}
+                    />
+                  </div>
+                  <Button variant="outline" onClick={loadFromUrl} disabled={!pastedUrl.trim() || loadingSheet}>
+                    Load
+                  </Button>
+                </div>
               </div>
-              <h3 className="font-semibold mb-1">Connect Google Sheets</h3>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                Pick a spreadsheet from Google Drive or paste a sheet URL. We'll read the headers and map them to ad fields.
-              </p>
-            </div>
+            )}
 
-            <Button
-              size="lg"
-              className="gap-2 min-w-[220px]"
-              onClick={openPicker}
-              disabled={loadingSheet}
-            >
-              {loadingSheet ? (
-                <><IconLoader2 className="size-4 animate-spin" />Connecting…</>
-              ) : (
-                <><IconBrandGoogleDrive className="size-4" />Pick from Google Drive</>
-              )}
-            </Button>
+            {/* CSV source */}
+            {importSource === "csv" && (
+              <div className="flex flex-col items-center justify-center p-8 gap-6">
+                <div className="text-center">
+                  <div className="size-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3">
+                    <IconFileText className="size-7 text-blue-600" />
+                  </div>
+                  <h3 className="font-semibold mb-1">Upload CSV File</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm">
+                    Upload your ad copy spreadsheet exported as CSV. Columns will be auto-detected.
+                  </p>
+                </div>
 
-            <div className="flex items-center gap-3 w-full max-w-md">
-              <div className="flex-1 h-px bg-border" />
-              <span className="text-xs text-muted-foreground">or paste URL</span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-
-            <div className="flex gap-2 w-full max-w-md">
-              <div className="flex-1 flex items-center gap-2 border rounded-lg px-3 h-9">
-                <IconLink className="size-3.5 text-muted-foreground shrink-0" />
                 <input
-                  value={pastedUrl}
-                  onChange={e => setPastedUrl(e.target.value)}
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-                  onKeyDown={e => e.key === "Enter" && loadFromUrl()}
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (file) handleCSVFile(file)
+                    e.target.value = ""
+                  }}
                 />
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loadingSheet}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => {
+                    e.preventDefault()
+                    const file = e.dataTransfer.files?.[0]
+                    if (file) handleCSVFile(file)
+                  }}
+                  className={cn(
+                    "w-full max-w-md border-2 border-dashed rounded-xl px-8 py-10 flex flex-col items-center gap-3 transition-colors",
+                    loadingSheet
+                      ? "opacity-50 cursor-not-allowed"
+                      : "cursor-pointer hover:border-primary hover:bg-primary/5"
+                  )}
+                >
+                  {loadingSheet ? (
+                    <IconLoader2 className="size-8 text-muted-foreground animate-spin" />
+                  ) : (
+                    <IconUpload className="size-8 text-muted-foreground" />
+                  )}
+                  <div className="text-center">
+                    <p className="text-sm font-medium">
+                      {loadingSheet ? "Parsing…" : "Click or drag & drop"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">.csv files only</p>
+                  </div>
+                </button>
+
+                <div className="w-full max-w-md rounded-lg bg-muted/50 border px-4 py-3 text-xs text-muted-foreground space-y-1">
+                  <p className="font-medium text-foreground">Expected columns (auto-detected):</p>
+                  <p>1️⃣ Ad Set · 2️⃣ Campaign · 3️⃣ Ads · link · Ads Accounts · Pages</p>
+                  <p>Link Ad Setting · Headline · Primary Text · Description · Launched?</p>
+                </div>
               </div>
-              <Button variant="outline" onClick={loadFromUrl} disabled={!pastedUrl.trim() || loadingSheet}>
-                Load
-              </Button>
-            </div>
+            )}
 
             {pickError && (
-              <div className="flex items-center gap-1.5 text-sm text-destructive">
+              <div className="px-8 pb-4 flex items-center gap-1.5 text-sm text-destructive justify-center">
                 <IconAlertCircle className="size-4" />{pickError}
               </div>
             )}
@@ -544,7 +777,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
             <div className="p-6 space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  {rawRows.length} rows found. Map your sheet columns to ad fields.
+                  {rawRows.length} rows found. Map your columns to ad fields.
                 </p>
                 <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded">
                   {headers.length} columns detected
@@ -555,7 +788,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                 <div className="grid grid-cols-[1fr_16px_1fr] gap-0">
                   <div className="bg-muted/50 px-4 py-2.5 text-xs font-semibold text-muted-foreground">Ad Field</div>
                   <div className="bg-muted/50" />
-                  <div className="bg-muted/50 px-4 py-2.5 text-xs font-semibold text-muted-foreground">Sheet Column</div>
+                  <div className="bg-muted/50 px-4 py-2.5 text-xs font-semibold text-muted-foreground">Column</div>
                 </div>
                 {AD_FIELDS.map(({ key, label }, idx) => (
                   <div
@@ -612,10 +845,14 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                 <div className="flex flex-col items-center justify-center py-16 gap-4">
                   <IconLoader2 className="size-8 text-primary animate-spin" />
                   <div className="text-center">
-                    <p className="text-sm font-medium">Importing rows…</p>
+                    <p className="text-sm font-medium">
+                      {importSource === "csv" ? "Looking up creatives…" : "Importing rows…"}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {importProgress.done} / {importProgress.total}
-                      {mapping.creative_url !== null ? " (uploading creatives to Meta)" : ""}
+                      {importSource === "sheets" && mapping.creative_url !== null
+                        ? " (uploading creatives to Meta)"
+                        : ""}
                     </p>
                   </div>
                   <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -631,15 +868,11 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                     <p className="text-sm text-muted-foreground">
                       <span className="font-medium text-foreground">{selectedRows.size}</span> of {rawRows.length} rows selected
                     </p>
-                    <button
-                      onClick={toggleAll}
-                      className="text-xs text-primary hover:underline"
-                    >
+                    <button onClick={toggleAll} className="text-xs text-primary hover:underline">
                       {selectedRows.size === rawRows.length ? "Deselect All" : "Select All"}
                     </button>
                   </div>
 
-                  {/* Table toolbar */}
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[11px] text-muted-foreground">
                       {previewCols.length} column{previewCols.length !== 1 ? "s" : ""} mapped
@@ -648,7 +881,6 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                     <button
                       onClick={() => setTableExpanded(v => !v)}
                       className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted/50"
-                      title={tableExpanded ? "Compact view" : "Expand cells"}
                     >
                       {tableExpanded
                         ? <><IconArrowsMinimize className="size-3" />Compact</>
@@ -669,7 +901,6 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                     <table className="text-xs border-collapse" style={{ minWidth: "max-content" }}>
                       <thead>
                         <tr className="border-b bg-muted/50">
-                          {/* Sticky checkbox + # */}
                           <th className="sticky left-0 z-10 bg-muted/50 w-8 px-3 py-2.5 text-left border-r border-border/40">
                             <input
                               type="checkbox"
@@ -701,7 +932,6 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                               selectedRows.has(i) ? "bg-primary/[0.04]" : "hover:bg-muted/30"
                             )}
                           >
-                            {/* Sticky checkbox */}
                             <td
                               className={cn(
                                 "sticky left-0 z-10 px-3 py-2 border-r border-border/40",
@@ -716,7 +946,6 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                                 className="rounded"
                               />
                             </td>
-                            {/* Sticky row number */}
                             <td
                               className={cn(
                                 "sticky left-8 z-10 px-2 py-2 text-muted-foreground border-r border-border/40 text-center",
@@ -745,7 +974,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                                 >
                                   {!val ? (
                                     <span className="text-muted-foreground/40 italic text-[11px]">—</span>
-                                  ) : f.key === "creative_url" ? (
+                                  ) : (f.key === "creative_url" || f.key === "creative_file") ? (
                                     <span
                                       className={cn(
                                         "text-primary text-[11px] cursor-pointer",
@@ -781,12 +1010,25 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                     )}
                   </div>
 
-                  {mapping.creative_url !== null && (
+                  {importSource === "csv" && mapping.creative_file !== null && (
+                    <div className="mt-3 flex items-start gap-2 text-xs bg-blue-50 border border-blue-100 rounded-lg px-3 py-2.5">
+                      <IconFileText className="size-3.5 text-blue-500 mt-0.5 shrink-0" />
+                      <div className="space-y-0.5">
+                        <p className="font-medium text-blue-800">Creatives matched by filename</p>
+                        <p className="text-blue-700/80">
+                          Make sure the video/image files are already uploaded in <strong>Assets → Media Library</strong> with the same filename as the <code className="bg-blue-100 px-1 rounded">link</code> column.
+                          Rows without a match will import without a creative — you can assign one manually.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {importSource === "sheets" && mapping.creative_url !== null && (
                     <div className="mt-3 flex items-start gap-2 text-xs text-muted-foreground bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
                       <IconBrandGoogleDrive className="size-3.5 text-blue-500 mt-0.5 shrink-0" />
                       <span>
                         Creative URLs will be uploaded to Meta during import.
-                        Rows without a valid Drive URL will be imported without a creative — you can assign one manually in the table.
+                        Rows without a valid Drive URL will be imported without a creative.
                       </span>
                     </div>
                   )}
@@ -814,10 +1056,16 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                   Back
                 </Button>
               )}
-              {step === 1 && (
+              {step === 1 && importSource === "sheets" && (
                 <Button size="sm" variant="outline" onClick={openPicker} disabled={loadingSheet}>
                   {loadingSheet ? <IconLoader2 className="size-3.5 animate-spin mr-1" /> : null}
                   Connect Google Drive
+                </Button>
+              )}
+              {step === 1 && importSource === "csv" && (
+                <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={loadingSheet}>
+                  {loadingSheet ? <IconLoader2 className="size-3.5 animate-spin mr-1" /> : <IconUpload className="size-3.5 mr-1" />}
+                  Choose CSV
                 </Button>
               )}
               {step === 2 && (

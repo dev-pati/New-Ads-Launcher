@@ -923,6 +923,7 @@ export async function createAd(
       descriptions: string[] // all description versions
     }
     // Ad Source modes
+    sitelinks?: Array<{ title: string; url: string }>
     object_story_id?: string   // Post ID mode: reuse existing dark post (carries social proof)
     reuse_creative_id?: string // Creative ID mode: reuse existing Meta creative_id
   }
@@ -990,6 +991,11 @@ export async function createAd(
   if (params.instagram_actor_id) creativeSpec.instagram_actor_id = params.instagram_actor_id
   if (params.display_url) creativeSpec.link_data.display_url = params.display_url
   if (params.image_hash) creativeSpec.link_data.image_hash = params.image_hash
+  if (params.sitelinks && params.sitelinks.length > 0) {
+    creativeSpec.link_data.additional_data = {
+      site_links: params.sitelinks.map(sl => ({ caption: sl.title, link: sl.url })),
+    }
+  }
   if (params.video_id) {
     const videoData: any = {
       video_id: params.video_id,

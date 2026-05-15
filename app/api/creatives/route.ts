@@ -56,6 +56,20 @@ export async function GET(request: NextRequest) {
       .order("id", { ascending: false })
       .limit(limit + 1)
 
+    // Batch lookup by filenames (for CSV import) — org-scoped only, no account filter
+    const fileNames = url.searchParams.getAll("file_name")
+    if (fileNames.length > 0) {
+      const db = createAdminClient()
+      const { data, error } = await db
+        .from("creatives")
+        .select("id, file_name, file_url, media_type, headline, primary_text, cta, link_url, fb_image_url, fb_thumbnail_url, fb_image_hash, fb_video_id, status, ad_account_id")
+        .eq("org_id", ctx.orgId)
+        .in("file_name", fileNames)
+        .order("created_at", { ascending: false })
+      if (error) return NextResponse.json({ error: "Failed to fetch creatives" }, { status: 500 })
+      return NextResponse.json({ creatives: (data ?? []).map(mapCreativeForClient) })
+    }
+
     if (adAccountId) query = query.eq("ad_account_id", adAccountId)
     if (cursor)      query = query.lt("created_at", cursor)
 
