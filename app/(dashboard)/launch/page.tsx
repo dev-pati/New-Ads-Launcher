@@ -59,7 +59,7 @@ interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "im
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
-interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string }
+interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string; sitelinks?: string[]; partnershipAds?: boolean; multiLanguage?: string[]; catalogEnabled?: boolean; metaSchedule?: string }
 interface CreatedAd { adId: string; adSetId: string; adSetName: string; creativeId?: string; fileName?: string; thumbnailUrl?: string | null; mediaType?: "image" | "video"; mode?: string; multiGroup?: string; flexibleAd?: string; carousel?: string }
 interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; pageName?: string; adAccountId: string; adAccountName: string; timestamp: string }
 interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[]; scheduled?: { at: string; end: string | null } | null; createdAds: CreatedAd[]; batchId?: string | null; launchMeta?: LaunchMeta }
@@ -11603,14 +11603,14 @@ function TableMode({
         onMouseUp={onTableMouseUp}
         onMouseLeave={onTableMouseUp}
       >
-        <table className="w-full text-sm border-collapse" style={{ minWidth: 1340 }}>
+        <table className="w-full text-sm border-collapse" style={{ minWidth: 2100 }}>
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b">
               <th className="w-10 px-3 py-2.5 text-left">
                 <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
               </th>
               <th className="w-7 px-1 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">#</th>
-              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
+              <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
               <th
                 className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("adName")}
@@ -11618,19 +11618,19 @@ function TableMode({
                 <span className="flex items-center gap-0.5">Ad Name <SortIcon field="adName" /></span>
               </th>
               <th
-                className="px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground min-w-[260px]"
+                className="w-64 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("primaryText")}
               >
                 <span className="flex items-center gap-0.5">Primary Text <SortIcon field="primaryText" /></span>
               </th>
               <th
-                className="w-56 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("headline")}
               >
                 <span className="flex items-center gap-0.5">Headline <SortIcon field="headline" /></span>
               </th>
               <th
-                className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("description")}
               >
                 <span className="flex items-center gap-0.5">Description <SortIcon field="description" /></span>
@@ -11643,8 +11643,22 @@ function TableMode({
               </th>
               <th className="w-40 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
               <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
-              <th className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
-              <th className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
+              <th className="w-48 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort("webLink")}>
+                <span className="flex items-center gap-0.5">Link <SortIcon field="webLink" /></span>
+              </th>
+              <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground" onClick={() => toggleSort("urlTags")}>
+                <span className="flex items-center gap-0.5">URL Tags <SortIcon field="urlTags" /></span>
+              </th>
+              <th className="w-36 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sitelinks</th>
+              <th className="w-36 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Partnership Ads</th>
+              <th className="w-36 px-3 py-2.5 text-left">
+                <span className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  <IconSparkles className="size-3 text-blue-400" />Multi-Language
+                </span>
+              </th>
+              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Catalog</th>
+              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Meta Schedule</th>
+              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Promo Code</th>
               <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Launch Status</th>
               <th className="w-14 px-3 py-2.5" />
             </tr>
@@ -11680,26 +11694,27 @@ function TableMode({
 
                   {/* CREATIVE */}
                   <td className="px-3 py-2">
-                    <div className="relative size-14 rounded-lg overflow-hidden bg-muted/60 border border-border/50 shrink-0">
-                      {mediaSrc
-                        ? <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
-                        : <div className="w-full h-full flex items-center justify-center">
-                            {row.creative
-                              ? <IconPhoto className="size-5 text-muted-foreground/40" />
-                              : <IconPlus className="size-5 text-muted-foreground/30" />
-                            }
-                          </div>
-                      }
-                      {row.creative?.media_type === "video" && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
-                            <IconPlayerPlay className="size-2.5 text-white fill-white" />
-                          </div>
-                        </div>
-                      )}
-                      {/* Format badge overlaid bottom */}
-                      <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[8px] font-bold text-center py-0.5 leading-none tracking-wide">
+                    <div className="flex flex-col items-start gap-1">
+                      <span className="text-[10px] bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">
                         SINGLE
+                      </span>
+                      <div className="size-16 rounded border-2 border-dashed border-border/60 overflow-hidden relative flex items-center justify-center bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer">
+                        {mediaSrc
+                          ? <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
+                          : <div className="flex items-center justify-center w-full h-full">
+                              {row.creative
+                                ? <IconPhoto className="size-5 text-muted-foreground/40" />
+                                : <IconPlus className="size-5 text-muted-foreground/30" />
+                              }
+                            </div>
+                        }
+                        {row.creative?.media_type === "video" && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
+                              <IconPlayerPlay className="size-2.5 text-white fill-white" />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -12035,23 +12050,124 @@ function TableMode({
 
                   {/* LINK */}
                   <td className="px-3 py-2">
-                    <input
-                      type="text"
+                    <textarea
                       value={row.webLink || ""}
                       onChange={e => onUpdateRow(row.id, "webLink", e.target.value)}
                       placeholder="https://..."
-                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 truncate"
+                      rows={2}
+                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
                     />
                   </td>
 
                   {/* URL TAGS */}
                   <td className="px-3 py-2">
-                    <input
-                      type="text"
+                    <textarea
                       value={row.urlTags || ""}
                       onChange={e => onUpdateRow(row.id, "urlTags", e.target.value)}
-                      placeholder="utm_source=fb..."
-                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 truncate"
+                      placeholder="UTM parameters"
+                      rows={2}
+                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
+                    />
+                  </td>
+
+                  {/* SITELINKS */}
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => {}}
+                      className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium whitespace-nowrap"
+                    >
+                      <IconPlus className="size-3" />Add sitelinks
+                    </button>
+                  </td>
+
+                  {/* PARTNERSHIP ADS */}
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => onUpdateRow(row.id, "partnershipAds", !row.partnershipAds)}
+                        className={cn(
+                          "relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0",
+                          row.partnershipAds ? "bg-blue-500" : "bg-muted-foreground/30"
+                        )}
+                      >
+                        <span className={cn(
+                          "inline-block size-3 rounded-full bg-white shadow-sm transition-transform",
+                          row.partnershipAds ? "translate-x-[18px]" : "translate-x-0.5"
+                        )} />
+                      </button>
+                      <span className="text-[10px] text-muted-foreground">{row.partnershipAds ? "On" : "Off"}</span>
+                    </div>
+                  </td>
+
+                  {/* MULTI-LANGUAGE */}
+                  <td className="px-3 py-2">
+                    {row.multiLanguage && row.multiLanguage.length > 0
+                      ? <div className="flex flex-wrap gap-1">
+                          {row.multiLanguage.map((lang, li) => (
+                            <span key={li} className="inline-flex items-center gap-0.5 text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800">
+                              {lang}
+                              <button onClick={() => onUpdateRow(row.id, "multiLanguage", (row.multiLanguage||[]).filter((_,j)=>j!==li))} className="ml-0.5 hover:text-blue-900">
+                                <IconX className="size-2.5" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      : <button
+                          onClick={() => {}}
+                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border/50 rounded px-2 py-1 whitespace-nowrap"
+                        >
+                          <IconLanguage className="size-3" />Add Languages
+                        </button>
+                    }
+                  </td>
+
+                  {/* CATALOG */}
+                  <td className="px-3 py-2">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => onUpdateRow(row.id, "catalogEnabled", !row.catalogEnabled)}
+                          className={cn(
+                            "relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0",
+                            row.catalogEnabled ? "bg-blue-500" : "bg-muted-foreground/30"
+                          )}
+                        >
+                          <span className={cn(
+                            "inline-block size-3 rounded-full bg-white shadow-sm transition-transform",
+                            row.catalogEnabled ? "translate-x-[18px]" : "translate-x-0.5"
+                          )} />
+                        </button>
+                        <span className="text-[10px] text-muted-foreground">{row.catalogEnabled ? "On" : "Off"}</span>
+                      </div>
+                      {row.catalogEnabled && (
+                        <button onClick={() => {}} className="text-[10px] text-blue-600 hover:text-blue-700 font-medium text-left">
+                          Configure
+                        </button>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* META SCHEDULE */}
+                  <td className="px-3 py-2">
+                    {row.metaSchedule
+                      ? <span className="text-[10px] text-foreground/70 break-all">{row.metaSchedule}</span>
+                      : <button
+                          onClick={() => {}}
+                          className="text-xs border border-border/60 rounded px-2.5 py-1 hover:bg-muted/40 text-foreground/70 font-medium"
+                        >
+                          Set
+                        </button>
+                    }
+                  </td>
+
+                  {/* PROMO CODE */}
+                  <td className="px-3 py-2">
+                    <input
+                      type="text"
+                      value={row.promoCode || ""}
+                      onChange={e => onUpdateRow(row.id, "promoCode", e.target.value)}
+                      placeholder="e.g., SAVE10"
+                      className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
                     />
                   </td>
 
