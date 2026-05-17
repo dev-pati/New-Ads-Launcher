@@ -20,7 +20,12 @@ export async function GET() {
     )
     return NextResponse.json({ adAccounts })
   } catch (err) {
-    console.error("Failed to fetch ad accounts:", err)
-    return NextResponse.json({ error: "Failed to fetch ad accounts" }, { status: 500 })
+    const msg = err instanceof Error ? err.message : "Failed to fetch ad accounts"
+    const isRateLimit = msg.includes("too many calls") || msg.includes("Rate limited")
+    console.error("Failed to fetch ad accounts:", msg)
+    return NextResponse.json(
+      { error: msg, rateLimited: isRateLimit },
+      { status: isRateLimit ? 429 : 500 }
+    )
   }
 }

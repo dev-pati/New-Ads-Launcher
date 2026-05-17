@@ -78,6 +78,7 @@ const navSections: NavSection[] = [
     icon: IconLink,
     subItems: [
       { label: "Connect", href: "/connect" },
+      { label: "Rate Limit", href: "/rate-limit" },
     ],
   },
   {
@@ -101,7 +102,7 @@ function getActiveSection(pathname: string): string {
   if (pathname.startsWith("/assets")) return "assets"
   if (pathname.startsWith("/insights")) return "insights"
   if (pathname.startsWith("/automate")) return "automate"
-  if (pathname.startsWith("/connect")) return "connect"
+  if (pathname.startsWith("/connect") || pathname.startsWith("/rate-limit")) return "connect"
   if (pathname.startsWith("/inspo")) return "inspo"
   if (pathname.startsWith("/search")) return "search"
   if (pathname.startsWith("/rewards")) return "rewards"

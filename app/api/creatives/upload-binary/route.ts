@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { uploadImageToMeta, uploadVideoToMeta, pollVideoReady } from "@/lib/facebook"
+import { uploadImageToMeta, uploadVideoUrlToMeta } from "@/lib/facebook"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
+import { checkCreativeDup, getActorName } from "@/lib/upload-utils"
 
 // Large media upload via raw binary body (avoids FormData parser limits).
 // Client sends file as raw body, metadata via URL params + headers.
@@ -65,6 +66,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Unsupported file type: ${fileType}` }, { status: 400 })
     }
 
+    // Dedup — same filename + size already in org? Return existing creative, skip Meta upload.
+    if (fileSize > 0) {
+      const dup = await checkCreativeDup(createAdminClient(), ctx.orgId, filename, fileSize, isVideo ? "video" : "image")
+      if (dup) return NextResponse.json({ creative: mapCreativeForClient(dup), rateLimitPct: 0 })
+    }
+
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
@@ -103,30 +110,39 @@ export async function POST(request: NextRequest) {
     let publicUrl = ""
     let storagePath: string | null = null
 
+    let rateLimitPct = 0
+
+    // Both images and videos go to Supabase Storage first for a stable public URL.
+    // Images: Meta receives binary hash. Videos: Meta pulls from the public URL (1 API call, no chunking).
+    const stored = await uploadOriginalToStorage({
+      orgId: ctx.orgId,
+      fileName: filename,
+      contentType: fileType,
+      buffer: fileBuffer,
+    })
+    publicUrl = stored.publicUrl
+    storagePath = stored.storagePath
+
     if (isVideo) {
-      // 1. Direct Meta Upload (No intermediate storage)
       try {
-        const uploadedVideo = await uploadVideoToMeta(fbAdAccountId as string, connection.access_token, fileBuffer, filename)
-        fbVideoId = uploadedVideo.videoId
+        const uploaded = await uploadVideoUrlToMeta(
+          fbAdAccountId as string,
+          connection.access_token,
+          publicUrl,
+          filename
+        )
+        fbVideoId = uploaded.videoId
+        rateLimitPct = uploaded.rateLimitPct
       } catch (err: any) {
-        console.error("Meta video upload error:", err)
+        console.error("Meta video URL upload error:", err)
         return NextResponse.json({ error: err?.message || "Meta Video Upload failed" }, { status: 500 })
       }
     } else {
-      // Image Flow: Use Supabase storage for reliable thumbnails
-      const stored = await uploadOriginalToStorage({
-        orgId: ctx.orgId,
-        fileName: filename,
-        contentType: fileType,
-        buffer: fileBuffer,
-      })
-      publicUrl = stored.publicUrl
-      storagePath = stored.storagePath
-
       const uploadedImage = await uploadImageToMeta(fbAdAccountId as string, connection.access_token, fileBuffer, filename)
       fbImageHash = uploadedImage.hash
       fbImageUrl = uploadedImage.url
       fbThumbnailUrl = uploadedImage.url_128
+      rateLimitPct = uploadedImage.rateLimitPct
     }
 
     const { data: creative, error: insertError } = await supabase
@@ -159,17 +175,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save creative" }, { status: 500 })
     }
 
-    const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
     await notifyOrgMembers({
       orgId: ctx.orgId,
       actorId: ctx.user.id,
-      actorName,
+      actorName: getActorName(ctx.user),
       type: "asset_uploaded",
-      title: `${actorName} uploaded "${filename}"`,
+      title: `${getActorName(ctx.user)} uploaded "${filename}"`,
       link: "/assets",
     })
 
-    return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
+    return NextResponse.json({ creative: mapCreativeForClient(creative), rateLimitPct }, { status: 201 })
   } catch (err) {
     console.error("[upload-binary] error:", err)
     return NextResponse.json(

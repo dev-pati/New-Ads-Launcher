@@ -43,23 +43,26 @@ export async function POST(
       } else if (statusCheck.status === "error") {
         currentStatus = "error"
         await supabase.from("creatives").update({ status: "error" }).eq("id", id)
-        return NextResponse.json({ 
+        return NextResponse.json({
           error: statusCheck.errorMsg || "Video processing failed on Meta",
           status: "error",
           creative: mapCreativeForClient({ ...creative, status: "error" })
         })
+      } else {
+        // Still processing — thumbnail/source won't be available yet, skip fetching them
+        return NextResponse.json({ status: "processing", creative: mapCreativeForClient(creative) })
       }
     }
 
-    // 2. Decide if we need to fetch more data
+    // 2. Decide if we need to fetch more data (only reached when status is "ready")
     const hasThumb =
       !!creative.fb_thumbnail_url &&
       /^https?:/.test(creative.fb_thumbnail_url) &&
       !creative.fb_thumbnail_url.includes("rsrc.php")
     const hasPlayableSource = !!(creative.file_url && /^https?:/.test(creative.file_url) && /(\.mp4|\.mov|\.webm|fbcdn\.net)/.test(creative.file_url))
-    
-    // If we already have everything and it's ready, return early
-    if (hasThumb && hasPlayableSource && currentStatus === "ready") {
+
+    // If we already have everything, return early
+    if (hasThumb && hasPlayableSource) {
       return NextResponse.json({
         thumbnail_url: creative.fb_thumbnail_url,
         source_url: creative.file_url,
@@ -68,7 +71,7 @@ export async function POST(
       })
     }
 
-    // 3. Fetch missing data from Meta
+    // 3. Fetch missing data from Meta (video is ready, so thumbnail/source should be available)
     const [thumbnailUrl, sourceUrl] = await Promise.all([
       hasThumb ? Promise.resolve(creative.fb_thumbnail_url) : getVideoThumbnail(creative.fb_video_id, connection.access_token),
       hasPlayableSource ? Promise.resolve(creative.file_url) : getVideoSource(creative.fb_video_id, connection.access_token),

@@ -1,16 +1,17 @@
 type CacheEntry<T> = {
-  expiresAt: number
-  value?: T
-  inFlight?: Promise<T>
+  value?:      T
+  expiresAt:   number
+  retryAfter:  number
+  inFlight?:   Promise<T>
 }
 
-type FacebookMetadataCacheStore = Map<string, CacheEntry<unknown>>
+type CacheStore = Map<string, CacheEntry<unknown>>
 
 declare global {
-  var __adlauncherFacebookMetadataCache: FacebookMetadataCacheStore | undefined
+  var __adlauncherFacebookMetadataCache: CacheStore | undefined
 }
 
-function getStore() {
+function getStore(): CacheStore {
   if (!globalThis.__adlauncherFacebookMetadataCache) {
     globalThis.__adlauncherFacebookMetadataCache = new Map()
   }
@@ -21,38 +22,74 @@ export function clearCachedFacebookMetadata(key: string) {
   getStore().delete(key)
 }
 
+export function clearAllCachedFacebookMetadata() {
+  getStore().clear()
+}
+
+/** Returns ms until retry is allowed, or 0 if not blocked */
+export function getCacheRetryAfterMs(key: string): number {
+  const entry = getStore().get(key) as CacheEntry<unknown> | undefined
+  if (!entry?.retryAfter) return 0
+  return Math.max(0, entry.retryAfter - Date.now())
+}
+
+export function getCacheKeys(): string[] {
+  return [...getStore().keys()]
+}
+
+const RATE_LIMIT_BACKOFF_MS  = 5 * 60_000  // 5 min after rate-limit error
+const GENERIC_ERROR_BACKOFF_MS = 30_000    // 30 s after other errors
+
+function isRateLimitError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err)
+  return msg.includes("too many calls") || msg.includes("rate limit") || msg.includes("Rate limit")
+}
+
 export async function getCachedFacebookMetadata<T>(
   key: string,
   ttlMs: number,
   loader: () => Promise<T>
 ): Promise<T> {
   const store = getStore()
-  const now = Date.now()
+  const now   = Date.now()
   const cached = store.get(key) as CacheEntry<T> | undefined
 
+  // Fresh cache hit
   if (cached?.value !== undefined && cached.expiresAt > now) {
     return cached.value
   }
 
+  // Join an already-running request
   if (cached?.inFlight) {
     return cached.inFlight
   }
 
-  const inFlight = loader()
+  // Still within backoff window — return stale if available, else throw
+  if (cached?.retryAfter && cached.retryAfter > now) {
+    if (cached.value !== undefined) return cached.value
+    throw new Error("Rate limited — please try again in a few minutes")
+  }
+
+  // Kick off a new fetch
+  const inFlight: Promise<T> = loader()
     .then((value) => {
-      store.set(key, {
-        value,
-        expiresAt: Date.now() + ttlMs,
-      })
+      store.set(key, { value, expiresAt: Date.now() + ttlMs, retryAfter: 0 })
       return value
     })
-    .catch((error) => {
-      store.delete(key)
-      throw error
+    .catch((err: unknown) => {
+      const backoff = isRateLimitError(err) ? RATE_LIMIT_BACKOFF_MS : GENERIC_ERROR_BACKOFF_MS
+      const stale   = (store.get(key) as CacheEntry<T> | undefined)?.value
+      // Preserve stale value; block retries for backoff period
+      store.set(key, { value: stale, expiresAt: 0, retryAfter: Date.now() + backoff })
+      if (stale !== undefined) return stale   // transparent fallback to stale data
+      throw err
     })
 
+  // Mark in-flight while preserving any stale value we already have
   store.set(key, {
-    expiresAt: now + ttlMs,
+    value:      cached?.value,
+    expiresAt:  0,
+    retryAfter: cached?.retryAfter ?? 0,
     inFlight,
   })
 

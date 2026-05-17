@@ -1,5 +1,5 @@
 const GRAPH_API_VERSION = "v25.0"
-const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`
+export const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`
 
 // Error codes Meta returns for rate limits (HTTP 200 body OR non-OK status).
 const META_RATE_LIMIT_CODES = new Set([4, 17, 32, 613])
@@ -10,6 +10,34 @@ function throwMetaError(data: any, fallback: string): never {
   const err = new Error(msg)
   if (META_RATE_LIMIT_CODES.has(code)) err.name = "MetaRateLimitError"
   throw err
+}
+
+// Read Meta rate-limit percentage from response headers.
+// Returns 0–100 (highest % across all rate-limit dimensions / header types).
+// Meta returns different headers depending on the API surface:
+//   x-app-usage              — app-level quota (Graph API + Marketing API uploads)
+//   x-business-use-case-usage — per-business quota (Marketing API management calls)
+//   x-ad-account-usage       — per-ad-account quota
+export function parseRateLimit(res: Response): number {
+  const pcts: number[] = []
+  try {
+    const app = res.headers.get("x-app-usage")
+    if (app) {
+      const v = JSON.parse(app)
+      pcts.push(v.call_count ?? 0, v.total_cputime ?? 0, v.total_time ?? 0)
+    }
+    const buc = res.headers.get("x-business-use-case-usage")
+    if (buc) {
+      const entries = (Object.values(JSON.parse(buc)) as any[][]).flat()
+      entries.forEach((v: any) => pcts.push(v.call_count ?? 0, v.total_time ?? 0, v.total_cputime ?? 0))
+    }
+    const ad = res.headers.get("x-ad-account-usage")
+    if (ad) {
+      const v = JSON.parse(ad)
+      pcts.push(v.acc_id_util_pct ?? 0)
+    }
+  } catch {}
+  return pcts.length > 0 ? Math.max(...pcts) : 0
 }
 
 // NOTE: ads_management, ads_read, business_management, pages_manage_ads,
@@ -188,6 +216,11 @@ export async function getAdAccounts(accessToken: string): Promise<AdAccount[]> {
   const res = await fetch(
     `${GRAPH_API_BASE}/me/adaccounts?fields=id,account_id,name,account_status,currency,amount_spent,balance&access_token=${accessToken}`
   )
+  // Record headers (including X-Business-Use-Case-Usage) for the status monitor
+  try {
+    const { recordUsageHeaders } = await import("@/lib/rate-limit-store")
+    recordUsageHeaders(res.headers)
+  } catch {}
   if (!res.ok) {
     const error = await res.json()
     throw new Error(error.error?.message || "Failed to get ad accounts")
@@ -427,7 +460,7 @@ export async function uploadImageToMeta(
   accessToken: string,
   fileBuffer: ArrayBuffer,
   fileName: string
-): Promise<{ hash: string; url: string; url_128: string }> {
+): Promise<{ hash: string; url: string; url_128: string; rateLimitPct: number }> {
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const base64 = Buffer.from(fileBuffer).toString("base64")
 
@@ -440,6 +473,7 @@ export async function uploadImageToMeta(
     `${GRAPH_API_BASE}/${normId}/adimages`,
     { method: "POST", body: formData }
   )
+  const rateLimitPct = parseRateLimit(res)
   const resText = await res.text()
   let data: any = {}
   try { data = JSON.parse(resText) } catch (e) {
@@ -453,13 +487,15 @@ export async function uploadImageToMeta(
   const images = data.images || {}
   const firstKey = Object.keys(images)[0]
   const img = images[firstKey] || {}
-  
+
   return {
     hash: img.hash || "",
     url: img.url || "",
     url_128: img.url_128 || "",
+    rateLimitPct,
   }
 }
+
 
 // Upload video to Meta Ad Account using Resumable Upload (recommended for stability)
 // Phase 1: START, Phase 2: TRANSFER, Phase 3: FINISH
@@ -468,7 +504,7 @@ export async function uploadVideoToMeta(
   accessToken: string,
   fileBuffer: ArrayBuffer,
   fileName: string
-): Promise<{ videoId: string }> {
+): Promise<{ videoId: string; rateLimitPct: number }> {
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const fileSize = fileBuffer.byteLength
   
@@ -548,18 +584,19 @@ export async function uploadVideoToMeta(
     method: "POST",
     body: finishParams,
   })
-  
+
+  const rateLimitPct = parseRateLimit(finishRes)
   const finishText = await finishRes.text()
   let finishData: any = {}
   try { finishData = JSON.parse(finishText) } catch (e) {
     throw new Error(`Meta Video Upload FINISH failed to parse JSON. Status: ${finishRes.status}, Body: ${finishText}`)
   }
-  
+
   if (!finishRes.ok) {
     throw new Error(`Meta Video Upload FINISH failed: ${finishData.error?.message || "Unknown error"}`)
   }
-  
-  return { videoId: video_id }
+
+  return { videoId: video_id, rateLimitPct }
 }
 
 // Get full details of an ad including adset & campaign settings (for template copy)
@@ -754,6 +791,37 @@ export async function getVideoThumbnail(videoId: string, accessToken: string): P
 }
 
 // Poll Meta until a video has finished processing (video_status === "ready").
+// Upload video to Meta via public URL — Meta pulls the file itself (1 API call, no chunking).
+// Prerequisite: fileUrl must be publicly accessible (e.g. Supabase Storage public bucket).
+export async function uploadVideoUrlToMeta(
+  adAccountId: string,
+  accessToken: string,
+  fileUrl: string,
+  fileName: string
+): Promise<{ videoId: string; rateLimitPct: number }> {
+  const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+
+  const params = new URLSearchParams({
+    access_token: accessToken,
+    file_url: fileUrl,
+    name: fileName,
+  })
+
+  const res = await fetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
+    method: "POST",
+    body: params,
+  })
+
+  const rateLimitPct = parseRateLimit(res)
+  const data = await res.json()
+
+  if (!res.ok) {
+    throw new Error(data.error?.message || "Failed to upload video from URL to Meta")
+  }
+
+  return { videoId: data.id, rateLimitPct }
+}
+
 // Meta /advideos accepts upload immediately and returns an id, but the video is "processing"
 // for 10s–2min. Using video_id in createAd before "ready" → ad created but renders no video.
 // Returns { ready, status, errorMsg } so caller can surface accurate status.
@@ -763,7 +831,8 @@ export async function pollVideoReady(
   maxWaitMs: number = 120_000
 ): Promise<{ ready: boolean; status: string; errorMsg?: string; waitedMs: number }> {
   const start = Date.now()
-  const intervals = [1500, 2500, 4000, 5000, 7000, 10000, 15000, 20000]
+  // Tăng thời gian giãn cách để tránh cạn kiệt API Rate Limit (Quota)
+  const intervals = [10000, 15000, 20000, 30000, 30000]
   let i = 0
 
   while (Date.now() - start < maxWaitMs) {
@@ -1003,6 +1072,8 @@ export async function createAd(
       message: params.body,
       call_to_action: { type: params.cta, value: { link: params.link_url } },
     }
+    // link_description is the correct field for description in video_data (not "description")
+    if (params.description) videoData.link_description = params.description
     // image_url is REQUIRED by Meta for video ads (subcode 1443226 if missing).
     // Caller (launch-direct) prefers Meta CDN URLs but Supabase public URLs work too.
     if (params.thumbnail_url) videoData.image_url = params.thumbnail_url

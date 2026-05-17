@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getCachedFacebookMetadata } from "../../facebook/_cache"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -42,41 +43,35 @@ export async function GET(request: NextRequest) {
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
     const sp = request.nextUrl.searchParams
-    const adAccountId      = sp.get("adAccountId") || ""
-    const datePreset       = sp.get("datePreset") || "last_90d"
-    const limit            = Math.min(parseInt(sp.get("limit") || "50"), 50)
-    const statusFilter     = sp.get("statusFilter") || ""
-    const groupByLP        = sp.get("groupByLandingPage") === "1"
-    const createdAfterDays = parseInt(sp.get("createdAfterDays") || "0")
-    const frequencyMin     = parseFloat(sp.get("frequencyMin") || "0")
+    const adAccountId = sp.get("adAccountId") || ""
+    const datePreset  = sp.get("datePreset") || "last_90d"
+    const limit       = Math.min(parseInt(sp.get("limit") || "50"), 50)
 
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
 
     const token       = connection.access_token
     const accountPath = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
 
-    const insightParams = new URLSearchParams({
-      level:        "ad",
-      fields:       "ad_id,ad_name,adset_name,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,frequency,reach,cpm,actions,action_values,video_thruplay_watched_actions,date_start,date_stop",
-      date_preset:  datePreset,
-      sort:         "spend_descending",
-      limit:        String(limit),
-      access_token: token,
-    })
+    // ── Cached fetch ── key excludes section-specific params so all sections share one cache entry
+    const cacheKey = `insights:report:${ctx.orgId}:${adAccountId}:${datePreset}`
+    const ads = await getCachedFacebookMetadata(cacheKey, 15 * 60_000, async () => {
+      const insightParams = new URLSearchParams({
+        level:        "ad",
+        fields:       "ad_id,ad_name,adset_name,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,outbound_clicks,frequency,reach,cpm,actions,action_values,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions,video_30_sec_watched_actions,video_avg_time_watched_actions,date_start,date_stop",
+        date_preset:  datePreset,
+        sort:         "spend_descending",
+        limit:        String(limit),
+        access_token: token,
+      })
+      // No statusFilter — all statuses fetched; filtering is done client-side per section
 
-    if (statusFilter) {
-      insightParams.append("filtering", JSON.stringify([{
-        field: "ad.effective_status", operator: "IN", value: statusFilter.split(","),
-      }]))
-    }
+      const insightRes  = await fetch(`${GRAPH}/${accountPath}/insights?${insightParams}`)
+      const insightData = await insightRes.json()
 
-    const insightRes  = await fetch(`${GRAPH}/${accountPath}/insights?${insightParams}`)
-    const insightData = await insightRes.json()
+      if (insightData.error) throw new Error(insightData.error.message)
 
-    if (insightData.error) return NextResponse.json({ error: insightData.error.message }, { status: 400 })
-
-    const rows: any[] = insightData.data || []
-    if (rows.length === 0) return NextResponse.json({ ads: [] })
+      const rows: any[] = insightData.data || []
+      if (rows.length === 0) return []
 
     const adIds = rows.map(r => r.ad_id)
 
@@ -138,7 +133,7 @@ export async function GET(request: NextRequest) {
 
     const PURCHASE_TYPES = ["offsite_conversion.fb_pixel_purchase", "purchase"]
 
-    let ads = rows.map(r => {
+    const rawAds = rows.map(r => {
       const info          = adInfo[r.ad_id]
       const spend         = parseFloat(r.spend || "0")
       const results       = pickResult(r.actions)
@@ -155,13 +150,40 @@ export async function GET(request: NextRequest) {
       const avgPV         = purchases > 0 ? purchaseValue / purchases : 0
       const purchaseCR    = impressions > 0 ? (purchases / impressions) * 100 : 0
       const thumbnail     = (info?.creativeId && sizedThumbs[info.creativeId]) || info?.imageUrl || info?.thumbUrl || null
-      const video3sViews  = ((r.actions || []) as { action_type: string; value: string }[])
-        .filter(a => a.action_type === "video_view")
-        .reduce((s, a) => s + parseInt(a.value || "0"), 0)
-      const thruplayViews = ((r.video_thruplay_watched_actions || []) as { action_type: string; value: string }[])
-        .reduce((s, a) => s + parseInt(a.value || "0"), 0)
+
+      const getAct = (type: string) =>
+        parseInt(((r.actions || []) as any[]).find((a: any) => a.action_type === type)?.value || "0")
+
+      const video3sViews  = getAct("video_view")
+      const thruplayViews = ((r.video_thruplay_watched_actions || []) as any[])
+        .reduce((s: number, a: any) => s + parseInt(a.value || "0"), 0)
       const thumbstopRate = impressions > 0 ? (video3sViews / impressions) * 100 : 0
       const holdRate      = video3sViews > 0 ? (thruplayViews / video3sViews) * 100 : 0
+
+      const videoP25      = parseInt(r.video_p25_watched_actions?.[0]?.value  || "0")
+      const videoP50      = parseInt(r.video_p50_watched_actions?.[0]?.value  || "0")
+      const videoP75      = parseInt(r.video_p75_watched_actions?.[0]?.value  || "0")
+      const videoP95      = parseInt(r.video_p95_watched_actions?.[0]?.value  || "0")
+      const videoP100     = parseInt(r.video_p100_watched_actions?.[0]?.value || "0")
+      const video30s      = parseInt(r.video_30_sec_watched_actions?.[0]?.value || "0")
+      const avgWatchTime  = parseFloat(r.video_avg_time_watched_actions?.[0]?.value || "0")
+      const outboundClicks = parseInt(r.outbound_clicks?.[0]?.value || "0")
+
+      const leads             = getAct("lead")
+      const registrations     = getAct("complete_registration")
+      const contentViews      = getAct("offsite_conversion.fb_pixel_view_content")
+      const addToCart         = getAct("offsite_conversion.fb_pixel_add_to_cart")
+      const appInstalls       = getAct("mobile_app_install") || getAct("app_install")
+      const appActivations    = getAct("app_activation")
+      const postEngagements   = getAct("post_engagement")
+      const postReactions     = getAct("post_reaction")
+      const pageEngagements   = getAct("page_engagement")
+      const like              = getAct("like")
+      const comment           = getAct("comment")
+      const initiateCheckout  = getAct("offsite_conversion.fb_pixel_initiate_checkout") || getAct("initiate_checkout")
+      const addPaymentInfo    = getAct("offsite_conversion.fb_pixel_add_payment_info") || getAct("add_payment_info")
+      const reach             = parseInt(r.reach || "0")
+      const ctr               = parseFloat(r.inline_link_click_ctr || "0")
 
       return {
         adId:            r.ad_id,
@@ -172,15 +194,72 @@ export async function GET(request: NextRequest) {
         results,
         costPerResult:   cpr,
         purchaseValue,
+        purchases,
         roas,
         impressions,
         linkClicks,
-        ctr:             parseFloat(r.inline_link_click_ctr || "0"),
+        outboundClicks,
+        ctr,
         frequency:       parseFloat(r.frequency || "0"),
-        reach:           parseInt(r.reach || "0"),
+        reach,
         cpm:             parseFloat(r.cpm || "0"),
         avgPurchaseValue: avgPV,
         purchaseCR,
+        leads,
+        registrations,
+        contentViews,
+        addToCart,
+        appInstalls,
+        appActivations,
+        postEngagements,
+        postReactions,
+        pageEngagements,
+        like,
+        comment,
+        initiateCheckout,
+        addPaymentInfo,
+        video3s:         video3sViews,
+        thruplay:        thruplayViews,
+        videoP25,
+        videoP50,
+        videoP75,
+        videoP95,
+        videoP100,
+        video30s,
+        avgWatchTime,
+        // Computed ratio metrics
+        costPerLinkClick:        linkClicks > 0 ? spend / linkClicks : 0,
+        outboundCostPer:         outboundClicks > 0 ? spend / outboundClicks : 0,
+        outboundCtr:             impressions > 0 ? (outboundClicks / impressions) * 100 : 0,
+        costPer3s:               video3sViews > 0 ? spend / video3sViews : 0,
+        costPerThruplay:         thruplayViews > 0 ? spend / thruplayViews : 0,
+        vtr:                     impressions > 0 ? (thruplayViews / impressions) * 100 : 0,
+        watchRate25:             video3sViews > 0 ? (videoP25 / video3sViews) * 100 : 0,
+        watchRate50:             video3sViews > 0 ? (videoP50 / video3sViews) * 100 : 0,
+        watchRate75:             video3sViews > 0 ? (videoP75 / video3sViews) * 100 : 0,
+        watchRate95:             video3sViews > 0 ? (videoP95 / video3sViews) * 100 : 0,
+        watchRate100:            video3sViews > 0 ? (videoP100 / video3sViews) * 100 : 0,
+        costPerVideoP25:         videoP25 > 0 ? spend / videoP25 : 0,
+        costPerVideoP50:         videoP50 > 0 ? spend / videoP50 : 0,
+        costPerVideoP75:         videoP75 > 0 ? spend / videoP75 : 0,
+        costPerVideoP95:         videoP95 > 0 ? spend / videoP95 : 0,
+        costPerVideoP100:        videoP100 > 0 ? spend / videoP100 : 0,
+        costPer1000Reached:      reach > 0 ? (spend / reach) * 1000 : 0,
+        costPerPurchase:         purchases > 0 ? spend / purchases : 0,
+        costPerAddToCart:        addToCart > 0 ? spend / addToCart : 0,
+        costPerLead:             leads > 0 ? spend / leads : 0,
+        costPerInstall:          appInstalls > 0 ? spend / appInstalls : 0,
+        costPerAppActivation:    appActivations > 0 ? spend / appActivations : 0,
+        costPerRegistration:     registrations > 0 ? spend / registrations : 0,
+        costPerContentView:      contentViews > 0 ? spend / contentViews : 0,
+        costPerNewCustomer:      purchases > 0 ? spend / purchases : 0,
+        costPerPageEngagement:   pageEngagements > 0 ? spend / pageEngagements : 0,
+        costPerPostEngagement:   postEngagements > 0 ? spend / postEngagements : 0,
+        costPerPostReaction:     postReactions > 0 ? spend / postReactions : 0,
+        costPerLike:             like > 0 ? spend / like : 0,
+        costPerComment:          comment > 0 ? spend / comment : 0,
+        costPerInitiateCheckout: initiateCheckout > 0 ? spend / initiateCheckout : 0,
+        costPerAddPaymentInfo:   addPaymentInfo > 0 ? spend / addPaymentInfo : 0,
         dateStart:       r.date_start,
         createdTime:     info?.createdTime     || null,
         landingPageUrl:  info?.landingPageUrl  || null,
@@ -192,44 +271,13 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    if (frequencyMin > 0)     ads = ads.filter(a => a.frequency >= frequencyMin)
-    if (createdAfterDays > 0) {
-      const cutoff = Date.now() - createdAfterDays * 86_400_000
-      ads = ads.filter(a => a.createdTime && new Date(a.createdTime).getTime() >= cutoff)
-    }
+      return rawAds
+    }) // end getCachedFacebookMetadata
 
-    if (groupByLP) {
-      const map = new Map<string, any>()
-      for (const ad of ads) {
-        const key = ad.landingPageUrl || "Unknown"
-        if (!map.has(key)) {
-          map.set(key, { ...ad, adId: `lp:${key}`, adName: key, _cnt: 1 })
-        } else {
-          const g = map.get(key)
-          g.spend          += ad.spend
-          g.results        += ad.results
-          g.impressions    += ad.impressions
-          g.linkClicks     += ad.linkClicks
-          g.purchaseValue  += ad.purchaseValue
-          g.reach          += ad.reach
-          g._cnt++
-          g.costPerResult  = g.results > 0 ? g.spend / g.results : 0
-          g.roas           = g.spend > 0 ? g.purchaseValue / g.spend : 0
-          g.ctr            = g.impressions > 0 ? (g.linkClicks / g.impressions) * 100 : 0
-          g.thumbstopRate  = (g.thumbstopRate * (g._cnt - 1) + ad.thumbstopRate) / g._cnt
-          g.holdRate       = (g.holdRate * (g._cnt - 1) + ad.holdRate) / g._cnt
-          g.adsetName      = `${g._cnt} ads`
-        }
-      }
-      ads = Array.from(map.values())
-    }
-
-    ads.sort((a, b) => b.spend - a.spend)
-    const ranked = ads.map((a, i) => ({ ...a, rank: i + 1 }))
-
-    return NextResponse.json({ ads: ranked })
+    return NextResponse.json({ ads })
   } catch (err: any) {
     console.error("[insights/report]", err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    const isRateLimit = err.message?.includes("too many calls") || err.message?.includes("Rate limited")
+    return NextResponse.json({ error: err.message }, { status: isRateLimit ? 429 : 500 })
   }
 }

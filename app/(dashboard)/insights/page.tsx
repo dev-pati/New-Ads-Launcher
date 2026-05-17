@@ -129,10 +129,109 @@ const GROUP_BY_OPTIONS = [
 ]
 
 const FILTER_FIELDS = [
-  { key: "ad_name",       label: "Ad name",       type: "text" },
-  { key: "adset_name",    label: "Adset name",     type: "dynamic" },
-  { key: "campaign_name", label: "Campaign name",  type: "dynamic" },
-  { key: "ad_type",       label: "Ad type",        type: "select", options: [{ label: "Video", value: "video" }, { label: "Image", value: "image" }] },
+  // Dimension
+  { key: "ad_name",        label: "Ad name",          type: "text",    category: "Dimension" },
+  { key: "adset_name",     label: "Adset name",        type: "dynamic", category: "Dimension" },
+  { key: "campaign_name",  label: "Campaign name",     type: "dynamic", category: "Dimension" },
+  { key: "landing_page",   label: "Landing page",      type: "text",    category: "Dimension" },
+  { key: "ad_type",        label: "Ad type",           type: "select",  category: "Dimension",
+    options: [{ label: "Video", value: "video" }, { label: "Image", value: "image" }] },
+  { key: "creative",       label: "Creative",          type: "text",    category: "Dimension" },
+  { key: "copy",           label: "Copy",              type: "text",    category: "Dimension" },
+  { key: "headline",       label: "Headline",          type: "text",    category: "Dimension" },
+  { key: "cta",            label: "Call to action",    type: "select",  category: "Dimension",
+    options: [
+      { label: "Learn More",  value: "LEARN_MORE" }, { label: "Shop Now",    value: "SHOP_NOW" },
+      { label: "Sign Up",     value: "SIGN_UP" },    { label: "Buy Now",     value: "BUY_NOW" },
+      { label: "Get Offer",   value: "GET_OFFER" },  { label: "Download",    value: "DOWNLOAD" },
+      { label: "Book Now",    value: "BOOK_NOW" },   { label: "Contact Us",  value: "CONTACT_US" },
+      { label: "Watch More",  value: "WATCH_MORE" }, { label: "Get Quote",   value: "GET_QUOTE" },
+      { label: "Subscribe",   value: "SUBSCRIBE" },  { label: "Apply Now",   value: "APPLY_NOW" },
+    ] },
+  { key: "ad_status",      label: "Ad status",         type: "select",  category: "Dimension",
+    options: [{ label: "Active", value: "ACTIVE" }, { label: "Paused", value: "PAUSED" }, { label: "Archived", value: "ARCHIVED" }] },
+  { key: "active_status",  label: "Active status",     type: "select",  category: "Dimension",
+    options: [{ label: "Active", value: "active" }, { label: "Inactive", value: "inactive" }] },
+  { key: "campaign_objective", label: "Campaign Objective", type: "dynamic", category: "Dimension" },
+  { key: "result_type",    label: "Result Type",       type: "dynamic", category: "Dimension" },
+  // Performance
+  { key: "spend",          label: "Amount Spent",      type: "number", category: "Performance" },
+  { key: "impressions",    label: "Impressions",       type: "number", category: "Performance" },
+  { key: "clicks",         label: "Clicks",            type: "number", category: "Performance" },
+  { key: "outbound_clicks",label: "Outbound Clicks",   type: "number", category: "Performance" },
+  { key: "reach",          label: "Reach",             type: "number", category: "Performance" },
+  { key: "results",        label: "Results",           type: "number", category: "Performance" },
+  { key: "cpr",            label: "Cost Per Result",   type: "number", category: "Performance" },
+  { key: "roas",           label: "ROAS",              type: "number", category: "Performance" },
+  { key: "purchase_roas",  label: "Purchase ROAS (return on ad spend)", type: "number", category: "Performance" },
+  { key: "website_roas",   label: "Website Purchase ROAS (return on ad spend)", type: "number", category: "Performance" },
+  { key: "purchases",      label: "Purchases",         type: "number", category: "Performance" },
+  { key: "purchase_value", label: "Purchase Value",    type: "number", category: "Performance" },
+  { key: "cost_per_purchase", label: "Cost Per Purchase", type: "number", category: "Performance" },
+  { key: "avg_purchase_value", label: "Average purchase value", type: "number", category: "Performance" },
+  { key: "purchase_cvr",   label: "Purchase Conversion Rate", type: "number", category: "Performance" },
+  { key: "leads",          label: "Leads",             type: "number", category: "Performance" },
+  { key: "cost_per_lead",  label: "Cost Per Lead",     type: "number", category: "Performance" },
+  { key: "link_clicks",    label: "Link Clicks",       type: "number", category: "Performance" },
+  { key: "cost_per_link_click", label: "Cost Per Link Click", type: "number", category: "Performance" },
+  { key: "landing_page_views", label: "Landing Page Views", type: "number", category: "Performance" },
+  { key: "cpm",            label: "CPM (Cost Per Mille)", type: "number", category: "Performance" },
+  { key: "cost_per_1000_reached", label: "Cost per 1,000 Accounts Center Accounts Reached", type: "number", category: "Performance" },
+  { key: "cpc_all",        label: "CPC (Cost Per Click)", type: "number", category: "Performance" },
+  { key: "cpc_outbound",   label: "CPC (Cost Per Outbound Click)", type: "number", category: "Performance" },
+  { key: "ctr_all",        label: "CTR (All clicks)",  type: "number", category: "Performance" },
+  { key: "ctr_link",       label: "CTR (Link)",        type: "number", category: "Performance" },
+  { key: "ctr_outbound",   label: "CTR (Outbound Click Through Rate)", type: "number", category: "Performance" },
+  { key: "frequency",      label: "Frequency",         type: "number", category: "Performance" },
+  { key: "cost_per_new_customer", label: "Cost per New Customer (CPA)", type: "number", category: "Performance" },
+  // Conversions
+  { key: "app_installs",   label: "App Installs",      type: "number", category: "Conversions" },
+  { key: "cost_per_install", label: "Cost Per Install", type: "number", category: "Conversions" },
+  { key: "app_activations", label: "App Activations",  type: "number", category: "Conversions" },
+  { key: "cost_per_app_activation", label: "Cost Per App Activation", type: "number", category: "Conversions" },
+  { key: "add_to_cart",    label: "Add to Cart",       type: "number", category: "Conversions" },
+  { key: "cost_per_add_to_cart", label: "Cost Per Add to Cart", type: "number", category: "Conversions" },
+  { key: "registrations",  label: "Registrations",     type: "number", category: "Conversions" },
+  { key: "cost_per_registration", label: "Cost Per Registration", type: "number", category: "Conversions" },
+  { key: "content_views",  label: "Content Views",     type: "number", category: "Conversions" },
+  { key: "cost_per_content_view", label: "Cost Per Content View", type: "number", category: "Conversions" },
+  // Engagement
+  { key: "page_engagements", label: "Page Engagements", type: "number", category: "Engagement" },
+  { key: "cost_per_page_engagement", label: "Cost Per Page Engagement", type: "number", category: "Engagement" },
+  { key: "post_engagements", label: "Post Engagements", type: "number", category: "Engagement" },
+  { key: "cost_per_post_engagement", label: "Cost Per Post Engagement", type: "number", category: "Engagement" },
+  { key: "post_reactions",  label: "Post Reactions",   type: "number", category: "Engagement" },
+  { key: "cost_per_post_reaction", label: "Cost Per Post Reaction", type: "number", category: "Engagement" },
+  // Video
+  { key: "video_3s",       label: "3 second video views", type: "number", category: "Video" },
+  { key: "cost_per_3s",    label: "Cost per 3 second video view", type: "number", category: "Video" },
+  { key: "thruplay",       label: "Thruplay",          type: "number", category: "Video" },
+  { key: "cost_per_thruplay", label: "Cost per thruplay", type: "number", category: "Video" },
+  { key: "thruplay_cvr",   label: "Thruplay conversion rate", type: "number", category: "Video" },
+  { key: "video_30s",      label: "Video 30s watched", type: "number", category: "Video" },
+  { key: "video_p25",      label: "Video 25% watched", type: "number", category: "Video" },
+  { key: "video_p50",      label: "Video 50% watched", type: "number", category: "Video" },
+  { key: "video_p75",      label: "Video 75% watched", type: "number", category: "Video" },
+  { key: "video_p95",      label: "Video 95% watched", type: "number", category: "Video" },
+  { key: "video_p100",     label: "Video 100% watched", type: "number", category: "Video" },
+  { key: "avg_watch_time", label: "Average Video Watch Time", type: "number", category: "Video" },
+  { key: "vtr",            label: "VTR (View Through Rate)", type: "number", category: "Video" },
+  { key: "hook_rate",      label: "Hook Rate (Thumbstop)", type: "number", category: "Video" },
+  { key: "hold_rate",      label: "Hold rate",         type: "number", category: "Video" },
+  { key: "thumbnail_perf", label: "Thumbnail Performance", type: "number", category: "Video" },
+  { key: "watch_rate_25",  label: "Video 25% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p25", label: "Cost per Video 25 watched", type: "number", category: "Video" },
+  { key: "watch_rate_50",  label: "Video 50% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p50", label: "Cost per Video 50% watched", type: "number", category: "Video" },
+  { key: "watch_rate_75",  label: "Video 75% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p75", label: "Cost per Video 75% watched", type: "number", category: "Video" },
+  { key: "watch_rate_95",  label: "Video 95% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p95", label: "Cost per Video 95% watched", type: "number", category: "Video" },
+  { key: "watch_rate_100", label: "Video 100% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p100", label: "Cost per Video 100 watched", type: "number", category: "Video" },
+  { key: "watch_rate_25b", label: "Watch Rate 25%",    type: "number", category: "Video" },
+  { key: "watch_rate_50b", label: "Watch Rate 50%",    type: "number", category: "Video" },
+  { key: "watch_rate_75b", label: "Watch Rate 75%",    type: "number", category: "Video" },
 ]
 
 const METRIC_DEFS: { key: SortField; label: string; color: string }[] = [
@@ -232,6 +331,7 @@ export default function InsightsPage() {
   const [filterSearch, setFilterSearch]   = useState("")
   const [pendingField, setPendingField]   = useState<typeof FILTER_FIELDS[number] | null>(null)
   const [pendingValue, setPendingValue]   = useState("")
+  const [pendingOperator, setPendingOperator] = useState<">=" | "<=" | ">" | "<" | "=">(">=")
   const [valueSearch, setValueSearch]     = useState("")
   const filterRef = useRef<HTMLDivElement>(null)
 
@@ -321,16 +421,43 @@ export default function InsightsPage() {
     if (section === "dashboard") { loadMetrics(); loadDashTopAds() }
   }, [section, loadMetrics, loadDashTopAds])
 
+  // ── Number filter helper ──────────────────────────────────────────────
+  const applyNumberFilter = (adVal: number | undefined, filterVal: string): boolean => {
+    const sep = filterVal.indexOf(":")
+    if (sep < 0) return true
+    const op = filterVal.slice(0, sep)
+    const num = parseFloat(filterVal.slice(sep + 1))
+    if (isNaN(num) || adVal === undefined) return true
+    if (op === ">")  return adVal > num
+    if (op === "<")  return adVal < num
+    if (op === ">=") return adVal >= num
+    if (op === "<=") return adVal <= num
+    if (op === "=")  return Math.abs(adVal - num) < 0.001
+    return true
+  }
+
   // ── Computed: filtered + grouped + sorted ads ─────────────────────────
   const displayedAds = useMemo(() => {
     let list = [...topAds]
 
     for (const f of activeFilters) {
       const val = f.value.toLowerCase()
-      if (f.field === "ad_name")           list = list.filter(a => a.adName.toLowerCase().includes(val))
-      else if (f.field === "adset_name")   list = list.filter(a => (a.adsetName || "").toLowerCase().includes(val))
-      else if (f.field === "campaign_name")list = list.filter(a => (a.campaignName || "").toLowerCase().includes(val))
-      else if (f.field === "ad_type")      list = list.filter(a => f.value === "video" ? a.isVideo : !a.isVideo)
+      // Dimension filters
+      if      (f.field === "ad_name")       list = list.filter(a => a.adName.toLowerCase().includes(val))
+      else if (f.field === "adset_name")    list = list.filter(a => (a.adsetName || "").toLowerCase().includes(val))
+      else if (f.field === "campaign_name") list = list.filter(a => (a.campaignName || "").toLowerCase().includes(val))
+      else if (f.field === "ad_type")       list = list.filter(a => f.value === "video" ? a.isVideo : !a.isVideo)
+      // Numeric metric filters (data available in TopAd)
+      else if (f.field === "spend")         list = list.filter(a => applyNumberFilter(a.spend, f.value))
+      else if (f.field === "impressions")   list = list.filter(a => applyNumberFilter(a.impressions, f.value))
+      else if (f.field === "link_clicks")   list = list.filter(a => applyNumberFilter(a.linkClicks, f.value))
+      else if (f.field === "results")       list = list.filter(a => applyNumberFilter(a.results, f.value))
+      else if (f.field === "cpr")           list = list.filter(a => applyNumberFilter(a.costPerResult, f.value))
+      else if (f.field === "roas" || f.field === "purchase_roas" || f.field === "website_roas")
+                                            list = list.filter(a => applyNumberFilter(a.roas, f.value))
+      else if (f.field === "purchase_value") list = list.filter(a => applyNumberFilter(a.purchaseValue, f.value))
+      else if (f.field === "ctr_all")       list = list.filter(a => applyNumberFilter(a.ctr, f.value))
+      // Other numeric filters: pass-through until API returns those fields
     }
 
     if (groupBy === "unique") {
@@ -368,10 +495,15 @@ export default function InsightsPage() {
   const addFilter = () => {
     if (!pendingField || !pendingValue.trim()) return
     const fieldDef = FILTER_FIELDS.find(f => f.key === pendingField.key)
-    const label = fieldDef?.type === "select"
-      ? (fieldDef as any).options?.find((o: any) => o.value === pendingValue)?.label || pendingValue
-      : pendingValue
-    setActiveFilters(prev => [...prev, { id: Date.now().toString(), field: pendingField.key, value: pendingValue, label: `${pendingField.label}: ${label}` }])
+    let encodedValue = pendingValue
+    let displayLabel = pendingValue
+    if (fieldDef?.type === "number") {
+      encodedValue = `${pendingOperator}:${pendingValue}`
+      displayLabel = `${pendingOperator} ${pendingValue}`
+    } else if (fieldDef?.type === "select") {
+      displayLabel = (fieldDef as any).options?.find((o: any) => o.value === pendingValue)?.label || pendingValue
+    }
+    setActiveFilters(prev => [...prev, { id: Date.now().toString(), field: pendingField.key, value: encodedValue, label: `${pendingField.label} ${fieldDef?.type === "number" ? displayLabel : ": " + displayLabel}` }])
     setPendingField(null); setPendingValue(""); setFilterOpen(false); setFilterSearch(""); setValueSearch("")
   }
 
@@ -675,16 +807,31 @@ export default function InsightsPage() {
                             />
                           </div>
                         </div>
-                        <div className="py-1 max-h-56 overflow-y-auto">
-                          {filteredFields.map(f => (
-                            <button key={f.key} onClick={() => { setPendingField(f); setPendingValue("") }}
-                              className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50 transition-colors">
-                              {f.label}
-                            </button>
-                          ))}
+                        <div className="py-1 max-h-[300px] overflow-y-auto">
                           {filteredFields.length === 0 && (
                             <p className="px-3 py-4 text-sm text-muted-foreground/50 text-center">No fields found</p>
                           )}
+                          {(() => {
+                            let lastCat = ""
+                            return filteredFields.map(f => {
+                              const cat = (f as any).category || ""
+                              const showHeader = cat && cat !== lastCat && !filterSearch.trim()
+                              lastCat = cat
+                              return (
+                                <div key={f.key}>
+                                  {showHeader && (
+                                    <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">
+                                      {cat}
+                                    </p>
+                                  )}
+                                  <button onClick={() => { setPendingField(f); setPendingValue(""); setPendingOperator(">=") }}
+                                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors">
+                                    {f.label}
+                                  </button>
+                                </div>
+                              )
+                            })
+                          })()}
                         </div>
                       </>
                     ) : (
@@ -734,8 +881,26 @@ export default function InsightsPage() {
                                 className="w-full px-3 py-2 text-sm border rounded-lg bg-background outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
                               />
                             )}
+                            {pendingField!.type === "number" && (
+                              <div className="space-y-2">
+                                <div className="grid grid-cols-5 gap-1">
+                                  {([">=" , "<=", ">", "<", "="] as const).map(op => (
+                                    <button key={op} onClick={() => setPendingOperator(op)}
+                                      className={cn("py-1.5 text-sm rounded-lg border font-mono transition-colors",
+                                        pendingOperator === op ? "border-primary bg-primary/10 text-primary font-semibold" : "border-border hover:bg-muted/50"
+                                      )}>{op}
+                                    </button>
+                                  ))}
+                                </div>
+                                <input type="number" value={pendingValue} onChange={e => setPendingValue(e.target.value)}
+                                  onKeyDown={e => e.key === "Enter" && addFilter()}
+                                  placeholder="Enter value..." autoFocus
+                                  className="w-full px-3 py-2 text-sm border rounded-lg bg-background outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
+                                />
+                              </div>
+                            )}
                             {pendingField!.type === "select" && (
-                              <div className="space-y-1">
+                              <div className="space-y-1 max-h-48 overflow-y-auto">
                                 {(pendingField as any).options?.map((opt: any) => (
                                   <button key={opt.value} onClick={() => setPendingValue(opt.value)}
                                     className={cn("w-full text-left px-3 py-2 text-sm rounded-lg border transition-colors",

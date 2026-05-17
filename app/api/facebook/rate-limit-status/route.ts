@@ -1,10 +1,22 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { clearAllCachedFacebookMetadata, getCacheRetryAfterMs } from "../_cache"
+import { getUsageSnapshot } from "@/lib/rate-limit-store"
 
-// Make 1 lightweight call to Meta and parse rate-limit headers to show current quota usage
-// X-App-Usage: { call_count, total_cputime, total_time } as 0-100% of app-level limit
-// X-Business-Use-Case-Usage: per business / ad account, includes estimated_time_to_regain_access
-export async function GET() {
+// GET  — check current rate-limit status from Meta headers
+// POST — clear server-side cache so app retries immediately
+export async function POST() {
+  try {
+    const ctx = await getAuthContext()
+    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    clearAllCachedFacebookMetadata()
+    return NextResponse.json({ cleared: true })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
+export async function GET(req: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -12,60 +24,95 @@ export async function GET() {
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
-    // Lightest call possible: GET /me?fields=id (1 simple field)
-    const res = await fetch(`https://graph.facebook.com/v25.0/me?fields=id&access_token=${connection.access_token}`)
-
-    const appUsageRaw = res.headers.get("x-app-usage")
-    const businessUsageRaw = res.headers.get("x-business-use-case-usage")
-    const adAccountUsageRaw = res.headers.get("x-ad-account-usage")
+    // ── Lightest possible Meta call to read app-level rate-limit headers ───
+    const res = await fetch(
+      `https://graph.facebook.com/v25.0/me?fields=id&access_token=${connection.access_token}`
+    )
 
     let appUsage: any = null
-    let businessUsage: any = null
-    let adAccountUsage: any = null
-    try { if (appUsageRaw) appUsage = JSON.parse(appUsageRaw) } catch {}
-    try { if (businessUsageRaw) businessUsage = JSON.parse(businessUsageRaw) } catch {}
-    try { if (adAccountUsageRaw) adAccountUsage = JSON.parse(adAccountUsageRaw) } catch {}
+    try {
+      const raw = res.headers.get("x-app-usage")
+      if (raw) appUsage = JSON.parse(raw)
+    } catch {}
 
     const data = await res.json().catch(() => ({}))
 
-    // Compute "can call" status
+    // ── Business/ad-account usage — from last known ad-account API call ───
+    // GET /me does NOT return X-Business-Use-Case-Usage.
+    // We use the snapshot recorded by getAdAccounts() for accurate data.
+    const snapshot = getUsageSnapshot()
+    const businessUsage  = snapshot?.businessUsage  ?? null
+    const adAccountUsage = snapshot?.adAccountUsage ?? null
+    const snapshotAgeMs  = snapshot ? Date.now() - snapshot.recordedAt : null
+
+    // ── App-level usage (0-100%) ──────────────────────────────────────────
     const maxAppPct = appUsage
       ? Math.max(appUsage.call_count || 0, appUsage.total_cputime || 0, appUsage.total_time || 0)
       : 0
 
-    let status: "ok" | "warning" | "blocked" = "ok"
-    if (maxAppPct >= 100 || data.error?.code === 4) status = "blocked"
-    else if (maxAppPct >= 75) status = "warning"
-
-    // Estimated wait from any source
+    // ── Business / ADS_MANAGEMENT usage ──────────────────────────────────
+    let maxBizPct = 0
     let estimatedMinutes: number | null = null
     if (businessUsage) {
-      for (const k of Object.keys(businessUsage)) {
-        const items = businessUsage[k]
-        if (Array.isArray(items)) {
-          for (const item of items) {
-            if (item.estimated_time_to_regain_access > 0) {
-              estimatedMinutes = Math.max(estimatedMinutes || 0, item.estimated_time_to_regain_access)
-            }
+      for (const entries of Object.values(businessUsage)) {
+        if (!Array.isArray(entries)) continue
+        for (const item of entries as any[]) {
+          if (item.type !== "ADS_MANAGEMENT") continue
+          const pct = Math.max(item.call_count || 0, item.total_cputime || 0, item.total_time || 0)
+          if (pct > maxBizPct) maxBizPct = pct
+          if ((item.estimated_time_to_regain_access || 0) > 0) {
+            estimatedMinutes = Math.max(estimatedMinutes ?? 0, item.estimated_time_to_regain_access)
           }
         }
       }
+    }
+
+    const maxPct = Math.max(maxAppPct, maxBizPct)
+
+    // ── Server-side cache state ──────────────────────────────────────────
+    const cacheKey = `fb:ad-accounts:${ctx.orgId}`
+    const cacheBlockedMs  = getCacheRetryAfterMs(cacheKey)
+    const cacheBlockedSec = Math.ceil(cacheBlockedMs / 1000)
+
+    // ── Overall status ────────────────────────────────────────────────────
+    const apiRateLimited = data.error?.code === 4 || data.error?.code === 17
+      || maxPct >= 100 || (estimatedMinutes !== null && estimatedMinutes > 0)
+
+    let status: "ok" | "warning" | "blocked" = "ok"
+    if (apiRateLimited || cacheBlockedMs > 0) {
+      status = cacheBlockedMs > 0 && !apiRateLimited ? "warning" : "blocked"
+    } else if (maxPct >= 75) {
+      status = "warning"
+    }
+
+    let tip: string
+    if (apiRateLimited) {
+      tip = estimatedMinutes
+        ? `✗ Meta rate limited — wait ~${estimatedMinutes} min`
+        : "✗ Meta rate limited — wait a few minutes"
+    } else if (cacheBlockedMs > 0) {
+      tip = `⚠ Server cache blocked — clears in ${cacheBlockedSec}s (or click Clear Cache)`
+    } else if (maxPct >= 75) {
+      tip = `⚠ Usage at ${maxPct}% — minimize API-heavy actions`
+    } else {
+      tip = "✓ Safe to test the app"
     }
 
     return NextResponse.json({
       status,
       apiCallSucceeded: res.ok && !data.error,
       apiError: data.error || null,
-      appUsage,         // { call_count, total_cputime, total_time } each 0-100
-      businessUsage,    // per business
+      appUsage,
+      businessUsage,
       adAccountUsage,
+      snapshotAgeSeconds: snapshotAgeMs !== null ? Math.round(snapshotAgeMs / 1000) : null,
       maxAppPct,
+      maxBizPct,
+      maxPct,
       estimatedMinutesUntilOK: estimatedMinutes,
-      tip: status === "ok"
-        ? "✓ Safe to test the app"
-        : status === "warning"
-          ? "⚠ Quota above 75% — minimize API-heavy actions"
-          : "✗ Rate limited — wait before testing",
+      cacheBlocked: cacheBlockedMs > 0,
+      cacheBlockedSeconds: cacheBlockedSec,
+      tip,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Failed to check status" }, { status: 500 })

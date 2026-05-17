@@ -37,23 +37,80 @@ interface ReportAd {
   results:          number
   costPerResult:    number
   purchaseValue:    number
+  purchases:        number
   roas:             number
   impressions:      number
   linkClicks:       number
+  outboundClicks:   number
   ctr:              number
   frequency:        number
   reach:            number
   cpm:              number
   avgPurchaseValue: number
   purchaseCR:       number
-  dateStart?:       string
-  createdTime?:     string | null
-  landingPageUrl?:  string | null
-  thumbnail?:       string | null
-  isVideo:          boolean
-  effectiveStatus?: string
-  thumbstopRate:    number
-  holdRate:         number
+  leads:            number
+  registrations:    number
+  contentViews:     number
+  addToCart:        number
+  appInstalls:      number
+  appActivations:   number
+  postEngagements:  number
+  postReactions:    number
+  pageEngagements:  number
+  video3s:          number
+  thruplay:         number
+  videoP25:         number
+  videoP50:         number
+  videoP75:         number
+  videoP95:              number
+  videoP100:             number
+  video30s:              number
+  avgWatchTime:          number
+  like:                  number
+  comment:               number
+  initiateCheckout:      number
+  addPaymentInfo:        number
+  // pre-computed ratios
+  costPerLinkClick:      number
+  outboundCostPer:       number
+  outboundCtr:           number
+  costPer3s:             number
+  costPerThruplay:       number
+  vtr:                   number
+  watchRate25:           number
+  watchRate50:           number
+  watchRate75:           number
+  watchRate95:           number
+  watchRate100:          number
+  costPerVideoP25:       number
+  costPerVideoP50:       number
+  costPerVideoP75:       number
+  costPerVideoP95:       number
+  costPerVideoP100:      number
+  costPer1000Reached:    number
+  costPerPurchase:       number
+  costPerAddToCart:      number
+  costPerLead:           number
+  costPerInstall:        number
+  costPerAppActivation:  number
+  costPerRegistration:   number
+  costPerContentView:    number
+  costPerNewCustomer:    number
+  costPerPageEngagement: number
+  costPerPostEngagement: number
+  costPerPostReaction:   number
+  costPerLike:           number
+  costPerComment:        number
+  costPerInitiateCheckout: number
+  costPerAddPaymentInfo: number
+  dateStart?:            string
+  createdTime?:          string | null
+  landingPageUrl?:       string | null
+  thumbnail?:            string | null
+  isVideo:               boolean
+  effectiveStatus?:      string
+  thumbstopRate:         number
+  holdRate:              number
 }
 
 interface ActiveFilter { id: string; field: string; value: string; label: string }
@@ -63,11 +120,12 @@ type ViewMode = "grid" | "table"
 // ─── Metric Definitions ───────────────────────────────────────────────────────
 
 interface MetricDef {
-  key:              string
-  label:            string
-  color:            string
-  fmt:              (v: number, raw?: any) => string
-  higherIsBetter:   boolean
+  key:            string
+  label:          string
+  color:          string
+  fmt:            (v: number, raw?: any) => string
+  higherIsBetter: boolean
+  category:       string
 }
 
 const fmt$ = (v: number, d = 2) =>
@@ -76,23 +134,84 @@ const fmtK = (v: number) =>
   v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(Math.round(v))
 const fmtDate = (v: number, raw?: any): string =>
   raw ? new Date(raw).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"
+const fmtPct = (v: number) => v.toFixed(2) + "%"
+const fmtN   = (v: number) => v > 0 ? fmtK(v) : "—"
+const fmt$0  = (v: number) => v > 0 ? fmt$(v) : "—"
+const fmtX   = (v: number) => v > 0 ? v.toFixed(2) + "x" : "—"
+const fmtSec = (v: number) => v > 0 ? (v >= 60 ? (v / 60).toFixed(1) + "m" : v.toFixed(1) + "s") : "—"
 
 const ALL_METRICS: MetricDef[] = [
-  { key: "spend",            label: "Amount Spent",             color: "#7c3aed", fmt: (v) => fmt$(v),                       higherIsBetter: true  },
-  { key: "results",          label: "Results",                  color: "#ec4899", fmt: (v) => v > 0 ? String(Math.round(v)) : "—", higherIsBetter: true  },
-  { key: "costPerResult",    label: "Cost Per Result",          color: "#14b8a6", fmt: (v) => v > 0 ? fmt$(v) : "—",         higherIsBetter: false },
-  { key: "impressions",      label: "Impressions",              color: "#f59e0b", fmt: (v) => fmtK(v),                       higherIsBetter: true  },
-  { key: "linkClicks",       label: "Clicks",                   color: "#3b82f6", fmt: (v) => fmtK(v),                       higherIsBetter: true  },
-  { key: "ctr",              label: "CTR (All clicks)",         color: "#10b981", fmt: (v) => v.toFixed(2) + "%",             higherIsBetter: true  },
-  { key: "frequency",        label: "Frequency",                color: "#ef4444", fmt: (v) => v.toFixed(2),                  higherIsBetter: false },
-  { key: "reach",            label: "Reach",                    color: "#8b5cf6", fmt: (v) => fmtK(v),                       higherIsBetter: true  },
-  { key: "cpm",              label: "CPM",                      color: "#f97316", fmt: (v) => fmt$(v),                       higherIsBetter: false },
-  { key: "roas",             label: "ROAS",                     color: "#84cc16", fmt: (v) => v > 0 ? v.toFixed(2) + "x" : "—", higherIsBetter: true  },
-  { key: "avgPurchaseValue", label: "Average Purchase Value",   color: "#06b6d4", fmt: (v) => v > 0 ? fmt$(v) : "—",         higherIsBetter: true  },
-  { key: "purchaseCR",       label: "Purchase Conversion Rate", color: "#a855f7", fmt: (v) => v.toFixed(2) + "%",             higherIsBetter: true  },
-  { key: "createdTime",      label: "Earliest ad created date", color: "#60a5fa", fmt: fmtDate,                              higherIsBetter: true  },
-  { key: "holdRate",         label: "Hold Rate",                color: "#0ea5e9", fmt: (v) => v.toFixed(2) + "%",             higherIsBetter: true  },
-  { key: "thumbstopRate",    label: "Thumbstop (Hook Rate)",    color: "#d946ef", fmt: (v) => v.toFixed(2) + "%",             higherIsBetter: true  },
+  // ── Performance ──────────────────────────────────────────────────────────
+  { category: "Performance", key: "spend",              label: "Amount Spent",                    color: "#7c3aed", fmt: fmt$,    higherIsBetter: true  },
+  { category: "Performance", key: "impressions",        label: "Impressions",                     color: "#f59e0b", fmt: fmtK,    higherIsBetter: true  },
+  { category: "Performance", key: "linkClicks",         label: "Clicks",                          color: "#3b82f6", fmt: fmtK,    higherIsBetter: true  },
+  { category: "Performance", key: "reach",              label: "Reach",                           color: "#8b5cf6", fmt: fmtK,    higherIsBetter: true  },
+  { category: "Performance", key: "cpm",                label: "CPM",                             color: "#f97316", fmt: fmt$,    higherIsBetter: false },
+  { category: "Performance", key: "costPer1000Reached", label: "Cost per 1,000 Reached",          color: "#fb923c", fmt: fmt$,    higherIsBetter: false },
+  { category: "Performance", key: "costPerLinkClick",   label: "Cost Per Link Click",             color: "#60a5fa", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Performance", key: "outboundClicks",     label: "Outbound Clicks",                 color: "#38bdf8", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Performance", key: "outboundCostPer",    label: "Outbound CPC",                    color: "#0ea5e9", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Performance", key: "outboundCtr",        label: "Outbound CTR",                    color: "#06b6d4", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Performance", key: "ctr",                label: "CTR (All clicks)",                color: "#10b981", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Performance", key: "frequency",          label: "Frequency",                       color: "#ef4444", fmt: (v) => v.toFixed(2), higherIsBetter: false },
+  { category: "Performance", key: "results",            label: "Results",                         color: "#ec4899", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Performance", key: "costPerResult",      label: "Cost Per Result",                 color: "#14b8a6", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Performance", key: "createdTime",        label: "Earliest ad created date",        color: "#a78bfa", fmt: fmtDate, higherIsBetter: true  },
+  // ── Video ─────────────────────────────────────────────────────────────────
+  { category: "Video",       key: "avgWatchTime",       label: "Avg. Video Watch Time",           color: "#22c55e", fmt: fmtSec,  higherIsBetter: true  },
+  { category: "Video",       key: "video3s",            label: "Video Views (3s)",                color: "#4ade80", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Video",       key: "costPer3s",          label: "Cost per 3s video view",          color: "#86efac", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Video",       key: "thruplay",           label: "ThruPlay",                        color: "#16a34a", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Video",       key: "costPerThruplay",    label: "Cost per ThruPlay",               color: "#15803d", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Video",       key: "holdRate",           label: "ThruPlay Conversion Rate",        color: "#0ea5e9", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Video",       key: "thumbstopRate",      label: "Thumbstop (Hook Rate)",           color: "#d946ef", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Video",       key: "vtr",                label: "VTR (View Through Rate)",         color: "#c026d3", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Video",       key: "watchRate25",        label: "Video 25% watched rate",          color: "#a3e635", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Video",       key: "costPerVideoP25",    label: "Cost per Video 25% watched",      color: "#84cc16", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Video",       key: "watchRate50",        label: "Video 50% watched rate",          color: "#65a30d", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Video",       key: "costPerVideoP50",    label: "Cost per Video 50% watched",      color: "#4d7c0f", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Video",       key: "watchRate75",        label: "Video 75% watched rate",          color: "#78716c", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Video",       key: "costPerVideoP75",    label: "Cost per Video 75% watched",      color: "#57534e", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Video",       key: "watchRate95",        label: "Video 95% watched rate",          color: "#44403c", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Video",       key: "costPerVideoP95",    label: "Cost per Video 95% watched",      color: "#6b7280", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Video",       key: "watchRate100",       label: "Video 100% watched rate",         color: "#374151", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Video",       key: "costPerVideoP100",   label: "Cost per Video 100% watched",     color: "#1f2937", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Video",       key: "video30s",           label: "Video 30s Watched",               color: "#2dd4bf", fmt: fmtN,    higherIsBetter: true  },
+  // ── Conversions ───────────────────────────────────────────────────────────
+  { category: "Conversions", key: "roas",               label: "ROAS",                            color: "#84cc16", fmt: fmtX,    higherIsBetter: true  },
+  { category: "Conversions", key: "purchases",          label: "Purchases",                       color: "#ec4899", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "purchaseValue",      label: "Purchase Value",                  color: "#f43f5e", fmt: fmt$,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerPurchase",    label: "Cost Per Purchase",               color: "#fb7185", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "purchaseCR",         label: "Purchase Conversion Rate",        color: "#a855f7", fmt: fmtPct,  higherIsBetter: true  },
+  { category: "Conversions", key: "avgPurchaseValue",   label: "Average Purchase Value",          color: "#9333ea", fmt: fmt$0,   higherIsBetter: true  },
+  { category: "Conversions", key: "addToCart",          label: "Add to Cart",                     color: "#c084fc", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerAddToCart",   label: "Cost Per Add to Cart",            color: "#a78bfa", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "initiateCheckout",   label: "Initiate Checkout",               color: "#818cf8", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerInitiateCheckout", label: "Cost Per Initiate Checkout", color: "#6366f1", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "addPaymentInfo",     label: "Add Payment Info",                color: "#4f46e5", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerAddPaymentInfo",   label: "Cost Per Add Payment Info",  color: "#4338ca", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "leads",              label: "Leads",                           color: "#e879f9", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerLead",        label: "Cost Per Lead",                   color: "#d946ef", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "appInstalls",        label: "App Installs",                    color: "#c026d3", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerInstall",     label: "Cost Per Install",                color: "#a21caf", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "appActivations",     label: "App Activations",                 color: "#86198f", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerAppActivation", label: "Cost Per App Activation",       color: "#701a75", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "registrations",      label: "Registrations",                   color: "#f472b6", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerRegistration",label: "Cost Per Registration",           color: "#f9a8d4", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "contentViews",       label: "Content Views",                   color: "#fda4af", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Conversions", key: "costPerContentView", label: "Cost Per Content View",           color: "#fb7185", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Conversions", key: "costPerNewCustomer", label: "Cost per New Customer (CPA)",     color: "#e11d48", fmt: fmt$0,   higherIsBetter: false },
+  // ── Engagement ────────────────────────────────────────────────────────────
+  { category: "Engagement",  key: "like",               label: "Like",                            color: "#f59e0b", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Engagement",  key: "costPerLike",        label: "Cost Per Like",                   color: "#fbbf24", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Engagement",  key: "comment",            label: "Comment",                         color: "#f97316", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Engagement",  key: "costPerComment",     label: "Cost Per Comment",                color: "#fb923c", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Engagement",  key: "pageEngagements",    label: "Page Engagements",                color: "#ef4444", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Engagement",  key: "costPerPageEngagement", label: "Cost Per Page Engagement",     color: "#f87171", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Engagement",  key: "postEngagements",    label: "Post Engagements",                color: "#fca5a5", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Engagement",  key: "costPerPostEngagement", label: "Cost Per Post Engagement",     color: "#dc2626", fmt: fmt$0,   higherIsBetter: false },
+  { category: "Engagement",  key: "postReactions",      label: "Post Reactions",                  color: "#b91c1c", fmt: fmtN,    higherIsBetter: true  },
+  { category: "Engagement",  key: "costPerPostReaction",label: "Cost Per Post Reaction",          color: "#991b1b", fmt: fmt$0,   higherIsBetter: false },
 ]
 
 // ─── Report Configurations ────────────────────────────────────────────────────
@@ -180,12 +299,212 @@ const GROUP_BY_OPTIONS = [
 ]
 
 const FILTER_FIELDS = [
-  { key: "ad_name",       label: "Ad name",       type: "text" },
-  { key: "adset_name",    label: "Adset name",     type: "dynamic" },
-  { key: "campaign_name", label: "Campaign name",  type: "dynamic" },
-  { key: "ad_type",       label: "Ad type",        type: "select",
+  // Dimension
+  { key: "ad_name",        label: "Ad name",          type: "text",    category: "Dimension" },
+  { key: "adset_name",     label: "Adset name",        type: "dynamic", category: "Dimension" },
+  { key: "campaign_name",  label: "Campaign name",     type: "dynamic", category: "Dimension" },
+  { key: "landing_page",   label: "Landing page",      type: "text",    category: "Dimension" },
+  { key: "ad_type",        label: "Ad type",           type: "select",  category: "Dimension",
     options: [{ label: "Video", value: "video" }, { label: "Image", value: "image" }] },
+  { key: "creative",       label: "Creative",          type: "text",    category: "Dimension" },
+  { key: "copy",           label: "Copy",              type: "text",    category: "Dimension" },
+  { key: "headline",       label: "Headline",          type: "text",    category: "Dimension" },
+  { key: "cta",            label: "Call to action",    type: "select",  category: "Dimension",
+    options: [
+      { label: "Learn More",  value: "LEARN_MORE" }, { label: "Shop Now",    value: "SHOP_NOW" },
+      { label: "Sign Up",     value: "SIGN_UP" },    { label: "Buy Now",     value: "BUY_NOW" },
+      { label: "Get Offer",   value: "GET_OFFER" },  { label: "Download",    value: "DOWNLOAD" },
+      { label: "Book Now",    value: "BOOK_NOW" },   { label: "Contact Us",  value: "CONTACT_US" },
+      { label: "Watch More",  value: "WATCH_MORE" }, { label: "Get Quote",   value: "GET_QUOTE" },
+      { label: "Subscribe",   value: "SUBSCRIBE" },  { label: "Apply Now",   value: "APPLY_NOW" },
+    ] },
+  { key: "ad_status",      label: "Ad status",         type: "select",  category: "Dimension",
+    options: [{ label: "Active", value: "ACTIVE" }, { label: "Paused", value: "PAUSED" }, { label: "Archived", value: "ARCHIVED" }] },
+  { key: "active_status",  label: "Active status",     type: "select",  category: "Dimension",
+    options: [{ label: "Active", value: "active" }, { label: "Inactive", value: "inactive" }] },
+  { key: "campaign_objective", label: "Campaign Objective", type: "dynamic", category: "Dimension" },
+  { key: "result_type",    label: "Result Type",       type: "dynamic", category: "Dimension" },
+  // Performance
+  { key: "spend",          label: "Amount Spent",      type: "number", category: "Performance" },
+  { key: "impressions",    label: "Impressions",       type: "number", category: "Performance" },
+  { key: "clicks",         label: "Clicks",            type: "number", category: "Performance" },
+  { key: "outbound_clicks",label: "Outbound Clicks",   type: "number", category: "Performance" },
+  { key: "reach",          label: "Reach",             type: "number", category: "Performance" },
+  { key: "results",        label: "Results",           type: "number", category: "Performance" },
+  { key: "cpr",            label: "Cost Per Result",   type: "number", category: "Performance" },
+  { key: "roas",           label: "ROAS",              type: "number", category: "Performance" },
+  { key: "purchase_roas",  label: "Purchase ROAS (return on ad spend)", type: "number", category: "Performance" },
+  { key: "website_roas",   label: "Website Purchase ROAS (return on ad spend)", type: "number", category: "Performance" },
+  { key: "purchases",      label: "Purchases",         type: "number", category: "Performance" },
+  { key: "purchase_value", label: "Purchase Value",    type: "number", category: "Performance" },
+  { key: "cost_per_purchase", label: "Cost Per Purchase", type: "number", category: "Performance" },
+  { key: "avg_purchase_value", label: "Average purchase value", type: "number", category: "Performance" },
+  { key: "purchase_cvr",   label: "Purchase Conversion Rate", type: "number", category: "Performance" },
+  { key: "leads",          label: "Leads",             type: "number", category: "Performance" },
+  { key: "cost_per_lead",  label: "Cost Per Lead",     type: "number", category: "Performance" },
+  { key: "link_clicks",    label: "Link Clicks",       type: "number", category: "Performance" },
+  { key: "cost_per_link_click", label: "Cost Per Link Click", type: "number", category: "Performance" },
+  { key: "landing_page_views", label: "Landing Page Views", type: "number", category: "Performance" },
+  { key: "cpm",            label: "CPM (Cost Per Mille)", type: "number", category: "Performance" },
+  { key: "cost_per_1000_reached", label: "Cost per 1,000 Accounts Center Accounts Reached", type: "number", category: "Performance" },
+  { key: "cpc_all",        label: "CPC (Cost Per Click)", type: "number", category: "Performance" },
+  { key: "cpc_outbound",   label: "CPC (Cost Per Outbound Click)", type: "number", category: "Performance" },
+  { key: "ctr_all",        label: "CTR (All clicks)",  type: "number", category: "Performance" },
+  { key: "ctr_link",       label: "CTR (Link)",        type: "number", category: "Performance" },
+  { key: "ctr_outbound",   label: "CTR (Outbound Click Through Rate)", type: "number", category: "Performance" },
+  { key: "frequency",      label: "Frequency",         type: "number", category: "Performance" },
+  { key: "cost_per_new_customer", label: "Cost per New Customer (CPA)", type: "number", category: "Performance" },
+  // Conversions
+  { key: "app_installs",   label: "App Installs",      type: "number", category: "Conversions" },
+  { key: "cost_per_install", label: "Cost Per Install", type: "number", category: "Conversions" },
+  { key: "app_activations", label: "App Activations",  type: "number", category: "Conversions" },
+  { key: "cost_per_app_activation", label: "Cost Per App Activation", type: "number", category: "Conversions" },
+  { key: "add_to_cart",    label: "Add to Cart",       type: "number", category: "Conversions" },
+  { key: "cost_per_add_to_cart", label: "Cost Per Add to Cart", type: "number", category: "Conversions" },
+  { key: "registrations",  label: "Registrations",     type: "number", category: "Conversions" },
+  { key: "cost_per_registration", label: "Cost Per Registration", type: "number", category: "Conversions" },
+  { key: "content_views",  label: "Content Views",     type: "number", category: "Conversions" },
+  { key: "cost_per_content_view", label: "Cost Per Content View", type: "number", category: "Conversions" },
+  // Engagement
+  { key: "page_engagements", label: "Page Engagements", type: "number", category: "Engagement" },
+  { key: "cost_per_page_engagement", label: "Cost Per Page Engagement", type: "number", category: "Engagement" },
+  { key: "post_engagements", label: "Post Engagements", type: "number", category: "Engagement" },
+  { key: "cost_per_post_engagement", label: "Cost Per Post Engagement", type: "number", category: "Engagement" },
+  { key: "post_reactions",  label: "Post Reactions",   type: "number", category: "Engagement" },
+  { key: "cost_per_post_reaction", label: "Cost Per Post Reaction", type: "number", category: "Engagement" },
+  // Video
+  { key: "video_3s",       label: "3 second video views", type: "number", category: "Video" },
+  { key: "cost_per_3s",    label: "Cost per 3 second video view", type: "number", category: "Video" },
+  { key: "thruplay",       label: "Thruplay",          type: "number", category: "Video" },
+  { key: "cost_per_thruplay", label: "Cost per thruplay", type: "number", category: "Video" },
+  { key: "thruplay_cvr",   label: "Thruplay conversion rate", type: "number", category: "Video" },
+  { key: "video_30s",      label: "Video 30s watched", type: "number", category: "Video" },
+  { key: "video_p25",      label: "Video 25% watched", type: "number", category: "Video" },
+  { key: "video_p50",      label: "Video 50% watched", type: "number", category: "Video" },
+  { key: "video_p75",      label: "Video 75% watched", type: "number", category: "Video" },
+  { key: "video_p95",      label: "Video 95% watched", type: "number", category: "Video" },
+  { key: "video_p100",     label: "Video 100% watched", type: "number", category: "Video" },
+  { key: "avg_watch_time", label: "Average Video Watch Time", type: "number", category: "Video" },
+  { key: "vtr",            label: "VTR (View Through Rate)", type: "number", category: "Video" },
+  { key: "hook_rate",      label: "Hook Rate (Thumbstop)", type: "number", category: "Video" },
+  { key: "hold_rate",      label: "Hold rate",         type: "number", category: "Video" },
+  { key: "thumbnail_perf", label: "Thumbnail Performance", type: "number", category: "Video" },
+  { key: "watch_rate_25",  label: "Video 25% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p25", label: "Cost per Video 25 watched", type: "number", category: "Video" },
+  { key: "watch_rate_50",  label: "Video 50% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p50", label: "Cost per Video 50% watched", type: "number", category: "Video" },
+  { key: "watch_rate_75",  label: "Video 75% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p75", label: "Cost per Video 75% watched", type: "number", category: "Video" },
+  { key: "watch_rate_95",  label: "Video 95% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p95", label: "Cost per Video 95% watched", type: "number", category: "Video" },
+  { key: "watch_rate_100", label: "Video 100% watched rate", type: "number", category: "Video" },
+  { key: "cost_per_video_p100", label: "Cost per Video 100 watched", type: "number", category: "Video" },
+  { key: "watch_rate_25b", label: "Watch Rate 25%",    type: "number", category: "Video" },
+  { key: "watch_rate_50b", label: "Watch Rate 50%",    type: "number", category: "Video" },
+  { key: "watch_rate_75b", label: "Watch Rate 75%",    type: "number", category: "Video" },
 ]
+
+// ─── Filter Helpers ───────────────────────────────────────────────────────────
+
+function applyNumberFilter(adVal: number | undefined, filterVal: string): boolean {
+  const sep = filterVal.indexOf(":")
+  if (sep < 0) return true
+  const op  = filterVal.slice(0, sep)
+  const num = parseFloat(filterVal.slice(sep + 1))
+  if (isNaN(num) || adVal === undefined) return true
+  if (op === ">")  return adVal > num
+  if (op === "<")  return adVal < num
+  if (op === ">=") return adVal >= num
+  if (op === "<=") return adVal <= num
+  if (op === "=")  return Math.abs(adVal - num) < 0.001
+  return true
+}
+
+function getFieldVal(a: ReportAd, key: string): number | undefined {
+  const video3s  = a.video3s  ?? (a.thumbstopRate * a.impressions / 100)
+  const thruplay = a.thruplay ?? (a.holdRate       * video3s / 100)
+  switch (key) {
+    // Performance
+    case "spend":                    return a.spend
+    case "impressions":              return a.impressions
+    case "clicks":                   return a.linkClicks
+    case "outbound_clicks":          return a.outboundClicks
+    case "reach":                    return a.reach
+    case "results":                  return a.results
+    case "cpr":                      return a.costPerResult
+    case "roas":
+    case "purchase_roas":
+    case "website_roas":             return a.roas
+    case "purchases":                return a.purchases
+    case "purchase_value":           return a.purchaseValue
+    case "cost_per_purchase":        return a.purchases > 0 ? a.spend / a.purchases : undefined
+    case "avg_purchase_value":       return a.avgPurchaseValue
+    case "purchase_cvr":             return a.purchaseCR
+    case "leads":                    return a.leads
+    case "cost_per_lead":            return a.leads > 0 ? a.spend / a.leads : undefined
+    case "link_clicks":              return a.linkClicks
+    case "cost_per_link_click":      return a.linkClicks > 0 ? a.spend / a.linkClicks : undefined
+    case "landing_page_views":       return undefined
+    case "cpm":                      return a.cpm
+    case "cost_per_1000_reached":    return a.reach > 0 ? (a.spend / a.reach) * 1000 : undefined
+    case "cpc_all":                  return a.linkClicks > 0 ? a.spend / a.linkClicks : undefined
+    case "cpc_outbound":             return a.outboundClicks > 0 ? a.spend / a.outboundClicks : undefined
+    case "ctr_all":                  return a.ctr
+    case "ctr_link":                 return a.ctr
+    case "ctr_outbound":             return a.impressions > 0 ? (a.outboundClicks / a.impressions) * 100 : undefined
+    case "frequency":                return a.frequency
+    case "cost_per_new_customer":    return a.purchases > 0 ? a.spend / a.purchases : undefined
+    // Conversions
+    case "app_installs":             return a.appInstalls
+    case "cost_per_install":         return a.appInstalls > 0 ? a.spend / a.appInstalls : undefined
+    case "app_activations":          return a.appActivations
+    case "cost_per_app_activation":  return a.appActivations > 0 ? a.spend / a.appActivations : undefined
+    case "add_to_cart":              return a.addToCart
+    case "cost_per_add_to_cart":     return a.addToCart > 0 ? a.spend / a.addToCart : undefined
+    case "registrations":            return a.registrations
+    case "cost_per_registration":    return a.registrations > 0 ? a.spend / a.registrations : undefined
+    case "content_views":            return a.contentViews
+    case "cost_per_content_view":    return a.contentViews > 0 ? a.spend / a.contentViews : undefined
+    // Engagement
+    case "page_engagements":         return a.pageEngagements
+    case "cost_per_page_engagement": return a.pageEngagements > 0 ? a.spend / a.pageEngagements : undefined
+    case "post_engagements":         return a.postEngagements
+    case "cost_per_post_engagement": return a.postEngagements > 0 ? a.spend / a.postEngagements : undefined
+    case "post_reactions":           return a.postReactions
+    case "cost_per_post_reaction":   return a.postReactions > 0 ? a.spend / a.postReactions : undefined
+    // Video
+    case "video_3s":                 return video3s
+    case "cost_per_3s":              return video3s > 0 ? a.spend / video3s : undefined
+    case "thruplay":                 return thruplay
+    case "cost_per_thruplay":        return thruplay > 0 ? a.spend / thruplay : undefined
+    case "thruplay_cvr":             return a.holdRate
+    case "video_30s":                return a.video30s
+    case "video_p25":                return a.videoP25
+    case "video_p50":                return a.videoP50
+    case "video_p75":                return a.videoP75
+    case "video_p95":                return a.videoP95
+    case "video_p100":               return a.videoP100
+    case "avg_watch_time":           return a.avgWatchTime
+    case "vtr":                      return a.impressions > 0 ? (thruplay / a.impressions) * 100 : undefined
+    case "hook_rate":                return a.thumbstopRate
+    case "hold_rate":                return a.holdRate
+    case "thumbnail_perf":           return a.thumbstopRate
+    case "watch_rate_25":
+    case "watch_rate_25b":           return video3s > 0 ? (a.videoP25 / video3s) * 100 : undefined
+    case "cost_per_video_p25":       return a.videoP25 > 0 ? a.spend / a.videoP25 : undefined
+    case "watch_rate_50":
+    case "watch_rate_50b":           return video3s > 0 ? (a.videoP50 / video3s) * 100 : undefined
+    case "cost_per_video_p50":       return a.videoP50 > 0 ? a.spend / a.videoP50 : undefined
+    case "watch_rate_75":
+    case "watch_rate_75b":           return video3s > 0 ? (a.videoP75 / video3s) * 100 : undefined
+    case "cost_per_video_p75":       return a.videoP75 > 0 ? a.spend / a.videoP75 : undefined
+    case "watch_rate_95":            return video3s > 0 ? (a.videoP95 / video3s) * 100 : undefined
+    case "cost_per_video_p95":       return a.videoP95 > 0 ? a.spend / a.videoP95 : undefined
+    case "watch_rate_100":           return video3s > 0 ? (a.videoP100 / video3s) * 100 : undefined
+    case "cost_per_video_p100":      return a.videoP100 > 0 ? a.spend / a.videoP100 : undefined
+    default:                         return undefined
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -493,6 +812,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
   const [filterSearch, setFilterSearch] = useState("")
   const [pendingField, setPendingField] = useState<typeof FILTER_FIELDS[number] | null>(null)
   const [pendingValue, setPendingValue] = useState("")
+  const [pendingOperator, setPendingOperator] = useState<">=" | "<=" | ">" | "<" | "=">(">=")
   const [valueSearch, setValueSearch]   = useState("")
 
   const [metricKeys, setMetricKeys] = useState<string[]>(config.defaultMetricKeys)
@@ -534,17 +854,9 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
 
   const buildUrl = useCallback(() => {
     if (!selectedAccountId) return null
-    const params = new URLSearchParams({
-      adAccountId: selectedAccountId,
-      datePreset,
-      limit: "50",
-    })
-    if (config.statusFilter)      params.set("statusFilter",      config.statusFilter)
-    if (config.frequencyMin)      params.set("frequencyMin",      String(config.frequencyMin))
-    if (config.groupByLandingPage) params.set("groupByLandingPage", "1")
-    if (config.createdAfterDays)  params.set("createdAfterDays", String(config.createdAfterDays))
+    const params = new URLSearchParams({ adAccountId: selectedAccountId, datePreset, limit: "50" })
     return `/api/insights/report?${params}`
-  }, [selectedAccountId, datePreset, config])
+  }, [selectedAccountId, datePreset])
 
   const load = useCallback(() => {
     const url = buildUrl()
@@ -585,12 +897,88 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
   // Apply client-side filters + group + sort
   const displayed = useMemo(() => {
     let list = [...ads]
+
+    // ── Section-config filters (moved from server so all sections share one cache entry) ──
+    if (config.statusFilter) {
+      const statuses = config.statusFilter.split(",").map(s => s.trim().toUpperCase())
+      list = list.filter(a => statuses.includes((a.effectiveStatus || "").toUpperCase()))
+    }
+    if ((config.frequencyMin ?? 0) > 0) {
+      list = list.filter(a => a.frequency >= config.frequencyMin!)
+    }
+    if ((config.createdAfterDays ?? 0) > 0) {
+      const cutoff = Date.now() - config.createdAfterDays! * 86_400_000
+      list = list.filter(a => !!(a.createdTime) && new Date(a.createdTime!).getTime() >= cutoff)
+    }
+    if (config.groupByLandingPage) {
+      const LP_SUM = ["results","impressions","linkClicks","purchaseValue","reach","purchases",
+        "leads","addToCart","registrations","contentViews","appInstalls","appActivations",
+        "postEngagements","postReactions","pageEngagements","like","comment",
+        "initiateCheckout","addPaymentInfo","outboundClicks",
+        "video3s","thruplay","videoP25","videoP50","videoP75","videoP95","videoP100","video30s"] as const
+      const map = new Map<string, ReportAd>()
+      for (const ad of list) {
+        const k = ad.landingPageUrl || "Unknown"
+        if (!map.has(k)) {
+          map.set(k, { ...ad, adId: `lp:${k}`, adName: k, rank: 0 })
+        } else {
+          const g = map.get(k)!
+          g.spend += ad.spend
+          for (const f of LP_SUM) (g as any)[f] = ((g as any)[f] || 0) + ((ad as any)[f] || 0)
+        }
+      }
+      list = Array.from(map.values()).map(g => {
+        const s = g.spend, imp = g.impressions, lc = g.linkClicks, pv = g.purchaseValue
+        const oc = g.outboundClicks || 0, pur = g.purchases || 0, v3 = g.video3s || 0, tp = g.thruplay || 0
+        return { ...g,
+          costPerResult: g.results > 0 ? s / g.results : 0, roas: s > 0 ? pv / s : 0,
+          ctr: imp > 0 ? (lc / imp) * 100 : 0, cpm: imp > 0 ? (s / imp) * 1000 : 0,
+          costPerLinkClick: lc > 0 ? s / lc : 0, outboundCostPer: oc > 0 ? s / oc : 0,
+          outboundCtr: imp > 0 ? (oc / imp) * 100 : 0,
+          costPer3s: v3 > 0 ? s / v3 : 0, costPerThruplay: tp > 0 ? s / tp : 0,
+          vtr: imp > 0 ? (tp / imp) * 100 : 0, thumbstopRate: imp > 0 ? (v3 / imp) * 100 : 0,
+          holdRate: v3 > 0 ? (tp / v3) * 100 : 0,
+          costPerPurchase: pur > 0 ? s / pur : 0,
+          costPerLead: (g.leads || 0) > 0 ? s / g.leads : 0,
+          costPerAddToCart: (g.addToCart || 0) > 0 ? s / g.addToCart : 0,
+          costPer1000Reached: (g.reach || 0) > 0 ? (s / g.reach) * 1000 : 0,
+        }
+      })
+    }
+
     for (const f of activeFilters) {
-      const val = f.value.toLowerCase()
-      if      (f.field === "ad_name")       list = list.filter(a => a.adName.toLowerCase().includes(val))
-      else if (f.field === "adset_name")    list = list.filter(a => a.adsetName.toLowerCase().includes(val))
-      else if (f.field === "campaign_name") list = list.filter(a => a.campaignName.toLowerCase().includes(val))
-      else if (f.field === "ad_type")       list = list.filter(a => f.value === "video" ? a.isVideo : !a.isVideo)
+      const field = FILTER_FIELDS.find(x => x.key === f.field)
+      if (!field) continue
+      if (field.type === "number") {
+        list = list.filter(a => applyNumberFilter(getFieldVal(a, f.field), f.value))
+      } else if (field.type === "text") {
+        const val = f.value.toLowerCase()
+        switch (f.field) {
+          case "ad_name":      list = list.filter(a => a.adName.toLowerCase().includes(val));           break
+          case "adset_name":   list = list.filter(a => a.adsetName.toLowerCase().includes(val));        break
+          case "campaign_name":list = list.filter(a => a.campaignName.toLowerCase().includes(val));     break
+          case "landing_page": list = list.filter(a => (a.landingPageUrl || "").toLowerCase().includes(val)); break
+          case "creative":     list = list.filter(a => a.adName.toLowerCase().includes(val));           break
+          // copy / headline / cta: not available in insight data — pass through
+        }
+      } else if (field.type === "select") {
+        switch (f.field) {
+          case "ad_type":
+            list = list.filter(a => f.value === "video" ? a.isVideo : !a.isVideo); break
+          case "ad_status":
+            list = list.filter(a => (a.effectiveStatus || "").toUpperCase() === f.value.toUpperCase()); break
+          case "active_status":
+            list = list.filter(a => f.value === "active" ? a.effectiveStatus === "ACTIVE" : a.effectiveStatus !== "ACTIVE"); break
+          // cta: not available in insight data
+        }
+      } else if (field.type === "dynamic") {
+        const val = f.value.toLowerCase()
+        switch (f.field) {
+          case "adset_name":          list = list.filter(a => a.adsetName.toLowerCase()   === val); break
+          case "campaign_name":       list = list.filter(a => a.campaignName.toLowerCase() === val); break
+          // campaign_objective / result_type: not returned by current API
+        }
+      }
     }
     if (groupBy === "unique") {
       const seen = new Set<string>()
@@ -602,7 +990,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
       return sortDir === "desc" ? bk - ak : ak - bk
     })
     return list.map((a, i) => ({ ...a, rank: i + 1 }))
-  }, [ads, activeFilters, groupBy, sortKey, sortDir])
+  }, [ads, activeFilters, groupBy, sortKey, sortDir, config])
 
   const paginated = useMemo(() => displayed.slice(0, perPage), [displayed, perPage])
 
@@ -619,10 +1007,15 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
   const addFilter = () => {
     if (!pendingField || !pendingValue.trim()) return
     const f = FILTER_FIELDS.find(x => x.key === pendingField.key)
-    const lbl = f?.type === "select"
-      ? (f as any).options?.find((o: any) => o.value === pendingValue)?.label || pendingValue
-      : pendingValue
-    setActiveFilters(prev => [...prev, { id: Date.now().toString(), field: pendingField.key, value: pendingValue, label: `${pendingField.label}: ${lbl}` }])
+    let encodedValue = pendingValue
+    let displayLabel = pendingValue
+    if (f?.type === "number") {
+      encodedValue = `${pendingOperator}:${pendingValue}`
+      displayLabel = `${pendingOperator} ${pendingValue}`
+    } else if (f?.type === "select") {
+      displayLabel = (f as any).options?.find((o: any) => o.value === pendingValue)?.label || pendingValue
+    }
+    setActiveFilters(prev => [...prev, { id: Date.now().toString(), field: pendingField.key, value: encodedValue, label: `${pendingField.label} ${f?.type === "number" ? displayLabel : ": " + displayLabel}` }])
     setPendingField(null); setPendingValue(""); setFilterOpen(false); setFilterSearch(""); setValueSearch("")
   }
 
@@ -776,11 +1169,24 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
                         className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/40" />
                     </div>
                   </div>
-                  <div className="py-1 max-h-48 overflow-y-auto">
-                    {filteredFields.map(f => (
-                      <button key={f.key} onClick={() => { setPendingField(f); setPendingValue("") }}
-                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted/50">{f.label}</button>
-                    ))}
+                  <div className="py-1 max-h-[300px] overflow-y-auto">
+                    {(() => {
+                      let lastCat = ""
+                      return filteredFields.map(f => {
+                        const cat = (f as any).category || ""
+                        const showHeader = cat && cat !== lastCat && !filterSearch.trim()
+                        lastCat = cat
+                        return (
+                          <div key={f.key}>
+                            {showHeader && (
+                              <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{cat}</p>
+                            )}
+                            <button onClick={() => { setPendingField(f); setPendingValue(""); setPendingOperator(">=") }}
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50">{f.label}</button>
+                          </div>
+                        )
+                      })
+                    })()}
                   </div>
                 </>
               ) : (
@@ -819,8 +1225,24 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
                           placeholder={`Filter by ${pendingField.label.toLowerCase()}...`} autoFocus
                           className="w-full px-3 py-2 text-sm border rounded-lg bg-background outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40" />
                       )}
+                      {pendingField.type === "number" && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-5 gap-1">
+                            {([">=" , "<=", ">", "<", "="] as const).map(op => (
+                              <button key={op} onClick={() => setPendingOperator(op)}
+                                className={cn("py-1.5 text-sm rounded-lg border font-mono transition-colors",
+                                  pendingOperator === op ? "border-primary bg-primary/10 text-primary font-semibold" : "border-border hover:bg-muted/50"
+                                )}>{op}</button>
+                            ))}
+                          </div>
+                          <input type="number" value={pendingValue} onChange={e => setPendingValue(e.target.value)}
+                            onKeyDown={e => e.key === "Enter" && addFilter()}
+                            placeholder="Enter value..." autoFocus
+                            className="w-full px-3 py-2 text-sm border rounded-lg bg-background outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40" />
+                        </div>
+                      )}
                       {pendingField.type === "select" && (
-                        <div className="space-y-1">
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
                           {(pendingField as any).options?.map((opt: any) => (
                             <button key={opt.value} onClick={() => setPendingValue(opt.value)}
                               className={cn("w-full text-left px-3 py-2 text-sm rounded-lg border transition-colors",
@@ -892,14 +1314,26 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
               <IconPlus className="size-3" /> Add metric
             </button>
             {metricOpen && (
-              <div className="absolute top-full left-0 mt-1 z-30 bg-popover border rounded-lg shadow-md py-1 min-w-[200px] max-h-56 overflow-y-auto">
-                {availableMetrics.map(m => (
-                  <button key={m.key} onClick={() => { setMetricKeys(p => [...p, m.key]); setMetricOpen(false) }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center gap-2">
-                    <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
-                    {m.label}
-                  </button>
-                ))}
+              <div className="absolute top-full left-0 mt-1 z-30 bg-popover border rounded-xl shadow-xl py-1 min-w-[230px] max-h-[340px] overflow-y-auto">
+                {(() => {
+                  let lastCat = ""
+                  return availableMetrics.map(m => {
+                    const showHeader = m.category !== lastCat
+                    lastCat = m.category
+                    return (
+                      <div key={m.key}>
+                        {showHeader && (
+                          <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{m.category}</p>
+                        )}
+                        <button onClick={() => { setMetricKeys(p => [...p, m.key]); setMetricOpen(false) }}
+                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2">
+                          <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                          {m.label}
+                        </button>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
             )}
           </div>
@@ -1055,21 +1489,77 @@ function applyVsFilters(ads: ReportAd[], filters: ActiveFilter[]): ReportAd[] {
 
 function aggregateAds(ads: ReportAd[]) {
   if (!ads.length) return {} as Record<string, number>
-  const spend         = ads.reduce((s, a) => s + a.spend, 0)
-  const impressions   = ads.reduce((s, a) => s + a.impressions, 0)
-  const linkClicks    = ads.reduce((s, a) => s + a.linkClicks, 0)
-  const purchaseValue = ads.reduce((s, a) => s + a.purchaseValue, 0)
-  const results       = ads.reduce((s, a) => s + a.results, 0)
-  const reach         = ads.reduce((s, a) => s + a.reach, 0)
+  const sum = (fn: (a: ReportAd) => number) => ads.reduce((s, a) => s + fn(a), 0)
+  const avg = (fn: (a: ReportAd) => number) => sum(fn) / ads.length
+  const spend         = sum(a => a.spend)
+  const impressions   = sum(a => a.impressions)
+  const linkClicks    = sum(a => a.linkClicks)
+  const outboundClicks = sum(a => a.outboundClicks || 0)
+  const purchaseValue = sum(a => a.purchaseValue)
+  const purchases     = sum(a => a.purchases || 0)
+  const results       = sum(a => a.results)
+  const reach         = sum(a => a.reach)
+  const video3s       = sum(a => a.video3s || 0)
+  const thruplay      = sum(a => a.thruplay || 0)
+  const videoP25      = sum(a => a.videoP25 || 0)
+  const videoP50      = sum(a => a.videoP50 || 0)
+  const videoP75      = sum(a => a.videoP75 || 0)
+  const leads         = sum(a => a.leads || 0)
+  const addToCart     = sum(a => a.addToCart || 0)
+  const registrations = sum(a => a.registrations || 0)
+  const contentViews  = sum(a => a.contentViews || 0)
+  const appInstalls   = sum(a => a.appInstalls || 0)
+  const appActivations = sum(a => a.appActivations || 0)
+  const postEngagements = sum(a => a.postEngagements || 0)
+  const postReactions   = sum(a => a.postReactions || 0)
+  const pageEngagements = sum(a => a.pageEngagements || 0)
+  const like            = sum(a => a.like || 0)
+  const comment         = sum(a => a.comment || 0)
+  const initiateCheckout = sum(a => a.initiateCheckout || 0)
+  const addPaymentInfo   = sum(a => a.addPaymentInfo || 0)
   return {
-    spend, impressions, linkClicks, purchaseValue, results, reach,
-    ctr:           impressions > 0 ? (linkClicks / impressions) * 100 : 0,
-    cpm:           impressions > 0 ? (spend / impressions) * 1000 : 0,
-    costPerResult: results > 0 ? spend / results : 0,
-    roas:          spend > 0 ? purchaseValue / spend : 0,
-    frequency:     ads.reduce((s, a) => s + a.frequency, 0) / ads.length,
-    holdRate:      ads.reduce((s, a) => s + (a.holdRate || 0), 0) / ads.length,
-    thumbstopRate: ads.reduce((s, a) => s + (a.thumbstopRate || 0), 0) / ads.length,
+    spend, impressions, linkClicks, outboundClicks, purchaseValue, purchases, results, reach,
+    video3s, thruplay, videoP25, videoP50, videoP75,
+    leads, addToCart, registrations, contentViews, appInstalls, appActivations,
+    postEngagements, postReactions, pageEngagements, like, comment, initiateCheckout, addPaymentInfo,
+    ctr:                   impressions > 0 ? (linkClicks / impressions) * 100 : 0,
+    cpm:                   impressions > 0 ? (spend / impressions) * 1000 : 0,
+    costPerResult:         results > 0 ? spend / results : 0,
+    roas:                  spend > 0 ? purchaseValue / spend : 0,
+    costPerLinkClick:      linkClicks > 0 ? spend / linkClicks : 0,
+    outboundCostPer:       outboundClicks > 0 ? spend / outboundClicks : 0,
+    outboundCtr:           impressions > 0 ? (outboundClicks / impressions) * 100 : 0,
+    costPer1000Reached:    reach > 0 ? (spend / reach) * 1000 : 0,
+    costPerPurchase:       purchases > 0 ? spend / purchases : 0,
+    costPerAddToCart:      addToCart > 0 ? spend / addToCart : 0,
+    costPerLead:           leads > 0 ? spend / leads : 0,
+    costPerInstall:        appInstalls > 0 ? spend / appInstalls : 0,
+    costPerAppActivation:  appActivations > 0 ? spend / appActivations : 0,
+    costPerRegistration:   registrations > 0 ? spend / registrations : 0,
+    costPerContentView:    contentViews > 0 ? spend / contentViews : 0,
+    costPerNewCustomer:    purchases > 0 ? spend / purchases : 0,
+    costPerPageEngagement: pageEngagements > 0 ? spend / pageEngagements : 0,
+    costPerPostEngagement: postEngagements > 0 ? spend / postEngagements : 0,
+    costPerPostReaction:   postReactions > 0 ? spend / postReactions : 0,
+    costPerLike:           like > 0 ? spend / like : 0,
+    costPerComment:        comment > 0 ? spend / comment : 0,
+    costPerInitiateCheckout: initiateCheckout > 0 ? spend / initiateCheckout : 0,
+    costPerAddPaymentInfo:   addPaymentInfo > 0 ? spend / addPaymentInfo : 0,
+    costPer3s:             video3s > 0 ? spend / video3s : 0,
+    costPerThruplay:       thruplay > 0 ? spend / thruplay : 0,
+    vtr:                   impressions > 0 ? (thruplay / impressions) * 100 : 0,
+    thumbstopRate:         impressions > 0 ? (video3s / impressions) * 100 : 0,
+    holdRate:              video3s > 0 ? (thruplay / video3s) * 100 : 0,
+    watchRate25:           video3s > 0 ? (videoP25 / video3s) * 100 : 0,
+    watchRate50:           video3s > 0 ? (videoP50 / video3s) * 100 : 0,
+    watchRate75:           video3s > 0 ? (videoP75 / video3s) * 100 : 0,
+    costPerVideoP25:       videoP25 > 0 ? spend / videoP25 : 0,
+    costPerVideoP50:       videoP50 > 0 ? spend / videoP50 : 0,
+    costPerVideoP75:       videoP75 > 0 ? spend / videoP75 : 0,
+    frequency:             avg(a => a.frequency),
+    avgPurchaseValue:      purchases > 0 ? purchaseValue / purchases : 0,
+    purchaseCR:            impressions > 0 ? (purchases / impressions) * 100 : 0,
+    avgWatchTime:          avg(a => a.avgWatchTime || 0),
   }
 }
 
@@ -1421,14 +1911,26 @@ function VSModeView() {
               <IconPlus className="size-3" /> Add metric
             </button>
             {metricOpen && (
-              <div className="absolute top-full left-0 mt-1 z-30 bg-popover border rounded-lg shadow-md py-1 min-w-[200px] max-h-56 overflow-y-auto">
-                {availMetrics.map(m => (
-                  <button key={m.key} onClick={() => { setMetricKeys(p => [...p, m.key]); setMetricOpen(false) }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center gap-2">
-                    <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
-                    {m.label}
-                  </button>
-                ))}
+              <div className="absolute top-full left-0 mt-1 z-30 bg-popover border rounded-xl shadow-xl py-1 min-w-[230px] max-h-[340px] overflow-y-auto">
+                {(() => {
+                  let lastCat = ""
+                  return availMetrics.map(m => {
+                    const showHeader = m.category !== lastCat
+                    lastCat = m.category
+                    return (
+                      <div key={m.key}>
+                        {showHeader && (
+                          <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{m.category}</p>
+                        )}
+                        <button onClick={() => { setMetricKeys(p => [...p, m.key]); setMetricOpen(false) }}
+                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2">
+                          <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
+                          {m.label}
+                        </button>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
             )}
           </div>

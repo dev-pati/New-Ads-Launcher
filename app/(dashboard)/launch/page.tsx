@@ -4517,6 +4517,19 @@ function formatCurrency(n: number): string {
   return `$${n.toFixed(2)}`
 }
 
+// Upload queue constants — shared by handleUpload inside LoadMediaModal
+const UPLOAD_CONCURRENCY = 3   // max parallel image uploads
+
+// Adaptive inter-video delay.
+// With URL-based upload (1 Meta call/video), rate limit risk is much lower,
+// but we still pace large batches to stay within the rolling window.
+function videoUploadDelay(quotaPct: number): number {
+  if (quotaPct < 50) return 3_000    //  3s — breathing room
+  if (quotaPct < 65) return 15_000   // 15s — warming up
+  if (quotaPct < 80) return 45_000   // 45s — getting hot
+  return 120_000                      //  2m — near limit
+}
+
 function LoadMediaModal({
   open, onClose, adAccountId, adAccounts, alreadySelected, onConfirm, refreshSignal,
 }: {
@@ -4587,6 +4600,7 @@ function LoadMediaModal({
   const [moreOpen, setMoreOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
+  const [uploadPauseMsg, setUploadPauseMsg] = useState<string | null>(null)
   const uploadFileRef = useRef<HTMLInputElement>(null)
   const uploadFolderRef = useRef<HTMLInputElement>(null)
 
@@ -4679,8 +4693,8 @@ function LoadMediaModal({
       }
     }
 
-    const interval = setInterval(tick, 15000)
-    // Resume immediately when user returns to this tab (don't wait up to 15s)
+    const interval = setInterval(tick, 30000)
+    // Resume immediately when user returns to this tab (don't wait up to 30s)
     const onVisible = () => { if (!document.hidden) tick() }
     document.addEventListener("visibilitychange", onVisible)
 
@@ -4923,42 +4937,6 @@ function LoadMediaModal({
         creativesCache.current = { accountId: adAccountId, data: list, at: Date.now() }
         console.log(`[creatives] fetched count=${list.length} total=${d.total ?? "?"} hasMore=${d.hasMore}`)
         setAllCreatives(list)
-        // Background refresh: ONLY for videos that genuinely need it
-        // (recent uploads OR no thumbnail at all). Throttled to 1 at a time
-        // with 1.5s delay between calls to avoid Meta rate limits.
-        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000
-        const videosToRefresh = list.filter(c => {
-          if (c.media_type !== "video" || !c.fb_video_id) return false
-          const hasGoodThumb =
-            !!c.fb_thumbnail_url &&
-            (/^https?:/.test(c.fb_thumbnail_url) || c.fb_thumbnail_url.startsWith("/api/creatives/"))
-          if (hasGoodThumb) return false // already has thumbnail, skip
-          const createdAt = c.created_at ? new Date(c.created_at).getTime() : 0
-          return createdAt > oneDayAgo // only refresh recent uploads (Meta processed by now)
-        })
-        if (videosToRefresh.length === 0) return
-        console.log(`[creatives] Refreshing thumbnails for ${videosToRefresh.length} recent videos (throttled 1/sec)`)
-        ;(async () => {
-          for (const c of videosToRefresh) {
-            await new Promise(r => setTimeout(r, 1500))
-            try {
-              const tRes = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" })
-              if (tRes.status === 429 || tRes.status === 500) {
-                const td = await tRes.json().catch(() => ({}))
-                if (/rate limit|#4|request limit/i.test(td.error || "")) {
-                  console.warn("[creatives] Rate limited — stopping thumbnail refresh")
-                  return
-                }
-              }
-              const td = await tRes.json()
-              if (td.thumbnail_url && td.thumbnail_url !== c.fb_thumbnail_url) {
-                setAllCreatives(prev => prev.map(x => x.id === c.id
-                  ? { ...x, fb_thumbnail_url: td.thumbnail_url, file_url: td.thumbnail_url }
-                  : x))
-              }
-            } catch {}
-          }
-        })()
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -5120,20 +5098,75 @@ function LoadMediaModal({
     const fileArr = Array.from(files)
     setUploading(true)
     setUploadProgress({ current: 0, total: fileArr.length })
+    setUploadPauseMsg(null)
+
     let done = 0
-    for (const file of fileArr) {
+    let rateLimitPct = 0
+    let newCount = 0
+    let dupCount = 0
+
+    // All files go through upload-binary: images + videos.
+    // Videos are now URL-based (Supabase → Meta), so only 1 Meta call per video.
+    // Server returns 201 for new uploads, 200 for duplicates (existing creative returned as-is).
+    const uploadFile = async (file: File): Promise<void> => {
       try {
-        await fetch(
+        const res = await fetch(
           `/api/creatives/upload-binary?filename=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}&size=${file.size}&ad_account_id=${encodeURIComponent(adAccountId)}`,
           { method: "POST", body: file }
         )
+        if (res.ok) {
+          const d = await res.json()
+          if (typeof d.rateLimitPct === "number") rateLimitPct = Math.max(rateLimitPct, d.rateLimitPct)
+          if (res.status === 201) newCount++
+          else dupCount++
+        }
       } catch {}
+    }
+
+    const images = fileArr.filter(f => !f.type.startsWith("video/"))
+    const videos = fileArr.filter(f => f.type.startsWith("video/"))
+
+    // Images: parallel (fast, cheap on quota)
+    if (images.length > 0) {
+      let imgIdx = 0
+      const imgWorker = async () => {
+        while (imgIdx < images.length) {
+          await uploadFile(images[imgIdx++])
+          done++
+          setUploadProgress({ current: done, total: fileArr.length })
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, images.length) }, imgWorker))
+    }
+
+    // Videos: serial — large files take time on Supabase, adaptive delay paces Meta quota
+    for (let i = 0; i < videos.length; i++) {
+      await uploadFile(videos[i])
       done++
       setUploadProgress({ current: done, total: fileArr.length })
+
+      if (i < videos.length - 1) {
+        const delay = videoUploadDelay(rateLimitPct)
+        if (delay > 0) {
+          setUploadPauseMsg(`Quota ${Math.round(rateLimitPct)}% — waiting ${Math.round(delay / 1000)}s`)
+          await new Promise(r => setTimeout(r, delay))
+          setUploadPauseMsg(null)
+        }
+      }
     }
+
     setUploading(false)
     setUploadProgress(null)
+    setUploadPauseMsg(null)
     fetchFbMedia()
+    fetchCreatives(true)
+    if (dupCount > 0 && newCount === 0) {
+      setUploadPauseMsg(`${dupCount} file đã tồn tại — không upload lại`)
+      setTimeout(() => setUploadPauseMsg(null), 4000)
+    } else if (dupCount > 0) {
+      setUploadPauseMsg(`Uploaded ${newCount} mới · ${dupCount} đã tồn tại (bỏ qua)`)
+      setTimeout(() => setUploadPauseMsg(null), 4000)
+    }
   }
 
   const TABS: { id: MediaTab; label: string; Icon: React.ElementType; beta?: boolean }[] = [
@@ -5291,6 +5324,15 @@ function LoadMediaModal({
 
             {/* Toolbar actions */}
             <div className="flex items-center justify-end gap-2 px-6 py-2 border-b shrink-0">
+              {uploadPauseMsg && (
+                <span className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mr-1">
+                  {uploading
+                    ? <IconLoader2 className="size-3 animate-spin" />
+                    : <IconCheck className="size-3" />
+                  }
+                  {uploadPauseMsg}
+                </span>
+              )}
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => uploadFileRef.current?.click()} disabled={uploading}>
                 {uploading && uploadProgress
                   ? <><IconLoader2 className="size-3.5 animate-spin" />{uploadProgress.current}/{uploadProgress.total}</>
@@ -11878,6 +11920,7 @@ function CtaPickerCell({ value, onChange }: {
 function TableMode({
   rows, adSets, onAddRow, onUpdateRow, onDeleteRow, onDuplicateRow,
   selectedPage, igAccountCache, selectedIgPageId, searchQuery, launchAsActive, pages, selectedAccountId,
+  onOpenCreativePicker,
 }: {
   rows: TableRow[]
   adSets: AdSet[]
@@ -11892,6 +11935,7 @@ function TableMode({
   launchAsActive: boolean
   pages: FacebookPage[]
   selectedAccountId: string
+  onOpenCreativePicker: (rowId: string) => void
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedVar, setExpandedVar] = useState<Record<string, { primary: boolean; headline: boolean; description: boolean }>>({})
@@ -11900,43 +11944,16 @@ function TableMode({
   const [profilePopoverRow, setProfilePopoverRow] = useState<string | null>(null)
   const [profilePopoverPos, setProfilePopoverPos] = useState<{ top: number; left: number } | null>(null)
   const [rowModal, setRowModal] = useState<{ type: RowModalType; rowId: string } | null>(null)
-  const [uploadingRowId, setUploadingRowId] = useState<string | null>(null)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [uploadingRowId] = useState<string | null>(null)
+  const [uploadError] = useState<string | null>(null)
   const profilePopoverRef = useRef<HTMLDivElement>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
-  const creativeFileInputRef = useRef<HTMLInputElement>(null)
-  const uploadTargetRowId = useRef<string | null>(null)
   const isDragging = useRef(false)
   const dragStartX = useRef(0)
   const dragScrollLeft = useRef(0)
 
   const handleCreativeCellClick = (rowId: string) => {
-    uploadTargetRowId.current = rowId
-    setUploadError(null)
-    creativeFileInputRef.current?.click()
-  }
-
-  const handleCreativeFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ""
-    if (!file || !uploadTargetRowId.current) return
-    const rowId = uploadTargetRowId.current
-    setUploadingRowId(rowId)
-    setUploadError(null)
-    try {
-      const formData = new FormData()
-      formData.append("file", file)
-      if (selectedAccountId) formData.append("adAccountId", selectedAccountId)
-      const res = await fetch("/api/creatives", { method: "POST", body: formData })
-      const d = await res.json()
-      if (!res.ok) { setUploadError(d.error || "Upload failed"); return }
-      onUpdateRow(rowId, "creative", d.creative)
-    } catch (err: any) {
-      setUploadError(err.message || "Upload failed")
-    } finally {
-      setUploadingRowId(null)
-      uploadTargetRowId.current = null
-    }
+    onOpenCreativePicker(rowId)
   }
 
   const onTableMouseDown = (e: React.MouseEvent) => {
@@ -12173,9 +12190,6 @@ function TableMode({
                           </button>
                         )}
                       </div>
-                      {uploadError && uploadTargetRowId.current === row.id && (
-                        <p className="text-[9px] text-destructive max-w-[80px] leading-tight">{uploadError}</p>
-                      )}
                     </div>
                   </td>
 
@@ -12743,14 +12757,6 @@ function TableMode({
       return null
     })()}
 
-    {/* Hidden file input for per-row creative upload */}
-    <input
-      ref={creativeFileInputRef}
-      type="file"
-      accept="image/*,video/*"
-      className="hidden"
-      onChange={handleCreativeFileChange}
-    />
     </>
   )
 }
@@ -12877,8 +12883,8 @@ export default function LaunchPage() {
       }
     }
 
-    const interval = setInterval(tick, 15000)
-    // Resume immediately when user returns to this tab (don't wait up to 15s)
+    const interval = setInterval(tick, 30000)
+    // Resume immediately when user returns to this tab (don't wait up to 30s)
     const onVisible = () => { if (!document.hidden) tick() }
     document.addEventListener("visibilitychange", onVisible)
 
@@ -12908,6 +12914,7 @@ export default function LaunchPage() {
 
   const [sheetsImportOpen, setSheetsImportOpen] = useState(false)
   const [mediaModalOpen, setMediaModalOpen] = useState(false)
+  const [creativePickerRowId, setCreativePickerRowId] = useState<string | null>(null)
   // Increment to force LoadMediaModal Library tab to re-fetch (used after a new upload completes)
   const [mediaRefreshSignal, setMediaRefreshSignal] = useState(0)
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
@@ -13012,152 +13019,7 @@ export default function LaunchPage() {
     setUploadDockOpen(false)
   }
 
-  // Direct video upload: client → Facebook in 1 request (no chunking needed).
-  // Server only handles auth (get token) and DB save. No Vercel body limit applies
-  // because the large payload goes client → Facebook directly.
-  const uploadVideoChunked = async (item: UploadItem): Promise<Creative | null> => {
-    const currentPrimary = primaryTexts.find(t => t.trim()) || ""
-    const currentHeadline = headlines.find(h => h.trim()) || ""
-    let CHUNK_SIZE = 4 * 1024 * 1024 // 4MB
-    if (item.file.size > 150 * 1024 * 1024) {
-      CHUNK_SIZE = 20 * 1024 * 1024 // 20MB
-    } else if (item.file.size > 50 * 1024 * 1024) {
-      CHUNK_SIZE = 10 * 1024 * 1024 // 10MB
-    }
-    try {
-      // 1. Get credentials
-      const credRes = await fetch(`/api/facebook/upload-credentials?adAccountId=${selectedAccountId}`)
-      if (!credRes.ok) throw new Error("Failed to get upload credentials")
-      const { accessToken, adAccountId: normAccountId } = await credRes.json()
-      const cleanId = normAccountId.replace(/^act_/, "")
-      const FB_API = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
-
-      // 2. Start session
-      const startFormData = new FormData()
-      startFormData.append("upload_phase", "start")
-      startFormData.append("file_size", String(item.file.size))
-      startFormData.append("access_token", accessToken)
-
-      const startRes = await fetch(FB_API, { method: "POST", body: startFormData })
-      const startData = await startRes.json()
-      if (startData.error) throw new Error(startData.error.message || "Failed to start upload")
-
-      const { upload_session_id, video_id } = startData
-      let startOffset = Number(startData.start_offset || "0")
-
-      // 3. Transfer chunks
-      updateUpload(item.id, { uploaded: 0, fileSize: item.file.size })
-      const startedAt = Date.now()
-      let lastTick = startedAt
-      let lastLoaded = 0
-
-      while (startOffset < item.file.size) {
-        const endOffset = Math.min(startOffset + CHUNK_SIZE, item.file.size)
-        const chunk = item.file.slice(startOffset, endOffset)
-
-        const transferFormData = new FormData()
-        transferFormData.append("upload_phase", "transfer")
-        transferFormData.append("upload_session_id", upload_session_id)
-        transferFormData.append("start_offset", String(startOffset))
-        transferFormData.append("access_token", accessToken)
-        transferFormData.append("video_file_chunk", chunk, item.file.name)
-
-        const transferRes = await fetch(FB_API, { method: "POST", body: transferFormData })
-        const transferData = await transferRes.json()
-        if (transferData.error) throw new Error(transferData.error.message || "Chunk upload failed")
-
-        startOffset = Number(transferData.start_offset)
-        
-        // Update progress
-        const now = Date.now()
-        const dt = (now - lastTick) / 1000
-        const dl = startOffset - lastLoaded
-        const speed = dt > 0 ? dl / dt : 0
-        const remaining = item.file.size - startOffset
-        const eta = speed > 0 ? remaining / speed : 0
-        lastTick = now
-        lastLoaded = startOffset
-        updateUpload(item.id, { uploaded: startOffset, fileSize: item.file.size, speed, eta })
-      }
-
-      // 4. Finish session on Meta
-      const finishMetaFormData = new FormData()
-      finishMetaFormData.append("upload_phase", "finish")
-      finishMetaFormData.append("upload_session_id", upload_session_id)
-      finishMetaFormData.append("access_token", accessToken)
-      finishMetaFormData.append("title", item.file.name)
-
-      const finishMetaRes = await fetch(FB_API, { method: "POST", body: finishMetaFormData })
-      const finishMetaData = await finishMetaRes.json()
-      if (finishMetaData.error) throw new Error(finishMetaData.error.message || "Failed to finalize Meta upload")
-
-      // 5. Save to our DB via our server's finish route
-      const finishRes = await fetch("/api/facebook/video-upload/finish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ad_account_id: selectedAccountId,
-          video_id,
-          file_name: item.file.name,
-          file_size: item.file.size,
-          headline: currentHeadline || null,
-          primary_text: currentPrimary || null,
-          description: description || null,
-          link_url: webLink || null,
-          cta: cta || "LEARN_MORE",
-        }),
-      })
-      const finishData = await finishRes.json()
-      if (!finishRes.ok) throw new Error(finishData.error || "Failed to save creative to database")
-
-      const creative: Creative = finishData.creative
-      const totalDurationSeconds = Math.max((Date.now() - startedAt) / 1000, 1)
-      updateUpload(item.id, {
-        status: "completed",
-        uploaded: item.fileSize,
-        eta: 0,
-        speed: item.file.size / totalDurationSeconds,
-        creativeId: creative.id,
-      })
-
-      // Poll Meta for thumbnail in background
-      ;(async () => {
-        for (let attempt = 0; attempt < 8; attempt++) {
-          await new Promise(r => setTimeout(r, attempt === 0 ? 3000 : 5000))
-          try {
-            const tRes = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
-            const tData = await tRes.json()
-            if (tData.status === "ready" || tData.thumbnail_url || tData.source_url) {
-              setSelectedCreatives(prev => prev.map(c =>
-                c.id === creative.id
-                  ? { 
-                      ...c, 
-                      fb_thumbnail_url: tData.thumbnail_url || c.fb_thumbnail_url, 
-                      file_url: tData.source_url || c.file_url || tData.thumbnail_url,
-                      status: tData.status || "ready"
-                    }
-                  : c
-              ))
-              if (tData.status === "ready") break
-            }
-          } catch {}
-        }
-      })()
-
-      return creative
-    } catch (err: any) {
-      console.error("Direct upload error:", err)
-      updateUpload(item.id, { status: "error", error: err.message || "Upload failed" })
-      return null
-    }
-  }
-
   const uploadOneFile = (item: UploadItem): Promise<Creative | null> => {
-    // Large videos (>3MB) use Facebook Resumable Upload API (chunked) to bypass Vercel body limit
-    if (item.file.type.startsWith("video/") && item.file.size > 3 * 1024 * 1024) {
-      return uploadVideoChunked(item)
-    }
-
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest()
       // Snapshot current form values so creative inherits them in DB → reusable later
@@ -13201,26 +13063,21 @@ export default function LaunchPage() {
             const creative: Creative = data.creative
             updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
 
-            // For videos: poll Meta for HD thumbnail in background; upgrade local frame when ready
+            // For videos: quick poll (3 attempts) for thumbnail; useEffect handles longer polling
             if (creative.media_type === "video" && creative.fb_video_id) {
               ;(async () => {
-                for (let attempt = 0; attempt < 6; attempt++) {
-                  await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 4000))
+                for (let attempt = 0; attempt < 3; attempt++) {
+                  await new Promise(r => setTimeout(r, 5000))
                   try {
                     const tRes = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
                     const tData = await tRes.json()
-                    if (tData.thumbnail_url || tData.source_url) {
-                      // Upgrade by REAL creative id (swap already happened in handleUploadFiles)
+                    if (tData.thumbnail_url && tData.source_url) {
                       setSelectedCreatives(prev => prev.map(c =>
                         c.id === creative.id
-                          ? {
-                              ...c,
-                              fb_thumbnail_url: tData.thumbnail_url || c.fb_thumbnail_url,
-                              file_url: tData.source_url || c.file_url || tData.thumbnail_url
-                            }
+                          ? { ...c, fb_thumbnail_url: tData.thumbnail_url, file_url: tData.source_url, status: "ready" }
                           : c
                       ))
-                      if (tData.thumbnail_url && tData.source_url) break
+                      break
                     }
                   } catch {}
                 }
@@ -13586,51 +13443,13 @@ export default function LaunchPage() {
       .catch(() => {})
   }, [selectedAccountId])
 
-  // Poll for missing thumbnails/sources in selectedCreatives
-  useEffect(() => {
-    const videosMissingMeta = selectedCreatives.filter(c =>
-      c.media_type === "video"
-      && c.fb_video_id
-      && (
-        !c.fb_thumbnail_url
-        || (
-          !/^https?:/.test(c.fb_thumbnail_url)
-          && !c.fb_thumbnail_url.startsWith("/api/creatives/")
-        )
-      )
-    )
-    
-    videosMissingMeta.forEach(c => {
-      let attempts = 0
-      const poll = async () => {
-        if (attempts >= 5) return
-        try {
-          const res = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" })
-          const data = await res.json()
-          if (data.thumbnail_url || data.source_url) {
-            setSelectedCreatives(prev => prev.map(x => 
-              x.id === c.id ? { 
-                ...x, 
-                fb_thumbnail_url: data.thumbnail_url || x.fb_thumbnail_url,
-                file_url: data.source_url || x.file_url || data.thumbnail_url
-              } : x
-            ))
-            if (data.thumbnail_url) return
-          }
-        } catch {}
-        attempts++
-        setTimeout(poll, 4000 * attempts)
-      }
-      poll()
-    })
-  }, [selectedCreatives.length]) // Only trigger when the count changes (e.g. added from library)
 
   const validate = () => {
-    if (selectedAdSets.length === 0) { setError("Select at least one ad set"); return false }
-    if (selectedMediaIds.size === 0) { setError("Select at least one media asset"); return false }
-    if (!webLink.trim()) { setError("Web link (URL) is required"); return false }
-    if (!/^https?:\/\//.test(webLink.trim())) { setError("URL must start with http:// or https://"); return false }
-    if (!selectedPageId) { setError("Select a Facebook Page"); return false }
+    if (selectedAdSets.length === 0) { setError("Chưa chọn Ad Set — vui lòng chọn ít nhất 1 ad set"); return false }
+    if (selectedMediaIds.size === 0) { setError("Chưa chọn creative — vui lòng chọn ít nhất 1 ảnh/video"); return false }
+    if (!webLink.trim()) { setError("Chưa nhập URL đích — bắt buộc khi dùng CTA có link"); return false }
+    if (!/^https?:\/\//.test(webLink.trim())) { setError("URL phải bắt đầu bằng http:// hoặc https://"); return false }
+    if (!selectedPageId) { setError("Chưa chọn Facebook Page"); return false }
     setError("")
     return true
   }
@@ -13741,6 +13560,7 @@ export default function LaunchPage() {
           pageId: selectedPageId,
           headline: headline.trim(),
           primaryText: primaryText.trim(),
+          description: description.trim(),
           cta,
           webLink: utmParams.trim()
             ? `${webLink.trim()}${webLink.includes("?") ? "&" : "?"}${utmParams.trim()}`
@@ -13853,6 +13673,7 @@ export default function LaunchPage() {
   const [tableAutoSync, setTableAutoSync] = useState(false)
   const [tableBulkOpen, setTableBulkOpen] = useState(false)
   const [tableMoreOpen, setTableMoreOpen] = useState(false)
+  const [tableHistoryOpen, setTableHistoryOpen] = useState(true)
   const tableBulkRef = useRef<HTMLDivElement>(null)
   const tableMoreRef = useRef<HTMLDivElement>(null)
 
@@ -13909,7 +13730,34 @@ export default function LaunchPage() {
   const doTableLaunch = useCallback(async (scheduledTime?: string, scheduleEndTime?: string) => {
     const validRows = tableRows.filter(r => r.creative?.id && r.adSetIds.length > 0)
     if (!validRows.length) {
-      setError("No rows with both a creative and ad sets selected")
+      const missing: string[] = []
+      if (!tableRows.some(r => r.creative?.id)) missing.push("creative")
+      if (!tableRows.some(r => r.adSetIds.length > 0)) missing.push("ad set")
+      setError(`Mỗi row cần có ${missing.join(" và ")} trước khi launch`)
+      return
+    }
+
+    // Client-side validation — catch all issues before hitting the server
+    const rowErrors: string[] = []
+    for (const row of validRows) {
+      const label = row.adName?.trim() || `Ad #${tableRows.indexOf(row) + 1}`
+      const rowLink = (row.webLink || webLink).trim()
+      const pageId = row.pageId || selectedPageId
+
+      if (!pageId) {
+        rowErrors.push(`"${label}": Chưa chọn Facebook Page`)
+      }
+      if (!rowLink) {
+        rowErrors.push(`"${label}": Chưa nhập URL đích (destination URL)`)
+      } else if (!rowLink.startsWith("http")) {
+        rowErrors.push(`"${label}": URL phải bắt đầu bằng http:// hoặc https://`)
+      }
+      if (row.creative && !row.creative.fb_image_hash && !row.creative.fb_video_id) {
+        rowErrors.push(`"${label}": Creative chưa upload lên Meta (hãy đợi upload hoàn tất)`)
+      }
+    }
+    if (rowErrors.length > 0) {
+      setError(rowErrors.join(" · "))
       return
     }
 
@@ -13956,7 +13804,7 @@ export default function LaunchPage() {
             creativeIds: [row.creative!.id],
             adName: row.adName.trim() || undefined,
             pageId: row.pageId || selectedPageId,
-            instagramAccountId: row.igId || selectedIgPageId || undefined,
+            instagramAccountId: (() => { const ig = row.igId || selectedIgPageId; return ig && !ig.startsWith("fb_") ? ig : undefined })(),
             headline: (row.headline || globalHeadline).trim(),
             headlineVariations: (row.headlineVariations || []).filter(v => v.trim()),
             primaryText: (row.primaryText || globalPrimaryText).trim(),
@@ -14120,8 +13968,44 @@ export default function LaunchPage() {
             }
           }
         }} />
+      {/* Creative picker for TableMode rows — multi-select supported */}
+      <LoadMediaModal open={creativePickerRowId !== null} onClose={() => setCreativePickerRowId(null)}
+        adAccountId={selectedAccountId} adAccounts={adAccounts} alreadySelected={new Set()}
+        onConfirm={(ids, creatives) => {
+          if (creatives.length > 0 && creativePickerRowId) {
+            setTableRows(prev => {
+              const idx = prev.findIndex(r => r.id === creativePickerRowId)
+              if (idx < 0) return prev
+              const baseRow = prev[idx]
+              // First creative → update the clicked row
+              const firstClean = (creatives[0].file_name || "").replace(/\.[^/.]+$/, "")
+              const updatedBase: TableRow = {
+                ...baseRow,
+                creative: creatives[0],
+                adName: baseRow.adName?.trim() ? baseRow.adName : firstClean,
+              }
+              // Extra creatives → new rows inserted after, inheriting base row settings
+              const extraRows: TableRow[] = creatives.slice(1).map((c, i) => ({
+                ...baseRow,
+                id: String(Date.now() + i + 1),
+                creative: c,
+                adName: (c.file_name || "").replace(/\.[^/.]+$/, ""),
+              }))
+              return [
+                ...prev.slice(0, idx),
+                updatedBase,
+                ...extraRows,
+                ...prev.slice(idx + 1),
+              ]
+            })
+          }
+          setCreativePickerRowId(null)
+        }} />
       <ScheduleModal open={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)}
-        onConfirm={(start, end) => doLaunch(start, end)} />
+        onConfirm={(start, end) => mode === "table" ? doTableLaunch(start, end) : doLaunch(start, end)} />
+      {mode === "table" && launchResult && (
+        <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} />
+      )}
       <AdProfilesModal
         open={adProfilesOpen}
         onClose={() => setAdProfilesOpen(false)}
@@ -14549,6 +14433,7 @@ export default function LaunchPage() {
             />
           </div>
         ) : (
+          <>
           <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
             {/* Table toolbar */}
             <div className="flex items-center gap-1.5 px-3 py-1.5 border-b shrink-0 flex-wrap">
@@ -14638,6 +14523,19 @@ export default function LaunchPage() {
                   <IconSelector className="size-3.5" />
                 </button>
 
+                {/* History panel toggle */}
+                <button
+                  onClick={() => setTableHistoryOpen(o => !o)}
+                  className={cn("flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors",
+                    tableHistoryOpen
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "border-border/60 hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+                  )}
+                  title={tableHistoryOpen ? "Hide history panel" : "Show history panel"}
+                >
+                  <IconClock className="size-3.5" />History
+                </button>
+
                 {/* Bulk Edit dropdown */}
                 <div ref={tableBulkRef} className="relative">
                   <Button
@@ -14702,21 +14600,24 @@ export default function LaunchPage() {
               </div>
             </div>
 
-            <TableMode
-              rows={tableRows}
-              adSets={allAdSets}
-              onAddRow={addTableRow}
-              onUpdateRow={updateTableRow}
-              onDeleteRow={deleteTableRow}
-              onDuplicateRow={duplicateTableRow}
-              selectedPage={selectedPage}
-              igAccountCache={igAccountCache}
-              selectedIgPageId={selectedIgPageId}
-              searchQuery={tableSearchQuery}
-              launchAsActive={launchAsActive}
-              pages={pages}
-              selectedAccountId={selectedAccountId || ""}
-            />
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              <TableMode
+                rows={tableRows}
+                adSets={allAdSets}
+                onAddRow={addTableRow}
+                onUpdateRow={updateTableRow}
+                onDeleteRow={deleteTableRow}
+                onDuplicateRow={duplicateTableRow}
+                selectedPage={selectedPage}
+                igAccountCache={igAccountCache}
+                selectedIgPageId={selectedIgPageId}
+                searchQuery={tableSearchQuery}
+                launchAsActive={launchAsActive}
+                onOpenCreativePicker={(rowId) => setCreativePickerRowId(rowId)}
+                pages={pages}
+                selectedAccountId={selectedAccountId || ""}
+              />
+            </div>
 
             {error && (
               <div className="flex items-center gap-1.5 text-xs text-destructive px-4 py-1">
@@ -14752,6 +14653,16 @@ export default function LaunchPage() {
               </Button>
             </div>
           </div>
+          {tableHistoryOpen && (
+            <LaunchHistorySection
+              reloadTrigger={historyReload}
+              onRelaunch={handleRelaunch}
+              onLoadDraft={handleLoadDraft}
+              tabOverride={historyTabOverride}
+              pages={pages}
+            />
+          )}
+          </>
         )}
 
       </div>

@@ -4,6 +4,7 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createAd, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
+import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 
 // Simple launch: create ads directly in existing ad sets.
 // N creatives × M ad sets = N×M ads. No campaign/adset creation needed.
@@ -75,14 +76,10 @@ export async function POST(request: NextRequest) {
     if (!webLink) return NextResponse.json({ error: "Web link (URL) is required" }, { status: 400 })
     if (!webLink.startsWith("http")) return NextResponse.json({ error: "URL must start with http:// or https://" }, { status: 400 })
 
-    // Verify ad account belongs to this org
-    const { data: adAccounts } = await supabase
-      .from("ad_accounts")
-      .select("fb_ad_account_id")
-      .eq("org_id", ctx.orgId)
-    const accountIds = (adAccounts || []).map((a: any) => a.fb_ad_account_id)
-    if (!accountIds.includes(adAccountId)) {
-      return NextResponse.json({ error: "Ad account not found" }, { status: 403 })
+    // Verify ad account belongs to this org — checks DB first, falls back to live Meta API
+    const belongs = await adAccountBelongsToOrg(ctx.orgId, adAccountId, token)
+    if (!belongs) {
+      return NextResponse.json({ error: "Ad account not found or not authorized" }, { status: 403 })
     }
 
     // Fetch creatives from DB
@@ -420,7 +417,7 @@ export async function POST(request: NextRequest) {
         try {
           const rowTitle = (headline || creative.headline || "").trim()
           const rowBody  = (primaryText || creative.primary_text || "").trim()
-          const rowDesc  = (description || "").trim()
+          const rowDesc  = (description || (creative as any).description || "").trim()
 
           // Build text variation pools for asset_feed_spec Dynamic Creative A/B testing.
           // Combine primary value + any extra variations, de-dup empty strings.
