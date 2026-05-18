@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { getAdAccountPages, getFacebookPages, getPageInstagramAccounts } from "@/lib/facebook"
-import { getCachedFacebookMetadata } from "../_cache"
+import { getAdAccountPages, getFacebookPages, getPageInstagramAccounts, getBatchPageInstagramAccounts } from "@/lib/facebook"
+import { getCachedFacebookMetadata, peekCachedFacebookMetadata, setCachedFacebookMetadata } from "../_cache"
 import { adAccountBelongsToOrg } from "../_utils"
 
 export const dynamic = "force-dynamic"
@@ -50,16 +50,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ igAccounts })
     }
 
-    const results = await Promise.all(
-      pages.map(async (page) => ({
-        pageId: page.id,
-        igAccounts: await getCachedFacebookMetadata(
-          `fb:page-instagram:${ctx.orgId}:${page.id}`,
-          INSTAGRAM_TTL_MS,
-          () => getPageInstagramAccounts(page.id, page.access_token)
-        ),
-      }))
-    )
+    // Batch-fetch: check cache per page, only call Meta API for uncached pages (1 call instead of N)
+    const uncachedPages: typeof pages = []
+    const igMap = new Map<string, any[]>()
+
+    for (const page of pages) {
+      const key = `fb:page-instagram:${ctx.orgId}:${page.id}`
+      const cached = peekCachedFacebookMetadata<any[]>(key)
+      if (cached !== undefined) {
+        igMap.set(page.id, cached)
+      } else {
+        uncachedPages.push(page)
+      }
+    }
+
+    if (uncachedPages.length > 0) {
+      const batchResult = await getBatchPageInstagramAccounts(uncachedPages, connection.access_token)
+      for (const page of uncachedPages) {
+        const ig = batchResult.get(page.id) || []
+        igMap.set(page.id, ig)
+        setCachedFacebookMetadata(`fb:page-instagram:${ctx.orgId}:${page.id}`, ig, INSTAGRAM_TTL_MS)
+      }
+    }
+
+    const results = pages.map(page => ({ pageId: page.id, igAccounts: igMap.get(page.id) || [] }))
 
     return NextResponse.json({ results })
   } catch (err) {

@@ -4942,6 +4942,22 @@ function LoadMediaModal({
       .finally(() => setLoading(false))
   }
 
+  const deleteFbMedia = async (ids: string[]) => {
+    if (ids.length === 0) return
+    const label = ids.length === 1 ? "1 item" : `${ids.length} items`
+    if (!confirm(`Delete ${label}? This cannot be undone.`)) return
+    try {
+      const res = await fetch("/api/creatives", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || "Delete failed"); return }
+      setFbMedia(prev => prev.filter(m => !ids.includes(m.id)))
+      setSelected(prev => { const next = new Set(prev); ids.forEach(id => next.delete(id)); return next })
+    } catch { alert("Delete failed") }
+  }
+
   const fetchFbMedia = (append = false) => {
     if (!adAccountId) return
     setFbMediaLoading(true)
@@ -5351,9 +5367,15 @@ function LoadMediaModal({
                 </Button>
                 {moreOpen && (
                   <div className="absolute top-full right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[160px] py-1">
-                    {["Export selected", "Bulk delete", "Settings"].map(o => (
-                      <button key={o} className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">{o}</button>
-                    ))}
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">Export selected</button>
+                    <button
+                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent text-destructive disabled:opacity-40"
+                      disabled={selected.size === 0}
+                      onClick={() => { setMoreOpen(false); deleteFbMedia(Array.from(selected)) }}
+                    >
+                      Bulk delete{selected.size > 0 ? ` (${selected.size})` : ""}
+                    </button>
+                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">Settings</button>
                   </div>
                 )}
               </div>
@@ -5410,7 +5432,7 @@ function LoadMediaModal({
                     : "bg-muted/60 text-muted-foreground"
                   return (
                     <div key={m.id} onClick={() => toggle(m.id)}
-                      className={cn("grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors",
+                      className={cn("group grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors",
                         isSelected && "bg-primary/5 hover:bg-primary/10")}
                       style={{ gridTemplateColumns: "28px 2.5fr 80px 100px 80px 120px 1.6fr 120px 120px" }}>
                       <div className={cn("size-4 rounded border-2 flex items-center justify-center shrink-0",
@@ -5429,7 +5451,14 @@ function LoadMediaModal({
                             </div>
                           )}
                         </div>
-                        <span className="text-sm truncate" title={m.name}>{m.name}</span>
+                        <span className="text-sm truncate flex-1" title={m.name}>{m.name}</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); deleteFbMedia([m.id]) }}
+                          className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
+                          title="Delete"
+                        >
+                          <IconTrash className="size-3.5" />
+                        </button>
                       </div>
                       <span className="text-xs text-muted-foreground font-mono">{m.fb_id?.slice(-6) || "—"}</span>
                       <span className="text-xs px-1.5 py-0.5 rounded bg-muted/50 w-fit">{fmtDims(m)}</span>
@@ -13039,6 +13068,19 @@ export default function LaunchPage() {
     // Supabase PUT drops large files (~87 MB) due to storage server body limits.
     // Meta API chunked upload is the proven fix (same pattern as bulk-upload-dialog).
     if (isVideo) {
+      // Dedup: same file already uploaded → reuse, skip ALL Meta API calls
+      try {
+        const dupRes = await fetch(`/api/creatives?file_name=${encodeURIComponent(item.file.name)}&file_size=${item.file.size}`)
+        if (dupRes.ok) {
+          const { creatives = [] } = await dupRes.json()
+          const existing = creatives[0]
+          if (existing?.fb_video_id) {
+            updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: existing.id })
+            return existing as Creative
+          }
+        }
+      } catch {}
+
       const credUrl = selectedAccountId
         ? `/api/facebook/upload-credentials?adAccountId=${selectedAccountId}`
         : "/api/facebook/upload-credentials"
@@ -13185,10 +13227,11 @@ export default function LaunchPage() {
       const creative: Creative = dbData.creative
       updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
 
-      // Poll for Meta thumbnail (video processing takes 10–60 s)
+      // Poll for Meta thumbnail — adaptive delays (video needs 15-90s to process)
       ;(async () => {
-        for (let attempt = 0; attempt < 3; attempt++) {
-          await new Promise(r => setTimeout(r, 5000))
+        const thumbDelays = [15000, 30000, 60000]
+        for (let attempt = 0; attempt < thumbDelays.length; attempt++) {
+          await new Promise(r => setTimeout(r, thumbDelays[attempt]))
           try {
             const tRes  = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
             const tData = await tRes.json()
@@ -13875,7 +13918,7 @@ export default function LaunchPage() {
   }, [tableAutoSync, primaryTexts, headlines, description, cta, webLink, selectedAdSets])
 
   const addTableRow = () => {
-    setTableRows(prev => [...prev, { id: String(Date.now()), creative: null, adName: "", primaryText: "", headline: "", description: "", adSetIds: [] }])
+    setTableRows(prev => [...prev, { id: crypto.randomUUID(), creative: null, adName: "", primaryText: "", headline: "", description: "", adSetIds: [] }])
   }
   const updateTableRow = (id: string, field: keyof TableRow, value: any) => {
     setTableRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r))
@@ -13887,7 +13930,7 @@ export default function LaunchPage() {
     setTableRows(prev => {
       const idx = prev.findIndex(r => r.id === id)
       if (idx < 0) return prev
-      const copy = { ...prev[idx], id: String(Date.now()), adName: prev[idx].adName ? `${prev[idx].adName} (copy)` : "" }
+      const copy = { ...prev[idx], id: crypto.randomUUID(), adName: prev[idx].adName ? `${prev[idx].adName} (copy)` : "" }
       return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)]
     })
   }
@@ -14060,7 +14103,7 @@ export default function LaunchPage() {
         if (matched) pageId = matched.id
       }
       return {
-        id: String(Date.now() + Math.random()),
+        id: crypto.randomUUID(),
         creative: r.creative,
         adName: r.adName,
         primaryText: r.primaryText,
@@ -14153,7 +14196,7 @@ export default function LaunchPage() {
               // Extra creatives → new rows inserted after, inheriting base row settings
               const extraRows: TableRow[] = creatives.slice(1).map((c, i) => ({
                 ...baseRow,
-                id: String(Date.now() + i + 1),
+                id: crypto.randomUUID(),
                 creative: c,
                 adName: (c.file_name || "").replace(/\.[^/.]+$/, ""),
               }))

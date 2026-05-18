@@ -128,8 +128,10 @@ interface MetricDef {
   category:       string
 }
 
-const fmt$ = (v: number, d = 2) =>
-  "$" + v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d })
+const fmt$ = (v: number, d = 2) => {
+  const digits = Number.isInteger(d) && d >= 0 && d <= 20 ? d : 2
+  return "$" + v.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })
+}
 const fmtK = (v: number) =>
   v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(Math.round(v))
 const fmtDate = (v: number, raw?: any): string =>

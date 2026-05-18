@@ -37,6 +37,16 @@ export function getCacheKeys(): string[] {
   return [...getStore().keys()]
 }
 
+export function peekCachedFacebookMetadata<T>(key: string): T | undefined {
+  const entry = getStore().get(key) as CacheEntry<T> | undefined
+  if (entry?.value !== undefined && entry.expiresAt > Date.now()) return entry.value
+  return undefined
+}
+
+export function setCachedFacebookMetadata<T>(key: string, value: T, ttlMs: number): void {
+  getStore().set(key, { value, expiresAt: Date.now() + ttlMs, retryAfter: 0 })
+}
+
 const RATE_LIMIT_BACKOFF_MS  = 5 * 60_000  // 5 min after rate-limit error
 const GENERIC_ERROR_BACKOFF_MS = 30_000    // 30 s after other errors
 

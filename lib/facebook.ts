@@ -204,6 +204,57 @@ export async function getPageInstagramAccounts(pageId: string, pageAccessToken: 
   }
 }
 
+// Batch-fetch instagram accounts for multiple pages in a single Meta Batch API call.
+// Reduces N separate requests to 1 (max 50 pages per batch).
+export async function getBatchPageInstagramAccounts(
+  pages: Array<{ id: string; access_token: string }>,
+  userToken: string
+): Promise<Map<string, InstagramAccount[]>> {
+  const result = new Map<string, InstagramAccount[]>()
+  const BATCH_SIZE = 50
+
+  for (let i = 0; i < pages.length; i += BATCH_SIZE) {
+    const chunk = pages.slice(i, i + BATCH_SIZE)
+    const batch = chunk.map(p => ({
+      method: "GET",
+      relative_url: `${p.id}?fields=instagram_accounts{id,username,profile_pic}`,
+      access_token: p.access_token,
+    }))
+
+    try {
+      const body = new URLSearchParams({
+        access_token: userToken,
+        batch: JSON.stringify(batch),
+      })
+      const res = await fetch(`${GRAPH_API_BASE}/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+      })
+      if (!res.ok) {
+        for (const p of chunk) result.set(p.id, [])
+        continue
+      }
+      const responses: Array<{ code: number; body: string } | null> = await res.json()
+      for (let j = 0; j < chunk.length; j++) {
+        const pageId = chunk[j].id
+        const item = responses[j]
+        if (!item || item.code !== 200) { result.set(pageId, []); continue }
+        try {
+          const data = JSON.parse(item.body)
+          result.set(pageId, data.instagram_accounts?.data || [])
+        } catch {
+          result.set(pageId, [])
+        }
+      }
+    } catch {
+      for (const p of chunk) result.set(p.id, [])
+    }
+  }
+
+  return result
+}
+
 export interface AdAccount {
   id: string
   account_id: string
@@ -759,31 +810,22 @@ export async function copyAdSet(
   return { id: newId }
 }
 
-// Fetch a video's HD thumbnail URL from Facebook
-// Uses thumbnails edge to get largest available quality
+// Fetch a video's HD thumbnail URL from Facebook.
+// Single call fetching both thumbnails and picture — prefers highest-res thumbnail.
 export async function getVideoThumbnail(videoId: string, accessToken: string): Promise<string | null> {
   try {
-    // Try thumbnails edge first (returns multiple resolutions of actual video frames)
-    const tRes = await fetch(
-      `${GRAPH_API_BASE}/${videoId}/thumbnails?fields=uri,width,height,is_preferred&access_token=${accessToken}`
-    )
-    if (tRes.ok) {
-      const tData = await tRes.json()
-      const thumbs: Array<{ uri: string; width: number; height: number; is_preferred?: boolean }> = tData.data || []
-      if (thumbs.length > 0) {
-        // Prefer is_preferred, otherwise pick largest by area
-        const preferred = thumbs.find(t => t.is_preferred)
-        if (preferred?.uri) return preferred.uri
-        const largest = thumbs.reduce((best, t) => (t.width * t.height) > (best.width * best.height) ? t : best, thumbs[0])
-        if (largest?.uri) return largest.uri
-      }
-    }
-    // Fallback to picture field (low res)
     const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=picture&access_token=${accessToken}`
+      `${GRAPH_API_BASE}/${videoId}?fields=thumbnails{uri,width,height,is_preferred},picture&access_token=${accessToken}`
     )
     if (!res.ok) return null
     const data = await res.json()
+    const thumbs: Array<{ uri: string; width: number; height: number; is_preferred?: boolean }> = data.thumbnails?.data || []
+    if (thumbs.length > 0) {
+      const preferred = thumbs.find(t => t.is_preferred)
+      if (preferred?.uri) return preferred.uri
+      const largest = thumbs.reduce((best, t) => (t.width * t.height) > (best.width * best.height) ? t : best, thumbs[0])
+      if (largest?.uri) return largest.uri
+    }
     return data.picture || null
   } catch {
     return null
@@ -911,6 +953,44 @@ export async function getVideoSource(videoId: string, accessToken: string): Prom
     return data.source || null
   } catch {
     return null
+  }
+}
+
+// Single call combining status + thumbnail + source — replaces 3 separate API calls.
+export async function getVideoReadyData(
+  videoId: string,
+  accessToken: string
+): Promise<{ ready: boolean; status: string; thumbnailUrl: string | null; sourceUrl: string | null; errorMsg?: string }> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=status,thumbnails{uri,width,height,is_preferred},picture,source&access_token=${accessToken}`
+    )
+    if (!res.ok) return { ready: false, status: "unknown", thumbnailUrl: null, sourceUrl: null }
+    const data = await res.json()
+    const vstatus = (data.status?.video_status as string | undefined) || "unknown"
+    const ready = vstatus === "ready"
+
+    let thumbnailUrl: string | null = null
+    if (ready) {
+      const thumbs: Array<{ uri: string; width: number; height: number; is_preferred?: boolean }> = data.thumbnails?.data || []
+      if (thumbs.length > 0) {
+        const preferred = thumbs.find(t => t.is_preferred)
+        thumbnailUrl = preferred?.uri
+          || thumbs.reduce((best, t) => (t.width * t.height) > (best.width * best.height) ? t : best, thumbs[0])?.uri
+          || null
+      }
+      if (!thumbnailUrl) thumbnailUrl = data.picture || null
+    }
+
+    const errorMsg = vstatus === "error"
+      ? (data.status?.processing_phase?.errors?.[0]?.message
+          || data.status?.uploading_phase?.errors?.[0]?.message
+          || "Video processing failed on Meta")
+      : undefined
+
+    return { ready, status: vstatus, thumbnailUrl, sourceUrl: data.source || null, errorMsg }
+  } catch {
+    return { ready: false, status: "error", thumbnailUrl: null, sourceUrl: null }
   }
 }
 
@@ -1487,18 +1567,26 @@ export interface ProductCatalog { id: string; name: string; product_count?: numb
 export interface ProductSet { id: string; name: string; product_count?: number; filter?: any }
 export interface CatalogProduct { id: string; name?: string; image_url?: string; price?: string; brand?: string }
 
-// Fetch catalogs — tries multiple endpoints (via businesses, ad account business, direct)
+// Fetch catalogs — tries multiple endpoints in parallel (via businesses + ad account business).
 export async function getProductCatalogs(accessToken: string, adAccountId?: string): Promise<{ catalogs: ProductCatalog[]; debug: string[] }> {
   const seen = new Set<string>()
   const catalogs: ProductCatalog[] = []
   const debug: string[] = []
 
-  // 1) /me/businesses → owned + client catalogs
-  try {
-    const url = `${GRAPH_API_BASE}/me/businesses?fields=id,name,owned_product_catalogs.limit(100){id,name,product_count,vertical},client_product_catalogs.limit(100){id,name,product_count,vertical}&limit=50&access_token=${accessToken}`
-    const r = await fetch(url)
-    if (r.ok) {
-      const biz = await r.json()
+  const bizUrl = `${GRAPH_API_BASE}/me/businesses?fields=id,name,owned_product_catalogs.limit(100){id,name,product_count,vertical},client_product_catalogs.limit(100){id,name,product_count,vertical}&limit=50&access_token=${accessToken}`
+  const accId = adAccountId ? (adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`) : null
+  const accUrl = accId
+    ? `${GRAPH_API_BASE}/${accId}?fields=business{id,name,owned_product_catalogs.limit(100){id,name,product_count,vertical}}&access_token=${accessToken}`
+    : null
+
+  const [bizRes, accRes] = await Promise.all([
+    fetch(bizUrl).catch((e: any) => { debug.push(`/me/businesses network error: ${e.message}`); return null }),
+    accUrl ? fetch(accUrl).catch((e: any) => { debug.push(`ad account network error: ${e.message}`); return null }) : Promise.resolve(null),
+  ])
+
+  if (bizRes?.ok) {
+    try {
+      const biz = await bizRes.json()
       let bizCount = 0, catCount = 0
       for (const b of (biz.data || [])) {
         bizCount++
@@ -1510,34 +1598,24 @@ export async function getProductCatalogs(accessToken: string, adAccountId?: stri
         }
       }
       debug.push(`/me/businesses: ${bizCount} businesses, ${catCount} catalogs`)
-    } else {
-      const e = await r.json().catch(() => ({}))
-      debug.push(`/me/businesses failed: ${e.error?.message || r.status}`)
-    }
-  } catch (e: any) {
-    debug.push(`/me/businesses error: ${e.message}`)
+    } catch (e: any) { debug.push(`/me/businesses parse error: ${e.message}`) }
+  } else if (bizRes) {
+    const e = await bizRes.json().catch(() => ({}))
+    debug.push(`/me/businesses failed: ${e.error?.message || bizRes.status}`)
   }
 
-  // 2) Via ad account → its business → catalogs
-  if (adAccountId) {
+  if (accRes?.ok) {
     try {
-      const accId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-      const url = `${GRAPH_API_BASE}/${accId}?fields=business{id,name,owned_product_catalogs.limit(100){id,name,product_count,vertical}}&access_token=${accessToken}`
-      const r = await fetch(url)
-      if (r.ok) {
-        const acc = await r.json()
-        let added = 0
-        for (const c of (acc.business?.owned_product_catalogs?.data || [])) {
-          if (!seen.has(c.id)) { seen.add(c.id); catalogs.push(c); added++ }
-        }
-        debug.push(`ad account business catalogs: ${added}`)
-      } else {
-        const e = await r.json().catch(() => ({}))
-        debug.push(`ad account fetch failed: ${e.error?.message || r.status}`)
+      const acc = await accRes.json()
+      let added = 0
+      for (const c of (acc.business?.owned_product_catalogs?.data || [])) {
+        if (!seen.has(c.id)) { seen.add(c.id); catalogs.push(c); added++ }
       }
-    } catch (e: any) {
-      debug.push(`ad account error: ${e.message}`)
-    }
+      debug.push(`ad account business catalogs: ${added}`)
+    } catch (e: any) { debug.push(`ad account parse error: ${e.message}`) }
+  } else if (accRes) {
+    const e = await accRes.json().catch(() => ({}))
+    debug.push(`ad account fetch failed: ${e.error?.message || accRes.status}`)
   }
 
   return { catalogs, debug }

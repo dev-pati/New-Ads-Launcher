@@ -56,16 +56,22 @@ export async function GET(request: NextRequest) {
       .order("id", { ascending: false })
       .limit(limit + 1)
 
-    // Batch lookup by filenames (for CSV import) — org-scoped only, no account filter
+    // Batch lookup by filenames (for CSV import) OR single dedup check (file_name + file_size)
     const fileNames = url.searchParams.getAll("file_name")
+    const fileSize  = url.searchParams.get("file_size")
     if (fileNames.length > 0) {
       const db = createAdminClient()
-      const { data, error } = await db
+      let q = db
         .from("creatives")
-        .select("id, file_name, file_url, media_type, headline, primary_text, cta, link_url, fb_image_url, fb_thumbnail_url, fb_image_hash, fb_video_id, status, ad_account_id")
+        .select("id, file_name, file_size, file_url, media_type, headline, primary_text, cta, link_url, fb_image_url, fb_thumbnail_url, fb_image_hash, fb_video_id, status, ad_account_id")
         .eq("org_id", ctx.orgId)
         .in("file_name", fileNames)
         .order("created_at", { ascending: false })
+      // Dedup mode: single name + size → only return rows that already have a Meta asset ID
+      if (fileSize && fileNames.length === 1) {
+        q = (q as any).eq("file_size", parseInt(fileSize, 10)).not("fb_video_id", "is", null)
+      }
+      const { data, error } = await q
       if (error) return NextResponse.json({ error: "Failed to fetch creatives" }, { status: 500 })
       return NextResponse.json({ creatives: (data ?? []).map(mapCreativeForClient) })
     }

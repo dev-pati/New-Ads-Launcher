@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { createClient } from "@/lib/supabase/server"
-import { getVideoThumbnail, getVideoSource, checkVideoStatus } from "@/lib/facebook"
+import { getVideoReadyData } from "@/lib/facebook"
 
 interface CreativeUpdate {
   fb_thumbnail_url?: string
@@ -33,49 +33,43 @@ export async function POST(
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
-    // 1. Check if the video is ready on Meta if it's still 'processing' in our DB
-    let currentStatus = creative.status || "ready"
-    if (currentStatus === "processing") {
-      const statusCheck = await checkVideoStatus(creative.fb_video_id, connection.access_token)
-      if (statusCheck.ready) {
-        currentStatus = "ready"
-        await supabase.from("creatives").update({ status: "ready" }).eq("id", id)
-      } else if (statusCheck.status === "error") {
-        currentStatus = "error"
-        await supabase.from("creatives").update({ status: "error" }).eq("id", id)
-        return NextResponse.json({
-          error: statusCheck.errorMsg || "Video processing failed on Meta",
-          status: "error",
-          creative: mapCreativeForClient({ ...creative, status: "error" })
-        })
-      } else {
-        // Still processing — thumbnail/source won't be available yet, skip fetching them
-        return NextResponse.json({ status: "processing", creative: mapCreativeForClient(creative) })
-      }
-    }
-
-    // 2. Decide if we need to fetch more data (only reached when status is "ready")
+    // Return early if we already have everything cached in DB
     const hasThumb =
       !!creative.fb_thumbnail_url &&
       /^https?:/.test(creative.fb_thumbnail_url) &&
       !creative.fb_thumbnail_url.includes("rsrc.php")
     const hasPlayableSource = !!(creative.file_url && /^https?:/.test(creative.file_url) && /(\.mp4|\.mov|\.webm|fbcdn\.net)/.test(creative.file_url))
 
-    // If we already have everything, return early
-    if (hasThumb && hasPlayableSource) {
+    if (hasThumb && hasPlayableSource && creative.status === "ready") {
       return NextResponse.json({
         thumbnail_url: creative.fb_thumbnail_url,
         source_url: creative.file_url,
-        creative: mapCreativeForClient({ ...creative, status: "ready" }),
+        creative: mapCreativeForClient(creative),
         cached: true,
       })
     }
 
-    // 3. Fetch missing data from Meta (video is ready, so thumbnail/source should be available)
-    const [thumbnailUrl, sourceUrl] = await Promise.all([
-      hasThumb ? Promise.resolve(creative.fb_thumbnail_url) : getVideoThumbnail(creative.fb_video_id, connection.access_token),
-      hasPlayableSource ? Promise.resolve(creative.file_url) : getVideoSource(creative.fb_video_id, connection.access_token),
-    ])
+    // Single Meta API call: status + thumbnails + source (replaces 3 separate calls)
+    const videoData = await getVideoReadyData(creative.fb_video_id, connection.access_token)
+
+    if (videoData.status === "error") {
+      await supabase.from("creatives").update({ status: "error" }).eq("id", id)
+      return NextResponse.json({
+        error: videoData.errorMsg || "Video processing failed on Meta",
+        status: "error",
+        creative: mapCreativeForClient({ ...creative, status: "error" }),
+      })
+    }
+
+    if (!videoData.ready) {
+      return NextResponse.json({ status: videoData.status, creative: mapCreativeForClient(creative) })
+    }
+
+    const [thumbnailUrl, sourceUrl] = [
+      hasThumb ? creative.fb_thumbnail_url : videoData.thumbnailUrl,
+      hasPlayableSource ? creative.file_url : videoData.sourceUrl,
+    ]
+    let currentStatus = "ready"
 
     // 4. Update DB if we got new info
     const update: CreativeUpdate = {}
