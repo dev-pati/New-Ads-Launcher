@@ -62,6 +62,7 @@ interface UploadItem {
   id: string
   file: File
   status: "pending" | "uploading" | "done" | "error"
+  progress?: number
   error?: string
 }
 
@@ -504,32 +505,83 @@ export default function AssetsPage() {
     items.forEach(item => uploadFile(item))
   }
 
+  // 500 MB matches the Supabase ad-media bucket limit
+  const MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+
   const uploadFile = async (item: UploadItem) => {
     if (!selectedAccountId) {
       setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: "No ad account selected" } : i))
       return
     }
-    setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "uploading" } : i))
+
+    if (item.file.size > MAX_UPLOAD_BYTES) {
+      setUploadItems(prev => prev.map(i => i.id === item.id ? {
+        ...i, status: "error",
+        error: `File quá lớn (${(item.file.size / 1024 / 1024).toFixed(0)} MB). Tối đa 500 MB.`,
+      } : i))
+      return
+    }
+
+    setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "uploading", progress: 0 } : i))
+
     try {
-      const params = new URLSearchParams({
-        filename: item.file.name,
-        type: item.file.type,
-        size: String(item.file.size),
-        ad_account_id: selectedAccountId,
-      })
-      const res = await fetch(`/api/creatives/upload-binary?${params}`, {
-        method: "POST",
-        headers: { "Content-Type": item.file.type },
-        body: item.file,
-      })
-      const d = await res.json()
-      if (d.creative) {
-        setCreatives(prev => [d.creative, ...prev])
-        refreshVideoPreviews([d.creative])
-        setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "done" } : i))
-      } else {
-        setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: d.error || "Upload failed" } : i))
+      // Step 1: Get a Supabase signed upload URL (tiny JSON, no body size issue)
+      const signRes = await fetch(
+        `/api/creatives/upload-sign?filename=${encodeURIComponent(item.file.name)}`
+      )
+      if (!signRes.ok) {
+        const err = await signRes.json().catch(() => ({}))
+        throw new Error((err as any).error || `Failed to get upload URL (${signRes.status})`)
       }
+      const { signedUrl, storagePath, publicUrl } = await signRes.json()
+
+      // Step 2: Upload file DIRECTLY to Supabase Storage via XHR for progress tracking.
+      // File never passes through Next.js/Vercel — no Payload Too Large risk.
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 88)
+            setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, progress: pct } : i))
+          }
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve()
+          } else {
+            reject(new Error(`Storage upload failed (${xhr.status}): ${xhr.responseText}`))
+          }
+        }
+        xhr.onerror = () => reject(new Error("Network error during file upload"))
+        xhr.open("PUT", signedUrl, true)
+        xhr.setRequestHeader("Content-Type", item.file.type)
+        xhr.send(item.file)
+      })
+
+      setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, progress: 92 } : i))
+
+      // Step 3: Finalize — server calls Meta API with the Supabase public URL, then saves to DB.
+      // Only a tiny JSON body goes through Next.js here.
+      const finalRes = await fetch("/api/creatives/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath,
+          publicUrl,
+          filename: item.file.name,
+          fileType: item.file.type,
+          fileSize: item.file.size,
+          adAccountId: selectedAccountId,
+        }),
+      })
+      const d = await finalRes.json()
+      if (!finalRes.ok || !d.creative) {
+        throw new Error((d as any).error || "Upload finalization failed")
+      }
+
+      setCreatives(prev => [d.creative, ...prev])
+      refreshVideoPreviews([d.creative])
+      setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "done", progress: 100 } : i))
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Upload failed"
       setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: message } : i))
@@ -710,14 +762,26 @@ export default function AssetsPage() {
                           {(item.file.size / 1024 / 1024).toFixed(1)} MB
                         </p>
                       </div>
-                      <div className="shrink-0">
+                      <div className="shrink-0 flex flex-col items-end gap-1 min-w-[80px]">
                         {item.status === "pending"   && <IconClock className="size-4 text-muted-foreground/40" />}
-                        {item.status === "uploading" && <IconLoader2 className="size-4 animate-spin text-primary" />}
+                        {item.status === "uploading" && (
+                          <>
+                            <IconLoader2 className="size-4 animate-spin text-primary" />
+                            {(item.progress ?? 0) > 0 && (
+                              <div className="w-full">
+                                <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                                  <div className="h-full bg-primary transition-all" style={{ width: `${item.progress}%` }} />
+                                </div>
+                                <span className="text-[10px] text-primary">{item.progress}%</span>
+                              </div>
+                            )}
+                          </>
+                        )}
                         {item.status === "done"      && <IconCircleCheck className="size-4 text-emerald-500" />}
                         {item.status === "error"     && (
-                          <div className="flex items-center gap-1">
-                            <IconAlertCircle className="size-4 text-destructive" />
-                            <span className="text-xs text-destructive">{item.error}</span>
+                          <div className="flex items-start gap-1 max-w-[200px]">
+                            <IconAlertCircle className="size-4 text-destructive shrink-0 mt-0.5" />
+                            <span className="text-xs text-destructive break-words">{item.error}</span>
                           </div>
                         )}
                       </div>

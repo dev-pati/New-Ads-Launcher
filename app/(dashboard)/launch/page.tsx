@@ -13019,94 +13019,260 @@ export default function LaunchPage() {
     setUploadDockOpen(false)
   }
 
-  const uploadOneFile = (item: UploadItem): Promise<Creative | null> => {
-    return new Promise((resolve) => {
-      const xhr = new XMLHttpRequest()
-      // Snapshot current form values so creative inherits them in DB → reusable later
-      const currentPrimary = primaryTexts.find(t => t.trim()) || ""
-      const currentHeadline = headlines.find(h => h.trim()) || ""
-      const params = new URLSearchParams({
-        filename: item.file.name,
-        type: item.file.type,
-        size: String(item.file.size),
-        ad_account_id: selectedAccountId,
+  // Upload strategy:
+  //   Images → signed Supabase URL + XHR PUT (small files, no size issue) + finalize
+  //   Videos → direct Meta API chunked upload from browser (proven approach, no proxy limits)
+  const uploadOneFile = async (item: UploadItem): Promise<Creative | null> => {
+    if (item.file.size > 500 * 1024 * 1024) {
+      updateUpload(item.id, {
+        status: "error",
+        error: `File quá lớn (${(item.file.size / 1024 / 1024).toFixed(0)} MB). Tối đa 500 MB.`,
       })
-      if (currentPrimary) params.set("primary_text", currentPrimary)
-      if (currentHeadline) params.set("headline", currentHeadline)
-      if (description) params.set("description", description)
-      if (webLink) params.set("link_url", webLink)
-      if (cta) params.set("cta", cta)
-      xhr.open("POST", `/api/creatives/upload-binary?${params}`)
-      xhr.setRequestHeader("Content-Type", item.file.type || "application/octet-stream")
+      return null
+    }
 
-      // Progress
-      const startTime = Date.now()
-      let lastTick = startTime
-      let lastLoaded = 0
+    const currentPrimary  = primaryTexts.find(t => t.trim()) || ""
+    const currentHeadline = headlines.find(h => h.trim()) || ""
+    const isVideo = item.file.type.startsWith("video/")
+
+    // ── VIDEO: upload directly to Meta API from browser ───────────────────
+    // Supabase PUT drops large files (~87 MB) due to storage server body limits.
+    // Meta API chunked upload is the proven fix (same pattern as bulk-upload-dialog).
+    if (isVideo) {
+      const credUrl = selectedAccountId
+        ? `/api/facebook/upload-credentials?adAccountId=${selectedAccountId}`
+        : "/api/facebook/upload-credentials"
+
+      let accessToken: string, adAccountId: string
+      try {
+        const credRes = await fetch(credUrl)
+        if (!credRes.ok) {
+          const e = await credRes.json().catch(() => ({}))
+          throw new Error((e as any).error || "Failed to get upload credentials")
+        }
+        ;({ accessToken, adAccountId } = await credRes.json())
+      } catch (err: any) {
+        updateUpload(item.id, { status: "error", error: err.message || "Failed to get credentials" })
+        return null
+      }
+
+      const cleanId    = adAccountId.replace(/^act_/, "")
+      const FB_VIDEOS  = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
+      const AUTH_HDR   = `Bearer ${accessToken}`
+      const DIRECT_LIMIT = 100 * 1024 * 1024 // ≤100 MB: direct POST
+      const CHUNK_SIZE   =  50 * 1024 * 1024 // >100 MB: 50 MB chunks
+
+      let fbVideoId: string
+
+      if (item.file.size <= DIRECT_LIMIT) {
+        // ── Direct POST to Meta ─────────────────────────────────────────
+        const form = new FormData()
+        form.append("source", item.file)
+        form.append("title", item.file.name)
+
+        const videoId = await new Promise<string | null>((resolve) => {
+          const xhr = new XMLHttpRequest()
+          let lastTick = Date.now(), lastLoaded = 0
+          xhr.upload.onprogress = (e) => {
+            if (!e.lengthComputable) return
+            const now = Date.now(), dt = (now - lastTick) / 1000
+            const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
+            lastTick = now; lastLoaded = e.loaded
+            updateUpload(item.id, { uploaded: e.loaded, fileSize: e.total, speed, eta: speed > 0 ? (e.total - e.loaded) / speed : 0 })
+          }
+          xhr.onload = () => {
+            const d = JSON.parse(xhr.responseText || "{}")
+            if (xhr.status < 300 && d.id) { resolve(d.id) }
+            else { updateUpload(item.id, { status: "error", error: d.error?.message || `Upload failed (${xhr.status})` }); resolve(null) }
+          }
+          xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error" }); resolve(null) }
+          xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(null) }
+          xhr.open("POST", FB_VIDEOS)
+          xhr.setRequestHeader("Authorization", AUTH_HDR)
+          updateUpload(item.id, { xhr })
+          xhr.send(form)
+        })
+        if (!videoId) return null
+        fbVideoId = videoId
+
+      } else {
+        // ── Chunked upload: START → TRANSFER × N → FINISH ──────────────
+        const startForm = new FormData()
+        startForm.append("upload_phase", "start")
+        startForm.append("file_size", String(item.file.size))
+        const startRes  = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH_HDR }, body: startForm })
+        const startData = await startRes.json()
+        if (startData.error) { updateUpload(item.id, { status: "error", error: startData.error.message }); return null }
+
+        const { upload_session_id, video_id } = startData
+        fbVideoId = video_id
+        let startOffset = parseInt(startData.start_offset || "0")
+        let endOffset   = parseInt(startData.end_offset   || String(Math.min(CHUNK_SIZE, item.file.size)))
+
+        while (startOffset < item.file.size) {
+          const chunk     = item.file.slice(startOffset, endOffset)
+          const chunkForm = new FormData()
+          chunkForm.append("upload_phase",      "transfer")
+          chunkForm.append("upload_session_id", upload_session_id)
+          chunkForm.append("start_offset",      String(startOffset))
+          chunkForm.append("video_file_chunk",  chunk, item.file.name)
+
+          const snapStart = startOffset // progress calc snapshot
+          const offsets = await new Promise<{ so: number; eo: number } | null>((resolve) => {
+            const xhr = new XMLHttpRequest()
+            let lastTick = Date.now(), lastLoaded = 0
+            xhr.upload.onprogress = (e) => {
+              if (!e.lengthComputable) return
+              const now = Date.now(), dt = (now - lastTick) / 1000
+              const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
+              lastTick = now; lastLoaded = e.loaded
+              const totalUploaded = snapStart + e.loaded
+              updateUpload(item.id, { uploaded: totalUploaded, fileSize: item.file.size, speed, eta: speed > 0 ? (item.file.size - totalUploaded) / speed : 0 })
+            }
+            xhr.onload = () => {
+              const d = JSON.parse(xhr.responseText || "{}")
+              if (xhr.status < 300 && !d.error) {
+                resolve({ so: parseInt(d.start_offset || String(endOffset)), eo: parseInt(d.end_offset || String(Math.min(endOffset + CHUNK_SIZE, item.file.size))) })
+              } else {
+                updateUpload(item.id, { status: "error", error: d.error?.message || "Chunk upload failed" }); resolve(null)
+              }
+            }
+            xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error during chunk upload" }); resolve(null) }
+            xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(null) }
+            xhr.open("POST", FB_VIDEOS)
+            xhr.setRequestHeader("Authorization", AUTH_HDR)
+            updateUpload(item.id, { xhr })
+            xhr.send(chunkForm)
+          })
+          if (!offsets) return null
+          startOffset = offsets.so
+          endOffset   = offsets.eo
+        }
+
+        // FINISH
+        const finishForm = new FormData()
+        finishForm.append("upload_phase",      "finish")
+        finishForm.append("upload_session_id", upload_session_id)
+        finishForm.append("title",             item.file.name)
+        const finishRes  = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH_HDR }, body: finishForm })
+        const finishData = await finishRes.json()
+        if (finishData.error) { updateUpload(item.id, { status: "error", error: finishData.error.message }); return null }
+      }
+
+      // Save to DB via JSON (tiny body — no size issue)
+      const dbRes = await fetch("/api/creatives", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ad_account_id: adAccountId,
+          file_name:     item.file.name,
+          file_size:     item.file.size,
+          media_type:    "video",
+          fb_video_id:   fbVideoId,
+          headline:      currentHeadline,
+          primary_text:  currentPrimary,
+          description:   description || "",
+          cta:           cta || "LEARN_MORE",
+          link_url:      webLink || "",
+        }),
+      })
+      const dbData = await dbRes.json()
+      if (!dbRes.ok || !dbData.creative) {
+        updateUpload(item.id, { status: "error", error: dbData.error || "Failed to save creative" })
+        return null
+      }
+
+      const creative: Creative = dbData.creative
+      updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
+
+      // Poll for Meta thumbnail (video processing takes 10–60 s)
+      ;(async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await new Promise(r => setTimeout(r, 5000))
+          try {
+            const tRes  = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
+            const tData = await tRes.json()
+            if (tData.thumbnail_url && tData.source_url) {
+              setSelectedCreatives(prev => prev.map(c =>
+                c.id === creative.id
+                  ? { ...c, fb_thumbnail_url: tData.thumbnail_url, file_url: tData.source_url, status: "ready" }
+                  : c
+              ))
+              break
+            }
+          } catch {}
+        }
+      })()
+
+      return creative
+    }
+
+    // ── IMAGE: signed Supabase URL + XHR PUT + finalize ───────────────────
+    // Images are small (<10 MB typically) — Supabase PUT works fine.
+    let signedUrl: string, storagePath: string, publicUrl: string
+    try {
+      const signRes = await fetch(`/api/creatives/upload-sign?filename=${encodeURIComponent(item.file.name)}`)
+      if (!signRes.ok) {
+        const err = await signRes.json().catch(() => ({}))
+        throw new Error((err as any).error || `Failed to get upload URL (${signRes.status})`)
+      }
+      ;({ signedUrl, storagePath, publicUrl } = await signRes.json())
+    } catch (err: any) {
+      updateUpload(item.id, { status: "error", error: err.message || "Failed to prepare upload" })
+      return null
+    }
+
+    const uploadOk = await new Promise<boolean>((resolve) => {
+      const xhr = new XMLHttpRequest()
+      let lastTick = Date.now(), lastLoaded = 0
       xhr.upload.onprogress = (e) => {
         if (!e.lengthComputable) return
-        const now = Date.now()
-        const dt = (now - lastTick) / 1000
-        const dl = e.loaded - lastLoaded
-        const speed = dt > 0 ? dl / dt : 0
-        const remaining = e.total - e.loaded
-        const eta = speed > 0 ? remaining / speed : 0
-        lastTick = now
-        lastLoaded = e.loaded
-        updateUpload(item.id, { uploaded: e.loaded, fileSize: e.total, speed, eta })
+        const now = Date.now(), dt = (now - lastTick) / 1000
+        const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
+        lastTick = now; lastLoaded = e.loaded
+        updateUpload(item.id, { uploaded: e.loaded, fileSize: e.total, speed, eta: speed > 0 ? (e.total - e.loaded) / speed : 0 })
       }
-
-      xhr.onload = async () => {
-        try {
-          const data = JSON.parse(xhr.responseText || "{}")
-          if (xhr.status >= 200 && xhr.status < 300 && data.creative) {
-            const creative: Creative = data.creative
-            updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
-
-            // For videos: quick poll (3 attempts) for thumbnail; useEffect handles longer polling
-            if (creative.media_type === "video" && creative.fb_video_id) {
-              ;(async () => {
-                for (let attempt = 0; attempt < 3; attempt++) {
-                  await new Promise(r => setTimeout(r, 5000))
-                  try {
-                    const tRes = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
-                    const tData = await tRes.json()
-                    if (tData.thumbnail_url && tData.source_url) {
-                      setSelectedCreatives(prev => prev.map(c =>
-                        c.id === creative.id
-                          ? { ...c, fb_thumbnail_url: tData.thumbnail_url, file_url: tData.source_url, status: "ready" }
-                          : c
-                      ))
-                      break
-                    }
-                  } catch {}
-                }
-              })()
-            }
-            resolve(creative)
-          } else {
-            const errMsg = data.error || `Upload failed (HTTP ${xhr.status})`
-            updateUpload(item.id, { status: "error", error: errMsg })
-            resolve(null)
-          }
-        } catch (e: any) {
-          updateUpload(item.id, { status: "error", error: "Server returned invalid response" })
-          resolve(null)
-        }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(true)
+        else { updateUpload(item.id, { status: "error", error: `Storage upload failed (${xhr.status})` }); resolve(false) }
       }
-      xhr.onerror = () => {
-        updateUpload(item.id, { status: "error", error: "Network error" })
-        resolve(null)
-      }
-      xhr.onabort = () => {
-        updateUpload(item.id, { status: "cancelled" })
-        resolve(null)
-      }
-
-      // Store XHR ref so cancel works
+      xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error during upload" }); resolve(false) }
+      xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(false) }
+      xhr.open("PUT", signedUrl, true)
+      xhr.setRequestHeader("Content-Type", item.file.type || "application/octet-stream")
       updateUpload(item.id, { xhr })
       xhr.send(item.file)
     })
+    if (!uploadOk) return null
+
+    const finalBody: Record<string, string | number> = {
+      storagePath, publicUrl,
+      filename: item.file.name, fileType: item.file.type, fileSize: item.file.size,
+      adAccountId: selectedAccountId,
+    }
+    if (currentPrimary)  finalBody.primary_text = currentPrimary
+    if (currentHeadline) finalBody.headline     = currentHeadline
+    if (description)     finalBody.description  = description
+    if (webLink)         finalBody.link_url     = webLink
+    if (cta)             finalBody.cta          = cta
+
+    let creative: Creative
+    try {
+      const finalRes = await fetch("/api/creatives/finalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(finalBody),
+      })
+      const data = await finalRes.json()
+      if (!finalRes.ok || !data.creative) throw new Error(data.error || `Finalize failed (${finalRes.status})`)
+      creative = data.creative
+    } catch (err: any) {
+      updateUpload(item.id, { status: "error", error: err.message || "Failed to save creative" })
+      return null
+    }
+
+    updateUpload(item.id, { status: "completed", uploaded: item.fileSize, eta: 0, speed: 0, creativeId: creative.id })
+    return creative
   }
 
   // Generate instant local preview (image objectURL OR video frame extracted via canvas)
