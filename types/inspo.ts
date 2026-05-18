@@ -22,6 +22,7 @@ export type DiscoveryAd = {
   theme?: string
   usp?: string
   desire?: string
+  adSnapshotUrl?: string
 }
 
 export type InspoBoard = {

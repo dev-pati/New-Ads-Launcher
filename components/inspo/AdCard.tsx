@@ -45,12 +45,25 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
     >
       {/* Media */}
       <div className="relative bg-neutral-100 dark:bg-neutral-900 overflow-hidden aspect-[4/3]">
-        <img
-          src={ad.mediaUrl}
-          alt={ad.headline || ad.brandName}
-          className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-          loading="lazy"
-        />
+        {ad.mediaUrl ? (
+          <img
+            src={ad.mediaUrl}
+            alt={ad.headline || ad.brandName}
+            className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
+            loading="lazy"
+            onError={e => {
+              const el = e.target as HTMLImageElement
+              el.style.display = "none"
+              el.parentElement?.classList.add("ad-img-fallback")
+            }}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-4xl font-bold text-neutral-300 dark:text-neutral-700 select-none">
+              {ad.brandName.charAt(0).toUpperCase()}
+            </span>
+          </div>
+        )}
 
         {/* Duration badge */}
         {ad.duration && (
@@ -88,12 +101,12 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
           onClick={e => e.stopPropagation()}
         >
           <a
-            href={ad.mediaUrl}
+            href={ad.adSnapshotUrl || ad.mediaUrl || "#"}
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
             className="size-7 flex items-center justify-center rounded-lg bg-white/90 backdrop-blur-sm text-neutral-700 hover:bg-white hover:text-neutral-900 transition-colors shadow"
-            title="Open original"
+            title="Open in Ad Library"
           >
             <IconExternalLink className="size-3.5" />
           </a>

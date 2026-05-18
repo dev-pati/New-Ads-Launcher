@@ -7123,11 +7123,12 @@ function DuplicateCampaignModal({
     fetchCampaigns()
   }, [open, adAccountId])
 
-  const fetchCampaigns = async () => {
+  const fetchCampaigns = async (forceRefresh = false) => {
     if (!adAccountId) return
     setCampaignsLoading(true)
     try {
-      const res = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(adAccountId)}`)
+      const url = `/api/facebook/campaigns?ad_account_id=${encodeURIComponent(adAccountId)}${forceRefresh ? "&refresh=true" : ""}`
+      const res = await fetch(url)
       const d = await res.json()
       const raw: any[] = d.campaigns || []
       setCampaigns(raw.map(c => ({
@@ -7433,7 +7434,7 @@ function DuplicateCampaignModal({
                   </div>
                 )}
               </div>
-              <button onClick={fetchCampaigns} className="size-10 border rounded-lg flex items-center justify-center hover:bg-muted/30 shrink-0">
+              <button onClick={() => fetchCampaigns(true)} className="size-10 border rounded-lg flex items-center justify-center hover:bg-muted/30 shrink-0">
                 <IconRefresh className={cn("size-4 text-muted-foreground", campaignsLoading && "animate-spin")} />
               </button>
             </div>
@@ -8197,10 +8198,11 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
   const [duplicateCampaignOpen, setDuplicateCampaignOpen] = useState(false)
   const selectedIds = new Set(selectedAdSets.map(a => a.id))
 
-  const fetchAdSets = useCallback(() => {
+  const fetchAdSets = useCallback((forceRefresh = false) => {
     if (!adAccountId) return
     setLoading(true)
-    fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(adAccountId)}`)
+    const url = `/api/facebook/adsets?ad_account_id=${encodeURIComponent(adAccountId)}${forceRefresh ? "&refresh=true" : ""}`
+    fetch(url)
       .then(r => r.json())
       .then(d => setAllAdSets(d.adSets || []))
       .catch(() => {})
@@ -8223,6 +8225,7 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
         onDuplicated={(newAdSets) => {
           setAllAdSets(prev => [...newAdSets, ...prev])
           newAdSets.forEach(a => onSelect(a))
+          fetchAdSets(true)
         }}
       />
       <DuplicateCampaignModal
@@ -8232,6 +8235,7 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
         onDuplicated={(newAdSets) => {
           setAllAdSets(prev => [...newAdSets, ...prev])
           newAdSets.forEach(a => onSelect(a))
+          fetchAdSets(true)
         }}
       />
       <div className="flex items-center justify-between px-4 py-3 border-b">
@@ -8314,7 +8318,7 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
           )}
         </div>
 
-        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={fetchAdSets}>
+        <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={() => fetchAdSets(true)}>
           <IconRefresh className={cn("size-3", loading && "animate-spin")} />Ad Set Refresh
         </Button>
       </div>

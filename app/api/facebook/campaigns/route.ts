@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getCampaigns } from "@/lib/facebook"
-import { getCachedFacebookMetadata } from "../_cache"
+import { getCachedFacebookMetadata, clearCachedFacebookMetadata } from "../_cache"
 
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const adAccountId = sp.get("ad_account_id")
     const datePreset  = sp.get("date_preset") || "last_7d"
     const timeRange   = sp.get("time_range") || ""
+    const forceRefresh = sp.get("refresh") === "true"
 
     if (!adAccountId) return NextResponse.json({ error: "ad_account_id is required" }, { status: 400 })
 
@@ -22,6 +23,8 @@ export async function GET(request: NextRequest) {
 
     const dateKey  = timeRange ? `tr:${timeRange}` : `dp:${datePreset}`
     const cacheKey = `campaigns:${adAccountId}:${dateKey}`
+
+    if (forceRefresh) clearCachedFacebookMetadata(cacheKey)
 
     const campaigns = await getCachedFacebookMetadata(
       cacheKey,

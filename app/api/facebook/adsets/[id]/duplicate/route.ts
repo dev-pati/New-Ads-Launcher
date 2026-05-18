@@ -29,15 +29,15 @@ export async function POST(
 
     // Call Meta /copies endpoint
     const renameOptions: any = {}
-    if (customName) renameOptions.rename_suffix = "" // we'll rename via separate update call
     if (renameSuffix) renameOptions.rename_suffix = renameSuffix
 
-    const params_ = new URLSearchParams({
+    const copyQs: Record<string, string> = {
       access_token: connection.access_token,
       deep_copy: deepCopy ? "true" : "false",
       status_option: statusOption,
-      rename_options: JSON.stringify(renameOptions),
-    })
+    }
+    if (Object.keys(renameOptions).length > 0) copyQs.rename_options = JSON.stringify(renameOptions)
+    const params_ = new URLSearchParams(copyQs)
 
     const res = await fetch(`${GRAPH_API_BASE}/${id}/copies?${params_}`, { method: "POST" })
     const data = await res.json()
@@ -64,22 +64,34 @@ export async function POST(
     if (body.spendingLimits?.max) updates.daily_spend_cap = String(body.spendingLimits.max)
     if (body.optimizationGoal) updates.optimization_goal = body.optimizationGoal
     if (body.bidStrategy) updates.bid_strategy = body.bidStrategy
-    // Targeting override (geo / age) — needs to merge with existing targeting
+
+    // Targeting override — must fetch existing targeting first, then merge only the changed fields.
+    // Sending a partial targeting object to Meta replaces the full targeting, destroying interests,
+    // custom audiences, placement settings, etc.
     if (body.geoCountries?.length || body.ageMin || body.ageMax) {
-      const targetingPatch: any = {}
-      if (body.geoCountries?.length) targetingPatch.geo_locations = { countries: body.geoCountries }
-      if (body.ageMin) targetingPatch.age_min = body.ageMin
-      if (body.ageMax) targetingPatch.age_max = body.ageMax
-      updates.targeting = JSON.stringify(targetingPatch)
+      try {
+        const tRes = await fetch(
+          `${GRAPH_API_BASE}/${newAdSetId}?fields=targeting&access_token=${connection.access_token}`
+        )
+        const tData = await tRes.json()
+        const merged = tData.targeting ? { ...tData.targeting } : {}
+        if (body.geoCountries?.length) merged.geo_locations = { countries: body.geoCountries }
+        if (body.ageMin) merged.age_min = body.ageMin
+        if (body.ageMax) merged.age_max = body.ageMax
+        updates.targeting = JSON.stringify(merged)
+      } catch {
+        // Skip targeting override if fetch fails — safer than destroying existing targeting
+        console.warn("[duplicate adset] failed to fetch existing targeting — skipping geo/age override")
+      }
     }
 
     if (Object.keys(updates).length > 0) {
       try {
-        const patchParams = new URLSearchParams({ ...updates, access_token: connection.access_token })
-        const patchRes = await fetch(`${GRAPH_API_BASE}/${newAdSetId}`, {
-          method: "POST",
-          body: patchParams,
-        })
+        const patchBody = new URLSearchParams(updates)
+        const patchRes = await fetch(
+          `${GRAPH_API_BASE}/${newAdSetId}?access_token=${encodeURIComponent(connection.access_token)}`,
+          { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: patchBody.toString() }
+        )
         if (!patchRes.ok) {
           const e = await patchRes.json().catch(() => ({}))
           console.warn("[duplicate adset] patch failed but copy created:", e.error?.message)

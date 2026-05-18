@@ -52,12 +52,15 @@ export async function POST(request: NextRequest) {
         // - If deepCopy true with subset → create empty ad set, then copy selected ads individually
         // - If deepCopy false → no ad copying
         const wantDeepCopy = !!cfg.deepCopy
-        const selectedAdIds: string[] = Array.isArray(cfg.selectedAdIds) ? cfg.selectedAdIds : []
+        // null = "not specified" (use Meta deep_copy=true), [] = "explicitly empty" (no ads)
+        const selectedAdIds: string[] | null = cfg.selectedAdIds === null ? null : Array.isArray(cfg.selectedAdIds) ? cfg.selectedAdIds : null
         const duplicatedAdsStatus = cfg.duplicatedAdsStatus === "ACTIVE" ? "ACTIVE" : "PAUSED"
 
         for (let k = 0; k < copies; k++) {
           const aSuffix = copies > 1 ? ` ${k + 1}` : ""
-          const useDeepCopyFlag = wantDeepCopy && selectedAdIds.length === 0 // empty array = "all" not chosen yet, fall back to deep
+          // Use Meta deep_copy=true only when: deepCopy requested AND no specific subset chosen (null)
+          // If selectedAdIds is an empty array [], user explicitly wants no ads copied → don't deep copy
+          const useDeepCopyFlag = wantDeepCopy && selectedAdIds === null
           const adsetParams = new URLSearchParams({
             access_token: connection.access_token,
             campaign_id: targetCampaignId,
@@ -121,7 +124,7 @@ export async function POST(request: NextRequest) {
 
           // Copy selected ads individually if subset chosen (and not using deep_copy=true)
           const copiedAdIds: string[] = []
-          if (wantDeepCopy && selectedAdIds.length > 0 && !useDeepCopyFlag) {
+          if (wantDeepCopy && selectedAdIds !== null && selectedAdIds.length > 0 && !useDeepCopyFlag) {
             for (const sourceAdId of selectedAdIds) {
               try {
                 const copyAdParams = new URLSearchParams({

@@ -10,6 +10,7 @@ import {
   IconTrash, IconSettings, IconCalendar, IconArrowsUpDown,
   IconArrowUp, IconArrowDown, IconHistory, IconTable, IconCheck,
   IconChevronRight as IconDrillRight,
+  IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard,
 } from "@tabler/icons-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
@@ -370,26 +371,27 @@ export default function AdsManagerPage() {
 
   // Fetches campaigns/adsets/ads only — `breakdowns` intentionally excluded from
   // deps so that toggling a breakdown never triggers a redundant main-data refetch.
-  const fetchMainData = useCallback(async () => {
+  const fetchMainData = useCallback(async (forceRefresh = false) => {
     if (!selectedAccountId) return
     setLoading(true)
     setError("")
     const t0 = Date.now()
     const dateParam = buildDateParam()
+    const refreshParam = forceRefresh ? "&refresh=true" : ""
 
     try {
       if (tab === "campaigns") {
-        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}`)
+        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setCampaigns(d.campaigns || [])
       } else if (tab === "adsets") {
-        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}`)
+        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
       } else {
-        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}`)
+        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
@@ -570,12 +572,10 @@ export default function AdsManagerPage() {
 
   // ─── Save Side Panel Edit ─────────────────────────────────────────────────────
   const saveSidePanelEdit = async (updatedNode: any) => {
-    // Optimistic update
     const updateList = (list: any[]) => list.map(x => x.id === updatedNode.id ? { ...x, ...updatedNode } : x)
     if (tab === "campaigns") setCampaigns(updateList)
     else if (tab === "adsets") setAdSets(updateList)
     else setAds(updateList)
-    
     setEditingNode(null)
 
     try {
@@ -588,6 +588,8 @@ export default function AdsManagerPage() {
           status: updatedNode.status,
           daily_budget: updatedNode.daily_budget ? parseInt(updatedNode.daily_budget) / 100 : undefined,
           lifetime_budget: updatedNode.lifetime_budget ? parseInt(updatedNode.lifetime_budget) / 100 : undefined,
+          start_time: updatedNode.start_time || undefined,
+          end_time: updatedNode.end_time || undefined,
         })
       })
       if (!r.ok) throw new Error("Failed to update")
@@ -975,7 +977,7 @@ export default function AdsManagerPage() {
             <IconHistory className="size-3.5" />History
           </button>
           <button
-            onClick={fetchMainData}
+            onClick={() => fetchMainData(true)}
             disabled={loading}
             className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors"
           >
@@ -1121,10 +1123,10 @@ export default function AdsManagerPage() {
         )}
 
         {/* Sync pair */}
-        <button onClick={fetchMainData} className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Sync">
+        <button onClick={() => fetchMainData(true)} className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Sync">
           <IconRefresh className="size-3.5 text-muted-foreground" />
         </button>
-        <button className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Refresh">
+        <button onClick={() => fetchMainData(true)} className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Refresh">
           <IconRefresh className="size-3.5 text-muted-foreground rotate-180" />
         </button>
 
@@ -1638,117 +1640,273 @@ export default function AdsManagerPage() {
         onClose={() => setCustomizeColsOpen(false)}
       />
 
-      {/* ── Edit Side Panel (Sheet) ── */}
+      {/* ── Edit Side Panel ── */}
       <Sheet open={!!editingNode} onOpenChange={(open) => !open && setEditingNode(null)}>
-        <SheetContent className="w-[400px] sm:w-[540px] overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>Edit {tab === "campaigns" ? "Campaign" : tab === "adsets" ? "Ad Set" : "Ad"}</SheetTitle>
-            <SheetDescription>Make changes to your settings here.</SheetDescription>
+        <SheetContent className="w-full sm:w-[480px] flex flex-col p-0 gap-0 overflow-hidden">
+          <SheetHeader className="sr-only">
+            <SheetTitle>{tab === "campaigns" ? "Edit Campaign" : tab === "adsets" ? "Edit Ad Set" : "Edit Ad"}</SheetTitle>
+            <SheetDescription>Edit settings for this {tab === "campaigns" ? "campaign" : tab === "adsets" ? "ad set" : "ad"}.</SheetDescription>
           </SheetHeader>
-          {editingNode && (
-            <div className="py-6 space-y-8">
-              {/* Performance Summary */}
-              {getInsight(editingNode) && (
-                <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-muted/30 border">
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Spend</p>
-                    <p className="text-lg font-bold">${getSpend(editingNode).toFixed(2)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Results</p>
-                    <p className="text-lg font-bold">{getResults(editingNode, (editingNode as any).objective).count}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Impressions</p>
-                    <p className="text-sm font-medium">{parseInt(getInsight(editingNode)!.impressions).toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Clicks</p>
-                    <p className="text-sm font-medium">{parseInt(getInsight(editingNode)!.clicks).toLocaleString()}</p>
-                  </div>
-                </div>
-              )}
+          {editingNode && (() => {
+            const node = editingNode as any
+            const isCampaign = tab === "campaigns"
+            const isAdSet    = tab === "adsets"
+            const isAd       = tab === "ads"
+            const hasDailyBudget    = node.daily_budget != null && node.daily_budget !== ""
+            const hasLifetimeBudget = node.lifetime_budget != null && node.lifetime_budget !== ""
+            const hasBudget  = hasDailyBudget || hasLifetimeBudget
+            const budgetCents = parseInt(node.daily_budget || node.lifetime_budget || "0")
+            const insight    = getInsight(editingNode)
+            const isActive   = node.status === "ACTIVE"
 
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">Name</Label>
-                  <Input value={editingNode.name} onChange={e => setEditingNode({ ...editingNode, name: e.target.value } as any)} />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase text-muted-foreground">Status</Label>
-                  <select 
-                    className="w-full h-10 rounded-lg border bg-background px-3 text-sm shadow-sm focus:ring-1 focus:ring-primary outline-none"
-                    value={editingNode.status} 
-                    onChange={e => setEditingNode({ ...editingNode, status: e.target.value } as any)}
-                  >
-                    <option value="ACTIVE">Active</option>
-                    <option value="PAUSED">Paused</option>
-                  </select>
+            const OBJECTIVE_LABEL: Record<string, string> = {
+              OUTCOME_SALES: "Sales", OUTCOME_LEADS: "Leads", OUTCOME_TRAFFIC: "Traffic",
+              OUTCOME_AWARENESS: "Awareness", OUTCOME_ENGAGEMENT: "Engagement",
+              OUTCOME_APP_PROMOTION: "App Promotion", OUTCOME_REACH: "Reach",
+              LINK_CLICKS: "Link Clicks", CONVERSIONS: "Conversions",
+            }
+            const BID_LABEL: Record<string, string> = {
+              LOWEST_COST_WITHOUT_CAP: "Lowest cost", LOWEST_COST_WITH_BID_CAP: "Bid cap",
+              COST_CAP: "Cost cap", MINIMUM_ROAS: "Min. ROAS",
+            }
+            const OPT_LABEL: Record<string, string> = {
+              LINK_CLICKS: "Link clicks", IMPRESSIONS: "Impressions", REACH: "Reach",
+              LANDING_PAGE_VIEWS: "Landing page views", CONVERSIONS: "Conversions",
+              OFFSITE_CONVERSIONS: "Offsite conversions", VIDEO_VIEWS: "Video views",
+              LEAD_GENERATION: "Lead generation", APP_INSTALLS: "App installs",
+            }
+            const fmt = (iso?: string) => iso ? iso.slice(0, 16) : ""
+            const toIso = (v: string) => v ? new Date(v).toISOString() : ""
+            const typeLabel = isCampaign ? "Campaign" : isAdSet ? "Ad Set" : "Ad"
+            const TypeIcon  = isCampaign ? IconSpeakerphone : isAdSet ? IconTarget : IconPhoto
+            const typeColor = isCampaign ? "bg-blue-500" : isAdSet ? "bg-violet-500" : "bg-emerald-500"
+
+            return (
+              <>
+                {/* ── Header ── */}
+                <div className="flex items-center gap-3 px-5 py-4 border-b shrink-0">
+                  <div className={cn("size-9 rounded-xl flex items-center justify-center text-white shrink-0", typeColor)}>
+                    <TypeIcon className="size-4.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{typeLabel}</p>
+                    <p className="text-sm font-semibold truncate leading-tight">{node.name}</p>
+                  </div>
+                  <span className={cn(
+                    "shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                    isActive
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
+                  )}>
+                    <span className={cn("size-1.5 rounded-full", isActive ? "bg-green-500" : "bg-neutral-400")} />
+                    {isActive ? "Active" : "Paused"}
+                  </span>
                 </div>
 
-                {('daily_budget' in editingNode || 'lifetime_budget' in editingNode) && (
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase text-muted-foreground">
-                      {('daily_budget' in editingNode) ? 'Daily Budget' : 'Lifetime Budget'} ($)
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
-                      <Input 
-                        type="number" 
-                        step="0.01"
-                        className="pl-7"
-                        value={((parseInt((editingNode as any).daily_budget || (editingNode as any).lifetime_budget || "0")) / 100)} 
-                        onChange={e => {
-                          const val = parseFloat(e.target.value) || 0
-                          const cents = Math.round(val * 100).toString()
-                          if ((editingNode as any).daily_budget) setEditingNode({ ...editingNode, daily_budget: cents } as any)
-                          else setEditingNode({ ...editingNode, lifetime_budget: cents } as any)
-                        }} 
+                {/* ── Scrollable body ── */}
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+
+                  {/* Performance row */}
+                  {insight && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {[
+                        { label: "Spend",  value: `$${getSpend(editingNode).toFixed(2)}`, accent: true },
+                        { label: "Results",value: String(getResults(editingNode, node.objective).count) },
+                        { label: "Impr.",  value: parseInt(insight.impressions).toLocaleString() },
+                        { label: "Clicks", value: parseInt(insight.clicks).toLocaleString() },
+                      ].map(s => (
+                        <div key={s.label} className="rounded-xl bg-muted/40 border px-2.5 py-2 text-center">
+                          <p className="text-[10px] text-muted-foreground mb-0.5">{s.label}</p>
+                          <p className={cn("text-sm font-bold tabular-nums truncate", s.accent && "text-primary")}>{s.value}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* ── Settings section ── */}
+                  <div className="space-y-3">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Settings</p>
+
+                    {/* Name */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Name</Label>
+                      <Input
+                        value={node.name}
+                        onChange={e => setEditingNode({ ...node, name: e.target.value })}
+                        className="h-9 text-sm bg-background"
                       />
                     </div>
-                  </div>
-                )}
-              </div>
 
-              {/* Drill down info */}
-              <div className="pt-4 border-t">
-                <p className="text-[10px] text-muted-foreground uppercase font-bold mb-2">ID: {editingNode.id}</p>
-                {tab === "adsets" && <p className="text-xs text-muted-foreground">Campaign ID: {(editingNode as AdSet).campaign_id}</p>}
-                {tab === "ads" && (
-                  <>
-                    <p className="text-xs text-muted-foreground">Ad Set ID: {(editingNode as Ad).adset_id}</p>
-                    { (editingNode as Ad).creative?.thumbnail_url && (
-                      <div className="mt-4">
-                        <p className="text-[10px] text-muted-foreground uppercase font-bold mb-2">Creative Preview</p>
-                        <img src={(editingNode as Ad).creative?.thumbnail_url} className="w-full aspect-video rounded-lg object-cover border" loading="lazy" />
+                    {/* Status toggle */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">Status</Label>
+                      <div className="grid grid-cols-2 gap-2 p-1 rounded-lg bg-muted/50 border">
+                        {(["ACTIVE", "PAUSED"] as const).map(s => (
+                          <button
+                            key={s}
+                            onClick={() => setEditingNode({ ...node, status: s })}
+                            className={cn(
+                              "h-8 rounded-md text-xs font-semibold transition-all",
+                              node.status === s
+                                ? s === "ACTIVE"
+                                  ? "bg-green-500 text-white shadow-sm"
+                                  : "bg-background text-foreground shadow-sm border"
+                                : "text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            {s === "ACTIVE" ? "● Active" : "○ Paused"}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Budget */}
+                    {(isCampaign || isAdSet) && (
+                      hasBudget ? (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">
+                            {hasDailyBudget ? "Daily Budget" : "Lifetime Budget"}
+                          </Label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-sm">$</span>
+                            <Input
+                              type="number" step="0.01" min="0"
+                              className="pl-7 h-9 text-sm bg-background"
+                              value={budgetCents / 100}
+                              onChange={e => {
+                                const cents = Math.round((parseFloat(e.target.value) || 0) * 100).toString()
+                                setEditingNode(hasDailyBudget ? { ...node, daily_budget: cents } : { ...node, lifetime_budget: cents })
+                              }}
+                            />
+                          </div>
+                          {isAdSet && node.budget_remaining != null && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Remaining: <span className="font-medium text-foreground">${(parseInt(node.budget_remaining) / 100).toFixed(2)}</span>
+                            </p>
+                          )}
+                        </div>
+                      ) : isAdSet ? (
+                        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 text-xs text-blue-600 dark:text-blue-400">
+                          <IconSpeakerphone className="size-3.5 shrink-0" />
+                          Budget set at campaign level (CBO)
+                        </div>
+                      ) : null
+                    )}
+
+                    {/* Schedule */}
+                    {(isCampaign || isAdSet) && (
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Start</Label>
+                          <Input type="datetime-local" className="h-9 text-xs bg-background"
+                            value={fmt(node.start_time)}
+                            onChange={e => setEditingNode({ ...node, start_time: toIso(e.target.value) })} />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">End</Label>
+                          <Input type="datetime-local" className="h-9 text-xs bg-background"
+                            value={fmt(isCampaign ? node.stop_time : node.end_time)}
+                            onChange={e => {
+                              const iso = toIso(e.target.value)
+                              setEditingNode(isCampaign ? { ...node, stop_time: iso } : { ...node, end_time: iso })
+                            }} />
+                        </div>
                       </div>
                     )}
-                  </>
-                )}
-              </div>
+                  </div>
 
-              <div className="pt-4 border-t">
-                <Button 
-                  variant="link" 
-                  className="p-0 h-auto text-blue-600 text-xs" 
-                  onClick={() => {
-                    const actId = selectedAccountId?.replace("act_", "")
-                    const url = `https://adsmanager.facebook.com/adsmanager/manage/${tab}?act=${actId}&selected_${tab.slice(0,-1)}_ids=${editingNode.id}`
-                    window.open(url, "_blank")
-                  }}
-                >
-                  View in Meta Ads Manager ↗
-                </Button>
-              </div>
-            </div>
-          )}
-          <SheetFooter className="mt-auto pt-6 border-t">
-            <Button variant="ghost" onClick={() => setEditingNode(null)}>Cancel</Button>
-            <Button onClick={() => editingNode && saveSidePanelEdit(editingNode)} className="bg-blue-600 hover:bg-blue-700 text-white">
-              Save Changes
-            </Button>
-          </SheetFooter>
+                  {/* ── Strategy tags ── */}
+                  {((isCampaign && (node.objective || node.bid_strategy)) ||
+                    (isAdSet && (node.optimization_goal || node.bid_strategy))) && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Strategy</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {isCampaign && node.objective && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-medium border border-blue-200/70 dark:border-blue-700/40">
+                            {OBJECTIVE_LABEL[node.objective] ?? node.objective}
+                          </span>
+                        )}
+                        {isAdSet && node.optimization_goal && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 text-xs font-medium border border-violet-200/70 dark:border-violet-700/40">
+                            {OPT_LABEL[node.optimization_goal] ?? node.optimization_goal}
+                          </span>
+                        )}
+                        {node.bid_strategy && (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-muted text-muted-foreground text-xs font-medium border">
+                            {BID_LABEL[node.bid_strategy] ?? node.bid_strategy}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Creative preview (Ad only) ── */}
+                  {isAd && (node.creative?.thumbnail_url || node.creative?.title || node.creative?.body) && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Creative</p>
+                      <div className="rounded-2xl border overflow-hidden shadow-sm">
+                        {node.creative.thumbnail_url && (
+                          <img src={node.creative.thumbnail_url} className="w-full object-cover max-h-52" loading="lazy" />
+                        )}
+                        {(node.creative.title || node.creative.body) && (
+                          <div className="px-3.5 py-3 space-y-1 bg-neutral-50 dark:bg-neutral-900 border-t">
+                            {node.creative.title && (
+                              <p className="text-sm font-semibold leading-snug line-clamp-2 text-foreground">{node.creative.title}</p>
+                            )}
+                            {node.creative.body && (
+                              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{node.creative.body}</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── IDs ── */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Details</p>
+                    <div className="rounded-xl border divide-y overflow-hidden text-xs">
+                      {[
+                        { label: "ID",          value: node.id },
+                        ...(isAdSet ? [{ label: "Campaign ID", value: node.campaign_id }] : []),
+                        ...(isAd    ? [{ label: "Ad Set ID",   value: node.adset_id }]   : []),
+                      ].map(row => (
+                        <div key={row.label} className="flex items-center justify-between px-3 py-2 bg-muted/10 hover:bg-muted/30 transition-colors">
+                          <span className="text-muted-foreground shrink-0 mr-3">{row.label}</span>
+                          <span className="font-mono text-foreground/80 truncate select-all">{row.value}</span>
+                        </div>
+                      ))}
+                      <button
+                        className="w-full flex items-center gap-2 px-3 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors text-left"
+                        onClick={() => {
+                          const actId = selectedAccountId?.replace("act_", "")
+                          const url = `https://adsmanager.facebook.com/adsmanager/manage/${tab}?act=${actId}&selected_${tab.slice(0,-1)}_ids=${node.id}`
+                          window.open(url, "_blank")
+                        }}
+                      >
+                        <IconExternalLink className="size-3.5 shrink-0" />
+                        View in Meta Ads Manager
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Footer ── */}
+                <div className="shrink-0 border-t px-5 py-4 flex items-center justify-end gap-2 bg-background">
+                  <Button variant="ghost" size="sm" onClick={() => setEditingNode(null)} className="text-muted-foreground">
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => saveSidePanelEdit(node)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-5"
+                  >
+                    Save changes
+                  </Button>
+                </div>
+              </>
+            )
+          })()}
         </SheetContent>
       </Sheet>
 
