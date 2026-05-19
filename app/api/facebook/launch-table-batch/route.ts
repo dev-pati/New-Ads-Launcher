@@ -203,7 +203,6 @@ export async function POST(request: NextRequest) {
 
     const allAdSetIds    = [...new Set(rows.flatMap((r: any) => r.adSetIds   || []))] as string[]
     const allAdSetNames  = [...new Set(rows.flatMap((r: any) => r.adSetNames || []))] as string[]
-    const allCreativeIds = [...new Set(rows.flatMap((r: any) => r.creativeIds || []))] as string[]
     const allThumbs      = [...new Set(
       [...creativeMap.values()].map((c: any) => c.fb_thumbnail_url || c.fb_image_url || c.file_url || null).filter(Boolean)
     )] as string[]

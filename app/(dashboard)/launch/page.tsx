@@ -13293,7 +13293,7 @@ export default function LaunchPage() {
       }
       xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error during upload" }); resolve(false) }
       xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(false) }
-      xhr.open("PUT", signedUrl, true)
+      xhr.open("PUT", `/api/creatives/upload-proxy?url=${encodeURIComponent(signedUrl)}`, true)
       xhr.setRequestHeader("Content-Type", item.file.type || "application/octet-stream")
       updateUpload(item.id, { xhr })
       xhr.send(item.file)
@@ -13513,17 +13513,22 @@ export default function LaunchPage() {
       const real = await uploadOneFile(item)
       if (real) {
         anyUploaded = true
-        // Swap temp → real, but ALWAYS keep local blob URL for instant preview
-        setSelectedCreatives(prev => prev.map(c => {
-          if (c.id !== item.id) return c
-          const localBlob = c.file_url
-          return {
-            ...real,
-            file_url: localBlob || real.fb_thumbnail_url || real.fb_image_url || "",
-            fb_image_url: real.fb_image_url || c.fb_image_url,
-            fb_thumbnail_url: real.fb_thumbnail_url || c.fb_thumbnail_url,
-          }
-        }))
+        // Swap temp → real, but ALWAYS keep local blob URL for instant preview.
+        // Dedup afterward: dedup check may return an existing creative already in the list.
+        setSelectedCreatives(prev => {
+          const mapped = prev.map(c => {
+            if (c.id !== item.id) return c
+            const localBlob = c.file_url
+            return {
+              ...real,
+              file_url: localBlob || real.fb_thumbnail_url || real.fb_image_url || "",
+              fb_image_url: real.fb_image_url || c.fb_image_url,
+              fb_thumbnail_url: real.fb_thumbnail_url || c.fb_thumbnail_url,
+            }
+          })
+          const seen = new Set<string>()
+          return mapped.filter(c => { if (seen.has(c.id)) return false; seen.add(c.id); return true })
+        })
         setSelectedMediaIds(prev => {
           const s = new Set(prev)
           s.delete(item.id)
