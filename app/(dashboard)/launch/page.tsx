@@ -12196,6 +12196,11 @@ function TableMode({
                             <IconLoader2 className="size-5 text-muted-foreground animate-spin" />
                           ) : mediaSrc ? (
                             <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
+                          ) : row.creative?.status === "pending" ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <IconClock className="size-4 text-amber-500/70" />
+                              <span className="text-[9px] text-amber-600/70 leading-none text-center">Pending</span>
+                            </div>
                           ) : (
                             <div className="flex flex-col items-center gap-1">
                               <IconUpload className="size-4 text-muted-foreground/40" />

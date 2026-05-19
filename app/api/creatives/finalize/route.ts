@@ -155,9 +155,10 @@ export async function POST(request: NextRequest) {
     // Fire-and-forget: trigger cron worker immediately so video uploads within seconds,
     // not waiting for the next 2-minute pg_cron tick. No await — response returns right away.
     if (isVideo && process.env.CRON_SECRET) {
-      const appUrl = process.env.APP_URL || process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : process.env.NEXT_PUBLIC_APP_URL || ""
+      const appUrl = process.env.APP_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || process.env.NEXT_PUBLIC_APP_URL
+        || ""
       if (appUrl) {
         fetch(`${appUrl}/api/cron/upload-to-facebook`, {
           headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },

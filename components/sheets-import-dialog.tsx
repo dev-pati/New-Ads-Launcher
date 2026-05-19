@@ -43,7 +43,7 @@ interface Creative {
   fb_thumbnail_url?: string
   fb_image_hash?: string
   fb_video_id?: string
-  status?: "processing" | "ready" | "error"
+  status?: "pending" | "processing" | "ready" | "error"
 }
 
 export interface ImportedRow {
@@ -82,11 +82,11 @@ type FieldKey =
 const AD_FIELDS: Array<{ key: FieldKey; label: string }> = [
   { key: "ad_set_name",     label: "Ad Set Name" },
   { key: "campaign_name",   label: "Campaign Name" },
+  { key: "ad_account_name", label: "Ad Account Name" },  // must come before ad_name so "Ads Accounts" isn't stolen by ad_name's "ads" pattern
   { key: "ad_name",         label: "Ad Name" },
   { key: "creative_url",    label: "Creative (Drive URL)" },
   { key: "web_link",        label: "Link (Destination URL)" },  // must come before creative_file so "Link Ad Setting" isn't stolen by the "link" pattern
   { key: "creative_file",   label: "Creative (Filename)" },
-  { key: "ad_account_name", label: "Ad Account Name" },
   { key: "page_name",       label: "Page Name" },
   { key: "headline",        label: "Headline" },
   { key: "primary_text",    label: "Primary Text" },
@@ -119,8 +119,8 @@ const AUTO_DETECT_SHEETS: Record<FieldKey, string[]> = {
 // Auto-detect patterns for CSV source (user's spreadsheet format)
 // Order of AD_FIELDS matters — earlier fields "claim" columns first
 const AUTO_DETECT_CSV: Record<FieldKey, string[]> = {
-  creative_url:     ["drive.google.com"],
-  creative_file:    ["link"],
+  creative_url:     ["drive link", "drive url", "gdrive", "google drive", "drive.google.com"],
+  creative_file:    ["creative link", "link", "creative file", "filename"],
   ad_set_name:      ["1️⃣ ad set", "ad set", "adset", "nhóm quảng cáo"],
   campaign_name:    ["2️⃣ campaign", "campaign", "chiến dịch"],
   ad_account_name:  ["ads accounts", "ads account", "ad account", "account"],
