@@ -14138,7 +14138,51 @@ export default function LaunchPage() {
     })
     setTableRows(prev => {
       const hasContent = prev.some(r => r.creative || r.adName.trim() || r.primaryText.trim())
-      return hasContent ? [...prev, ...newRows] : newRows
+      if (!hasContent) return newRows
+
+      // Merge: match CSV rows to existing table rows, update in-place, append unmatched.
+      // Primary match: creative.id (exact). Fallback: ad name vs creative file_name (no extension).
+      const creativeIdToIdx = new Map<string, number>()
+      const fileNameToIdx = new Map<string, number>()
+      prev.forEach((r, i) => {
+        if (r.creative?.id) creativeIdToIdx.set(r.creative.id, i)
+        if (r.creative?.file_name) {
+          fileNameToIdx.set(r.creative.file_name.toLowerCase().replace(/\.[^/.]+$/, ""), i)
+        }
+        if (r.adName) fileNameToIdx.set(r.adName.toLowerCase().trim(), i)
+      })
+
+      const updated = [...prev]
+      const unmatched: typeof newRows = []
+      const matchedIdx = new Set<number>()
+
+      for (const nr of newRows) {
+        let idx = nr.creative?.id ? creativeIdToIdx.get(nr.creative.id) : undefined
+        if (idx === undefined && nr.adName) {
+          idx = fileNameToIdx.get(nr.adName.toLowerCase().trim())
+        }
+        if (idx !== undefined && !matchedIdx.has(idx)) {
+          matchedIdx.add(idx)
+          updated[idx] = {
+            ...updated[idx],
+            ...(nr.adName       ? { adName: nr.adName }             : {}),
+            ...(nr.primaryText  ? { primaryText: nr.primaryText }   : {}),
+            ...(nr.headline     ? { headline: nr.headline }         : {}),
+            ...(nr.description  ? { description: nr.description }   : {}),
+            ...(nr.adSetIds.length > 0 ? { adSetIds: nr.adSetIds } : {}),
+            ...(nr.pageId       ? { pageId: nr.pageId }             : {}),
+            ...(nr.cta          ? { cta: nr.cta }                   : {}),
+            ...(nr.webLink      ? { webLink: nr.webLink }           : {}),
+            ...(nr.urlTags      ? { urlTags: nr.urlTags }           : {}),
+            ...(nr.promoCode    ? { promoCode: nr.promoCode }       : {}),
+            ...(nr.launchAsActive !== undefined ? { launchAsActive: nr.launchAsActive } : {}),
+          }
+        } else {
+          unmatched.push(nr)
+        }
+      }
+
+      return [...updated, ...unmatched]
     })
     setMode("table")
   }, [selectedAdSets, allAdSets, pages, cta, webLink])
@@ -14437,7 +14481,7 @@ export default function LaunchPage() {
                     setTableRows(selectedCreatives.map((c, i) => ({
                       id: `tr_${c.id}_${i}`,
                       creative: c,
-                      adName: adNameOverrides[c.id] || c.file_name || "",
+                      adName: adNameOverrides[c.id] || (c.file_name || "").replace(/\.[^/.]+$/, ""),
                       primaryText: sharedPt,
                       headline: sharedHl,
                       description,
