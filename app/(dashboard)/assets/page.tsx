@@ -38,7 +38,7 @@ interface Creative {
   tags?: string[]
   created_at?: string
   ad_account_id?: string
-  status?: "processing" | "ready" | "error"
+  status?: "pending" | "processing" | "ready" | "error"
 }
 
 interface Board {
@@ -530,16 +530,6 @@ export default function AssetsPage() {
   // ── Upload ────────────────────────────────────────────────────────────────
 
   const ACCEPTED = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm"
-  const [uploadPauseMsg, setUploadPauseMsg] = useState<string | null>(null)
-
-  function videoUploadDelay(pct: number): number {
-    if (pct < 30) return 0
-    if (pct < 50) return 3_000
-    if (pct < 65) return 10_000
-    if (pct < 80) return 30_000
-    return 60_000
-  }
-
   const processFiles = (files: FileList | File[]) => {
     const arr = Array.from(files).filter(f => ACCEPTED.split(",").some(t => f.type === t || f.type.startsWith(t.split("/")[0] + "/")))
     const items: UploadItem[] = arr.map(f => ({ id: crypto.randomUUID(), file: f, status: "pending" }))
@@ -547,10 +537,8 @@ export default function AssetsPage() {
 
     const images = items.filter(i => !i.file.type.startsWith("video/"))
     const videos = items.filter(i => i.file.type.startsWith("video/"))
-    // Bulk mode: >5 videos → skip immediate polling to avoid rate limit
-    const isBulk = videos.length > 5
 
-    // Images: up to 3 in parallel (fast, cheap on quota)
+    // Images: up to 3 in parallel
     if (images.length > 0) {
       let idx = 0
       const worker = async () => {
@@ -562,38 +550,24 @@ export default function AssetsPage() {
       Promise.all(Array.from({ length: Math.min(3, images.length) }, worker))
     }
 
-    // Videos: serial with adaptive delay to protect rate limit
+    // Videos: up to 3 in parallel — Meta upload is now decoupled via background cron,
+    // so there is no rate-limit reason to serialize video uploads to Supabase Storage.
     if (videos.length > 0) {
-      ;(async () => {
-        let lastPct = 0
-        if (isBulk) {
-          setUploadPauseMsg(`Bulk mode: ${videos.length} video — thumbnail sẽ load sau khi upload xong`)
+      let vidIdx = 0
+      const videoWorker = async () => {
+        while (vidIdx < videos.length) {
+          const item = videos[vidIdx++]
+          await uploadFile(item)
         }
-        for (let i = 0; i < videos.length; i++) {
-          if (i > 0) {
-            const delay = videoUploadDelay(lastPct)
-            if (delay > 0) {
-              setUploadPauseMsg(`Quota ${Math.round(lastPct)}% — chờ ${Math.round(delay / 1000)}s trước video tiếp theo...`)
-              await new Promise(r => setTimeout(r, delay))
-            }
-          }
-          lastPct = await uploadFile(videos[i], isBulk)
-        }
-        setUploadPauseMsg(null)
-        // Bulk: start polling lazily after all uploads done (max 3 concurrent)
-        if (isBulk) {
-          const done = videos
-            .map(v => uploadItems.find(u => u.id === v.id) ?? v)
-          // IDs will be resolved from creatives state — polling triggered on next page visit
-        }
-      })()
+      }
+      Promise.all(Array.from({ length: Math.min(3, videos.length) }, videoWorker))
     }
   }
 
   // 500 MB matches the Supabase ad-media bucket limit
   const MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
-  const uploadFile = async (item: UploadItem, skipPolling = false): Promise<number> => {
+  const uploadFile = async (item: UploadItem): Promise<number> => {
     if (!selectedAccountId) {
       setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: "No ad account selected" } : i))
       return 0
@@ -665,8 +639,10 @@ export default function AssetsPage() {
       }
 
       setCreatives(prev => [d.creative, ...prev])
-      // Bulk mode: skip polling — thumbnails load lazily on next page visit
-      if (!skipPolling && d.creative.media_type === "video" && d.creative.fb_video_id) {
+      // Only poll for thumbnail if FB video ID is already set (images always have it;
+      // videos now start as pending with null fb_video_id — thumbnail polling happens
+      // automatically once the cron worker sets fb_video_id).
+      if (d.creative.media_type === "video" && d.creative.fb_video_id) {
         refreshVideoPreview(d.creative.id, 0, 20000)
       }
       setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "done", progress: 100 } : i))
@@ -1232,9 +1208,15 @@ export default function AssetsPage() {
                         {/* Status */}
                         <div className={cn(
                           "absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full font-semibold",
-                          isReady ? "bg-emerald-500/90 text-white" : "bg-black/40 text-white/80"
+                          isReady
+                            ? "bg-emerald-500/90 text-white"
+                            : c.status === "processing"
+                            ? "bg-blue-500/90 text-white"
+                            : c.status === "error"
+                            ? "bg-red-500/90 text-white"
+                            : "bg-black/40 text-white/80"
                         )}>
-                          {isReady ? "Ready" : "Pending"}
+                          {isReady ? "Ready" : c.status === "processing" ? "Processing" : c.status === "error" ? "Error" : "Pending"}
                         </div>
                         {/* Context menu trigger */}
                         <button
@@ -1293,9 +1275,15 @@ export default function AssetsPage() {
                             <td className="px-3 py-2.5 text-xs text-muted-foreground capitalize">{c.media_type}</td>
                             <td className="px-3 py-2.5">
                               <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium",
-                                isReady ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-muted text-muted-foreground"
+                                isReady
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                  : c.status === "processing"
+                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                                  : c.status === "error"
+                                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                               )}>
-                                {isReady ? "Ready" : "Pending"}
+                                {isReady ? "Ready" : c.status === "processing" ? "Processing" : c.status === "error" ? "Error" : "Pending Meta"}
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(c.created_at)}</td>

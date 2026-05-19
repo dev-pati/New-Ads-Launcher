@@ -54,7 +54,7 @@ import { SheetsImportDialog, type ImportedRow } from "@/components/sheets-import
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AdSet { id: string; name: string; status: string; effective_status: string; campaign_id: string; daily_budget?: string }
-interface Creative { id: string; file_name: string; file_url: string; media_type: "image" | "video"; headline?: string; primary_text?: string; cta?: string; link_url?: string; fb_image_url?: string; fb_thumbnail_url?: string; fb_image_hash?: string; fb_video_id?: string; created_at?: string; transcript?: string; tags?: string[]; status?: "processing" | "ready" | "error" }
+interface Creative { id: string; file_name: string; file_url: string; media_type: "image" | "video"; headline?: string; primary_text?: string; cta?: string; link_url?: string; fb_image_url?: string; fb_thumbnail_url?: string; fb_image_hash?: string; fb_video_id?: string; created_at?: string; transcript?: string; tags?: string[]; status?: "pending" | "processing" | "ready" | "error" }
 interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "image" | "video"; duration?: number | null; width?: number; height?: number; dimensions?: string | null; date_added?: string; status?: string | null; thumbnail_url?: string; fb_video_id?: string; fb_image_hash?: string; fb_image_url?: string }
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
@@ -4863,11 +4863,13 @@ function LoadMediaModal({
         setGdriveQueue(queue)
         setGdriveImporting(true)
 
+        // Snapshot of creatives before import (used to reconstruct full list after parallel imports)
+        const creativesBefore = [...allCreatives]
         const newImported: Creative[] = []
-        let newAllCreatives = [...allCreatives]
 
-        for (let i = 0; i < files.length; i++) {
-          const f = files[i]
+        // Parallel imports — all files download+upload simultaneously instead of one by one.
+        // Each handler uses functional state updates to avoid race conditions.
+        await Promise.allSettled(files.map(async (f, i) => {
           setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "importing" } : q))
           try {
             const res = await fetch("/api/google/import-drive", {
@@ -4884,33 +4886,34 @@ function LoadMediaModal({
             const d = await res.json()
             if (!res.ok) throw new Error(d.error || "Import failed")
             const creative: Creative = d.creative
-            
             newImported.push(creative)
-            newAllCreatives = [creative, ...newAllCreatives.filter(c => c.id !== creative.id)]
-            setAllCreatives(newAllCreatives)
+            setAllCreatives(prev => [creative, ...prev.filter(c => c.id !== creative.id)])
             setSelected(prev => new Set([...prev, creative.id]))
             setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "done" } : q))
           } catch (err: any) {
             setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "error", error: err.message } : q))
           }
-        }
+        }))
         setGdriveImporting(false)
 
-        // Auto-confirm and close the dialog if we successfully imported files,
-        // so they instantly appear in the main Ads view (mimicking competitor UX).
+        // Auto-confirm and close if files were imported successfully.
         if (newImported.length > 0) {
+          // Reconstruct full creatives list from snapshot + newly imported
+          const newAllCreatives = [
+            ...newImported,
+            ...creativesBefore.filter(c => !newImported.find(n => n.id === c.id)),
+          ]
           setTimeout(() => {
             setSelected(prev => {
               const finalSelectedIds = Array.from(prev)
               const selectedObjects = newAllCreatives.filter(c => prev.has(c.id))
-              // Call onConfirm in the next microtask to avoid side-effects in setState
               Promise.resolve().then(() => {
                 onConfirm(finalSelectedIds, selectedObjects)
                 onClose()
               })
               return prev
             })
-          }, 800) // Brief delay so user can see the "Done" state before it closes
+          }, 800)
         }
       })
       .build()
@@ -13660,6 +13663,11 @@ export default function LaunchPage() {
   const validate = () => {
     if (selectedAdSets.length === 0) { setError("Chưa chọn Ad Set — vui lòng chọn ít nhất 1 ad set"); return false }
     if (selectedMediaIds.size === 0) { setError("Chưa chọn creative — vui lòng chọn ít nhất 1 ảnh/video"); return false }
+    const pendingVideos = selectedCreatives.filter(c => c.media_type === "video" && c.status === "pending")
+    if (pendingVideos.length > 0) {
+      setError(`${pendingVideos.length} video đang chờ upload lên Meta (~2 phút) — vui lòng đợi rồi thử lại`)
+      return false
+    }
     if (!webLink.trim()) { setError("Chưa nhập URL đích — bắt buộc khi dùng CTA có link"); return false }
     if (!/^https?:\/\//.test(webLink.trim())) { setError("URL phải bắt đầu bằng http:// hoặc https://"); return false }
     if (!selectedPageId) { setError("Chưa chọn Facebook Page"); return false }
@@ -13966,7 +13974,8 @@ export default function LaunchPage() {
         rowErrors.push(`"${label}": URL phải bắt đầu bằng http:// hoặc https://`)
       }
       if (row.creative && !row.creative.fb_image_hash && !row.creative.fb_video_id) {
-        rowErrors.push(`"${label}": Creative chưa upload lên Meta (hãy đợi upload hoàn tất)`)
+        const isPending = row.creative.status === "pending"
+        rowErrors.push(`"${label}": ${isPending ? "Video đang chờ upload lên Meta (~2 phút) — vui lòng đợi rồi thử lại" : "Creative chưa upload lên Meta (hãy đợi upload hoàn tất)"}`)
       }
     }
     if (rowErrors.length > 0) {

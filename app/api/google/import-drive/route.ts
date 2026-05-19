@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
+import { uploadImageToMeta } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { mapCreativeForClient } from "@/lib/creative-media"
 
 // POST /api/google/import-drive
-// Downloads a file from Google Drive using the user's OAuth token,
-// uploads it to Meta, and saves a creative record.
+// Downloads a file from Google Drive using the user's OAuth token.
+// Images: sync upload to Meta + Supabase Storage → status=ready immediately.
+// Videos: upload to Supabase Storage only → status=pending, background cron handles Meta upload.
+export const runtime = "nodejs"
+export const maxDuration = 120
+export const dynamic = "force-dynamic"
+
+function sanitizeFileName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-")
+}
+
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
@@ -16,98 +26,168 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "accessToken, fileId, adAccountId required" }, { status: 400 })
     }
 
-    // Download file from Google Drive
-    // For large files, Google Drive might return a virus scan warning (HTML). 
-    // We try to handle it by checking the content type and looking for confirmation tokens.
+    const isVideo = (mimeType as string)?.startsWith("video/")
+    const isImage = (mimeType as string)?.startsWith("image/")
+    if (!isVideo && !isImage) {
+      return NextResponse.json({ error: `Unsupported file type: ${mimeType}` }, { status: 400 })
+    }
+
+    // ── Download from Google Drive ────────────────────────────────────────────
     let driveRes = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
 
-    // Check if we got an HTML response instead of binary (common for large files / warnings)
+    // Large files may return a virus-scan confirmation HTML page
     const contentType = driveRes.headers.get("content-type") || ""
     if (contentType.includes("text/html")) {
       const html = await driveRes.text()
-      // Look for confirmation token in the HTML (e.g. name="confirm" value="xxxx")
       const match = html.match(/name="confirm" value="([^"]+)"/)
-      if (match) {
-        const confirmToken = match[1]
-        console.log(`[import-drive] Large file detected, retrying with confirm token: ${confirmToken}`)
-        driveRes = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&confirm=${confirmToken}`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
-        )
-      } else {
-        console.error("[import-drive] Received HTML instead of media and no confirm token found.")
-        return NextResponse.json({ error: "Google Drive returned an HTML page instead of the video file. This usually happens with very large files or restricted permissions." }, { status: 400 })
+      if (!match) {
+        return NextResponse.json({
+          error: "Google Drive returned an HTML page instead of the file. Check file permissions or try again.",
+        }, { status: 400 })
       }
+      driveRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&confirm=${match[1]}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
     }
 
     if (!driveRes.ok) {
-      const err = await driveRes.text()
-      console.error("[import-drive] Drive download failed:", driveRes.status, err)
-      return NextResponse.json({ error: `Drive download failed: ${err}` }, { status: 400 })
+      const errText = await driveRes.text()
+      return NextResponse.json({ error: `Drive download failed (${driveRes.status}): ${errText}` }, { status: 400 })
     }
+
     const fileBuffer = await driveRes.arrayBuffer()
-    
-    // Final sanity check: if buffer is very small and contains HTML-like tags, it's likely a failure
+
+    // Sanity check: detect accidental HTML download (e.g. access-denied page)
     if (fileBuffer.byteLength < 5000) {
-      const head = new TextDecoder().decode(fileBuffer.slice(0, 100))
-      if (head.toLowerCase().includes("<!doctype html") || head.toLowerCase().includes("<html")) {
-        return NextResponse.json({ error: "Downloaded content appears to be HTML, not a video file." }, { status: 400 })
+      const head = new TextDecoder().decode(fileBuffer.slice(0, 100)).toLowerCase()
+      if (head.includes("<!doctype html") || head.includes("<html")) {
+        return NextResponse.json({ error: "Downloaded content appears to be HTML, not a media file." }, { status: 400 })
       }
     }
 
-    // Get Facebook connection
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
+    const fileSize = fileBuffer.byteLength
+    const admin = createAdminClient()
+    const normAccountId = (adAccountId as string).startsWith("act_") ? adAccountId : `act_${adAccountId}`
+    const storagePath = `creatives/${ctx.orgId}/${crypto.randomUUID()}-${sanitizeFileName(fileName)}`
 
-    const isVideo = mimeType?.startsWith("video/")
-    let fbImageHash: string | null = null
-    let fbImageUrl: string | null = null
-    let fbThumbnailUrl: string | null = null
-    let fbVideoId: string | null = null
+    // ── Images: sync Meta upload (small, fast) ───────────────────────────────
+    if (isImage) {
+      const connection = await getFacebookConnection(ctx.orgId)
+      if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
-    if (isVideo) {
-      const r = await uploadVideoToMeta(adAccountId, connection.access_token, fileBuffer, fileName)
-      fbVideoId = r.videoId
-    } else {
-      const r = await uploadImageToMeta(adAccountId, connection.access_token, fileBuffer, fileName)
-      fbImageHash = r.hash
-      fbImageUrl = r.url
-      fbThumbnailUrl = r.url_128 || r.url
+      const r = await uploadImageToMeta(normAccountId, connection.access_token, fileBuffer, fileName)
+
+      const { error: storageError } = await admin.storage
+        .from("ad-media")
+        .upload(storagePath, fileBuffer, { contentType: mimeType, upsert: false })
+      if (storageError) {
+        console.error("[import-drive] Storage upload error (image):", storageError)
+      }
+      const { data: { publicUrl } } = admin.storage.from("ad-media").getPublicUrl(storagePath)
+
+      const { data: creative, error: insertError } = await admin
+        .from("creatives")
+        .insert({
+          org_id: ctx.orgId,
+          user_id: ctx.user.id,
+          ad_account_id: normAccountId,
+          file_name: fileName,
+          file_url: publicUrl,
+          storage_path: storagePath,
+          media_type: "image",
+          file_size: fileSize,
+          fb_image_hash: r.hash,
+          fb_image_url: r.url,
+          fb_thumbnail_url: r.url_128 || r.url,
+          fb_video_id: null,
+          status: "ready",
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        console.error("[import-drive] DB insert error (image):", insertError)
+        return NextResponse.json({ error: `Database error: ${insertError.message}` }, { status: 500 })
+      }
+      return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
     }
 
-    // Save creative to Supabase
-    const supabase = createAdminClient()
-    const { data: creative, error: insertError } = await supabase
+    // ── Videos: dedup check before uploading ─────────────────────────────────
+    const { data: existingVideo } = await admin
+      .from("creatives")
+      .select("id, file_name, file_url, media_type, fb_image_url, fb_thumbnail_url, fb_image_hash, fb_video_id, status, ad_account_id, created_at")
+      .eq("org_id", ctx.orgId)
+      .eq("file_name", fileName)
+      .eq("file_size", fileSize)
+      .eq("media_type", "video")
+      .neq("status", "error")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existingVideo) {
+      return NextResponse.json({ creative: mapCreativeForClient(existingVideo) })
+    }
+
+    // ── Videos: upload to Supabase Storage, defer Meta to cron ───────────────
+    const { error: storageError } = await admin.storage
+      .from("ad-media")
+      .upload(storagePath, fileBuffer, { contentType: mimeType, upsert: false })
+
+    if (storageError) {
+      console.error("[import-drive] Storage upload error (video):", storageError)
+      return NextResponse.json({ error: `Storage upload failed: ${storageError.message}` }, { status: 500 })
+    }
+
+    const { data: { publicUrl } } = admin.storage.from("ad-media").getPublicUrl(storagePath)
+
+    const { data: creative, error: insertError } = await admin
       .from("creatives")
       .insert({
         org_id: ctx.orgId,
         user_id: ctx.user.id,
-        ad_account_id: adAccountId,
+        ad_account_id: normAccountId,
         file_name: fileName,
-        file_url: (fbThumbnailUrl || fbImageUrl || "") + "#gdrive",
-        media_type: isVideo ? "video" : "image",
-        file_size: fileBuffer.byteLength,
-        fb_image_hash: fbImageHash,
-        fb_image_url: fbImageUrl,
-        fb_thumbnail_url: fbThumbnailUrl,
-        fb_video_id: fbVideoId,
+        file_url: publicUrl,
+        storage_path: storagePath,
+        media_type: "video",
+        file_size: fileSize,
+        fb_image_hash: null,
+        fb_image_url: null,
+        fb_thumbnail_url: null,
+        fb_video_id: null,
+        status: "pending",
       })
       .select()
       .single()
 
     if (insertError) {
-      console.error("[import-drive] Supabase Insert Error:", insertError)
+      console.error("[import-drive] DB insert error (video):", insertError)
       return NextResponse.json({ error: `Database error: ${insertError.message}` }, { status: 500 })
     }
-    
-    return NextResponse.json({ creative }, { status: 201 })
+
+    // Fire-and-forget: trigger cron immediately so video uploads to Meta within seconds
+    if (process.env.CRON_SECRET) {
+      const appUrl = process.env.APP_URL
+        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+        || process.env.NEXT_PUBLIC_APP_URL
+        || ""
+      if (appUrl) {
+        fetch(`${appUrl}/api/cron/upload-to-facebook`, {
+          headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
+        }).catch(() => {})
+      }
+    }
+
+    return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
   } catch (err: any) {
-    console.error("[import-drive] Critical Error:", err)
-    // If the error is a SyntaxError from JSON.parse somewhere, include the full stack
-    const errorMessage = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
-    return NextResponse.json({ error: errorMessage, details: err?.stack }, { status: 500 })
+    console.error("[import-drive] Error:", err)
+    return NextResponse.json({
+      error: err instanceof Error ? err.message : String(err),
+    }, { status: 500 })
   }
 }
