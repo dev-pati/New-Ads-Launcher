@@ -614,9 +614,16 @@ export default function AdsManagerPage() {
       const d = await r.json()
       if (d.deleted > 0) {
         const deletedSet = new Set(d.results.filter((x: any) => x.success).map((x: any) => x.id))
-        if (tab === "campaigns") setCampaigns(prev => prev.filter(c => !deletedSet.has(c.id)))
-        else if (tab === "adsets") setAdSets(prev => prev.filter(a => !deletedSet.has(a.id)))
-        else setAds(prev => prev.filter(a => !deletedSet.has(a.id)))
+        if (tab === "campaigns") {
+          setCampaigns(prev => prev.filter(c => !deletedSet.has(c.id)))
+          setAdSets(prev => prev.filter(a => !deletedSet.has(a.campaign_id)))
+          setAds(prev => prev.filter(a => !deletedSet.has(a.campaign_id)))
+        } else if (tab === "adsets") {
+          setAdSets(prev => prev.filter(a => !deletedSet.has(a.id)))
+          setAds(prev => prev.filter(a => !deletedSet.has(a.adset_id)))
+        } else {
+          setAds(prev => prev.filter(a => !deletedSet.has(a.id)))
+        }
         setSelectedIds(new Set())
       }
       setDeleteConfirmOpen(false)

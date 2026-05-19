@@ -14012,69 +14012,68 @@ export default function LaunchPage() {
     const allCreatedAds: CreatedAd[] = []
     let lastBatchId: string | null = null
 
-    for (const row of validRows) {
+    const batchRows = validRows.map(row => {
       const rowLink = (row.webLink || webLink).trim()
       const rowUtm = (row.urlTags || utmParams).trim()
-      const rowWebLink = rowUtm
-        ? `${rowLink}${rowLink.includes("?") ? "&" : "?"}${rowUtm}`
-        : rowLink
-
-      try {
-        const res = await fetch("/api/facebook/launch-direct", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            adAccountId: selectedAccountId,
-            adAccountName: selectedAccount?.name || selectedAccountId,
-            adSetIds: row.adSetIds,
-            adSetNames: row.adSetIds.map(id => allAdSets.find(a => a.id === id)?.name || id),
-            creativeIds: [row.creative!.id],
-            adName: row.adName.trim() || undefined,
-            pageId: row.pageId || selectedPageId,
-            instagramAccountId: (() => { const ig = row.igId || selectedIgPageId; return ig && !ig.startsWith("fb_") ? ig : undefined })(),
-            headline: (row.headline || globalHeadline).trim(),
-            headlineVariations: (row.headlineVariations || []).filter(v => v.trim()),
-            primaryText: (row.primaryText || globalPrimaryText).trim(),
-            primaryTextVariations: (row.primaryTextVariations || []).filter(v => v.trim()),
-            description: (row.description || "").trim(),
-            descriptionVariations: (row.descriptionVariations || []).filter(v => v.trim()),
-            cta: row.cta || cta,
-            webLink: rowWebLink,
-            createPaused: row.launchAsActive !== undefined ? !row.launchAsActive : !launchAsActive,
-            // Per-row Partnership Ads
-            partnerPageId: row.partnership?.enabled && row.partnership.partnerPageId ? row.partnership.partnerPageId : undefined,
-            partnershipDisplayMode: row.partnership?.enabled && row.partnership.partnerPageId ? row.partnership.displayMode : undefined,
-            // Per-row Multi-Language
-            multilanguage: row.multilanguage?.enabled && row.multilanguage.translations.length > 0
-              ? { defaultLanguage: row.multilanguage.defaultLanguage, translations: row.multilanguage.translations }
-              : undefined,
-            // Per-row Catalog Ads
-            catalogAds: row.catalog?.enabled && row.catalog.catalogId
-              ? { catalogId: row.catalog.catalogId, productSetId: row.catalog.productSetId || undefined, formatMode: row.catalog.formatMode, format: row.catalog.format, frameImageUrl: row.catalog.frameImageUrl || undefined, dynamicMedia: row.catalog.dynamicMedia }
-              : undefined,
-            sitelinks: row.sitelinks && row.sitelinks.length > 0 ? row.sitelinks : undefined,
-            // Per-row schedule overrides global schedule
-            startTime: row.schedule?.start || scheduledTime,
-            endTime: row.schedule?.end || scheduleEndTime,
-            enhancements: savedEnhancements,
-            launchSettings: savedLaunchSettings,
-          }),
-        })
-        const data = await res.json()
-        if (res.ok) {
-          totalCreated += data.created?.length ?? 0
-          totalFailed += data.errors?.length ?? 0
-          allErrors.push(...(data.errors || []))
-          allCreatedAds.push(...(data.created || []))
-          if (data.batchId) lastBatchId = data.batchId
-        } else {
-          totalFailed += row.adSetIds.length
-          allErrors.push({ adSetId: row.adSetIds[0] || "", fileName: row.creative?.file_name || "", error: data.error || "Launch failed" })
-        }
-      } catch (err: any) {
-        totalFailed += row.adSetIds.length
-        allErrors.push({ adSetId: row.adSetIds[0] || "", fileName: row.creative?.file_name || "", error: err.message || "Network error" })
+      const rowWebLink = rowUtm ? `${rowLink}${rowLink.includes("?") ? "&" : "?"}${rowUtm}` : rowLink
+      return {
+        adSetIds: row.adSetIds,
+        adSetNames: row.adSetIds.map(id => allAdSets.find(a => a.id === id)?.name || id),
+        creativeIds: [row.creative!.id],
+        adName: row.adName.trim() || undefined,
+        pageId: row.pageId || selectedPageId,
+        instagramAccountId: (() => { const ig = row.igId || selectedIgPageId; return ig && !ig.startsWith("fb_") ? ig : undefined })(),
+        headline: (row.headline || globalHeadline).trim(),
+        headlineVariations: (row.headlineVariations || []).filter(v => v.trim()),
+        primaryText: (row.primaryText || globalPrimaryText).trim(),
+        primaryTextVariations: (row.primaryTextVariations || []).filter(v => v.trim()),
+        description: (row.description || "").trim(),
+        descriptionVariations: (row.descriptionVariations || []).filter(v => v.trim()),
+        cta: row.cta || cta,
+        webLink: rowWebLink,
+        createPaused: row.launchAsActive !== undefined ? !row.launchAsActive : !launchAsActive,
+        partnerPageId: row.partnership?.enabled && row.partnership.partnerPageId ? row.partnership.partnerPageId : undefined,
+        partnershipDisplayMode: row.partnership?.enabled && row.partnership.partnerPageId ? row.partnership.displayMode : undefined,
+        multilanguage: row.multilanguage?.enabled && row.multilanguage.translations.length > 0
+          ? { defaultLanguage: row.multilanguage.defaultLanguage, translations: row.multilanguage.translations }
+          : undefined,
+        catalogAds: row.catalog?.enabled && row.catalog.catalogId
+          ? { catalogId: row.catalog.catalogId, productSetId: row.catalog.productSetId || undefined, formatMode: row.catalog.formatMode, format: row.catalog.format, frameImageUrl: row.catalog.frameImageUrl || undefined, dynamicMedia: row.catalog.dynamicMedia }
+          : undefined,
+        sitelinks: row.sitelinks && row.sitelinks.length > 0 ? row.sitelinks : undefined,
+        startTime: row.schedule?.start || scheduledTime,
+        endTime: row.schedule?.end || scheduleEndTime,
+        enhancements: savedEnhancements,
+        launchSettings: savedLaunchSettings,
       }
+    })
+
+    try {
+      const res = await fetch("/api/facebook/launch-table-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rows: batchRows,
+          adAccountId: selectedAccountId,
+          adAccountName: selectedAccount?.name || selectedAccountId,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        for (const rowResult of (data.rows || [])) {
+          totalCreated += rowResult.created?.length ?? 0
+          totalFailed  += rowResult.errors?.length ?? 0
+          allErrors.push(...(rowResult.errors || []))
+          allCreatedAds.push(...(rowResult.created || []))
+          if (rowResult.batchId) lastBatchId = rowResult.batchId
+        }
+      } else {
+        totalFailed += validRows.reduce((s, r) => s + r.adSetIds.length, 0)
+        allErrors.push({ adSetId: "", fileName: "", error: data.error || "Launch failed" })
+      }
+    } catch (err: any) {
+      totalFailed += validRows.reduce((s, r) => s + r.adSetIds.length, 0)
+      allErrors.push({ adSetId: "", fileName: "", error: err.message || "Network error" })
     }
 
     const result: LaunchResult = {
