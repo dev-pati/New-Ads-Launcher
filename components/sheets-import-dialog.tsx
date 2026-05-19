@@ -790,41 +790,82 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                   <div className="bg-muted/50" />
                   <div className="bg-muted/50 px-4 py-2.5 text-xs font-semibold text-muted-foreground">Column</div>
                 </div>
-                {AD_FIELDS.map(({ key, label }, idx) => (
-                  <div
-                    key={key}
-                    className={cn(
-                      "grid grid-cols-[1fr_16px_1fr] items-center gap-0",
-                      idx % 2 === 0 ? "bg-background" : "bg-muted/20"
-                    )}
-                  >
-                    <div className="px-4 py-3 text-sm font-medium">{label}</div>
-                    <div className="flex items-center justify-center">
-                      <IconChevronRight className="size-3 text-muted-foreground" />
-                    </div>
-                    <div className="px-3 py-2">
-                      <Select
-                        value={mapping[key] !== null ? String(mapping[key]) : "__skip__"}
-                        onValueChange={v => setMapping(prev => ({
-                          ...prev,
-                          [key]: v === "__skip__" ? null : Number(v),
-                        }))}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="— skip —" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__skip__">— skip —</SelectItem>
-                          {headers.map((h, i) => (
-                            <SelectItem key={i} value={String(i)}>
-                              {h || `Column ${i + 1}`}
+                {AD_FIELDS.map(({ key, label }, idx) => {
+                  const mappedIdx = mapping[key]
+                  const mappedHeader = mappedIdx !== null ? (headers[mappedIdx] || `Col ${mappedIdx + 1}`) : null
+                  // Strip leading emoji/special chars for display
+                  const cleanHeader = (h: string) => h.replace(/^[\p{Emoji}\s!*#]+/u, "").trim() || h.trim()
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        "grid grid-cols-[1fr_20px_1fr] items-center gap-0",
+                        idx % 2 === 0 ? "bg-background" : "bg-muted/20"
+                      )}
+                    >
+                      {/* Left: field label */}
+                      <div className="px-4 py-2.5 flex items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        {mappedHeader && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium leading-none shrink-0">mapped</span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-center">
+                        <IconChevronRight className="size-3 text-muted-foreground/40" />
+                      </div>
+                      {/* Right: column selector */}
+                      <div className="px-3 py-2">
+                        <Select
+                          value={mappedIdx !== null ? String(mappedIdx) : "__skip__"}
+                          onValueChange={v => setMapping(prev => ({
+                            ...prev,
+                            [key]: v === "__skip__" ? null : Number(v),
+                          }))}
+                        >
+                          <SelectTrigger className={cn(
+                            "h-8 text-xs gap-2",
+                            mappedIdx === null ? "text-muted-foreground" : "text-foreground"
+                          )}>
+                            <SelectValue>
+                              {mappedIdx === null ? (
+                                <span className="text-muted-foreground/60">— skip —</span>
+                              ) : (
+                                <span className="flex items-center gap-1.5 min-w-0">
+                                  <span className="shrink-0 size-4 rounded bg-muted text-[10px] font-bold flex items-center justify-center text-muted-foreground">
+                                    {mappedIdx + 1}
+                                  </span>
+                                  <span className="truncate">{cleanHeader(headers[mappedIdx] || `Col ${mappedIdx + 1}`)}</span>
+                                </span>
+                              )}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent className="max-h-64">
+                            <SelectItem value="__skip__">
+                              <span className="text-muted-foreground/60 text-xs">— skip —</span>
                             </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                            {headers.map((h, i) => (
+                              <SelectItem key={i} value={String(i)}>
+                                <span className="flex items-center gap-2">
+                                  <span className="shrink-0 size-4 rounded bg-muted text-[10px] font-bold flex items-center justify-center text-muted-foreground leading-none">
+                                    {i + 1}
+                                  </span>
+                                  <span className="truncate max-w-[180px]">
+                                    {cleanHeader(h) || `Column ${i + 1}`}
+                                  </span>
+                                  {cleanHeader(h) !== h.trim() && (
+                                    <span className="text-[10px] text-muted-foreground/50 shrink-0 hidden sm:inline truncate max-w-[80px]">
+                                      {h.trim()}
+                                    </span>
+                                  )}
+                                </span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               {mapping.primary_text === null && mapping.headline === null && (

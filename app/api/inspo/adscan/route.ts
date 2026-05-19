@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext } from "@/lib/auth"
+
+// App Access Token = app_id|app_secret — never expires, no user ToS required
+function getAppAccessToken() {
+  const appId = process.env.FACEBOOK_APP_ID
+  const appSecret = process.env.FACEBOOK_APP_SECRET
+  if (!appId || !appSecret) return null
+  return `${appId}|${appSecret}`
+}
 
 const AD_LIBRARY_URL = "https://graph.facebook.com/v25.0/ads_archive"
 const FIELDS = [
@@ -53,27 +61,18 @@ export async function GET(request: NextRequest) {
 
     if (!q) return NextResponse.json({ ads: [] })
 
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection?.access_token) {
+    const token = getAppAccessToken()
+    if (!token) {
       return NextResponse.json(
-        { error: "No Facebook connection. Please connect your Meta account in Connect page." },
-        { status: 400 }
+        { error: "Facebook App credentials not configured." },
+        { status: 500 }
       )
     }
 
-    const data = await queryAdLibrary(connection.access_token, q, country, status, limit)
+    const data = await queryAdLibrary(token, q, country, status, limit)
     if (data.error) {
       console.error("Meta Ad Library error:", data.error)
-      const isToS = data.error?.error_subcode === 2332002
-      return NextResponse.json(
-        {
-          error: isToS
-            ? "Ad Library API chưa được kích hoạt. Vui lòng vào facebook.com/ads/library/api để chấp nhận điều khoản, sau đó reconnect tài khoản Meta."
-            : data.error.message,
-          error_subcode: data.error?.error_subcode,
-        },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: data.error.message, error_subcode: data.error?.error_subcode }, { status: 400 })
     }
 
     return NextResponse.json({ ads: data.data || [], paging: data.paging })
