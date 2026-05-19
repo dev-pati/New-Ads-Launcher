@@ -121,6 +121,9 @@ export default function AssetsPage() {
   const [uploadItems, setUploadItems]   = useState<UploadItem[]>([])
   const [isDragging, setIsDragging]     = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const pollingVideosRef = useRef<Set<string>>(new Set())
+  const pollingQueueRef  = useRef<string[]>([])
+  const MAX_CONCURRENT_POLLS = 3
 
   // Dialog state
   const [createBoardOpen, setCreateBoardOpen]     = useState(false)
@@ -158,11 +161,29 @@ export default function AssetsPage() {
     setBoardCreatives((prev) => patch(prev))
   }, [])
 
-  const refreshVideoPreview = useCallback(async (creativeId: string, retries = 0) => {
-    const MAX_RETRIES = 10
-    if (retries >= MAX_RETRIES) return
+  const refreshVideoPreview = useCallback(async (creativeId: string, retries = 0, initialDelayMs = 0) => {
+    const MAX_RETRIES = 6
+    if (retries === 0) {
+      if (pollingVideosRef.current.has(creativeId)) return
+      // Queue if already at max concurrent polls
+      if (pollingVideosRef.current.size >= MAX_CONCURRENT_POLLS) {
+        if (!pollingQueueRef.current.includes(creativeId)) {
+          pollingQueueRef.current.push(creativeId)
+        }
+        return
+      }
+      pollingVideosRef.current.add(creativeId)
+      if (initialDelayMs > 0) await new Promise(r => setTimeout(r, initialDelayMs))
+    }
+    if (retries >= MAX_RETRIES) {
+      pollingVideosRef.current.delete(creativeId)
+      // Start next queued video
+      const next = pollingQueueRef.current.shift()
+      if (next) setTimeout(() => refreshVideoPreview(next, 0, 5000), 1000)
+      return
+    }
 
-    // Defer when tab is hidden — resume immediately on next visibilitychange
+    // Defer when tab is hidden — resume on next visibilitychange
     if (document.hidden) {
       const resume = () => {
         document.removeEventListener("visibilitychange", resume)
@@ -175,7 +196,10 @@ export default function AssetsPage() {
     try {
       const response = await fetch(`/api/creatives/${creativeId}/thumbnail`, { method: "POST" })
       const data = await response.json()
-      if (data.error || !data.creative) return
+      if (data.error || !data.creative) {
+        pollingVideosRef.current.delete(creativeId)
+        return
+      }
       applyCreativePreviewUpdate(creativeId, {
         file_url: data.creative.file_url,
         fb_image_url: data.creative.fb_image_url,
@@ -184,15 +208,27 @@ export default function AssetsPage() {
       })
 
       if (data.creative.status === "processing") {
-        setTimeout(() => refreshVideoPreview(creativeId, retries + 1), 8000)
+        // Progressive backoff: 20s, 25s, 30s, 30s, 30s, 30s
+        const delays = [20000, 25000, 30000, 30000, 30000, 30000]
+        const delay = delays[Math.min(retries, delays.length - 1)]
+        setTimeout(() => refreshVideoPreview(creativeId, retries + 1), delay)
+      } else {
+        pollingVideosRef.current.delete(creativeId)
+        const next = pollingQueueRef.current.shift()
+        if (next) setTimeout(() => refreshVideoPreview(next, 0, 5000), 1000)
       }
-    } catch {}
+    } catch {
+      pollingVideosRef.current.delete(creativeId)
+      const next = pollingQueueRef.current.shift()
+      if (next) setTimeout(() => refreshVideoPreview(next, 0, 5000), 1000)
+    }
   }, [applyCreativePreviewUpdate])
 
   const refreshVideoPreviews = useCallback(async (items: Creative[]) => {
     const toRefresh = items.filter((creative) =>
       creative.media_type === "video"
       && creative.fb_video_id
+      && !pollingVideosRef.current.has(creative.id)  // skip already-polling
       && (
         creative.status === "processing"
         || !creative.fb_thumbnail_url
@@ -204,14 +240,11 @@ export default function AssetsPage() {
       )
     )
 
-    // Only process the first 10 items automatically to prevent rate limiting
-    // The rest will be processed if the user re-loads or interacts.
-    const limited = toRefresh.slice(0, 10)
-    
+    // Max 5 concurrent chains; stagger start by 2s to spread load
+    const limited = toRefresh.slice(0, 5)
     for (const creative of limited) {
-      await refreshVideoPreview(creative.id)
-      // Add a small 200ms delay between requests to be gentle on the API
-      await new Promise(r => setTimeout(r, 200))
+      refreshVideoPreview(creative.id)
+      await new Promise(r => setTimeout(r, 2000))
     }
   }, [refreshVideoPreview])
 
@@ -497,21 +530,73 @@ export default function AssetsPage() {
   // ── Upload ────────────────────────────────────────────────────────────────
 
   const ACCEPTED = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm"
+  const [uploadPauseMsg, setUploadPauseMsg] = useState<string | null>(null)
+
+  function videoUploadDelay(pct: number): number {
+    if (pct < 30) return 0
+    if (pct < 50) return 3_000
+    if (pct < 65) return 10_000
+    if (pct < 80) return 30_000
+    return 60_000
+  }
 
   const processFiles = (files: FileList | File[]) => {
     const arr = Array.from(files).filter(f => ACCEPTED.split(",").some(t => f.type === t || f.type.startsWith(t.split("/")[0] + "/")))
     const items: UploadItem[] = arr.map(f => ({ id: crypto.randomUUID(), file: f, status: "pending" }))
     setUploadItems(prev => [...prev, ...items])
-    items.forEach(item => uploadFile(item))
+
+    const images = items.filter(i => !i.file.type.startsWith("video/"))
+    const videos = items.filter(i => i.file.type.startsWith("video/"))
+    // Bulk mode: >5 videos → skip immediate polling to avoid rate limit
+    const isBulk = videos.length > 5
+
+    // Images: up to 3 in parallel (fast, cheap on quota)
+    if (images.length > 0) {
+      let idx = 0
+      const worker = async () => {
+        while (idx < images.length) {
+          const item = images[idx++]
+          await uploadFile(item)
+        }
+      }
+      Promise.all(Array.from({ length: Math.min(3, images.length) }, worker))
+    }
+
+    // Videos: serial with adaptive delay to protect rate limit
+    if (videos.length > 0) {
+      ;(async () => {
+        let lastPct = 0
+        if (isBulk) {
+          setUploadPauseMsg(`Bulk mode: ${videos.length} video — thumbnail sẽ load sau khi upload xong`)
+        }
+        for (let i = 0; i < videos.length; i++) {
+          if (i > 0) {
+            const delay = videoUploadDelay(lastPct)
+            if (delay > 0) {
+              setUploadPauseMsg(`Quota ${Math.round(lastPct)}% — chờ ${Math.round(delay / 1000)}s trước video tiếp theo...`)
+              await new Promise(r => setTimeout(r, delay))
+            }
+          }
+          lastPct = await uploadFile(videos[i], isBulk)
+        }
+        setUploadPauseMsg(null)
+        // Bulk: start polling lazily after all uploads done (max 3 concurrent)
+        if (isBulk) {
+          const done = videos
+            .map(v => uploadItems.find(u => u.id === v.id) ?? v)
+          // IDs will be resolved from creatives state — polling triggered on next page visit
+        }
+      })()
+    }
   }
 
   // 500 MB matches the Supabase ad-media bucket limit
   const MAX_UPLOAD_BYTES = 500 * 1024 * 1024
 
-  const uploadFile = async (item: UploadItem) => {
+  const uploadFile = async (item: UploadItem, skipPolling = false): Promise<number> => {
     if (!selectedAccountId) {
       setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: "No ad account selected" } : i))
-      return
+      return 0
     }
 
     if (item.file.size > MAX_UPLOAD_BYTES) {
@@ -519,7 +604,7 @@ export default function AssetsPage() {
         ...i, status: "error",
         error: `File quá lớn (${(item.file.size / 1024 / 1024).toFixed(0)} MB). Tối đa 500 MB.`,
       } : i))
-      return
+      return 0
     }
 
     setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "uploading", progress: 0 } : i))
@@ -580,11 +665,16 @@ export default function AssetsPage() {
       }
 
       setCreatives(prev => [d.creative, ...prev])
-      refreshVideoPreviews([d.creative])
+      // Bulk mode: skip polling — thumbnails load lazily on next page visit
+      if (!skipPolling && d.creative.media_type === "video" && d.creative.fb_video_id) {
+        refreshVideoPreview(d.creative.id, 0, 20000)
+      }
       setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "done", progress: 100 } : i))
+      return (d.rateLimitPct as number) || 0
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Upload failed"
       setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: message } : i))
+      return 0
     }
   }
 

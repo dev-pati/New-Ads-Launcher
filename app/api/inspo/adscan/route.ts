@@ -53,18 +53,6 @@ export async function GET(request: NextRequest) {
 
     if (!q) return NextResponse.json({ ads: [] })
 
-    // App token first (stable, no user reconnect needed)
-    const appId     = process.env.FACEBOOK_APP_ID
-    const appSecret = process.env.FACEBOOK_APP_SECRET
-    const appToken  = appId && appSecret ? `${appId}|${appSecret}` : null
-
-    if (appToken) {
-      const data = await queryAdLibrary(appToken, q, country, status, limit)
-      if (!data.error) return NextResponse.json({ ads: data.data || [], paging: data.paging })
-      console.warn("App token Ad Library failed:", data.error?.message)
-    }
-
-    // Fallback to user token
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection?.access_token) {
       return NextResponse.json(
@@ -76,7 +64,16 @@ export async function GET(request: NextRequest) {
     const data = await queryAdLibrary(connection.access_token, q, country, status, limit)
     if (data.error) {
       console.error("Meta Ad Library error:", data.error)
-      return NextResponse.json({ error: data.error.message }, { status: 400 })
+      const isToS = data.error?.error_subcode === 2332002
+      return NextResponse.json(
+        {
+          error: isToS
+            ? "Ad Library API chưa được kích hoạt. Vui lòng vào facebook.com/ads/library/api để chấp nhận điều khoản, sau đó reconnect tài khoản Meta."
+            : data.error.message,
+          error_subcode: data.error?.error_subcode,
+        },
+        { status: 400 }
+      )
     }
 
     return NextResponse.json({ ads: data.data || [], paging: data.paging })

@@ -467,6 +467,7 @@ export default function InspoPage() {
   const [adStatus, setAdStatus] = useState("ACTIVE")
   const [searching, setSearching] = useState(false)
   const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchErrSubcode, setSearchErrSubcode] = useState<number | null>(null)
   const [results, setResults] = useState<AdResult[]>([])
   const [hasSearched, setHasSearched] = useState(false)
 
@@ -608,13 +609,19 @@ export default function InspoPage() {
     if (!query.trim()) return
     setSearching(true)
     setSearchError(null)
+    setSearchErrSubcode(null)
     setHasSearched(true)
     try {
       const params = new URLSearchParams({ q: query.trim(), country, status: adStatus })
       const res = await fetch(`/api/inspo/adscan?${params}`)
       const data = await res.json()
-      if (data.error) { setSearchError(data.error); setResults([]) }
-      else { setResults(data.ads || []) }
+      if (data.error) {
+        setSearchError(data.error)
+        setSearchErrSubcode(data.error_subcode ?? null)
+        setResults([])
+      } else {
+        setResults(data.ads || [])
+      }
     } catch {
       setSearchError("Network error. Please try again.")
       setResults([])
@@ -815,34 +822,41 @@ export default function InspoPage() {
                 <div className="flex flex-col items-center justify-center min-h-64 gap-4 text-center py-8">
                   <IconAlertCircle className="size-10 text-amber-400" />
                   <div>
-                    <p className="font-semibold">Can't access Meta Ad Library API</p>
-                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-                      {isPermissionError(searchError)
-                        ? "App chưa được Meta approve để dùng Ad Library API."
-                        : searchError}
+                    <p className="font-semibold">
+                      {searchErrSubcode === 2332002 ? "Chưa chấp nhận điều khoản Ad Library API" : "Không thể truy cập Meta Ad Library API"}
                     </p>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-sm">{searchError}</p>
                   </div>
                   <div className="border rounded-xl bg-muted/30 p-5 max-w-md w-full text-left space-y-4">
-                    <div>
-                      <p className="text-sm font-semibold mb-2">Tìm kiếm trực tiếp trên Meta Ad Library</p>
-                      <p className="text-xs text-muted-foreground mb-3">
-                        Kết quả tương tự, đầy đủ dữ liệu — mở trong tab mới.
-                      </p>
-                      <Button className="w-full gap-2" onClick={() => window.open(metaLibraryUrl, "_blank")}>
-                        <IconExternalLink className="size-4" />
-                        Tìm "{query}" trên Meta Ad Library
-                      </Button>
-                    </div>
-                    {isPermissionError(searchError) && (
-                      <div className="border-t pt-4">
-                        <p className="text-xs font-semibold text-muted-foreground mb-2">Để fix API (cần làm 1 lần):</p>
-                        <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                          <li>Vào developers.facebook.com → App của bạn</li>
-                          <li>Use cases → Advertiser → Set up</li>
-                          <li>Request permission <strong className="text-foreground">ads_read</strong></li>
+                    {searchErrSubcode === 2332002 ? (
+                      <div>
+                        <p className="text-sm font-semibold mb-2">Cách fix (cần làm 1 lần):</p>
+                        <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside mb-4">
+                          <li>Đăng nhập Facebook bằng tài khoản quản lý app</li>
+                          <li>Vào <strong className="text-foreground">facebook.com/ads/library/api</strong></li>
+                          <li>Click <strong className="text-foreground">"Access the API"</strong></li>
+                          <li>Trong Graph API Explorer, click <strong className="text-foreground">"Generate Access Token"</strong> → chọn permission <strong className="text-foreground">ads_library</strong> → Accept</li>
+                          <li>Quay lại đây và <strong className="text-foreground">Reconnect tài khoản Meta</strong> trong trang Connect</li>
                         </ol>
+                        <Button
+                          className="w-full gap-2 mb-2"
+                          variant="default"
+                          onClick={() => window.open("https://www.facebook.com/ads/library/api/", "_blank")}
+                        >
+                          <IconExternalLink className="size-4" />
+                          Mở facebook.com/ads/library/api
+                        </Button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-semibold mb-2">Tìm kiếm trực tiếp trên Meta Ad Library</p>
+                        <p className="text-xs text-muted-foreground mb-3">Kết quả tương tự, đầy đủ dữ liệu — mở trong tab mới.</p>
                       </div>
                     )}
+                    <Button className="w-full gap-2" variant={searchErrSubcode === 2332002 ? "outline" : "default"} onClick={() => window.open(metaLibraryUrl, "_blank")}>
+                      <IconExternalLink className="size-4" />
+                      Tìm &quot;{query}&quot; trên Meta Ad Library
+                    </Button>
                   </div>
                 </div>
               ) : !hasSearched ? (

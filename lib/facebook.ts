@@ -49,6 +49,7 @@ export const FB_PERMISSIONS = [
   "pages_read_engagement",
   "ads_read",
   "ads_management",
+  "ads_library",
   "catalog_management",
 ].join(",")
 
