@@ -612,7 +612,7 @@ export default function AssetsPage() {
           }
         }
         xhr.onerror = () => reject(new Error("Network error during file upload"))
-        xhr.open("PUT", signedUrl, true)
+        xhr.open("PUT", `/api/creatives/upload-proxy?url=${encodeURIComponent(signedUrl)}`, true)
         xhr.setRequestHeader("Content-Type", item.file.type)
         xhr.send(item.file)
       })

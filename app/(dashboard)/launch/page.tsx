@@ -13331,7 +13331,7 @@ export default function LaunchPage() {
       }
       xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error during upload" }); resolve(false) }
       xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(false) }
-      xhr.open("PUT", signedUrl, true)
+      xhr.open("PUT", `/api/creatives/upload-proxy?url=${encodeURIComponent(signedUrl)}`, true)
       xhr.setRequestHeader("Content-Type", item.file.type || "application/octet-stream")
       updateUpload(item.id, { xhr })
       xhr.send(item.file)
