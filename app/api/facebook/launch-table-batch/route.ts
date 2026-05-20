@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     const adminDb = createAdminClient()
 
     const body = await request.json()
-    const { rows, adAccountId, adAccountName } = body
+    const { rows, adAccountId, adAccountName, pageName: batchPageName } = body
 
     if (!rows?.length) return NextResponse.json({ error: "No rows provided" }, { status: 400 })
     if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
@@ -225,6 +225,7 @@ export async function POST(request: NextRequest) {
       cta: firstRow.cta || null,
       web_link: firstRow.webLink || null,
       page_id: firstRow.pageId || null,
+      page_name: batchPageName || null,
       status: batchStatus,
       total_ads: totalCreated,
       failed_ads: totalFailed,

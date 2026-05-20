@@ -4298,6 +4298,9 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
     if (fileMatch) return { id: fileMatch[1], type: "file" }
     const folderMatch = url.match(/\/folders\/([a-zA-Z0-9_-]+)/)
     if (folderMatch) return { id: folderMatch[1], type: "folder" }
+    // drive.google.com/open?id=... or /uc?id=... or any ?id= / &id= param
+    const openMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+    if (openMatch) return { id: openMatch[1], type: "file" }
     return null
   }
 
@@ -11468,7 +11471,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
         headline: b.headline || "",
         primaryText: b.primary_text || "",
         pageId: b.page_id || "",
-        pageName: pages.find(p => p.id === b.page_id)?.name || "",
+        pageName: (b as any).page_name || pages.find(p => p.id === b.page_id)?.name || "",
         adAccountId: b.ad_account_id,
         adAccountName: b.ad_account_name,
         timestamp: b.created_at,
@@ -13293,7 +13296,7 @@ export default function LaunchPage() {
       }
       xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error during upload" }); resolve(false) }
       xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(false) }
-      xhr.open("PUT", `/api/creatives/upload-proxy?url=${encodeURIComponent(signedUrl)}`, true)
+      xhr.open("PUT", signedUrl, true)
       xhr.setRequestHeader("Content-Type", item.file.type || "application/octet-stream")
       updateUpload(item.id, { xhr })
       xhr.send(item.file)
@@ -14062,6 +14065,7 @@ export default function LaunchPage() {
           rows: batchRows,
           adAccountId: selectedAccountId,
           adAccountName: selectedAccount?.name || selectedAccountId,
+          pageName: pages.find(p => p.id === selectedPageId)?.name || "",
         }),
       })
       const data = await res.json()
