@@ -4608,6 +4608,7 @@ function LoadMediaModal({
   const uploadFolderRef = useRef<HTMLInputElement>(null)
 
   // ── Google Drive state ──────────────────────────────────────────
+  // Short-lived memory cache — server is the source of truth for refresh tokens
   const GDRIVE_LS_KEY = "gdrive_token_cache"
   const loadCachedToken = (): string | null => {
     try {
@@ -4622,6 +4623,8 @@ function LoadMediaModal({
     localStorage.setItem(GDRIVE_LS_KEY, JSON.stringify({ token, expiresAt: Date.now() + 55 * 60 * 1000 }))
   }
   const clearCachedToken = () => localStorage.removeItem(GDRIVE_LS_KEY)
+
+  const [gdriveEmail, setGdriveEmail] = useState<string | null>(null)
 
   const [gdriveToken, setGdriveToken] = useState<string | null>(() => loadCachedToken())
   const [gdriveQueue, setGdriveQueue] = useState<{ id: string; name: string; mimeType: string; status: "pending" | "importing" | "done" | "error"; error?: string }[]>([])
@@ -4823,19 +4826,49 @@ function LoadMediaModal({
 
     try {
 
+    // 1. Check server for stored refresh token (persistent connection)
+    if (!gdriveTokenRef.current) {
+      const serverRes = await fetch("/api/google/token")
+      if (serverRes.ok) {
+        const serverData = await serverRes.json()
+        if (serverData.connected && serverData.token) {
+          gdriveTokenRef.current = serverData.token
+          setGdriveToken(serverData.token)
+          saveCachedToken(serverData.token)
+          if (serverData.email) setGdriveEmail(serverData.email)
+        }
+      }
+    }
+
+    // 2. If still no token, request auth via Authorization Code flow (gets refresh token)
     const getToken = () => new Promise<string>((resolve, reject) => {
-      const tc = (window as any).google.accounts.oauth2.initTokenClient({
+      const cc = (window as any).google.accounts.oauth2.initCodeClient({
         client_id: clientId,
         scope: "https://www.googleapis.com/auth/drive.readonly",
-        callback: (resp: any) => {
+        ux_mode: "popup",
+        callback: async (resp: any) => {
           if (resp.error) { reject(new Error(resp.error)); return }
-          gdriveTokenRef.current = resp.access_token
-          setGdriveToken(resp.access_token)
-          saveCachedToken(resp.access_token)
-          resolve(resp.access_token)
+          try {
+            const connectRes = await fetch("/api/google/connect", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ code: resp.code }),
+            })
+            const connectData = await connectRes.json()
+            if (!connectRes.ok) { reject(new Error(connectData.error || "Connect failed")); return }
+            // Fetch fresh token from server
+            const tokenRes = await fetch("/api/google/token")
+            const tokenData = await tokenRes.json()
+            if (!tokenData.token) { reject(new Error("No token returned")); return }
+            gdriveTokenRef.current = tokenData.token
+            setGdriveToken(tokenData.token)
+            saveCachedToken(tokenData.token)
+            if (tokenData.email) setGdriveEmail(tokenData.email)
+            resolve(tokenData.token)
+          } catch (e: any) { reject(e) }
         },
       })
-      tc.requestAccessToken({ prompt: gdriveTokenRef.current ? "" : "consent" })
+      cc.requestCode()
     })
 
     const token = gdriveTokenRef.current || await getToken()
@@ -5879,10 +5912,12 @@ function LoadMediaModal({
                       <Button size="sm" className="gap-1.5" onClick={openGoogleDrivePicker}>
                         <IconBrandGoogleDrive className="size-3.5" />Open Google Drive
                       </Button>
-                      <Button size="sm" variant="ghost" className="text-xs text-muted-foreground" onClick={() => {
+                      <Button size="sm" variant="ghost" className="text-xs text-muted-foreground" onClick={async () => {
                         clearCachedToken()
                         gdriveTokenRef.current = null
                         setGdriveToken(null)
+                        setGdriveEmail(null)
+                        await fetch("/api/google/connect", { method: "DELETE" }).catch(() => {})
                       }}>
                         Disconnect
                       </Button>

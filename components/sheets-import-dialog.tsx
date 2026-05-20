@@ -136,8 +136,28 @@ const AUTO_DETECT_CSV: Record<FieldKey, string[]> = {
   launch_status:    ["launched", "status", "launch status", "active", "paused", "trạng thái"],
 }
 
-function autoDetect(headers: string[], sourceType: "sheets" | "csv" = "sheets"): Record<FieldKey, number | null> {
-  const patterns = sourceType === "csv" ? AUTO_DETECT_CSV : AUTO_DETECT_SHEETS
+// Auto-detect patterns for northedc CSV format
+// Headers: Library ID, Page Name, Start Date, Ad Type, Title, Primary Text, Description, Landing Page, CTA, Media URL, Brand, Facebook Page ID
+const AUTO_DETECT_NORTHEDC: Record<FieldKey, string[]> = {
+  creative_url:     ["media url"],
+  creative_file:    [],
+  ad_set_name:      [],
+  campaign_name:    [],
+  ad_account_name:  [],
+  page_name:        ["page name"],
+  ad_name:          ["library id"],
+  primary_text:     ["primary text"],
+  headline:         ["title"],
+  description:      ["description"],
+  cta:              ["cta"],
+  web_link:         ["landing page"],
+  url_tags:         [],
+  promo_code:       [],
+  launch_status:    [],
+}
+
+function autoDetect(headers: string[], sourceType: "sheets" | "csv" | "northedc" = "sheets"): Record<FieldKey, number | null> {
+  const patterns = sourceType === "northedc" ? AUTO_DETECT_NORTHEDC : sourceType === "csv" ? AUTO_DETECT_CSV : AUTO_DETECT_SHEETS
   const result = {} as Record<FieldKey, number | null>
   const usedIdx = new Set<number>()
   for (const { key } of AD_FIELDS) {
@@ -381,7 +401,9 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
         const dataRows = parsed.slice(1)
         setHeaders(headerRow)
         setRawRows(dataRows)
-        const detected = autoDetect(headerRow, "csv")
+        const lowerH = headerRow.map(h => h.toLowerCase().trim())
+        const isNorthedc = lowerH.includes("library id") || (lowerH.includes("landing page") && lowerH.includes("media url"))
+        const detected = autoDetect(headerRow, isNorthedc ? "northedc" : "csv")
         setMapping(detected)
         setSelectedRows(new Set(dataRows.map((_, i) => i)))
         setStep(2)
@@ -755,10 +777,18 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                   </div>
                 </button>
 
-                <div className="w-full max-w-md rounded-lg bg-muted/50 border px-4 py-3 text-xs text-muted-foreground space-y-1">
-                  <p className="font-medium text-foreground">Expected columns (auto-detected):</p>
-                  <p>1️⃣ Ad Set · 2️⃣ Campaign · 3️⃣ Ads · link · Ads Accounts · Pages</p>
-                  <p>Link Ad Setting · Headline · Primary Text · Description · Launched?</p>
+                <div className="w-full max-w-md rounded-lg bg-muted/50 border px-4 py-3 text-xs text-muted-foreground space-y-2">
+                  <p className="font-medium text-foreground">Supported formats (auto-detected):</p>
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-foreground/70">Standard format:</p>
+                    <p>1️⃣ Ad Set · 2️⃣ Campaign · 3️⃣ Ads · link · Ads Accounts · Pages</p>
+                    <p>Link Ad Setting · Headline · Primary Text · Description · Launched?</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="font-medium text-foreground/70">Northedc format:</p>
+                    <p>Library ID · Page Name · Title · Primary Text · Description</p>
+                    <p>Landing Page · CTA · Media URL · Facebook Page ID</p>
+                  </div>
                 </div>
               </div>
             )}

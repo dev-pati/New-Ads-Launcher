@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -30,6 +30,9 @@ import {
   IconX,
   IconEye,
   IconEyeOff,
+  IconBrandGoogleDrive,
+  IconRefresh,
+  IconUnlink,
 } from "@tabler/icons-react"
 
 type SubTab = "channels" | "media" | "api" | "mcp"
@@ -777,13 +780,8 @@ export default function ConnectPage() {
         )}
 
         {subTab === "media" && (
-          <div className="max-w-2xl">
-            <div className="border rounded-xl p-8 text-center bg-card">
-              <IconBuildingStore className="size-10 text-muted-foreground/40 mx-auto mb-3" />
-              <h3 className="text-sm font-semibold">Media Integrations</h3>
-              <p className="text-sm text-muted-foreground mt-1">Connect Google Drive, Dropbox, and other media sources.</p>
-              <Button className="mt-4" size="sm" disabled>Coming Soon</Button>
-            </div>
+          <div className="max-w-2xl space-y-4">
+            <GoogleDriveConnect />
           </div>
         )}
 
@@ -801,6 +799,122 @@ export default function ConnectPage() {
         {subTab === "mcp" && (
           <McpTab />
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Google Drive Connect ───────────────────────────────────────────────────────
+
+function GoogleDriveConnect() {
+  const [status, setStatus]     = useState<"loading" | "connected" | "disconnected">("loading")
+  const [email, setEmail]       = useState<string | null>(null)
+  const [error, setError]       = useState<string | null>(null)
+  const [working, setWorking]   = useState(false)
+  const scriptsReady            = useRef(false)
+
+  useEffect(() => {
+    fetch("/api/google/token")
+      .then(r => r.json())
+      .then(d => {
+        if (d.connected) { setStatus("connected"); setEmail(d.email || null) }
+        else setStatus("disconnected")
+      })
+      .catch(() => setStatus("disconnected"))
+  }, [])
+
+  const loadScript = (src: string) => new Promise<void>((resolve) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
+    const s = document.createElement("script")
+    s.src = src; s.async = true; s.onload = () => resolve(); s.onerror = () => resolve()
+    document.head.appendChild(s)
+  })
+
+  const connect = async () => {
+    setError(null)
+    setWorking(true)
+    try {
+      if (!scriptsReady.current) {
+        await loadScript("https://accounts.google.com/gsi/client")
+        scriptsReady.current = true
+      }
+      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""
+      await new Promise<void>((resolve, reject) => {
+        const cc = (window as any).google.accounts.oauth2.initCodeClient({
+          client_id: clientId,
+          scope: "https://www.googleapis.com/auth/drive.readonly",
+          ux_mode: "popup",
+          callback: async (resp: any) => {
+            if (resp.error) { reject(new Error(resp.error)); return }
+            try {
+              const res = await fetch("/api/google/connect", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ code: resp.code }),
+              })
+              const d = await res.json()
+              if (!res.ok) { reject(new Error(d.error || "Connect failed")); return }
+              setEmail(d.email || null)
+              setStatus("connected")
+              resolve()
+            } catch (e: any) { reject(e) }
+          },
+        })
+        cc.requestCode()
+      })
+    } catch (e: any) {
+      setError(e.message || "Connection failed")
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  const disconnect = async () => {
+    setWorking(true)
+    await fetch("/api/google/connect", { method: "DELETE" }).catch(() => {})
+    setStatus("disconnected")
+    setEmail(null)
+    setWorking(false)
+  }
+
+  return (
+    <div className="border rounded-xl bg-card overflow-hidden">
+      <div className="flex items-center gap-4 px-6 py-5">
+        <div className="size-10 rounded-lg bg-white border flex items-center justify-center shrink-0">
+          <IconBrandGoogleDrive className="size-5 text-[#4285F4]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">Google Drive</span>
+            {status === "connected" && (
+              <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium bg-green-50 dark:bg-green-950/40 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-800">
+                <IconCheck className="size-3" /> Connected
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {status === "loading"
+              ? "Checking connection..."
+              : status === "connected"
+              ? email ? `Connected as ${email}` : "Connected — access media files from Drive"
+              : "Import images and videos directly from Google Drive"}
+          </p>
+          {error && <p className="text-xs text-destructive mt-1">{error}</p>}
+        </div>
+        <div className="shrink-0">
+          {status === "loading" ? (
+            <IconRefresh className="size-4 text-muted-foreground animate-spin" />
+          ) : status === "connected" ? (
+            <Button size="sm" variant="outline" className="text-xs gap-1.5 text-destructive hover:text-destructive" onClick={disconnect} disabled={working}>
+              <IconUnlink className="size-3.5" />Disconnect
+            </Button>
+          ) : (
+            <Button size="sm" className="gap-1.5" onClick={connect} disabled={working}>
+              {working ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBrandGoogleDrive className="size-3.5" />}
+              Connect
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )
