@@ -13663,11 +13663,12 @@ export default function LaunchPage() {
 
   useEffect(() => {
     if (!selectedAccountId) return
-    fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}`)
+    const refresh = mode === "table"
+    fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}${refresh ? "&refresh=true" : ""}`)
       .then(r => r.json())
       .then(d => setAllAdSets(d.adSets || []))
       .catch(() => {})
-  }, [selectedAccountId])
+  }, [selectedAccountId, mode])
 
 
   const validate = () => {
