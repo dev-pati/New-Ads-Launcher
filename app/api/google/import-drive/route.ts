@@ -225,18 +225,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Database error: ${insertError.message}` }, { status: 500 })
     }
 
-    // Fire-and-forget: trigger cron immediately so video uploads to Meta within seconds
-    if (process.env.CRON_SECRET) {
-      const appUrl = process.env.APP_URL
-        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-        || process.env.NEXT_PUBLIC_APP_URL
-        || ""
-      if (appUrl) {
-        fetch(`${appUrl}/api/cron/upload-to-facebook`, {
-          headers: { Authorization: `Bearer ${process.env.CRON_SECRET}` },
-        }).catch(() => {})
+    // Background: upload video URL to Meta immediately without blocking response
+    const creativeId = creative.id
+    ;(async () => {
+      try {
+        const conn = await getFacebookConnection(ctx.orgId)
+        if (!conn?.access_token) return
+        const result = await uploadVideoUrlToMeta(normAccountId, conn.access_token, publicUrl, fileName as string)
+        await admin.from("creatives")
+          .update({ fb_video_id: result.videoId, status: "processing" })
+          .eq("id", creativeId)
+        console.log(`[import-drive] video ${creativeId} sent to Meta: ${result.videoId}`)
+      } catch (e: any) {
+        console.error(`[import-drive] background Meta upload failed for ${creativeId}:`, e.message)
       }
-    }
+    })()
 
     return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
   } catch (err: any) {
