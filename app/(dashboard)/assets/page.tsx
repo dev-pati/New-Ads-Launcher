@@ -240,11 +240,10 @@ export default function AssetsPage() {
       )
     )
 
-    // Max 5 concurrent chains; stagger start by 2s to spread load
-    const limited = toRefresh.slice(0, 5)
-    for (const creative of limited) {
+    // Submit all to refreshVideoPreview — it self-limits to MAX_CONCURRENT_POLLS=3
+    // and queues the rest automatically
+    for (const creative of toRefresh) {
       refreshVideoPreview(creative.id)
-      await new Promise(r => setTimeout(r, 2000))
     }
   }, [refreshVideoPreview])
 
