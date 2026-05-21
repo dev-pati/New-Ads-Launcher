@@ -18,7 +18,7 @@ function sanitizeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-")
 }
 
-// TUS resumable upload — splits into 6 MB chunks to avoid Caddy 413 on large files
+// TUS resumable upload — 20 MB chunks (was 6 MB: too many round-trips for large files)
 async function tusUpload(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -28,7 +28,7 @@ async function tusUpload(
   mimeType: string,
   cfHeaders: Record<string, string> = {}
 ) {
-  const CHUNK = 6 * 1024 * 1024
+  const CHUNK = 20 * 1024 * 1024
   const total = data.byteLength
   const base = (s: string) => Buffer.from(s).toString("base64")
 
@@ -229,8 +229,9 @@ export async function POST(request: NextRequest) {
 
     // after() keeps the Vercel Lambda alive after response is sent — bare IIFEs are
     // killed immediately in serverless environments once the response returns.
+    // We tell Meta to fetch the video from the Supabase public URL instead of
+    // re-uploading the entire buffer — eliminates a second 200MB transfer through our server.
     const creativeId = creative.id
-    const capturedBuffer = fileBuffer
     after(async () => {
       try {
         const conn = await getFacebookConnection(ctx.orgId)
@@ -238,13 +239,14 @@ export async function POST(request: NextRequest) {
           console.error(`[import-drive] no Facebook connection for org ${ctx.orgId}`)
           return
         }
-        const form = new FormData()
-        form.append("access_token", conn.access_token)
-        form.append("name", fileName as string)
-        form.append("file", new Blob([capturedBuffer], { type: mimeType as string }), fileName as string)
+        const params = new URLSearchParams()
+        params.set("access_token", conn.access_token)
+        params.set("name", fileName as string)
+        params.set("file_url", publicUrl)  // Meta fetches directly from Supabase
         const metaRes = await fetch(`https://graph-video.facebook.com/v21.0/${normAccountId}/advideos`, {
           method: "POST",
-          body: form,
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params,
         })
         const metaData = await metaRes.json()
         if (!metaRes.ok || metaData.error) {
@@ -253,7 +255,7 @@ export async function POST(request: NextRequest) {
         await admin.from("creatives")
           .update({ fb_video_id: metaData.id, status: "processing" })
           .eq("id", creativeId)
-        console.log(`[import-drive] video ${creativeId} sent to Meta: ${metaData.id}`)
+        console.log(`[import-drive] video ${creativeId} sent to Meta via URL: ${metaData.id}`)
       } catch (e: any) {
         console.error(`[import-drive] background Meta upload failed for ${creativeId}:`, e.message)
         await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)
