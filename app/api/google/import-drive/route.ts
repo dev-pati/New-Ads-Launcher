@@ -225,17 +225,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Database error: ${insertError.message}` }, { status: 500 })
     }
 
-    // Background: upload video URL to Meta immediately without blocking response
+    // Background: upload video buffer directly to Meta (avoids Meta fetching our URL)
     const creativeId = creative.id
+    const capturedBuffer = fileBuffer
     ;(async () => {
       try {
         const conn = await getFacebookConnection(ctx.orgId)
-        if (!conn?.access_token) return
-        const result = await uploadVideoUrlToMeta(normAccountId, conn.access_token, publicUrl, fileName as string)
+        if (!conn?.access_token) {
+          console.error(`[import-drive] no Facebook connection for org ${ctx.orgId}`)
+          return
+        }
+        const form = new FormData()
+        form.append("access_token", conn.access_token)
+        form.append("name", fileName as string)
+        form.append("file", new Blob([capturedBuffer], { type: mimeType as string }), fileName as string)
+        const metaRes = await fetch(`https://graph-video.facebook.com/v21.0/${normAccountId}/advideos`, {
+          method: "POST",
+          body: form,
+        })
+        const metaData = await metaRes.json()
+        if (!metaRes.ok || metaData.error) {
+          throw new Error(metaData.error?.message || `Meta video upload failed (${metaRes.status})`)
+        }
         await admin.from("creatives")
-          .update({ fb_video_id: result.videoId, status: "processing" })
+          .update({ fb_video_id: metaData.id, status: "processing" })
           .eq("id", creativeId)
-        console.log(`[import-drive] video ${creativeId} sent to Meta: ${result.videoId}`)
+        console.log(`[import-drive] video ${creativeId} sent to Meta: ${metaData.id}`)
       } catch (e: any) {
         console.error(`[import-drive] background Meta upload failed for ${creativeId}:`, e.message)
       }
