@@ -16,6 +16,58 @@ function sanitizeFileName(name: string) {
   return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-")
 }
 
+// TUS resumable upload — splits into 6 MB chunks to avoid Caddy 413 on large files
+async function tusUpload(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  bucket: string,
+  objectPath: string,
+  data: ArrayBuffer,
+  mimeType: string,
+  cfHeaders: Record<string, string> = {}
+) {
+  const CHUNK = 6 * 1024 * 1024
+  const total = data.byteLength
+  const base = (s: string) => Buffer.from(s).toString("base64")
+
+  const initRes = await fetch(`${supabaseUrl}/storage/v1/upload/resumable`, {
+    method: "POST",
+    headers: {
+      ...cfHeaders,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/offset+octet-stream",
+      "Content-Length": "0",
+      "Tus-Resumable": "1.0.0",
+      "Upload-Length": String(total),
+      "Upload-Metadata": `bucketName ${base(bucket)},objectName ${base(objectPath)},contentType ${base(mimeType)}`,
+    },
+  })
+  if (!initRes.ok) throw new Error(`TUS init failed (${initRes.status}): ${await initRes.text()}`)
+
+  const location = initRes.headers.get("Location") || ""
+  const uploadUrl = location.startsWith("http") ? location : `${supabaseUrl}${location}`
+
+  let offset = 0
+  while (offset < total) {
+    const end = Math.min(offset + CHUNK, total)
+    const chunk = data.slice(offset, end)
+    const patchRes = await fetch(uploadUrl, {
+      method: "PATCH",
+      headers: {
+        ...cfHeaders,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        "Content-Type": "application/offset+octet-stream",
+        "Content-Length": String(end - offset),
+        "Upload-Offset": String(offset),
+        "Tus-Resumable": "1.0.0",
+      },
+      body: chunk,
+    })
+    if (!patchRes.ok) throw new Error(`TUS chunk failed at ${offset} (${patchRes.status}): ${await patchRes.text()}`)
+    offset = end
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
@@ -71,6 +123,12 @@ export async function POST(request: NextRequest) {
 
     const fileSize = fileBuffer.byteLength
     const admin = createAdminClient()
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const cfHeaders: Record<string, string> = {}
+    if (process.env.CF_ACCESS_CLIENT_ID) cfHeaders["CF-Access-Client-Id"] = process.env.CF_ACCESS_CLIENT_ID
+    if (process.env.CF_ACCESS_CLIENT_SECRET) cfHeaders["CF-Access-Client-Secret"] = process.env.CF_ACCESS_CLIENT_SECRET
+
     const normAccountId = (adAccountId as string).startsWith("act_") ? adAccountId : `act_${adAccountId}`
     const storagePath = `creatives/${ctx.orgId}/${crypto.randomUUID()}-${sanitizeFileName(fileName)}`
 
@@ -81,11 +139,10 @@ export async function POST(request: NextRequest) {
 
       const r = await uploadImageToMeta(normAccountId, connection.access_token, fileBuffer, fileName)
 
-      const { error: storageError } = await admin.storage
-        .from("ad-media")
-        .upload(storagePath, fileBuffer, { contentType: mimeType, upsert: false })
-      if (storageError) {
-        console.error("[import-drive] Storage upload error (image):", storageError)
+      try {
+        await tusUpload(supabaseUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
+      } catch (e: any) {
+        console.error("[import-drive] Storage upload error (image):", e)
       }
       const { data: { publicUrl } } = admin.storage.from("ad-media").getPublicUrl(storagePath)
 
@@ -133,14 +190,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ creative: mapCreativeForClient(existingVideo) })
     }
 
-    // ── Videos: upload to Supabase Storage, defer Meta to cron ───────────────
-    const { error: storageError } = await admin.storage
-      .from("ad-media")
-      .upload(storagePath, fileBuffer, { contentType: mimeType, upsert: false })
-
-    if (storageError) {
-      console.error("[import-drive] Storage upload error (video):", storageError)
-      return NextResponse.json({ error: `Storage upload failed: ${storageError.message}` }, { status: 500 })
+    // ── Videos: upload to Supabase Storage via TUS, defer Meta to cron ─────────
+    try {
+      await tusUpload(supabaseUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
+    } catch (e: any) {
+      console.error("[import-drive] Storage upload error (video):", e)
+      return NextResponse.json({ error: `Storage upload failed: ${e.message}` }, { status: 500 })
     }
 
     const { data: { publicUrl } } = admin.storage.from("ad-media").getPublicUrl(storagePath)
