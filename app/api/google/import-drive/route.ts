@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { uploadImageToMeta } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -227,10 +227,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Database error: ${insertError.message}` }, { status: 500 })
     }
 
-    // Background: upload video buffer directly to Meta (avoids Meta fetching our URL)
+    // after() keeps the Vercel Lambda alive after response is sent — bare IIFEs are
+    // killed immediately in serverless environments once the response returns.
     const creativeId = creative.id
     const capturedBuffer = fileBuffer
-    ;(async () => {
+    after(async () => {
       try {
         const conn = await getFacebookConnection(ctx.orgId)
         if (!conn?.access_token) {
@@ -255,10 +256,9 @@ export async function POST(request: NextRequest) {
         console.log(`[import-drive] video ${creativeId} sent to Meta: ${metaData.id}`)
       } catch (e: any) {
         console.error(`[import-drive] background Meta upload failed for ${creativeId}:`, e.message)
-        // Mark as error so client stops polling and shows feedback
         await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)
       }
-    })()
+    })
 
     return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })
   } catch (err: any) {
