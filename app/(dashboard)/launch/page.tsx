@@ -12987,6 +12987,32 @@ export default function LaunchPage() {
     return () => { clearInterval(interval); document.removeEventListener("visibilitychange", onVisible) }
   }, [selectedCreatives])
 
+  // Polling for videos awaiting Meta upload (status=pending, no fb_video_id) — 5s interval
+  useEffect(() => {
+    const pending = selectedCreatives.filter(c =>
+      c.media_type === "video" && !c.fb_video_id && !c.id.startsWith("temp_")
+    )
+    if (pending.length === 0) return
+
+    const tick = async () => {
+      for (const c of pending) {
+        try {
+          const res = await fetch(`/api/creatives/${c.id}`)
+          if (!res.ok) continue
+          const data = await res.json()
+          const updated = data.creative || data
+          if (updated.fb_video_id || updated.status === "ready" || updated.status === "processing") {
+            setSelectedCreatives(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x))
+          }
+        } catch {}
+      }
+    }
+
+    tick() // check immediately on mount
+    const interval = setInterval(tick, 5000)
+    return () => clearInterval(interval)
+  }, [selectedCreatives])
+
   // Save selection whenever creatives or names change (debounced via effect cycle)
   useEffect(() => {
     if (!selectedAccountId) return
