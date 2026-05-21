@@ -192,14 +192,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ creative: mapCreativeForClient(existingVideo) })
     }
 
-    // ── Videos: upload to Supabase Storage via TUS, defer Meta to cron ─────────
-    try {
-      await tusUpload(supabaseUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
-    } catch (e: any) {
-      console.error("[import-drive] Storage upload error (video):", e)
-      return NextResponse.json({ error: `Storage upload failed: ${e.message}` }, { status: 500 })
-    }
-
+    // ── Videos: insert immediately, move TUS + Meta to after() ──────────────
+    // publicUrl is deterministic from storagePath — no upload needed to compute it.
+    // Returning before TUS completes means the user sees the card in ~Drive-download
+    // time instead of waiting for TUS (20-25 s extra for 200 MB).
     const { data: { publicUrl } } = admin.storage.from("ad-media").getPublicUrl(storagePath)
 
     const { data: creative, error: insertError } = await admin
@@ -227,13 +223,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Database error: ${insertError.message}` }, { status: 500 })
     }
 
-    // after() keeps the Vercel Lambda alive after response is sent — bare IIFEs are
-    // killed immediately in serverless environments once the response returns.
-    // We tell Meta to fetch the video from the Supabase public URL instead of
-    // re-uploading the entire buffer — eliminates a second 200MB transfer through our server.
     const creativeId = creative.id
     after(async () => {
       try {
+        // Step 1: upload buffer to Supabase (must complete before Meta fetches the URL)
+        await tusUpload(supabaseUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
+
+        // Step 2: tell Meta to fetch the video from Supabase — no re-upload through server
         const conn = await getFacebookConnection(ctx.orgId)
         if (!conn?.access_token) {
           console.error(`[import-drive] no Facebook connection for org ${ctx.orgId}`)
@@ -242,7 +238,7 @@ export async function POST(request: NextRequest) {
         const params = new URLSearchParams()
         params.set("access_token", conn.access_token)
         params.set("name", fileName as string)
-        params.set("file_url", publicUrl)  // Meta fetches directly from Supabase
+        params.set("file_url", publicUrl)
         const metaRes = await fetch(`https://graph-video.facebook.com/v21.0/${normAccountId}/advideos`, {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
