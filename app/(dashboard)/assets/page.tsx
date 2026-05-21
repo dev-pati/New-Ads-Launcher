@@ -123,6 +123,7 @@ export default function AssetsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pollingVideosRef = useRef<Set<string>>(new Set())
   const pollingQueueRef  = useRef<string[]>([])
+  const pendingPollIdsRef = useRef<Set<string>>(new Set())
   const MAX_CONCURRENT_POLLS = 3
 
   // Dialog state
@@ -341,6 +342,40 @@ export default function AssetsPage() {
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
   }, [])
+
+  // Poll pending videos (fb_video_id=null) until IIFE uploads to Meta
+  useEffect(() => {
+    const toAdd = creatives.filter(c =>
+      c.media_type === "video" &&
+      !(c as any).fb_video_id &&
+      (c.status === "pending" || c.status === "processing") &&
+      !pendingPollIdsRef.current.has(c.id)
+    )
+    if (toAdd.length === 0) return
+    for (const c of toAdd) {
+      pendingPollIdsRef.current.add(c.id)
+      let retries = 0
+      const poll = async () => {
+        if (retries >= 24) { pendingPollIdsRef.current.delete(c.id); return }
+        try {
+          const res = await fetch(`/api/creatives/${c.id}`)
+          const data = await res.json()
+          const updated = data.creative
+          if (!updated) { retries++; setTimeout(poll, 5000); return }
+          const isDone = !!(updated as any).fb_video_id || updated.status === "error" || updated.status === "ready"
+          if (isDone) {
+            setCreatives(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x))
+            if ((updated as any).fb_video_id) refreshVideoPreview(c.id, 0, 3000)
+            pendingPollIdsRef.current.delete(c.id)
+            return
+          }
+        } catch {}
+        retries++
+        setTimeout(poll, 5000)
+      }
+      setTimeout(poll, 5000)
+    }
+  }, [creatives, refreshVideoPreview])
 
   // ── Filtering ─────────────────────────────────────────────────────────────
 
@@ -1184,48 +1219,57 @@ export default function AssetsPage() {
                       <div
                         key={c.id}
                         className={cn(
-                          "group relative aspect-square rounded-xl overflow-hidden border-2 cursor-pointer transition-all",
+                          "group relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all flex flex-col",
                           isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-muted-foreground/20"
                         )}
                         onClick={() => toggleSelect(c.id)}
                         onContextMenu={e => { e.preventDefault(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
                       >
-                        <CreativeCardMedia creative={c} className="h-full w-full object-cover" />
-                        {/* Checkbox */}
-                        <div className={cn(
-                          "absolute top-2 left-2 size-5 rounded-full border-2 flex items-center justify-center transition-all",
-                          isSelected ? "bg-primary border-primary" : "bg-background/80 border-muted-foreground/30 opacity-0 group-hover:opacity-100"
-                        )}>
-                          {isSelected && <IconCheck className="size-3 text-primary-foreground" />}
-                        </div>
-                        {/* Video indicator */}
-                        {c.media_type === "video" && (
-                          <div className="absolute bottom-2 left-2 size-5 rounded-full bg-black/60 flex items-center justify-center">
-                            <IconPlayerPlay className="size-2.5 text-white" />
+                        {/* Thumbnail */}
+                        <div className="relative aspect-square">
+                          <CreativeCardMedia creative={c} className="h-full w-full object-cover" />
+                          {/* Checkbox */}
+                          <div className={cn(
+                            "absolute top-2 left-2 size-5 rounded-full border-2 flex items-center justify-center transition-all",
+                            isSelected ? "bg-primary border-primary" : "bg-background/80 border-muted-foreground/30 opacity-0 group-hover:opacity-100"
+                          )}>
+                            {isSelected && <IconCheck className="size-3 text-primary-foreground" />}
                           </div>
-                        )}
-                        {/* Status */}
-                        <div className={cn(
-                          "absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full font-semibold",
-                          isReady
-                            ? "bg-emerald-500/90 text-white"
-                            : c.status === "processing"
-                            ? "bg-blue-500/90 text-white"
-                            : c.status === "error"
-                            ? "bg-red-500/90 text-white"
-                            : "bg-black/40 text-white/80"
-                        )}>
-                          {isReady ? "Ready" : c.status === "processing" ? "Processing" : c.status === "error" ? "Error" : "Pending"}
+                          {/* Video indicator */}
+                          {c.media_type === "video" && (
+                            <div className="absolute bottom-2 left-2 size-5 rounded-full bg-black/60 flex items-center justify-center">
+                              <IconPlayerPlay className="size-2.5 text-white" />
+                            </div>
+                          )}
+                          {/* Status */}
+                          <div className={cn(
+                            "absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full font-semibold",
+                            isReady
+                              ? "bg-emerald-500/90 text-white"
+                              : c.status === "processing"
+                              ? "bg-blue-500/90 text-white"
+                              : c.status === "error"
+                              ? "bg-red-500/90 text-white"
+                              : "bg-black/40 text-white/80"
+                          )}>
+                            {isReady ? "Ready" : c.status === "processing" ? "Processing" : c.status === "error" ? "Error" : "Pending"}
+                          </div>
+                          {/* Context menu trigger */}
+                          <button
+                            onClick={e => { e.stopPropagation(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
+                            className="absolute bottom-2 right-2 size-6 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <IconDotsVertical className="size-3 text-white" />
+                          </button>
+                          {/* Hover overlay */}
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
                         </div>
-                        {/* Context menu trigger */}
-                        <button
-                          onClick={e => { e.stopPropagation(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
-                          className="absolute bottom-2 right-2 size-6 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <IconDotsVertical className="size-3 text-white" />
-                        </button>
-                        {/* Hover overlay */}
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
+                        {/* File name */}
+                        <div className="px-2 py-1.5 bg-card border-t border-border/50">
+                          <p className="text-[11px] text-foreground/80 truncate leading-tight">
+                            {c.file_name.replace(/\.[^/.]+$/, "")}
+                          </p>
+                        </div>
                       </div>
                     )
                   })}

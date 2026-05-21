@@ -3947,6 +3947,7 @@ function PreviewModal({
 
   const refreshThumbnail = async () => {
     if (refreshing) return
+    if (!(creative as any).fb_video_id) return
     setRefreshing(true)
     try {
       const res = await fetch(`/api/creatives/${creative.id}/thumbnail`, { method: "POST" })
@@ -4647,9 +4648,9 @@ function LoadMediaModal({
     fetchFbMedia()
   }, [open, mediaTab, adAccountId])
 
-  // Auto-load persistent Google Drive token from server when gdrive tab opens
+  // Auto-load persistent Google Drive token from server when gdrive or drive_link tab opens
   useEffect(() => {
-    if (!open || mediaTab !== "gdrive") return
+    if (!open || (mediaTab !== "gdrive" && mediaTab !== "drive_link")) return
     if (gdriveTokenRef.current) return
     fetch("/api/google/token")
       .then(r => r.json())
@@ -4692,7 +4693,8 @@ function LoadMediaModal({
     const MAX_RETRIES = 12
     const pending = allCreatives.filter(c =>
       c.media_type === "video"
-      && (!c.fb_thumbnail_url || (!/^https?:/.test(c.fb_thumbnail_url) && !c.fb_thumbnail_url.startsWith("/api/creatives/")))
+      && !!(c as any).fb_video_id
+      && (!c.fb_thumbnail_url || !/^https?:/.test(c.fb_thumbnail_url) || c.fb_thumbnail_url.includes("rsrc.php"))
       && (libThumbRetryCounts.current.get(c.id) ?? 0) < MAX_RETRIES
     )
     if (pending.length === 0) return
@@ -10812,8 +10814,11 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
 
                 {/* Not ready badge */}
                 {!isReady && (
-                  <div className="absolute bottom-2 right-2 text-[9px] text-white font-semibold bg-amber-500/90 px-1.5 py-0.5 rounded">
-                    Not Uploaded
+                  <div className={cn(
+                    "absolute bottom-2 right-2 text-[9px] text-white font-semibold px-1.5 py-0.5 rounded",
+                    c.status === "error" ? "bg-red-500/90" : "bg-amber-500/90"
+                  )}>
+                    {c.status === "error" ? "Upload Failed" : "Not Uploaded"}
                   </div>
                 )}
               </div>
@@ -12948,30 +12953,39 @@ export default function LaunchPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId])
 
-  // Polling for missing thumbnails in selected creatives (max 10 retries per video ~2.5min at 15s)
+  // Polling for missing thumbnails in selected creatives (max 10 retries per video ~100s at 10s)
   useEffect(() => {
     const MAX_RETRIES = 10
     const pending = selectedCreatives.filter(c =>
       c.media_type === "video" &&
       c.fb_video_id &&
-      !(c.fb_thumbnail_url && (/^https?:/.test(c.fb_thumbnail_url) || c.fb_thumbnail_url.startsWith("/api/creatives/"))) &&
+      !(c.fb_thumbnail_url && /^https?:/.test(c.fb_thumbnail_url) && !c.fb_thumbnail_url.includes("rsrc.php")) &&
       !c.id.startsWith("temp_") &&
       (thumbRetryCounts.current.get(c.id) ?? 0) < MAX_RETRIES
     )
     if (pending.length === 0) return
 
     const tick = async () => {
-      if (document.hidden) return  // pause when tab is not visible
+      if (document.hidden) return
       const toCheck = pending.slice(0, 2)
       for (const c of toCheck) {
         thumbRetryCounts.current.set(c.id, (thumbRetryCounts.current.get(c.id) ?? 0) + 1)
         try {
           const res = await fetch(`/api/creatives/${c.id}/thumbnail`, { method: "POST" })
           const data = await res.json()
-          if (data.thumbnail_url || data.source_url) {
+          // Always propagate status from server (processing → ready) so Ad Source dot updates correctly.
+          // Only update file fields when the endpoint returns actual values to avoid overwriting blob URL.
+          const hasNewData = data.thumbnail_url || data.source_url
+          const statusChanged = data.creative?.status && data.creative.status !== c.status
+          if (hasNewData || statusChanged) {
             setSelectedCreatives(prev => prev.map(x =>
               x.id === c.id
-                ? { ...x, fb_thumbnail_url: data.thumbnail_url || x.fb_thumbnail_url, file_url: data.source_url || x.file_url || data.thumbnail_url }
+                ? {
+                    ...x,
+                    ...(data.thumbnail_url ? { fb_thumbnail_url: data.thumbnail_url } : {}),
+                    ...(data.source_url ? { file_url: data.source_url } : {}),
+                    ...(data.creative?.status ? { status: data.creative.status } : {}),
+                  }
                 : x
             ))
           }
@@ -12979,7 +12993,7 @@ export default function LaunchPage() {
       }
     }
 
-    tick() // check immediately, don't wait 30s for first poll
+    tick()
     const interval = setInterval(tick, 10000)
     const onVisible = () => { if (!document.hidden) tick() }
     document.addEventListener("visibilitychange", onVisible)
@@ -13001,7 +13015,7 @@ export default function LaunchPage() {
           if (!res.ok) continue
           const data = await res.json()
           const updated = data.creative || data
-          if (updated.fb_video_id || updated.status === "ready" || updated.status === "processing") {
+          if (updated.fb_video_id || updated.status === "ready" || updated.status === "processing" || updated.status === "error") {
             setSelectedCreatives(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x))
           }
         } catch {}

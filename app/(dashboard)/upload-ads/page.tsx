@@ -60,7 +60,7 @@ export default function UploadAdsPage() {
 
       // Poll thumbnails only for videos in this batch with exponential backoff
       const RETRY_DELAYS = [10_000, 30_000, 60_000, 120_000, 240_000]
-      const videosMissingThumb = list.filter(c => c.media_type === "video" && !c.fb_thumbnail_url)
+      const videosMissingThumb = list.filter(c => c.media_type === "video" && !!(c as any).fb_video_id && !c.fb_thumbnail_url)
       for (const c of videosMissingThumb) {
         let attempt = 0
         const poll = () => {

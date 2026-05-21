@@ -231,7 +231,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
       const creative = data.creative as CreativeAssetOption
       applyUploadedCreative(creative)
 
-      if (creative.media_type === "video" && !creative.fb_thumbnail_url) {
+      if (creative.media_type === "video" && !creative.fb_thumbnail_url && !!(creative as any).fb_video_id) {
         void refreshUploadedVideoPreview(creative.id)
       }
     } catch (error) {

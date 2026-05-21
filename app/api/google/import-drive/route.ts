@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { uploadImageToMeta, uploadVideoUrlToMeta } from "@/lib/facebook"
+import { uploadImageToMeta } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
 
 // POST /api/google/import-drive
 // Downloads a file from Google Drive using the user's OAuth token.
 // Images: sync upload to Meta + Supabase Storage → status=ready immediately.
-// Videos: upload to Supabase Storage only → status=pending, background cron handles Meta upload.
+// Videos: TUS upload to Supabase → status=pending returned to client immediately,
+//         background IIFE uploads buffer directly to Meta → status=processing,
+//         client thumbnail polling transitions to status=ready once Meta finishes.
 export const runtime = "nodejs"
 export const maxDuration = 120
 export const dynamic = "force-dynamic"
@@ -253,6 +255,8 @@ export async function POST(request: NextRequest) {
         console.log(`[import-drive] video ${creativeId} sent to Meta: ${metaData.id}`)
       } catch (e: any) {
         console.error(`[import-drive] background Meta upload failed for ${creativeId}:`, e.message)
+        // Mark as error so client stops polling and shows feedback
+        await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)
       }
     })()
 
