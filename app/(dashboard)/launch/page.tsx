@@ -12979,8 +12979,8 @@ export default function LaunchPage() {
       }
     }
 
-    const interval = setInterval(tick, 30000)
-    // Resume immediately when user returns to this tab (don't wait up to 30s)
+    tick() // check immediately, don't wait 30s for first poll
+    const interval = setInterval(tick, 10000)
     const onVisible = () => { if (!document.hidden) tick() }
     document.addEventListener("visibilitychange", onVisible)
 
