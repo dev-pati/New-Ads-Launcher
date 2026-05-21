@@ -1,6 +1,6 @@
 create table if not exists google_connections (
   id uuid default gen_random_uuid() primary key,
-  org_id uuid not null references orgs(id) on delete cascade,
+  org_id uuid not null,
   user_id uuid not null,
   email text,
   access_token text,
