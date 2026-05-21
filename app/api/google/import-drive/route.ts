@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { uploadImageToMeta } from "@/lib/facebook"
+import { uploadImageToMeta, uploadVideoUrlToMeta } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
 
