@@ -90,11 +90,14 @@ export async function POST(
       status: currentStatus
     })
 
+    // Return raw URLs (not proxy-mapped) so the client's <img> src actually changes.
+    // mapCreativeForClient converts fbcdn.net → proxy URL; if the client already holds
+    // the same proxy URL in state, React skips the DOM update and the image never loads.
     return NextResponse.json({
-      thumbnail_url: nextCreative.fb_thumbnail_url,
-      source_url: nextCreative.file_url,
+      thumbnail_url: thumbnailUrl || null,
+      source_url: sourceUrl || null,
       status: currentStatus,
-      creative: nextCreative,
+      creative: { ...nextCreative, fb_thumbnail_url: thumbnailUrl || nextCreative.fb_thumbnail_url },
     })
   } catch (err) {
     console.error("[thumbnail-refresh] error:", err)
