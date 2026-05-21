@@ -4647,6 +4647,23 @@ function LoadMediaModal({
     fetchFbMedia()
   }, [open, mediaTab, adAccountId])
 
+  // Auto-load persistent Google Drive token from server when gdrive tab opens
+  useEffect(() => {
+    if (!open || mediaTab !== "gdrive") return
+    if (gdriveTokenRef.current) return
+    fetch("/api/google/token")
+      .then(r => r.json())
+      .then(d => {
+        if (d.connected && d.token) {
+          gdriveTokenRef.current = d.token
+          setGdriveToken(d.token)
+          saveCachedToken(d.token)
+          if (d.email) setGdriveEmail(d.email)
+        }
+      })
+      .catch(() => {})
+  }, [open, mediaTab])
+
   // Preload Google scripts when modal opens so they're ready before user clicks
   useEffect(() => {
     if (!open || gdriveScriptsReady.current) return
