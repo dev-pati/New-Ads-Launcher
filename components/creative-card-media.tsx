@@ -1,7 +1,7 @@
 "use client"
 /* eslint-disable @next/next/no-img-element */
 
-import { useRef, useState } from "react"
+import { useRef, useState, useEffect } from "react"
 import { IconPhoto, IconVideo, IconLoader2, IconBrandGoogleDrive } from "@tabler/icons-react"
 import { isMetaCdnUrl } from "@/lib/creative-media"
 
@@ -15,9 +15,64 @@ interface Creative {
   fb_video_id?: string
 }
 
+// Capture a JPEG frame from a video URL via Canvas API (client-side, no Meta API call).
+// Uses a hidden <video crossOrigin="anonymous"> so canvas.toBlob() is not tainted.
+// Silently fails if Supabase Storage hasn't configured CORS for the app origin.
+async function captureFrameFromUrl(videoUrl: string, creativeId: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const tmp = document.createElement("video")
+    tmp.crossOrigin = "anonymous"
+    tmp.muted = true
+    tmp.playsInline = true
+    // #t=1 seeks to 1 second before decoding — avoids black frames at t=0
+    tmp.src = videoUrl.split("#")[0] + "#t=1"
+
+    const cleanup = () => {
+      tmp.onloadeddata = null
+      tmp.onerror = null
+      tmp.src = ""
+      tmp.load()
+    }
+
+    const timer = setTimeout(() => { cleanup(); resolve(null) }, 20000)
+
+    tmp.onerror = () => { clearTimeout(timer); cleanup(); resolve(null) }
+
+    tmp.onloadeddata = () => {
+      clearTimeout(timer)
+      try {
+        const canvas = document.createElement("canvas")
+        canvas.width = Math.min(tmp.videoWidth || 1280, 1280)
+        canvas.height = Math.min(tmp.videoHeight || 720, 720)
+        canvas.getContext("2d")?.drawImage(tmp, 0, 0, canvas.width, canvas.height)
+        canvas.toBlob(async (blob) => {
+          cleanup()
+          if (!blob) { resolve(null); return }
+          // Show immediately via object URL
+          const objectUrl = URL.createObjectURL(blob)
+          // Save to server in the background (non-blocking)
+          fetch(`/api/creatives/${creativeId}/save-thumbnail`, {
+            method: "POST",
+            headers: { "Content-Type": "image/jpeg" },
+            body: blob,
+          }).catch(() => {})
+          resolve(objectUrl)
+        }, "image/jpeg", 0.85)
+      } catch {
+        // SecurityError: canvas tainted (CORS not configured on storage)
+        cleanup()
+        resolve(null)
+      }
+    }
+  })
+}
+
 export function CreativeCardMedia({ creative, className = "h-full w-full object-cover", compact = false }: { creative: Creative, className?: string, compact?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
+  const [capturedPoster, setCapturedPoster] = useState<string | null>(null)
+  const captureStartedRef = useRef(false)
+
   const isVideo = creative.media_type === "video"
   const isCreativeMediaRoute = (url: string) => url.startsWith("/api/creatives/")
   const isDisplayableImageUrl = (url: string) => /^https?:/.test(url) || isCreativeMediaRoute(url)
@@ -34,6 +89,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
     creative.file_url && isDisplayableImageUrl(cleanVideoSrc) && !isVideoFile(cleanVideoSrc) && !isMetaCdnUrl(cleanVideoSrc)
       ? cleanVideoSrc
       : null
+
   const metaThumb = stableImageUrl
     || ((creative.fb_thumbnail_url && isDisplayableImageUrl(creative.fb_thumbnail_url) && !creative.fb_thumbnail_url.includes("rsrc.php"))
       ? creative.fb_thumbnail_url
@@ -42,6 +98,34 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
         : (creative.file_url && isDisplayableImageUrl(creative.file_url) && !isVideoFile(creative.file_url))
           ? creative.file_url
           : null)
+
+  // A "real" poster is either a stable https URL or a captured object URL.
+  // The proxy route (/api/creatives/*/media) is NOT a real poster — it triggers server-side work.
+  const hasRealPoster = metaThumb ? !metaThumb.startsWith("/api/creatives/") : false
+  const effectivePoster = capturedPoster || (hasRealPoster ? metaThumb : null)
+
+  const playable = !!(cleanVideoSrc && (/^(blob|data|https?):/.test(cleanVideoSrc) || cleanVideoSrc.startsWith("/")) && (isVideoFile(cleanVideoSrc) || isVideo))
+
+  // Trigger client-side canvas capture when video is playable but has no real cached thumbnail.
+  useEffect(() => {
+    if (!isVideo || !playable || hasRealPoster || capturedPoster || captureStartedRef.current) return
+    if (!cleanVideoSrc || !cleanVideoSrc.startsWith("https://")) return
+    captureStartedRef.current = true
+
+    let cancelled = false
+    captureFrameFromUrl(cleanVideoSrc, creative.id).then((url) => {
+      if (!cancelled && url) setCapturedPoster(url)
+    })
+
+    return () => { cancelled = true }
+  }, [isVideo, playable, hasRealPoster, capturedPoster, cleanVideoSrc, creative.id])
+
+  // Revoke object URL on unmount to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      if (capturedPoster?.startsWith("blob:")) URL.revokeObjectURL(capturedPoster)
+    }
+  }, [capturedPoster])
 
   if (!isVideo) {
     const imgSrc = stableImageUrl || creative.fb_image_url || creative.fb_thumbnail_url || cleanVideoSrc
@@ -63,8 +147,6 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
     )
   }
 
-  const playable = cleanVideoSrc && (/^(blob|data|https?):/.test(cleanVideoSrc) || cleanVideoSrc.startsWith("/")) && (isVideoFile(cleanVideoSrc) || isVideo)
-
   if (playable) {
     if (compact) {
       return (
@@ -76,7 +158,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
             playsInline
             loop
             preload="metadata"
-            poster={metaThumb || undefined}
+            poster={effectivePoster || undefined}
             className={className}
             onMouseEnter={e => {
               const v = e.currentTarget
@@ -94,7 +176,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
               <IconBrandGoogleDrive className="size-3 text-[#4285F4]" />
             </div>
           )}
-          {!metaThumb && !cleanVideoSrc.includes("fbcdn.net") && (
+          {!effectivePoster && !cleanVideoSrc.includes("fbcdn.net") && (
              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <IconVideo className="size-4 text-muted-foreground/20" />
              </div>
@@ -111,7 +193,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
           playsInline
           loop
           preload="none"
-          poster={metaThumb || undefined}
+          poster={effectivePoster || undefined}
           className={className}
           onLoadedData={() => {
             if (videoRef.current) {
@@ -135,7 +217,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
             <IconBrandGoogleDrive className="size-4 text-[#4285F4]" />
           </div>
         )}
-        {!metaThumb && !cleanVideoSrc.includes("fbcdn.net") && (
+        {!effectivePoster && !cleanVideoSrc.includes("fbcdn.net") && (
            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <IconVideo className="size-6 text-muted-foreground/20" />
            </div>

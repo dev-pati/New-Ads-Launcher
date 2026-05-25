@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { getVideoSource, getVideoThumbnail } from "@/lib/facebook"
 import { isMetaCdnUrl } from "@/lib/creative-media"
+import { extractThumbnailFromUrl } from "@/lib/ffmpeg-thumbnail"
 
 export const runtime = "nodejs"
 export const maxDuration = 120
@@ -49,6 +50,22 @@ function stablePublicUrl(url?: string | null) {
   if (!url || !/^https?:/i.test(url)) return null
   if (isMetaCdnUrl(url)) return null
   return url
+}
+
+async function cacheBufferAsAsset(params: {
+  buffer: Buffer
+  contentType: string
+  storagePath: string
+}): Promise<{ publicUrl: string }> {
+  const admin = createAdminClient()
+  const { error } = await admin.storage.from("ad-media").upload(params.storagePath, params.buffer, {
+    contentType: params.contentType,
+    upsert: true,
+    cacheControl: "31536000",
+  })
+  if (error) throw new Error(error.message)
+  const { data } = admin.storage.from("ad-media").getPublicUrl(params.storagePath)
+  return { publicUrl: data.publicUrl }
 }
 
 async function cacheRemoteAsset(params: {
@@ -196,6 +213,35 @@ export async function GET(
       const stableThumbnailUrl = stablePublicUrl(creative.fb_thumbnail_url)
       if (stableThumbnailUrl) return noStoreRedirect(stableThumbnailUrl)
 
+      // Try FFmpeg extraction from Supabase storage — zero Meta API calls.
+      // Falls back to Meta API only if FFmpeg is unavailable or fails.
+      if (creative.storage_path) {
+        const videoPublicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ad-media/${creative.storage_path}`
+        const thumbBuffer = await extractThumbnailFromUrl(videoPublicUrl)
+        if (thumbBuffer) {
+          const storagePath = `thumbnails/${ctx.orgId}/${creative.id}.jpg`
+          try {
+            const cached = await cacheBufferAsAsset({
+              buffer: thumbBuffer,
+              contentType: "image/jpeg",
+              storagePath,
+            })
+            await admin
+              .from("creatives")
+              .update({ fb_thumbnail_url: cached.publicUrl })
+              .eq("id", creative.id)
+              .eq("org_id", ctx.orgId)
+            return noStoreRedirect(cached.publicUrl)
+          } catch {
+            // Cache failed — return the JPEG directly without redirect
+            return new NextResponse(thumbBuffer.buffer as ArrayBuffer, {
+              headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=3600" },
+            })
+          }
+        }
+      }
+
+      // Fallback: fetch thumbnail from Meta API
       if (!creative.fb_video_id) {
         return NextResponse.json({ error: "Video thumbnail is unavailable" }, { status: 404 })
       }
