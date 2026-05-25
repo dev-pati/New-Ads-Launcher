@@ -46,6 +46,7 @@ interface Campaign {
   objective: string
   daily_budget?: string
   lifetime_budget?: string
+  budget_remaining?: string
   start_time?: string
   stop_time?: string
   bid_strategy?: string
@@ -187,12 +188,17 @@ function StatusToggle({ id, status, onToggle }: { id: string; status: string; on
 
 // ─── Delivery Badge ───────────────────────────────────────────────────────────
 
-function DeliveryBadge({ effective_status }: { effective_status: string }) {
+function DeliveryBadge({ effective_status, budget_remaining }: { effective_status: string; budget_remaining?: string }) {
   const isActive = effective_status === "ACTIVE"
+  const isOutOfBudget = isActive && budget_remaining !== undefined && budget_remaining === "0"
   return (
     <span className="flex items-center gap-1.5 text-[13px] text-[#1c2b33] dark:text-gray-300">
-      <span className={cn("size-[7px] rounded-full", isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]")} />
-      {isActive ? "Active" : effective_status === "PAUSED" ? "Off" : effective_status.charAt(0) + effective_status.slice(1).toLowerCase()}
+      <span className={cn("size-[7px] rounded-full", isOutOfBudget ? "bg-[#f0a500]" : isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]")} />
+      {isOutOfBudget
+        ? <span className="text-[#f0a500]">Budget depleted</span>
+        : isActive ? "Active"
+        : effective_status === "PAUSED" ? "Off"
+        : effective_status.charAt(0) + effective_status.slice(1).toLowerCase()}
     </span>
   )
 }
@@ -742,7 +748,7 @@ export default function AdsManagerPage() {
         return <span className="text-[13px] tabular-nums">{(row as any).lifetime_budget ? fmtBudget((row as any).lifetime_budget) : "—"}</span>
 
       case "delivery":
-        return <DeliveryBadge effective_status={row.effective_status} />
+        return <DeliveryBadge effective_status={row.effective_status} budget_remaining={(row as any).budget_remaining} />
 
       case "effective_status":
         return <span className="text-[13px]">{row.effective_status.charAt(0) + row.effective_status.slice(1).toLowerCase()}</span>

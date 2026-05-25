@@ -323,6 +323,7 @@ export interface Campaign {
   objective: string
   daily_budget?: string
   lifetime_budget?: string
+  budget_remaining?: string
   spend_cap?: string
   bid_strategy?: string
   start_time?: string
@@ -340,7 +341,7 @@ export async function getCampaigns(
 ): Promise<Campaign[]> {
   const fields = [
     "id", "name", "status", "effective_status", "objective",
-    "daily_budget", "lifetime_budget", "spend_cap", "bid_strategy",
+    "daily_budget", "lifetime_budget", "budget_remaining", "spend_cap", "bid_strategy",
     "start_time", "stop_time", "created_time", "updated_time",
     `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`,
     "adsets.limit(0).summary(true)",
