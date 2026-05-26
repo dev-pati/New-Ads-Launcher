@@ -4,9 +4,30 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { sendInviteEmail, sendAddedToOrgEmail } from "@/lib/email"
 import { notifyOrgMembers } from "@/lib/notify-org"
 
+type MemberRow = {
+  id: string
+  role: string
+  joined_at: string
+  user_id: string
+}
+
+type ProfileRow = {
+  id: string
+  full_name: string | null
+  avatar_url: string | null
+}
+
+type AccountRow = {
+  id: string
+  email: string
+  full_name: string | null
+  avatar_url: string | null
+  created_at?: string
+}
+
 // List org members
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -28,6 +49,51 @@ export async function GET(
       return NextResponse.json({ error: "Not a member" }, { status: 403 })
     }
 
+    if (request.nextUrl.searchParams.get("available") === "true") {
+      const { data: callerMember } = await adminSupabase
+        .from("org_members")
+        .select("role")
+        .eq("org_id", orgId)
+        .eq("user_id", user.id)
+        .single()
+
+      if (!callerMember || callerMember.role !== "admin") {
+        return NextResponse.json({ error: "Only admins can view available accounts" }, { status: 403 })
+      }
+
+      const { data: existingMembers } = await adminSupabase
+        .from("org_members")
+        .select("user_id")
+        .eq("org_id", orgId)
+
+      const memberIds = new Set(
+        ((existingMembers || []) as Array<{ user_id: string }>).map((m) => m.user_id)
+      )
+
+      const { data: accounts, error: accountsError } = await adminSupabase
+        .from("accounts")
+        .select("id, email, full_name, avatar_url, created_at")
+        .is("disabled_at", null)
+        .order("email")
+
+      if (accountsError) {
+        console.error("Failed to fetch available accounts:", accountsError)
+        return NextResponse.json({ error: "Failed to fetch available accounts" }, { status: 500 })
+      }
+
+      const availableAccounts = (accounts || [])
+        .filter((account: AccountRow) => !memberIds.has(account.id))
+        .map((account: AccountRow) => ({
+          id: account.id,
+          email: account.email,
+          full_name: account.full_name,
+          avatar_url: account.avatar_url,
+          created_at: account.created_at,
+        }))
+
+      return NextResponse.json({ accounts: availableAccounts })
+    }
+
     const { data: members } = await adminSupabase
       .from("org_members")
       .select("id, role, joined_at, user_id")
@@ -35,15 +101,18 @@ export async function GET(
       .order("joined_at")
 
     // Fetch profiles separately
-    const userIds = (members || []).map((m: any) => m.user_id)
+    const memberRows = (members || []) as MemberRow[]
+    const userIds = memberRows.map((m) => m.user_id)
     const { data: profiles } = await adminSupabase
       .from("profiles")
       .select("id, full_name, avatar_url")
       .in("id", userIds)
 
-    const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]))
+    const profileMap = new Map(
+      ((profiles || []) as ProfileRow[]).map((p) => [p.id, p])
+    )
 
-    const result = (members || []).map((m: any) => ({
+    const result = memberRows.map((m) => ({
       id: m.id,
       role: m.role,
       joined_at: m.joined_at,
@@ -67,10 +136,11 @@ export async function POST(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id: orgId } = await params
-    const { email, role } = await request.json()
+    const { email, role, user_id: userId } = await request.json()
 
+    const trimmedEmail = typeof email === "string" ? email.trim().toLowerCase() : ""
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!email || !emailRegex.test(email)) {
+    if (!userId && (!trimmedEmail || !emailRegex.test(trimmedEmail))) {
       return NextResponse.json({ error: "Invalid email address" }, { status: 400 })
     }
 
@@ -93,13 +163,28 @@ export async function POST(
 
     const adminSupabase = createAdminClient()
 
-    // Check if user with this email already exists — paginate to handle >1000 users
-    let existingUser: any = null
-    for (let page = 1; !existingUser; page++) {
-      const { data: batch } = await adminSupabase.auth.admin.listUsers({ page, perPage: 1000 })
-      const found = (batch?.users || []).find((u: any) => u.email?.toLowerCase() === email.toLowerCase())
-      if (found) { existingUser = found; break }
-      if ((batch?.users?.length ?? 0) < 1000) break
+    // Check custom-auth accounts before falling back to an email invitation.
+    let existingUser: AccountRow | null = null
+    if (userId) {
+      const { data } = await adminSupabase
+        .from("accounts")
+        .select("id, email, full_name, avatar_url")
+        .eq("id", userId)
+        .is("disabled_at", null)
+        .maybeSingle()
+      existingUser = data
+    } else {
+      const { data } = await adminSupabase
+        .from("accounts")
+        .select("id, email, full_name, avatar_url")
+        .ilike("email", trimmedEmail)
+        .is("disabled_at", null)
+        .maybeSingle()
+      existingUser = data
+    }
+
+    if (userId && !existingUser) {
+      return NextResponse.json({ error: "User account not found" }, { status: 404 })
     }
 
     if (existingUser) {
@@ -122,6 +207,14 @@ export async function POST(
         invited_by: user.id,
       })
 
+      await adminSupabase
+        .from("profiles")
+        .upsert({
+          id: existingUser.id,
+          full_name: existingUser.full_name,
+          avatar_url: existingUser.avatar_url,
+        })
+
       // Send notification email
       const { data: org } = await adminSupabase
         .from("organizations")
@@ -131,7 +224,7 @@ export async function POST(
 
       try {
         await sendAddedToOrgEmail({
-          to: email,
+          to: existingUser.email,
           orgName: org?.name || "Organization",
           inviterName: user.user_metadata?.full_name || user.email || "Someone",
         })
@@ -143,9 +236,9 @@ export async function POST(
       await notifyOrgMembers({
         orgId,
         actorId: existingUser.id,
-        actorName: email,
+        actorName: existingUser.email,
         type: "member_joined",
-        title: `${email} joined the workspace`,
+        title: `${existingUser.email} joined the workspace`,
         body: `Invited by ${inviterName}`,
         link: "/settings",
       })
@@ -159,7 +252,7 @@ export async function POST(
       .upsert(
         {
           org_id: orgId,
-          email,
+          email: trimmedEmail,
           role: sanitizedRole,
           invited_by: user.id,
         },
@@ -184,13 +277,13 @@ export async function POST(
     let emailError: string | null = null
     try {
       await sendInviteEmail({
-        to: email,
+        to: trimmedEmail,
         orgName: org?.name || "Organization",
         inviterName: user.user_metadata?.full_name || user.email || "Someone",
         token: invitation.token,
       })
-    } catch (emailErr: any) {
-      emailError = emailErr?.message || "Failed to send email"
+    } catch (emailErr: unknown) {
+      emailError = emailErr instanceof Error ? emailErr.message : "Failed to send email"
     }
 
     return NextResponse.json({

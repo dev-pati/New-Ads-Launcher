@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useOrg } from "@/lib/org-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +26,7 @@ import {
   IconTrash,
   IconLoader2,
   IconMail,
+  IconUserPlus,
 } from "@tabler/icons-react"
 
 interface Member {
@@ -39,17 +40,30 @@ interface Member {
   }
 }
 
+interface AvailableAccount {
+  id: string
+  email: string
+  full_name?: string | null
+  avatar_url?: string | null
+  created_at: string
+}
+
 export default function OrganizationPage() {
   const { activeOrgId, activeOrg } = useOrg()
   const [members, setMembers] = useState<Member[]>([])
+  const [availableAccounts, setAvailableAccounts] = useState<AvailableAccount[]>([])
   const [loading, setLoading] = useState(true)
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("editor")
+  const [selectedAccountId, setSelectedAccountId] = useState("")
+  const [existingRole, setExistingRole] = useState("editor")
   const [inviting, setInviting] = useState(false)
+  const [addingExisting, setAddingExisting] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
   const [message, setMessage] = useState("")
+  const isAdmin = activeOrg?.role === "admin"
 
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     if (!activeOrgId) return
     setLoading(true)
     try {
@@ -61,11 +75,37 @@ export default function OrganizationPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeOrgId])
+
+  const fetchAvailableAccounts = useCallback(async () => {
+    if (!activeOrgId || !isAdmin) {
+      setAvailableAccounts([])
+      setSelectedAccountId("")
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/orgs/${activeOrgId}/members?available=true`)
+      if (!res.ok) {
+        setAvailableAccounts([])
+        return
+      }
+      const data = await res.json()
+      setAvailableAccounts(data.accounts || [])
+      setSelectedAccountId((current) => (
+        (data.accounts || []).some((account: AvailableAccount) => account.id === current)
+          ? current
+          : ""
+      ))
+    } catch {
+      setAvailableAccounts([])
+    }
+  }, [activeOrgId, isAdmin])
 
   useEffect(() => {
     fetchMembers()
-  }, [activeOrgId])
+    fetchAvailableAccounts()
+  }, [fetchMembers, fetchAvailableAccounts])
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -89,6 +129,7 @@ export default function OrganizationPage() {
       if (data.added) {
         setMessage("Member added successfully!")
         fetchMembers()
+        fetchAvailableAccounts()
       } else {
         setMessage("Invitation sent!")
       }
@@ -100,6 +141,36 @@ export default function OrganizationPage() {
     }
   }
 
+  const handleAddExisting = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedAccountId || !activeOrgId) return
+
+    setAddingExisting(true)
+    setMessage("")
+    try {
+      const res = await fetch(`/api/orgs/${activeOrgId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selectedAccountId, role: existingRole }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setMessage(data.error || "Failed to add account")
+        return
+      }
+
+      setMessage("Member added successfully!")
+      setSelectedAccountId("")
+      fetchMembers()
+      fetchAvailableAccounts()
+    } catch {
+      setMessage("Failed to add account")
+    } finally {
+      setAddingExisting(false)
+    }
+  }
+
   const handleRemove = async (memberId: string) => {
     if (!activeOrgId) return
     setRemoving(memberId)
@@ -108,6 +179,7 @@ export default function OrganizationPage() {
         method: "DELETE",
       })
       setMembers((prev) => prev.filter((m) => m.id !== memberId))
+      fetchAvailableAccounts()
     } catch {
       // ignore
     } finally {
@@ -136,6 +208,68 @@ export default function OrganizationPage() {
           </CardDescription>
         </CardHeader>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <IconUserPlus className="size-5" />
+              Add Existing Account
+            </CardTitle>
+            <CardDescription>
+              Add a registered account that is not yet a member of this organization.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAddExisting} className="flex items-end gap-3">
+              <div className="min-w-0 flex-1 space-y-2">
+                <Label>Account</Label>
+                <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableAccounts.length === 0 ? (
+                      <SelectItem value="none" disabled>
+                        No accounts available
+                      </SelectItem>
+                    ) : (
+                      availableAccounts.map((account) => (
+                        <SelectItem key={account.id} value={account.id}>
+                          {account.full_name ? `${account.full_name} - ${account.email}` : account.email}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-32 space-y-2">
+                <Label>Role</Label>
+                <Select value={existingRole} onValueChange={setExistingRole}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="editor">Editor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                type="submit"
+                disabled={addingExisting || !selectedAccountId || availableAccounts.length === 0}
+              >
+                {addingExisting ? (
+                  <IconLoader2 className="size-4 animate-spin" />
+                ) : (
+                  <IconPlus className="size-4" />
+                )}
+                Add
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Invite Member */}
       <Card>
