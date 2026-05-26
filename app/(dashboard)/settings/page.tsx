@@ -53,6 +53,7 @@ import {
   IconExternalLink,
   IconUserPlus,
   IconBuilding,
+  IconPencil,
 } from "@tabler/icons-react"
 
 interface FbConnection {
@@ -88,10 +89,18 @@ interface AvailableAccount {
   provider?: string | null
 }
 
+interface SettingsOrg {
+  id: string
+  name: string
+  slug: string
+  role: string
+  created_at?: string
+}
+
 function SettingsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { activeOrgId, activeOrg } = useOrg()
+  const { orgs, activeOrgId, activeOrg, refreshOrgs, switchOrg } = useOrg()
 
   // Facebook connection
   const [connection, setConnection] = useState<FbConnection>({ connected: false })
@@ -130,6 +139,13 @@ function SettingsContent() {
   const [deleteStep, setDeleteStep] = useState(1) // 1: warning, 2: type name, 3: final confirm
   const [deleteConfirmName, setDeleteConfirmName] = useState("")
   const [deleting, setDeleting] = useState(false)
+  const [deleteOrgTarget, setDeleteOrgTarget] = useState<SettingsOrg | null>(null)
+  const [createOrgOpen, setCreateOrgOpen] = useState(false)
+  const [newOrgName, setNewOrgName] = useState("")
+  const [creatingOrg, setCreatingOrg] = useState(false)
+  const [editingOrg, setEditingOrg] = useState<SettingsOrg | null>(null)
+  const [editOrgName, setEditOrgName] = useState("")
+  const [savingOrg, setSavingOrg] = useState(false)
 
   // Fetch Facebook connection
   useEffect(() => {
@@ -340,26 +356,85 @@ function SettingsContent() {
 
   const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date()
 
+  const handleCreateOrg = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newOrgName.trim()) return
+
+    setCreatingOrg(true)
+    try {
+      const res = await fetch("/api/orgs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newOrgName.trim() }),
+      })
+      if (res.ok) {
+        setNewOrgName("")
+        setCreateOrgOpen(false)
+        await refreshOrgs()
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCreatingOrg(false)
+    }
+  }
+
+  const openEditOrg = (org: SettingsOrg) => {
+    setEditingOrg(org)
+    setEditOrgName(org.name)
+  }
+
+  const handleUpdateOrg = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingOrg || !editOrgName.trim()) return
+
+    setSavingOrg(true)
+    try {
+      const res = await fetch(`/api/orgs/${editingOrg.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editOrgName.trim() }),
+      })
+      if (res.ok) {
+        setEditingOrg(null)
+        setEditOrgName("")
+        await refreshOrgs()
+      }
+    } catch {
+      // ignore
+    } finally {
+      setSavingOrg(false)
+    }
+  }
+
   const handleDeleteOrg = async () => {
-    if (!activeOrgId || deleteConfirmName !== activeOrg?.name) return
+    if (!deleteOrgTarget || deleteConfirmName !== deleteOrgTarget.name) return
     setDeleting(true)
     try {
-      const res = await fetch(`/api/orgs/${activeOrgId}`, {
+      const res = await fetch(`/api/orgs/${deleteOrgTarget.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmName: deleteConfirmName }),
       })
       if (res.ok) {
-        document.cookie = "active_org_id=; path=/; max-age=0"
-        router.push("/projects")
-        router.refresh()
+        const deletedActiveOrg = deleteOrgTarget.id === activeOrgId
+        setDeleteDialogOpen(false)
+        setDeleteOrgTarget(null)
+        setDeleteConfirmName("")
+        await refreshOrgs()
+        if (deletedActiveOrg) {
+          document.cookie = "active_org_id=; path=/; max-age=0"
+          router.push("/projects")
+          router.refresh()
+        }
       }
     } catch { /* ignore */ } finally {
       setDeleting(false)
     }
   }
 
-  const openDeleteDialog = () => {
+  const openDeleteDialog = (org: SettingsOrg) => {
+    setDeleteOrgTarget(org)
     setDeleteStep(1)
     setDeleteConfirmName("")
     setDeleteDialogOpen(true)
@@ -652,79 +727,72 @@ function SettingsContent() {
         <TabsContent value="organization" className="space-y-6 mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <IconBuilding className="size-5" />
-                Organization
-              </CardTitle>
-              <CardDescription>
-                Workspace identity, membership summary, and administrative actions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-lg border p-4">
-                  <p className="text-xs font-medium text-muted-foreground">Name</p>
-                  <p className="mt-1 truncate text-sm font-semibold">{activeOrg?.name || "Organization"}</p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <p className="text-xs font-medium text-muted-foreground">Your role</p>
-                  <Badge className="mt-2" variant={isAdmin ? "default" : "secondary"}>
-                    {activeOrg?.role || "member"}
-                  </Badge>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <p className="text-xs font-medium text-muted-foreground">Members</p>
-                  <p className="mt-1 text-sm font-semibold">{members.length}</p>
-                </div>
-                <div className="rounded-lg border p-4">
-                  <p className="text-xs font-medium text-muted-foreground">Pending invites</p>
-                  <p className="mt-1 text-sm font-semibold">{invitations.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Access Management</CardTitle>
-              <CardDescription>
-                Add members from the Team tab. Only organization admins can invite, add, or remove members.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between rounded-lg border p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-sm font-medium">Admin permissions</p>
-                  <p className="text-sm text-muted-foreground">
-                    {isAdmin ? "You can manage this organization." : "You can view this organization, but cannot manage members."}
-                  </p>
+                  <CardTitle className="flex items-center gap-2">
+                    <IconBuilding className="size-5" />
+                    Organizations
+                  </CardTitle>
+                  <CardDescription>
+                    Manage every organization your account belongs to.
+                  </CardDescription>
                 </div>
-                <Badge variant={isAdmin ? "default" : "secondary"}>
-                  {isAdmin ? "Admin" : "Limited"}
-                </Badge>
+                <Button onClick={() => setCreateOrgOpen(true)}>
+                  <IconPlus className="size-4" />
+                  Add Organization
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {orgs.map((org) => {
+                  const isOrgAdmin = org.role === "admin"
+                  const isActiveOrg = org.id === activeOrgId
+                  return (
+                    <div key={org.id} className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                          <IconBuilding className="size-5 text-primary" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-semibold">{org.name}</p>
+                            {isActiveOrg && <Badge variant="outline">Active</Badge>}
+                            <Badge variant={isOrgAdmin ? "default" : "secondary"}>{org.role}</Badge>
+                          </div>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {org.slug}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 sm:shrink-0">
+                        {!isActiveOrg && (
+                          <Button variant="outline" size="sm" onClick={() => switchOrg(org.id)}>
+                            Switch
+                          </Button>
+                        )}
+                        {isOrgAdmin && (
+                          <>
+                            <Button variant="ghost" size="icon" className="size-8" onClick={() => openEditOrg(org)}>
+                              <IconPencil className="size-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => openDeleteDialog(org)}
+                            >
+                              <IconTrash className="size-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </CardContent>
           </Card>
-
-          {isAdmin && (
-            <Card className="border-destructive/50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-destructive">
-                  <IconAlertTriangle className="size-5" />
-                  Danger Zone
-                </CardTitle>
-                <CardDescription>
-                  Permanently delete this organization and all its data.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button variant="destructive" onClick={openDeleteDialog}>
-                  <IconTrash className="size-4" />
-                  Delete Organization
-                </Button>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         {/* AI Keys Tab */}
@@ -915,8 +983,65 @@ function SettingsContent() {
         </TabsContent>
       </Tabs>
 
+      <Dialog open={createOrgOpen} onOpenChange={setCreateOrgOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Create Organization</DialogTitle>
+            <DialogDescription>
+              Add a new workspace for campaigns, assets, and team members.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateOrg} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Organization Name</Label>
+              <Input
+                placeholder="My Agency"
+                value={newOrgName}
+                onChange={(e) => setNewOrgName(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={creatingOrg}>
+              {creatingOrg ? <IconLoader2 className="size-4 animate-spin" /> : "Create"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!editingOrg}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingOrg(null)
+            setEditOrgName("")
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit Organization</DialogTitle>
+            <DialogDescription>
+              Rename this organization. Existing members and data stay unchanged.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateOrg} className="space-y-4">
+            <div className="space-y-2">
+              <Label>Organization Name</Label>
+              <Input
+                value={editOrgName}
+                onChange={(e) => setEditOrgName(e.target.value)}
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={savingOrg}>
+              {savingOrg ? <IconLoader2 className="size-4 animate-spin" /> : "Save Changes"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Organization Dialog - Multi-step */}
-      <Dialog open={deleteDialogOpen} onOpenChange={(open) => { if (!open) { setDeleteDialogOpen(false); setDeleteStep(1); setDeleteConfirmName("") } }}>
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => { if (!open) { setDeleteDialogOpen(false); setDeleteStep(1); setDeleteConfirmName(""); setDeleteOrgTarget(null) } }}>
         <DialogContent className="max-w-md">
           {deleteStep === 1 && (
             <>
@@ -926,7 +1051,7 @@ function SettingsContent() {
                   Delete Organization
                 </DialogTitle>
                 <DialogDescription>
-                  Are you sure you want to delete <strong>{activeOrg?.name}</strong>? This action will permanently remove:
+                  Are you sure you want to delete <strong>{deleteOrgTarget?.name}</strong>? This action will permanently remove:
                 </DialogDescription>
               </DialogHeader>
               <ul className="space-y-1.5 text-sm text-muted-foreground pl-4 list-disc">
@@ -948,7 +1073,7 @@ function SettingsContent() {
               <DialogHeader>
                 <DialogTitle>Confirm by typing the organization name</DialogTitle>
                 <DialogDescription>
-                  Type <strong className="text-foreground">{activeOrg?.name}</strong> to confirm deletion.
+                  Type <strong className="text-foreground">{deleteOrgTarget?.name}</strong> to confirm deletion.
                 </DialogDescription>
               </DialogHeader>
               <Input
@@ -961,7 +1086,7 @@ function SettingsContent() {
                 <Button variant="outline" onClick={() => setDeleteStep(1)}>Back</Button>
                 <Button
                   variant="destructive"
-                  disabled={deleteConfirmName !== activeOrg?.name}
+                  disabled={deleteConfirmName !== deleteOrgTarget?.name}
                   onClick={() => setDeleteStep(3)}
                 >
                   Next
@@ -975,7 +1100,7 @@ function SettingsContent() {
               <DialogHeader>
                 <DialogTitle className="text-destructive">Final Confirmation</DialogTitle>
                 <DialogDescription>
-                  You are about to permanently delete <strong className="text-foreground">{activeOrg?.name}</strong> and all associated data. This is your last chance to cancel.
+                  You are about to permanently delete <strong className="text-foreground">{deleteOrgTarget?.name}</strong> and all associated data. This is your last chance to cancel.
                 </DialogDescription>
               </DialogHeader>
               <div className="rounded-lg border border-destructive/50 bg-destructive/5 p-4 text-center">

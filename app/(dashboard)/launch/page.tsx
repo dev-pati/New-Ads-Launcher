@@ -12877,6 +12877,16 @@ export default function LaunchPage() {
   const [selectedIgPageId, setSelectedIgPageId] = useState("")
   const [igAccountCache, setIgAccountCache] = useState<Record<string, IgAccount[]>>({})
   const [adProfilesOpen, setAdProfilesOpen] = useState(false)
+  const sanitizePages = (items: FacebookPage[]): FacebookPage[] => (
+    items.map((page) => ({
+      ...page,
+      picture: {
+        data: {
+          url: `/api/facebook/page-picture?page_id=${encodeURIComponent(page.id)}`,
+        },
+      },
+    }))
+  )
 
   // Lưu page/IG preference cho từng ad account
   const PAGE_PREFS_KEY = activeOrgId ? `launch_page_prefs:${activeOrgId}` : "launch_page_prefs"
@@ -13724,8 +13734,9 @@ export default function LaunchPage() {
       if (cached) {
         const { ts, pages: cachedPages } = JSON.parse(cached)
         if (Date.now() - ts < PAGES_CACHE_TTL && Array.isArray(cachedPages)) {
-          console.log(`[pages] Using cache (${cachedPages.length} pages)`)
-          setPages(cachedPages)
+          const cleanPages = sanitizePages(cachedPages)
+          console.log(`[pages] Using cache (${cleanPages.length} pages)`)
+          setPages(cleanPages)
           return
         }
       }
@@ -13749,7 +13760,7 @@ export default function LaunchPage() {
           if (d.needsReconnect) setNeedsReconnect(true)
           return
         }
-        const p: FacebookPage[] = d.pages || []
+        const p = sanitizePages(d.pages || [])
         console.log(`[pages] Loaded ${p.length} pages`)
         setPages(p)
         // Cache for 10 min

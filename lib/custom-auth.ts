@@ -31,6 +31,7 @@ export async function createSession(account: AuthAccount) {
   const token = await new SignJWT({
     email: account.email,
     full_name: account.full_name || undefined,
+    avatar_url: account.avatar_url || undefined,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(account.id)
@@ -73,8 +74,10 @@ export async function getSessionAccount(): Promise<AuthAccount | null> {
       id: payload.sub,
       email: String(payload.email),
       full_name: typeof payload.full_name === "string" ? payload.full_name : null,
+      avatar_url: typeof payload.avatar_url === "string" ? payload.avatar_url : null,
       user_metadata: {
         full_name: typeof payload.full_name === "string" ? payload.full_name : null,
+        avatar_url: typeof payload.avatar_url === "string" ? payload.avatar_url : null,
       },
     }
   } catch {

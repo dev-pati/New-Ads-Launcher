@@ -1,7 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+
+type OrgMemberWithOrg = {
+  role: string
+  org: {
+    id: string
+    name: string
+    slug: string
+    created_at: string
+  } | Array<{
+    id: string
+    name: string
+    slug: string
+    created_at: string
+  }> | null
+}
 
 // List user's organizations
 export async function GET() {
@@ -15,10 +29,12 @@ export async function GET() {
       .select("role, org:organizations(id, name, slug, created_at)")
       .eq("user_id", user.id)
 
-    const orgs = (data || []).map((m: any) => ({
-      ...m.org,
-      role: m.role,
-    }))
+    const orgs = ((data || []) as OrgMemberWithOrg[])
+      .map((m) => {
+        const org = Array.isArray(m.org) ? m.org[0] : m.org
+        return org ? { ...org, role: m.role } : null
+      })
+      .filter((org) => org !== null)
 
     return NextResponse.json({ orgs })
   } catch (err) {

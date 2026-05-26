@@ -12,10 +12,12 @@ function DashboardContent({
   children,
   userName,
   userEmail,
+  userAvatarUrl,
 }: {
   children: React.ReactNode
   userName?: string
   userEmail?: string
+  userAvatarUrl?: string
 }) {
   const { hasOrg, loading } = useOrg()
   const router = useRouter()
@@ -36,7 +38,7 @@ function DashboardContent({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
-      <AppSidebar userName={userName} userEmail={userEmail} />
+      <AppSidebar userName={userName} userEmail={userEmail} userAvatarUrl={userAvatarUrl} />
       <main className="flex-1 overflow-auto min-w-0">
         {children}
       </main>
@@ -45,7 +47,7 @@ function DashboardContent({
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
+  const [user, setUser] = useState<{ name?: string; email?: string; avatarUrl?: string } | null>(null)
 
   useEffect(() => {
     async function getUser() {
@@ -55,6 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         setUser({
           name: user.full_name || user.email?.split("@")[0],
           email: user.email,
+          avatarUrl: user.avatar_url || user.user_metadata?.avatar_url,
         })
       }
     }
@@ -65,7 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <OrgProvider>
       <AdAccountProvider>
         <TooltipProvider>
-          <DashboardContent userName={user?.name} userEmail={user?.email}>
+          <DashboardContent userName={user?.name} userEmail={user?.email} userAvatarUrl={user?.avatarUrl}>
             {children}
           </DashboardContent>
         </TooltipProvider>

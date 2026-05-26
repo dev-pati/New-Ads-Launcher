@@ -116,9 +116,10 @@ function getActiveSection(pathname: string): string {
 interface AppSidebarProps {
   userName?: string
   userEmail?: string
+  userAvatarUrl?: string
 }
 
-export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
+export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const { activeOrg } = useOrg()
@@ -356,8 +357,12 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
       {/* User footer */}
       <div className="border-t border-sidebar-border p-2">
         <div className={cn("flex items-center gap-2", collapsed && "justify-center")}>
-          <div className="size-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-semibold shrink-0">
-            {userInitials}
+          <div className="size-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-semibold shrink-0 overflow-hidden">
+            {userAvatarUrl ? (
+              <img src={userAvatarUrl} alt="" className="size-7 object-cover" />
+            ) : (
+              userInitials
+            )}
           </div>
           {!collapsed && (
             <>

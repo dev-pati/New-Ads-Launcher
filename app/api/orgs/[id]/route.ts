@@ -2,6 +2,54 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+// Update an organization (admin only)
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getAuthUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { id: orgId } = await params
+    const { name } = await request.json()
+    const trimmedName = typeof name === "string" ? name.trim() : ""
+
+    if (!trimmedName) {
+      return NextResponse.json({ error: "name is required" }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+    const { data: callerMember } = await supabase
+      .from("org_members")
+      .select("role")
+      .eq("org_id", orgId)
+      .eq("user_id", user.id)
+      .single()
+
+    if (!callerMember || callerMember.role !== "admin") {
+      return NextResponse.json({ error: "Only admins can update organizations" }, { status: 403 })
+    }
+
+    const { data: org, error } = await supabase
+      .from("organizations")
+      .update({ name: trimmedName })
+      .eq("id", orgId)
+      .select("id, name, slug, created_at")
+      .single()
+
+    if (error) {
+      console.error("Failed to update organization:", error)
+      return NextResponse.json({ error: "Failed to update organization" }, { status: 500 })
+    }
+
+    return NextResponse.json({ org })
+  } catch (err) {
+    console.error("Failed to update organization:", err)
+    return NextResponse.json({ error: "Failed to update organization" }, { status: 500 })
+  }
+}
+
 // Delete an organization (admin only, requires confirmation name match)
 export async function DELETE(
   request: NextRequest,
