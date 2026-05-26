@@ -91,11 +91,11 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
       : null
 
   const metaThumb = stableImageUrl
-    || ((creative.fb_thumbnail_url && isDisplayableImageUrl(creative.fb_thumbnail_url) && !creative.fb_thumbnail_url.includes("rsrc.php"))
+    || ((creative.fb_thumbnail_url && isDisplayableImageUrl(creative.fb_thumbnail_url) && !creative.fb_thumbnail_url.includes("rsrc.php") && !isMetaCdnUrl(creative.fb_thumbnail_url))
       ? creative.fb_thumbnail_url
-      : (creative.fb_image_url && isDisplayableImageUrl(creative.fb_image_url))
+      : (creative.fb_image_url && isDisplayableImageUrl(creative.fb_image_url) && !isMetaCdnUrl(creative.fb_image_url))
         ? creative.fb_image_url
-        : (creative.file_url && isDisplayableImageUrl(creative.file_url) && !isVideoFile(creative.file_url))
+        : (creative.file_url && isDisplayableImageUrl(creative.file_url) && !isVideoFile(creative.file_url) && !isMetaCdnUrl(creative.file_url))
           ? creative.file_url
           : null)
 

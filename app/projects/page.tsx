@@ -121,7 +121,10 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-3">
             {user && (
-              <span className="text-sm text-muted-foreground">{user.email}</span>
+              <div className="text-right text-sm">
+                <span className="font-semibold text-foreground block md:inline md:mr-1.5">{user.name}</span>
+                <span className="text-xs text-muted-foreground">({user.email})</span>
+              </div>
             )}
             <Button variant="ghost" size="icon" onClick={handleLogout} title="Logout">
               <IconLogout className="size-4" />

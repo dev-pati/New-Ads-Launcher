@@ -747,8 +747,19 @@ export default function AdsManagerPage() {
       case "lifetime_budget":
         return <span className="text-[13px] tabular-nums">{(row as any).lifetime_budget ? fmtBudget((row as any).lifetime_budget) : "—"}</span>
 
-      case "delivery":
-        return <DeliveryBadge effective_status={row.effective_status} budget_remaining={(row as any).budget_remaining} />
+      case "delivery": {
+        let budgetRemaining: string | undefined = (row as any).budget_remaining
+        if (tab === "ads") {
+          const ad = row as Ad
+          const parentAdSet = adSets.find(s => s.id === ad.adset_id)
+          const parentCampaign = campaigns.find(c => c.id === ad.campaign_id)
+          // Use adset budget if it has its own; otherwise fall back to campaign budget
+          budgetRemaining = (parentAdSet?.daily_budget || parentAdSet?.lifetime_budget)
+            ? parentAdSet?.budget_remaining
+            : parentCampaign?.budget_remaining
+        }
+        return <DeliveryBadge effective_status={row.effective_status} budget_remaining={budgetRemaining} />
+      }
 
       case "effective_status":
         return <span className="text-[13px]">{row.effective_status.charAt(0) + row.effective_status.slice(1).toLowerCase()}</span>
