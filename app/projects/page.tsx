@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -28,6 +27,8 @@ import {
   IconLoader2,
   IconChevronRight,
   IconArrowLeft,
+  IconTrash,
+  IconAlertTriangle,
 } from "@tabler/icons-react"
 import Image from "next/image"
 import Link from "next/link"
@@ -49,6 +50,9 @@ export default function HomePage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [newOrgName, setNewOrgName] = useState("")
   const [creating, setCreating] = useState(false)
+  const [deleteOrg, setDeleteOrg] = useState<Org | null>(null)
+  const [deleteConfirmName, setDeleteConfirmName] = useState("")
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     async function init() {
@@ -102,6 +106,30 @@ export default function HomePage() {
       // ignore
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleDeleteOrg = async () => {
+    if (!deleteOrg || deleteConfirmName !== deleteOrg.name) return
+
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/orgs/${deleteOrg.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmName: deleteConfirmName }),
+      })
+
+      if (res.ok) {
+        setOrgs((prev) => prev.filter((org) => org.id !== deleteOrg.id))
+        document.cookie = "active_org_id=; path=/; max-age=0"
+        setDeleteOrg(null)
+        setDeleteConfirmName("")
+      }
+    } catch {
+      // ignore
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -213,7 +241,35 @@ export default function HomePage() {
                       <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
                         <IconBuilding className="size-5 text-primary" />
                       </div>
-                      <IconChevronRight className="size-4 text-muted-foreground" />
+                      <div className="flex items-center gap-1">
+                        {org.role === "admin" && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-muted-foreground hover:text-destructive"
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              setDeleteOrg(org)
+                              setDeleteConfirmName("")
+                            }}
+                            title="Delete organization"
+                          >
+                            <IconTrash className="size-4" />
+                          </Button>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleSelectOrg(org)
+                          }}
+                          title="Open organization"
+                        >
+                          <IconChevronRight className="size-4" />
+                        </Button>
+                      </div>
                     </div>
                     <CardTitle className="mt-3 text-lg">{org.name}</CardTitle>
                     <CardDescription className="flex items-center gap-1">
@@ -227,6 +283,57 @@ export default function HomePage() {
           )}
         </div>
       </main>
+
+      <Dialog
+        open={!!deleteOrg}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteOrg(null)
+            setDeleteConfirmName("")
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <IconAlertTriangle className="size-5" />
+              Delete Organization
+            </DialogTitle>
+            <DialogDescription>
+              This will permanently delete <strong>{deleteOrg?.name}</strong> and all associated data.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Type the organization name to confirm deletion.
+            </p>
+            <Input
+              placeholder={deleteOrg?.name || "Organization name"}
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteOrg(null)
+                setDeleteConfirmName("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteOrg}
+              disabled={deleting || deleteConfirmName !== deleteOrg?.name}
+            >
+              {deleting ? <IconLoader2 className="size-4 animate-spin" /> : <IconTrash className="size-4" />}
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

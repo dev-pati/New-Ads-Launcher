@@ -11,14 +11,20 @@ export async function GET() {
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "No Facebook connection found" }, { status: 401 })
+    if (!connection) {
+      return NextResponse.json({
+        adAccounts: [],
+        connected: false,
+        needsReconnect: true,
+      })
+    }
 
     const adAccounts = await getCachedFacebookMetadata(
       `fb:ad-accounts:${ctx.orgId}`,
       AD_ACCOUNTS_TTL_MS,
       () => getAdAccounts(connection.access_token)
     )
-    return NextResponse.json({ adAccounts })
+    return NextResponse.json({ adAccounts, connected: true })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to fetch ad accounts"
     const isRateLimit = msg.includes("too many calls") || msg.includes("Rate limited")

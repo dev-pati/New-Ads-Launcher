@@ -13,7 +13,12 @@ export async function GET(request: NextRequest) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "No Facebook connection found. Go to /connect to link Facebook." }, { status: 401 })
+    if (!connection) {
+      return NextResponse.json({
+        error: "No Facebook connection found. Go to /connect to link Facebook.",
+        needsReconnect: true,
+      }, { status: 401 })
+    }
 
     try {
       const adAccountId = request.nextUrl.searchParams.get("ad_account_id")

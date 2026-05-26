@@ -52,6 +52,7 @@ import {
   IconSparkles,
   IconExternalLink,
   IconUserPlus,
+  IconBuilding,
 } from "@tabler/icons-react"
 
 interface FbConnection {
@@ -104,10 +105,9 @@ function SettingsContent() {
   const [membersLoading, setMembersLoading] = useState(true)
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("editor")
-  const [selectedLarkAccountId, setSelectedLarkAccountId] = useState("")
-  const [selectedLarkRole, setSelectedLarkRole] = useState("editor")
+  const [larkAccountRoles, setLarkAccountRoles] = useState<Record<string, string>>({})
   const [inviting, setInviting] = useState(false)
-  const [addingLarkAccount, setAddingLarkAccount] = useState(false)
+  const [addingLarkAccount, setAddingLarkAccount] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
   const [resending, setResending] = useState<string | null>(null)
   const [deletingInvite, setDeletingInvite] = useState<string | null>(null)
@@ -166,7 +166,6 @@ function SettingsContent() {
   const fetchAvailableLarkAccounts = useCallback(async () => {
     if (!activeOrgId || !isAdmin) {
       setAvailableLarkAccounts([])
-      setSelectedLarkAccountId("")
       return
     }
 
@@ -179,9 +178,13 @@ function SettingsContent() {
       const data = await res.json()
       const accounts = data.accounts || []
       setAvailableLarkAccounts(accounts)
-      setSelectedLarkAccountId((current) => (
-        accounts.some((account: AvailableAccount) => account.id === current) ? current : ""
-      ))
+      setLarkAccountRoles((current) => {
+        const next: Record<string, string> = {}
+        accounts.forEach((account: AvailableAccount) => {
+          next[account.id] = current[account.id] || "editor"
+        })
+        return next
+      })
     } catch {
       setAvailableLarkAccounts([])
     }
@@ -271,16 +274,15 @@ function SettingsContent() {
     }
   }
 
-  const handleAddLarkAccount = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedLarkAccountId || !activeOrgId) return
-    setAddingLarkAccount(true)
+  const handleAddLarkAccount = async (accountId: string) => {
+    if (!accountId || !activeOrgId) return
+    setAddingLarkAccount(accountId)
     setMessage("")
     try {
       const res = await fetch(`/api/orgs/${activeOrgId}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: selectedLarkAccountId, role: selectedLarkRole }),
+        body: JSON.stringify({ user_id: accountId, role: larkAccountRoles[accountId] || "editor" }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -288,13 +290,12 @@ function SettingsContent() {
       }
       setMessageType("success")
       setMessage("Lark account added successfully!")
-      setSelectedLarkAccountId("")
       fetchMembers()
       fetchAvailableLarkAccounts()
     } catch {
       setMessageType("error"); setMessage("Failed to add Lark account")
     } finally {
-      setAddingLarkAccount(false)
+      setAddingLarkAccount(null)
     }
   }
 
@@ -364,9 +365,13 @@ function SettingsContent() {
     setDeleteDialogOpen(true)
   }
 
+  const getInitial = (name?: string | null, email?: string) => (
+    name?.charAt(0) || email?.charAt(0) || "?"
+  ).toUpperCase()
+
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="mx-auto w-full max-w-7xl space-y-6 px-6 py-5 lg:px-8">
+      <div className="space-y-1">
         <h1 className="font-heading text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground">
           Manage connections, team members, and organization settings.
@@ -374,10 +379,14 @@ function SettingsContent() {
       </div>
 
       <Tabs defaultValue="team">
-        <TabsList>
+        <TabsList className="w-fit">
           <TabsTrigger value="team">
             <IconUsers className="mr-1.5 size-4" />
             Team
+          </TabsTrigger>
+          <TabsTrigger value="organization">
+            <IconBuilding className="mr-1.5 size-4" />
+            Organization
           </TabsTrigger>
           <TabsTrigger value="connections">
             <IconBrandFacebook className="mr-1.5 size-4" />
@@ -412,53 +421,85 @@ function SettingsContent() {
                   Lark Company Accounts
                 </CardTitle>
                 <CardDescription>
-                  People who have signed in with company Lark and are not members of this organization yet.
+                  People who have signed in with the Lark app and are not members of this organization yet.
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleAddLarkAccount} className="flex items-end gap-3">
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <Label>Account</Label>
-                    <Select value={selectedLarkAccountId} onValueChange={setSelectedLarkAccountId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a Lark account" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availableLarkAccounts.length === 0 ? (
-                          <SelectItem value="none" disabled>
-                            No Lark accounts waiting
-                          </SelectItem>
-                        ) : (
-                          availableLarkAccounts.map((account) => (
-                            <SelectItem key={account.id} value={account.id}>
-                              {account.full_name ? `${account.full_name} - ${account.email}` : account.email}
-                              {account.last_sign_in_at ? ` - last login ${new Date(account.last_sign_in_at).toLocaleDateString()}` : ""}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
+                {availableLarkAccounts.length === 0 ? (
+                  <div className="flex items-center justify-center rounded-lg border border-dashed px-4 py-8 text-sm text-muted-foreground">
+                    No Lark accounts waiting
                   </div>
-                  <div className="w-32 space-y-2">
-                    <Label>Role</Label>
-                    <Select value={selectedLarkRole} onValueChange={setSelectedLarkRole}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="editor">Editor</SelectItem>
-                      </SelectContent>
-                    </Select>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border">
+                    {availableLarkAccounts.map((account) => (
+                      <div
+                        key={account.id}
+                        className="flex flex-col gap-4 border-b p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                            {account.avatar_url ? (
+                              <img
+                                src={account.avatar_url}
+                                alt=""
+                                className="size-10 rounded-full object-cover"
+                              />
+                            ) : (
+                              getInitial(account.full_name, account.email)
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-medium">
+                                {account.full_name || account.email}
+                              </p>
+                              <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
+                                Lark
+                              </Badge>
+                            </div>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {account.email}
+                            </p>
+                            {account.last_sign_in_at && (
+                              <p className="text-xs text-muted-foreground">
+                                Last login {new Date(account.last_sign_in_at).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 sm:shrink-0">
+                          <Select
+                            value={larkAccountRoles[account.id] || "editor"}
+                            onValueChange={(role) => {
+                              setLarkAccountRoles((current) => ({ ...current, [account.id]: role }))
+                            }}
+                          >
+                            <SelectTrigger className="h-9 w-28">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="admin">Admin</SelectItem>
+                              <SelectItem value="editor">Editor</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            className="h-9"
+                            disabled={addingLarkAccount === account.id}
+                            onClick={() => handleAddLarkAccount(account.id)}
+                          >
+                            {addingLarkAccount === account.id ? (
+                              <IconLoader2 className="size-4 animate-spin" />
+                            ) : (
+                              <IconPlus className="size-4" />
+                            )}
+                            Add
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <Button
-                    type="submit"
-                    disabled={addingLarkAccount || !selectedLarkAccountId || availableLarkAccounts.length === 0}
-                  >
-                    {addingLarkAccount ? <IconLoader2 className="size-4 animate-spin" /> : <IconPlus className="size-4" />}
-                    Add
-                  </Button>
-                </form>
+                )}
               </CardContent>
             </Card>
           )}
@@ -475,8 +516,8 @@ function SettingsContent() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={handleInvite} className="flex items-end gap-3">
-                <div className="flex-1 space-y-2">
+              <form onSubmit={handleInvite} className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_128px_auto] lg:items-end">
+                <div className="space-y-2">
                   <Label>Email</Label>
                   <Input
                     type="email"
@@ -486,7 +527,7 @@ function SettingsContent() {
                     required
                   />
                 </div>
-                <div className="w-32 space-y-2">
+                <div className="space-y-2">
                   <Label>Role</Label>
                   <Select value={inviteRole} onValueChange={setInviteRole}>
                     <SelectTrigger>
@@ -498,7 +539,7 @@ function SettingsContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button type="submit" disabled={inviting}>
+                <Button type="submit" className="lg:self-end" disabled={inviting}>
                   {inviting ? <IconLoader2 className="size-4 animate-spin" /> : <IconPlus className="size-4" />}
                   Invite
                 </Button>
@@ -533,7 +574,7 @@ function SettingsContent() {
                 <div className="space-y-3">
                   {/* Active members */}
                   {members.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between rounded-lg border p-3">
+                    <div key={m.id} className="flex items-center justify-between rounded-lg border p-4">
                       <div className="flex items-center gap-3">
                         <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
                           {m.user?.full_name?.charAt(0)?.toUpperCase() || "?"}
@@ -558,7 +599,7 @@ function SettingsContent() {
 
                   {/* Pending invitations */}
                   {invitations.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between rounded-lg border border-dashed p-3">
+                    <div key={inv.id} className="flex items-center justify-between rounded-lg border border-dashed p-4">
                       <div className="flex items-center gap-3">
                         <div className="flex size-8 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
                           <IconMail className="size-3.5" />
@@ -605,24 +646,85 @@ function SettingsContent() {
               )}
             </CardContent>
           </Card>
-          {/* Danger Zone */}
-          <Card className="border-destructive/50">
+        </TabsContent>
+
+        {/* Organization Tab */}
+        <TabsContent value="organization" className="space-y-6 mt-6">
+          <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
-                <IconAlertTriangle className="size-5" />
-                Danger Zone
+              <CardTitle className="flex items-center gap-2">
+                <IconBuilding className="size-5" />
+                Organization
               </CardTitle>
               <CardDescription>
-                Permanently delete this organization and all its data.
+                Workspace identity, membership summary, and administrative actions.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="destructive" onClick={openDeleteDialog}>
-                <IconTrash className="size-4" />
-                Delete Organization
-              </Button>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Name</p>
+                  <p className="mt-1 truncate text-sm font-semibold">{activeOrg?.name || "Organization"}</p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Your role</p>
+                  <Badge className="mt-2" variant={isAdmin ? "default" : "secondary"}>
+                    {activeOrg?.role || "member"}
+                  </Badge>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Members</p>
+                  <p className="mt-1 text-sm font-semibold">{members.length}</p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs font-medium text-muted-foreground">Pending invites</p>
+                  <p className="mt-1 text-sm font-semibold">{invitations.length}</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Access Management</CardTitle>
+              <CardDescription>
+                Add members from the Team tab. Only organization admins can invite, add, or remove members.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <p className="text-sm font-medium">Admin permissions</p>
+                  <p className="text-sm text-muted-foreground">
+                    {isAdmin ? "You can manage this organization." : "You can view this organization, but cannot manage members."}
+                  </p>
+                </div>
+                <Badge variant={isAdmin ? "default" : "secondary"}>
+                  {isAdmin ? "Admin" : "Limited"}
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
+
+          {isAdmin && (
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-destructive">
+                  <IconAlertTriangle className="size-5" />
+                  Danger Zone
+                </CardTitle>
+                <CardDescription>
+                  Permanently delete this organization and all its data.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Button variant="destructive" onClick={openDeleteDialog}>
+                  <IconTrash className="size-4" />
+                  Delete Organization
+                </Button>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* AI Keys Tab */}

@@ -30,11 +30,8 @@ type AccountRow = {
   } | null
 }
 
-const COMPANY_LARK_DOMAINS = new Set(["patigroup.com", "patiagency.com"])
-
-function isCompanyLarkAccount(account: AccountRow) {
-  const domain = account.email.split("@").pop()?.toLowerCase()
-  return account.raw_user_meta_data?.provider === "lark" && !!domain && COMPANY_LARK_DOMAINS.has(domain)
+function isLarkAccount(account: AccountRow) {
+  return account.raw_user_meta_data?.provider === "lark"
 }
 
 // List org members
@@ -96,7 +93,7 @@ export async function GET(
 
       const availableAccounts = (accounts || [])
         .filter((account: AccountRow) => !memberIds.has(account.id))
-        .filter((account: AccountRow) => source === "lark_company" ? isCompanyLarkAccount(account) : true)
+        .filter((account: AccountRow) => source === "lark_company" ? isLarkAccount(account) : true)
         .map((account: AccountRow) => ({
           id: account.id,
           email: account.email,

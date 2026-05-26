@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import { useOrg } from "@/lib/org-context"
 
 interface AdAccount {
   id: string
@@ -35,30 +36,59 @@ export function useAdAccount() {
 }
 
 export function AdAccountProvider({ children }: { children: React.ReactNode }) {
+  const { activeOrgId } = useOrg()
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([])
   const [selectedAccountId, setSelectedAccountIdState] = useState("")
   const [loading, setLoading] = useState(true)
+  const storageKey = activeOrgId ? `${STORAGE_KEY}:${activeOrgId}` : STORAGE_KEY
 
   useEffect(() => {
-    fetch("/api/facebook/ad-accounts")
-      .then(r => r.json())
-      .then(d => {
+    let cancelled = false
+
+    async function loadAdAccounts() {
+      await Promise.resolve()
+      if (cancelled) return
+
+      if (!activeOrgId) {
+        setAdAccounts([])
+        setSelectedAccountIdState("")
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setAdAccounts([])
+      setSelectedAccountIdState("")
+
+      try {
+        const res = await fetch("/api/facebook/ad-accounts")
+        const d = await res.json().catch(() => ({}))
+        if (cancelled) return
         const accounts: AdAccount[] = d.adAccounts || []
         setAdAccounts(accounts)
         if (accounts.length > 0) {
-          const stored = localStorage.getItem(STORAGE_KEY)
+          const stored = localStorage.getItem(storageKey)
           const valid = stored && accounts.find(a => a.id === stored)
           setSelectedAccountIdState(valid ? stored : accounts[0].id)
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+      } catch {
+        if (!cancelled) setAdAccounts([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadAdAccounts()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeOrgId, storageKey])
 
   const setSelectedAccountId = useCallback((id: string) => {
     setSelectedAccountIdState(id)
-    localStorage.setItem(STORAGE_KEY, id)
-  }, [])
+    localStorage.setItem(storageKey, id)
+  }, [storageKey])
 
   const selectedAccount = adAccounts.find(a => a.id === selectedAccountId) || null
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useOrg } from "@/lib/org-context"
@@ -17,6 +17,7 @@ import {
   IconLink,
   IconBulb,
   IconSearch,
+  IconBuilding,
   IconGift,
   IconSettings,
   IconBell,
@@ -92,6 +93,7 @@ const navSections: NavSection[] = [
 ]
 
 const bottomNav = [
+  { label: "Project", href: "/projects", icon: IconBuilding },
   { label: "Search", href: "/search", icon: IconSearch },
   { label: "Rewards", href: "/rewards", icon: IconGift },
   { label: "Settings", href: "/settings", icon: IconSettings },
@@ -104,6 +106,7 @@ function getActiveSection(pathname: string): string {
   if (pathname.startsWith("/automate")) return "automate"
   if (pathname.startsWith("/connect") || pathname.startsWith("/rate-limit")) return "connect"
   if (pathname.startsWith("/inspo")) return "inspo"
+  if (pathname.startsWith("/project")) return "projects"
   if (pathname.startsWith("/search")) return "search"
   if (pathname.startsWith("/rewards")) return "rewards"
   if (pathname.startsWith("/settings")) return "settings"
@@ -258,7 +261,7 @@ export function AppSidebar({ userName, userEmail }: AppSidebarProps) {
                   {section.id === "launch" && (
                     <div className="mx-2 mb-2 rounded-lg bg-sidebar-accent px-3 py-2">
                       <p className="text-[10px] font-medium text-sidebar-foreground/40 uppercase tracking-wide mb-1.5">
-                        Your team's last 30d
+                        Your team&apos;s last 30d
                       </p>
                       <div className="flex items-center gap-4">
                         <div>

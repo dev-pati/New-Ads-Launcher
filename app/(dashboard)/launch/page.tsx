@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useAdAccount } from "@/lib/ad-account-context"
+import { useOrg } from "@/lib/org-context"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -287,7 +288,8 @@ function PlatformStatusPopover() {
     setLoading(true)
     try {
       const res = await fetch("/api/facebook/ad-accounts")
-      const ok = res.ok
+      const data = await res.json().catch(() => ({}))
+      const ok = res.ok && data.connected !== false
       setMetaApi({ label: "Marketing API", status: ok ? "operational" : "degraded" })
       setAdsManager({ label: "Ads Manager", status: ok ? "operational" : "degraded" })
     } catch {
@@ -12866,6 +12868,7 @@ function TableMode({
 
 export default function LaunchPage() {
   const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
+  const { activeOrgId } = useOrg()
 
   const [mode, setMode] = useState<"gallery" | "table">("gallery")
 
@@ -12876,7 +12879,7 @@ export default function LaunchPage() {
   const [adProfilesOpen, setAdProfilesOpen] = useState(false)
 
   // Lưu page/IG preference cho từng ad account
-  const PAGE_PREFS_KEY = "launch_page_prefs"
+  const PAGE_PREFS_KEY = activeOrgId ? `launch_page_prefs:${activeOrgId}` : "launch_page_prefs"
   const getPagePrefs = (): Record<string, { pageId: string; igId: string }> => {
     try { return JSON.parse(localStorage.getItem(PAGE_PREFS_KEY) || "{}") } catch { return {} }
   }
@@ -13681,14 +13684,29 @@ export default function LaunchPage() {
   // Fetch pages 1 lần khi mount — cache 10 min in sessionStorage to avoid rate limits
   const [pagesError, setPagesError] = useState<string>("")
   const [needsReconnect, setNeedsReconnect] = useState(false)
-  const PAGES_CACHE_KEY    = "fb_pages_cache"
+  const pagesCacheKey = activeOrgId && selectedAccountId
+    ? `fb_pages_cache:${activeOrgId}:${selectedAccountId}`
+    : ""
   const PAGES_CACHE_TTL    = 10 * 60 * 1000 // 10 minutes
-  const PAGES_RL_KEY       = "fb_pages_ratelimit"
+  const pagesRateLimitKey = activeOrgId ? `fb_pages_ratelimit:${activeOrgId}` : "fb_pages_ratelimit"
   const PAGES_RL_COOLDOWN  = 5 * 60 * 1000  // 5 minutes — don't re-hit after 429
   useEffect(() => {
+    setPages([])
+    setSelectedPageId("")
+    setSelectedIgPageId("")
+    setIgAccountCache({})
+    setPagesError("")
+    setNeedsReconnect(false)
+
+    if (!activeOrgId) return
+    if (!selectedAccountId) {
+      setPagesError("Select or connect an ad account to load pages.")
+      return
+    }
+
     // Respect active rate-limit cooldown (avoids hammering Facebook on rapid refreshes)
     try {
-      const rl = sessionStorage.getItem(PAGES_RL_KEY)
+      const rl = sessionStorage.getItem(pagesRateLimitKey)
       if (rl) {
         const since = Date.now() - parseInt(rl, 10)
         if (since < PAGES_RL_COOLDOWN) {
@@ -13696,13 +13714,13 @@ export default function LaunchPage() {
           setPagesError(`Facebook API rate limit active. Try again in ~${remaining} min.`)
           return
         }
-        sessionStorage.removeItem(PAGES_RL_KEY)
+        sessionStorage.removeItem(pagesRateLimitKey)
       }
     } catch {}
 
     // Try page cache first
     try {
-      const cached = sessionStorage.getItem(PAGES_CACHE_KEY)
+      const cached = pagesCacheKey ? sessionStorage.getItem(pagesCacheKey) : null
       if (cached) {
         const { ts, pages: cachedPages } = JSON.parse(cached)
         if (Date.now() - ts < PAGES_CACHE_TTL && Array.isArray(cachedPages)) {
@@ -13713,15 +13731,19 @@ export default function LaunchPage() {
       }
     } catch {}
 
-    fetch("/api/facebook/pages")
+    fetch(`/api/facebook/pages?ad_account_id=${encodeURIComponent(selectedAccountId)}`)
       .then(async r => {
         const d = await r.json().catch(() => ({}))
         if (!r.ok || d.error) {
-          console.error(`[pages] API ${r.status}:`, d.error || r.statusText)
           if (r.status === 429 || d.rateLimited || /request limit|rate limit|too many|#4/i.test(d.error || "")) {
-            try { sessionStorage.setItem(PAGES_RL_KEY, String(Date.now())) } catch {}
+            console.warn(`[pages] API ${r.status}:`, d.error || r.statusText)
+            try { sessionStorage.setItem(pagesRateLimitKey, String(Date.now())) } catch {}
             setPagesError("Facebook API rate limit reached. Please wait 5-10 minutes and refresh.")
+          } else if (r.status === 401 && /no facebook connection/i.test(d.error || "")) {
+            setPagesError("Connect Facebook to load pages for this organization.")
+            setNeedsReconnect(true)
           } else {
+            console.warn(`[pages] API ${r.status}:`, d.error || r.statusText)
             setPagesError(d.error || `HTTP ${r.status}`)
           }
           if (d.needsReconnect) setNeedsReconnect(true)
@@ -13731,7 +13753,9 @@ export default function LaunchPage() {
         console.log(`[pages] Loaded ${p.length} pages`)
         setPages(p)
         // Cache for 10 min
-        try { sessionStorage.setItem(PAGES_CACHE_KEY, JSON.stringify({ ts: Date.now(), pages: p })) } catch {}
+        try {
+          if (pagesCacheKey) sessionStorage.setItem(pagesCacheKey, JSON.stringify({ ts: Date.now(), pages: p }))
+        } catch {}
         if (p.length === 0) {
           setPagesError("No Facebook pages found. Your account must be admin of at least one page.")
         }
@@ -13740,7 +13764,7 @@ export default function LaunchPage() {
         console.error("[pages] Fetch error:", e)
         setPagesError(e.message || "Failed to load pages")
       })
-  }, [])
+  }, [activeOrgId, selectedAccountId, pagesCacheKey, pagesRateLimitKey])
 
   // Khi pages load xong hoặc account đổi → apply saved pref cho account đó
   useEffect(() => {
