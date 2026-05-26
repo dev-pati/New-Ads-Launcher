@@ -1,6 +1,6 @@
 create table if not exists scheduled_activations (
   id uuid default gen_random_uuid() primary key,
-  org_id uuid not null,
+  org_id uuid not null references organizations(id) on delete cascade,
   ad_account_id text not null,
   ad_ids text[] not null default '{}',
   scheduled_at timestamptz not null,
@@ -12,9 +12,9 @@ create table if not exists scheduled_activations (
 
 alter table scheduled_activations enable row level security;
 
-create policy "org members can read scheduled activations"
-  on scheduled_activations for select
-  using (org_id::text = current_setting('app.active_org_id', true));
+create policy "org members can manage scheduled activations"
+  on scheduled_activations for all
+  using (is_org_member(org_id));
 
 create index scheduled_activations_pending_idx
   on scheduled_activations (status, scheduled_at)

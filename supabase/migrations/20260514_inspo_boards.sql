@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS inspo_boards (
   id         UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   org_id     UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -33,10 +33,10 @@ CREATE POLICY "Members can create boards"
   ON inspo_boards FOR INSERT WITH CHECK (is_org_member(org_id));
 
 CREATE POLICY "Owner can update board"
-  ON inspo_boards FOR UPDATE USING (user_id = auth.uid());
+  ON inspo_boards FOR UPDATE USING (user_id = current_account_id());
 
 CREATE POLICY "Owner can delete board"
-  ON inspo_boards FOR DELETE USING (user_id = auth.uid());
+  ON inspo_boards FOR DELETE USING (user_id = current_account_id());
 
 CREATE POLICY "Members can view saves"
   ON inspo_board_saves FOR SELECT USING (is_org_member(org_id));

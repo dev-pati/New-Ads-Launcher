@@ -13,16 +13,16 @@ ALTER TABLE naming_schemas ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "org members can read naming schema"
   ON naming_schemas FOR SELECT
-  USING (org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid()));
+  USING (is_org_member(org_id));
 
 CREATE POLICY "org members can insert naming schema"
   ON naming_schemas FOR INSERT
-  WITH CHECK (org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid()));
+  WITH CHECK (is_org_member(org_id));
 
 CREATE POLICY "org members can update naming schema"
   ON naming_schemas FOR UPDATE
-  USING (org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid()))
-  WITH CHECK (org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid()));
+  USING (is_org_member(org_id))
+  WITH CHECK (is_org_member(org_id));
 
 CREATE OR REPLACE FUNCTION update_naming_schemas_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$

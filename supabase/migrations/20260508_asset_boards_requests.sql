@@ -2,7 +2,7 @@
 create table if not exists asset_boards (
   id          uuid        default gen_random_uuid() primary key,
   org_id      uuid        not null references organizations(id) on delete cascade,
-  user_id     uuid        not null references auth.users(id),
+  user_id     uuid        not null references accounts(id) on delete cascade,
   name        text        not null,
   description text,
   created_at  timestamptz default now(),
@@ -24,7 +24,7 @@ create index if not exists idx_board_assets_creative on board_assets(creative_id
 create table if not exists creative_requests (
   id          uuid        default gen_random_uuid() primary key,
   org_id      uuid        not null references organizations(id) on delete cascade,
-  created_by  uuid        not null references auth.users(id),
+  created_by  uuid        not null references accounts(id) on delete cascade,
   title       text        not null,
   description text,
   status      text        default 'open'

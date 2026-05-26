@@ -1,6 +1,6 @@
 create table if not exists ad_set_presets (
   id uuid default gen_random_uuid() primary key,
-  org_id uuid not null,
+  org_id uuid not null references organizations(id) on delete cascade,
   name text not null,
   objective text not null,
   special_ad_categories jsonb default '[]',
@@ -18,4 +18,4 @@ alter table ad_set_presets enable row level security;
 
 create policy "org members can manage presets"
   on ad_set_presets for all
-  using (org_id::text = current_setting('app.active_org_id', true));
+  using (is_org_member(org_id));

@@ -1,7 +1,7 @@
 create table if not exists launch_drafts (
   id uuid default gen_random_uuid() primary key,
-  org_id uuid not null,
-  user_id uuid not null,
+  org_id uuid not null references organizations(id) on delete cascade,
+  user_id uuid not null references accounts(id) on delete cascade,
   user_name text,
   name text not null,
   ad_account_id text,
@@ -19,6 +19,6 @@ alter table launch_drafts enable row level security;
 
 create policy "org members can manage launch drafts"
   on launch_drafts for all
-  using (org_id::text = current_setting('app.active_org_id', true));
+  using (is_org_member(org_id));
 
 create index launch_drafts_org_id_idx on launch_drafts (org_id, created_at desc);

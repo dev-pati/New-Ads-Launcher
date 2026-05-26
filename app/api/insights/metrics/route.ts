@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { getCachedFacebookMetadata } from "@/app/api/facebook/_cache"
+import { getDbCachedFacebookMetadata } from "@/app/api/facebook/_db-cache"
 import { metaFetch } from "@/app/api/facebook/_meta-fetch"
 
 export const runtime = "nodejs"
@@ -58,9 +58,15 @@ export async function GET(request: NextRequest) {
     const token = connection.access_token
 
     const dateKey  = since && until ? `tr:${since}_${until}` : `dp:${datePreset}`
-    const cacheKey = `insights-metrics:${adAccountId}:${dateKey}`
+    const cacheKey = `insights:metrics:${adAccountId}:${dateKey}`
+    const forceRefresh = sp.get("refresh") === "true"
 
-    const result = await getCachedFacebookMetadata(cacheKey, CACHE_TTL, async () => {
+    const result = await getDbCachedFacebookMetadata({
+      orgId: ctx.orgId,
+      cacheKey,
+      ttlMs: CACHE_TTL,
+      forceRefresh,
+      loader: async () => {
       const fields = [
         "spend", "impressions", "reach",
         "inline_link_clicks", "inline_link_click_ctr",
@@ -125,9 +131,15 @@ export async function GET(request: NextRequest) {
         },
         daily: dailyStats,
       }
+      },
     })
 
-    return NextResponse.json(result)
+    return NextResponse.json({
+      ...result.value,
+      cached: result.source !== "meta",
+      stale: result.stale,
+      retryAfterMs: result.retryAfterMs,
+    })
   } catch (err: any) {
     console.error("[insights/metrics]", err)
     const isRateLimit = err?.name === "MetaRateLimitError"

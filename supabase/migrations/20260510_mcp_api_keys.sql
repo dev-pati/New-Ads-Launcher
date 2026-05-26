@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS mcp_api_keys (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id uuid NOT NULL,
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   api_key text NOT NULL UNIQUE,
   name text NOT NULL DEFAULT 'Default',
   last_used_at timestamptz,
@@ -15,4 +15,4 @@ ALTER TABLE mcp_api_keys ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "org members can manage their keys"
   ON mcp_api_keys
   FOR ALL
-  USING (org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid()));
+  USING (is_org_member(org_id));

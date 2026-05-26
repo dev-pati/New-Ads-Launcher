@@ -1,6 +1,6 @@
 -- Automations: rule-based automation engine for Meta ad management
 
-CREATE TABLE automations (
+CREATE TABLE IF NOT EXISTS automations (
   id                uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
   org_id            uuid        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   name              text        NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE automations (
   created_at        timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE automation_executions (
+CREATE TABLE IF NOT EXISTS automation_executions (
   id                uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
   org_id            uuid        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   automation_id     uuid        REFERENCES automations(id) ON DELETE SET NULL,
@@ -32,7 +32,7 @@ CREATE TABLE automation_executions (
   executed_at       timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE automation_approvals (
+CREATE TABLE IF NOT EXISTS automation_approvals (
   id               uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
   org_id           uuid        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   automation_id    uuid        REFERENCES automations(id) ON DELETE SET NULL,
@@ -41,12 +41,12 @@ CREATE TABLE automation_approvals (
   status           text        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
   requested_action text        NOT NULL,
   details          jsonb       NOT NULL DEFAULT '{}',
-  reviewed_by      uuid        REFERENCES auth.users(id),
+  reviewed_by      uuid        REFERENCES accounts(id),
   reviewed_at      timestamptz,
   created_at       timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE budget_schedules (
+CREATE TABLE IF NOT EXISTS budget_schedules (
   id             uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
   org_id         uuid        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   ad_account_id  text        NOT NULL,
@@ -80,15 +80,7 @@ ALTER TABLE automation_executions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE automation_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE budget_schedules ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "org members" ON automations USING (
-  org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid())
-);
-CREATE POLICY "org members" ON automation_executions USING (
-  org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid())
-);
-CREATE POLICY "org members" ON automation_approvals USING (
-  org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid())
-);
-CREATE POLICY "org members" ON budget_schedules USING (
-  org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid())
-);
+CREATE POLICY "org members" ON automations FOR ALL USING (is_org_member(org_id));
+CREATE POLICY "org members" ON automation_executions FOR ALL USING (is_org_member(org_id));
+CREATE POLICY "org members" ON automation_approvals FOR ALL USING (is_org_member(org_id));
+CREATE POLICY "org members" ON budget_schedules FOR ALL USING (is_org_member(org_id));

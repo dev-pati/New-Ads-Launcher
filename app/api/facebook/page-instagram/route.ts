@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getAdAccountPages, getFacebookPages, getPageInstagramAccounts, getBatchPageInstagramAccounts } from "@/lib/facebook"
-import { getCachedFacebookMetadata, peekCachedFacebookMetadata, setCachedFacebookMetadata } from "../_cache"
+import { getDbCachedFacebookMetadata } from "../_db-cache"
 import { adAccountBelongsToOrg } from "../_utils"
 
 export const dynamic = "force-dynamic"
 const PAGES_TTL_MS = 10 * 60 * 1000
 const INSTAGRAM_TTL_MS = 15 * 60 * 1000
+type PageInstagramResult = { pageId: string; igAccounts: Array<{ id: string; username?: string; profile_pic?: string }> }
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,15 +27,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const pages = await getCachedFacebookMetadata(
-      adAccountId
-        ? `fb:pages:${ctx.orgId}:ad-account:${adAccountId}`
-        : `fb:pages:${ctx.orgId}:all`,
-      PAGES_TTL_MS,
-      () => adAccountId
+    const forceRefresh = request.nextUrl.searchParams.get("refresh") === "true"
+    const pagesResult = await getDbCachedFacebookMetadata({
+      orgId: ctx.orgId,
+      cacheKey: adAccountId
+        ? `facebook:pages:ad-account:${adAccountId}`
+        : "facebook:pages:all",
+      ttlMs: PAGES_TTL_MS,
+      forceRefresh,
+      loader: () => adAccountId
         ? getAdAccountPages(adAccountId, connection.access_token)
-        : getFacebookPages(connection.access_token)
-    )
+        : getFacebookPages(connection.access_token),
+    })
+    const pages = pagesResult.value
 
     if (pageId) {
       const page = pages.find((candidate) => candidate.id === pageId)
@@ -42,40 +47,43 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Facebook Page not found for this ad account" }, { status: 403 })
       }
 
-      const igAccounts = await getCachedFacebookMetadata(
-        `fb:page-instagram:${ctx.orgId}:${page.id}`,
-        INSTAGRAM_TTL_MS,
-        () => getPageInstagramAccounts(page.id, page.access_token)
-      )
-      return NextResponse.json({ igAccounts })
+      const igResult = await getDbCachedFacebookMetadata({
+        orgId: ctx.orgId,
+        cacheKey: `facebook:page-instagram:${page.id}`,
+        ttlMs: INSTAGRAM_TTL_MS,
+        forceRefresh,
+        loader: () => getPageInstagramAccounts(page.id, page.access_token),
+      })
+      return NextResponse.json({
+        igAccounts: igResult.value,
+        cached: igResult.source !== "meta",
+        stale: igResult.stale,
+        retryAfterMs: igResult.retryAfterMs,
+      })
     }
 
-    // Batch-fetch: check cache per page, only call Meta API for uncached pages (1 call instead of N)
-    const uncachedPages: typeof pages = []
-    const igMap = new Map<string, any[]>()
-
-    for (const page of pages) {
-      const key = `fb:page-instagram:${ctx.orgId}:${page.id}`
-      const cached = peekCachedFacebookMetadata<any[]>(key)
-      if (cached !== undefined) {
-        igMap.set(page.id, cached)
-      } else {
-        uncachedPages.push(page)
+    const resultsCacheKey = adAccountId
+      ? `facebook:page-instagram-results:ad-account:${adAccountId}`
+      : "facebook:page-instagram-results:all"
+    const resultsResult = await getDbCachedFacebookMetadata({
+      orgId: ctx.orgId,
+      cacheKey: resultsCacheKey,
+      ttlMs: INSTAGRAM_TTL_MS,
+      forceRefresh,
+      loader: async () => {
+        const igMap = new Map<string, PageInstagramResult["igAccounts"]>()
+        const batchResult = await getBatchPageInstagramAccounts(pages, connection.access_token)
+        for (const page of pages) igMap.set(page.id, batchResult.get(page.id) || [])
+        return pages.map(page => ({ pageId: page.id, igAccounts: igMap.get(page.id) || [] }))
       }
-    }
+    })
 
-    if (uncachedPages.length > 0) {
-      const batchResult = await getBatchPageInstagramAccounts(uncachedPages, connection.access_token)
-      for (const page of uncachedPages) {
-        const ig = batchResult.get(page.id) || []
-        igMap.set(page.id, ig)
-        setCachedFacebookMetadata(`fb:page-instagram:${ctx.orgId}:${page.id}`, ig, INSTAGRAM_TTL_MS)
-      }
-    }
-
-    const results = pages.map(page => ({ pageId: page.id, igAccounts: igMap.get(page.id) || [] }))
-
-    return NextResponse.json({ results })
+    return NextResponse.json({
+      results: resultsResult.value,
+      cached: resultsResult.source !== "meta",
+      stale: resultsResult.stale,
+      retryAfterMs: resultsResult.retryAfterMs,
+    })
   } catch (err) {
     console.error("page-instagram error:", err)
     return NextResponse.json(

@@ -1182,7 +1182,7 @@ export default function AssetsPage() {
             {/* Grid / List content */}
             <div className="flex-1 overflow-auto px-4 py-4">
               {(loadingCreatives || loadingBoard) ? (
-                <div className="grid grid-cols-3 gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                <div className="grid grid-cols-3 items-start gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 [grid-auto-rows:max-content]">
                   {[...Array(12)].map((_, i) => <div key={i} className="aspect-square rounded-xl bg-muted animate-pulse" />)}
                 </div>
               ) : displayList.length === 0 ? (
@@ -1219,14 +1219,14 @@ export default function AssetsPage() {
                       <div
                         key={c.id}
                         className={cn(
-                          "group relative rounded-xl overflow-hidden border-2 cursor-pointer transition-all flex flex-col",
+                          "group relative flex flex-col self-start overflow-hidden rounded-xl border-2 cursor-pointer transition-all",
                           isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-muted-foreground/20"
                         )}
                         onClick={() => toggleSelect(c.id)}
                         onContextMenu={e => { e.preventDefault(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
                       >
                         {/* Thumbnail */}
-                        <div className="relative aspect-square">
+                        <div className="relative aspect-square overflow-hidden bg-muted/40">
                           <CreativeCardMedia creative={c} className="h-full w-full object-cover" />
                           {/* Checkbox */}
                           <div className={cn(

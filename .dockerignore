@@ -1,0 +1,15 @@
+.git
+.next
+node_modules
+npm-debug.log*
+.env
+.env.*
+!.env.example
+.claude
+.playwright-mcp
+screenshots
+scratch
+*.tsbuildinfo
+*.log
+Copy of *.csv
+image.png

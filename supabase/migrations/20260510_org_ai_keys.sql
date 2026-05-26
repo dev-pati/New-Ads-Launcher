@@ -9,4 +9,4 @@ ALTER TABLE org_ai_keys ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "org members can manage ai keys"
   ON org_ai_keys FOR ALL
-  USING (org_id IN (SELECT org_id FROM org_members WHERE user_id = auth.uid()));
+  USING (is_org_member(org_id));

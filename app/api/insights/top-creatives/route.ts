@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getDbCachedFacebookMetadata } from "@/app/api/facebook/_db-cache"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -50,6 +51,15 @@ export async function GET(request: NextRequest) {
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
     const token       = connection.access_token
     const accountPath = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+    const forceRefresh = sp.get("refresh") === "true"
+    const cacheKey = `insights:top-creatives:${adAccountId}:${datePreset}:limit:${limit}:after:${after || "first"}`
+
+    const result = await getDbCachedFacebookMetadata({
+      orgId: ctx.orgId,
+      cacheKey,
+      ttlMs: 10 * 60_000,
+      forceRefresh,
+      loader: async () => {
 
     // ── Step 1: ad-level insights sorted by spend ────────────────────────
     const insightParamsObj: Record<string, string> = {
@@ -71,7 +81,7 @@ export async function GET(request: NextRequest) {
     }
 
     const rows: any[] = insightData.data || []
-    if (rows.length === 0) return NextResponse.json({ ads: [] })
+    if (rows.length === 0) return { ads: [], datePreset, nextCursor: null, hasMore: false }
 
     const adIds = rows.map(r => r.ad_id)
 
@@ -168,7 +178,16 @@ export async function GET(request: NextRequest) {
     const nextCursor = insightData.paging?.cursors?.after || null
     const hasMore    = !!insightData.paging?.next
 
-    return NextResponse.json({ ads, datePreset, nextCursor, hasMore })
+    return { ads, datePreset, nextCursor, hasMore }
+      },
+    })
+
+    return NextResponse.json({
+      ...result.value,
+      cached: result.source !== "meta",
+      stale: result.stale,
+      retryAfterMs: result.retryAfterMs,
+    })
   } catch (err: any) {
     console.error("[insights/top-creatives]", err)
     return NextResponse.json({ error: err.message }, { status: 500 })

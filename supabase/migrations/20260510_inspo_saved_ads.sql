@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS inspo_saved_ads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   org_id uuid NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   ad_archive_id text NOT NULL,
   page_name text NOT NULL,
   page_id text,
@@ -20,8 +20,4 @@ ALTER TABLE inspo_saved_ads ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Org members can manage inspo saved ads"
   ON inspo_saved_ads FOR ALL
-  USING (
-    org_id IN (
-      SELECT org_id FROM org_members WHERE user_id = auth.uid()
-    )
-  );
+  USING (is_org_member(org_id));

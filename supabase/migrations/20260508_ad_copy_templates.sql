@@ -1,7 +1,7 @@
 create table if not exists ad_copy_templates (
   id uuid default gen_random_uuid() primary key,
-  org_id uuid not null,
-  user_id uuid not null,
+  org_id uuid not null references organizations(id) on delete cascade,
+  user_id uuid not null references accounts(id) on delete cascade,
   ad_account_id text not null,
   name text not null,
   primary_text text,
@@ -18,7 +18,7 @@ alter table ad_copy_templates enable row level security;
 
 create policy "org members can manage ad copy templates"
   on ad_copy_templates for all
-  using (org_id::text = current_setting('app.active_org_id', true));
+  using (is_org_member(org_id));
 
 create index ad_copy_templates_org_account_idx
   on ad_copy_templates (org_id, ad_account_id, created_at desc);

@@ -499,11 +499,11 @@ function AdProfilesModal({
   const [igByPage, setIgByPage] = useState<Record<string, IgAccount[]>>({})
   const [igLoading, setIgLoading] = useState(false)
 
-  const fetchIgAccounts = async () => {
+  const fetchIgAccounts = async (forceRefresh = false) => {
     if (pages.length === 0) return
     setIgLoading(true)
     try {
-      const res = await fetch("/api/facebook/page-instagram")
+      const res = await fetch(`/api/facebook/page-instagram${forceRefresh ? "?refresh=true" : ""}`)
       if (res.ok) {
         const data = await res.json()
         const map: Record<string, IgAccount[]> = {}
@@ -529,7 +529,7 @@ function AdProfilesModal({
 
   const fetchIgAccountsTimed = async () => {
     const t = Date.now()
-    await fetchIgAccounts()
+    await fetchIgAccounts(true)
     setFetchTime(Date.now() - t)
   }
 

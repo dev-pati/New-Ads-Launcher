@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getAdAccountPages, getFacebookPages } from "@/lib/facebook"
-import { getCachedFacebookMetadata } from "../_cache"
+import { getDbCachedFacebookMetadata } from "../_db-cache"
 import { adAccountBelongsToOrg } from "../_utils"
 export const dynamic = "force-dynamic"
 
@@ -30,17 +30,28 @@ export async function GET(request: NextRequest) {
       }
 
       const cacheKey = adAccountId
-        ? `fb:pages:${ctx.orgId}:ad-account:${adAccountId}`
-        : `fb:pages:${ctx.orgId}:all`
+        ? `facebook:pages:ad-account:${adAccountId}`
+        : "facebook:pages:all"
 
-      const pages = await getCachedFacebookMetadata(
-        cacheKey,
-        PAGES_TTL_MS,
-        () => adAccountId
-          ? getAdAccountPages(adAccountId, connection.access_token)
-          : getFacebookPages(connection.access_token)
+      const forceRefresh = request.nextUrl.searchParams.get("refresh") === "true"
+      const result = await getDbCachedFacebookMetadata(
+        {
+          orgId: ctx.orgId,
+          cacheKey,
+          ttlMs: PAGES_TTL_MS,
+          forceRefresh,
+          loader: () => adAccountId
+            ? getAdAccountPages(adAccountId, connection.access_token)
+            : getFacebookPages(connection.access_token),
+        }
       )
-      return NextResponse.json({ pages })
+
+      return NextResponse.json({
+        pages: result.value,
+        cached: result.source !== "meta",
+        stale: result.stale,
+        retryAfterMs: result.retryAfterMs,
+      })
     } catch (metaErr) {
       const msg = metaErr instanceof Error ? metaErr.message : "Meta API error"
       console.error("[pages] Meta API error:", msg)

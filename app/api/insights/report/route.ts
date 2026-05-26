@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { getCachedFacebookMetadata } from "../../facebook/_cache"
+import { getDbCachedFacebookMetadata } from "../../facebook/_db-cache"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -53,8 +53,14 @@ export async function GET(request: NextRequest) {
     const accountPath = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
 
     // ── Cached fetch ── key excludes section-specific params so all sections share one cache entry
-    const cacheKey = `insights:report:${ctx.orgId}:${adAccountId}:${datePreset}`
-    const ads = await getCachedFacebookMetadata(cacheKey, 15 * 60_000, async () => {
+    const forceRefresh = sp.get("refresh") === "true"
+    const cacheKey = `insights:report:${adAccountId}:${datePreset}:limit:${limit}`
+    const result = await getDbCachedFacebookMetadata({
+      orgId: ctx.orgId,
+      cacheKey,
+      ttlMs: 15 * 60_000,
+      forceRefresh,
+      loader: async () => {
       const insightParams = new URLSearchParams({
         level:        "ad",
         fields:       "ad_id,ad_name,adset_name,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,outbound_clicks,frequency,reach,cpm,actions,action_values,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions,video_30_sec_watched_actions,video_avg_time_watched_actions,date_start,date_stop",
@@ -272,9 +278,15 @@ export async function GET(request: NextRequest) {
     })
 
       return rawAds
-    }) // end getCachedFacebookMetadata
+      },
+    }) // end getDbCachedFacebookMetadata
 
-    return NextResponse.json({ ads })
+    return NextResponse.json({
+      ads: result.value,
+      cached: result.source !== "meta",
+      stale: result.stale,
+      retryAfterMs: result.retryAfterMs,
+    })
   } catch (err: any) {
     console.error("[insights/report]", err)
     const isRateLimit = err.message?.includes("too many calls") || err.message?.includes("Rate limited")
