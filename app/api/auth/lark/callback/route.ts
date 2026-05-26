@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
 
     const { data: existing } = await db
       .from("accounts")
-      .select("id, email, full_name, avatar_url")
+      .select("id, email, full_name, avatar_url, raw_user_meta_data")
       .ilike("email", email)
       .maybeSingle()
 
@@ -79,10 +79,20 @@ export async function GET(request: NextRequest) {
       accountEmail = existing.email
       accountName = fullName || existing.full_name
       accountAvatar = larkUser.avatar_url || existing.avatar_url
+      const rawMetadata = (
+        existing.raw_user_meta_data &&
+        typeof existing.raw_user_meta_data === "object" &&
+        !Array.isArray(existing.raw_user_meta_data)
+      ) ? existing.raw_user_meta_data : {}
       await db.from("accounts").update({
         full_name: accountName,
         avatar_url: accountAvatar,
         last_sign_in_at: new Date().toISOString(),
+        raw_user_meta_data: {
+          ...rawMetadata,
+          full_name: accountName,
+          provider: "lark",
+        },
       }).eq("id", accountId)
     } else {
       const { data: created, error } = await db

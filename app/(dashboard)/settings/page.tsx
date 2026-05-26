@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useOrg } from "@/lib/org-context"
 import { Button } from "@/components/ui/button"
@@ -51,6 +51,7 @@ import {
   IconCopy,
   IconSparkles,
   IconExternalLink,
+  IconUserPlus,
 } from "@tabler/icons-react"
 
 interface FbConnection {
@@ -77,6 +78,15 @@ interface Invitation {
   expires_at: string
 }
 
+interface AvailableAccount {
+  id: string
+  email: string
+  full_name?: string | null
+  avatar_url?: string | null
+  last_sign_in_at?: string | null
+  provider?: string | null
+}
+
 function SettingsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -90,15 +100,20 @@ function SettingsContent() {
   // Members
   const [members, setMembers] = useState<Member[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [availableLarkAccounts, setAvailableLarkAccounts] = useState<AvailableAccount[]>([])
   const [membersLoading, setMembersLoading] = useState(true)
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState("editor")
+  const [selectedLarkAccountId, setSelectedLarkAccountId] = useState("")
+  const [selectedLarkRole, setSelectedLarkRole] = useState("editor")
   const [inviting, setInviting] = useState(false)
+  const [addingLarkAccount, setAddingLarkAccount] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
   const [resending, setResending] = useState<string | null>(null)
   const [deletingInvite, setDeletingInvite] = useState<string | null>(null)
   const [message, setMessage] = useState("")
   const [messageType, setMessageType] = useState<"success" | "error">("success")
+  const isAdmin = activeOrg?.role === "admin"
 
   // AI Keys
   const [geminiKey, setGeminiKey] = useState("")
@@ -131,7 +146,7 @@ function SettingsContent() {
   }, [searchParams])
 
   // Fetch members + invitations
-  const fetchMembers = async () => {
+  const fetchMembers = useCallback(async () => {
     if (!activeOrgId) return
     setMembersLoading(true)
     try {
@@ -146,9 +161,36 @@ function SettingsContent() {
     } catch { /* ignore */ } finally {
       setMembersLoading(false)
     }
-  }
+  }, [activeOrgId])
 
-  useEffect(() => { fetchMembers() }, [activeOrgId])
+  const fetchAvailableLarkAccounts = useCallback(async () => {
+    if (!activeOrgId || !isAdmin) {
+      setAvailableLarkAccounts([])
+      setSelectedLarkAccountId("")
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/orgs/${activeOrgId}/members?available=true&source=lark_company`)
+      if (!res.ok) {
+        setAvailableLarkAccounts([])
+        return
+      }
+      const data = await res.json()
+      const accounts = data.accounts || []
+      setAvailableLarkAccounts(accounts)
+      setSelectedLarkAccountId((current) => (
+        accounts.some((account: AvailableAccount) => account.id === current) ? current : ""
+      ))
+    } catch {
+      setAvailableLarkAccounts([])
+    }
+  }, [activeOrgId, isAdmin])
+
+  useEffect(() => {
+    fetchMembers()
+    fetchAvailableLarkAccounts()
+  }, [fetchMembers, fetchAvailableLarkAccounts])
 
   useEffect(() => {
     async function fetchAiKeys() {
@@ -221,10 +263,38 @@ function SettingsContent() {
       }
       setInviteEmail("")
       fetchMembers()
+      fetchAvailableLarkAccounts()
     } catch {
       setMessageType("error"); setMessage("Failed to invite member")
     } finally {
       setInviting(false)
+    }
+  }
+
+  const handleAddLarkAccount = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedLarkAccountId || !activeOrgId) return
+    setAddingLarkAccount(true)
+    setMessage("")
+    try {
+      const res = await fetch(`/api/orgs/${activeOrgId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: selectedLarkAccountId, role: selectedLarkRole }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setMessageType("error"); setMessage(data.error || "Failed to add Lark account"); return
+      }
+      setMessageType("success")
+      setMessage("Lark account added successfully!")
+      setSelectedLarkAccountId("")
+      fetchMembers()
+      fetchAvailableLarkAccounts()
+    } catch {
+      setMessageType("error"); setMessage("Failed to add Lark account")
+    } finally {
+      setAddingLarkAccount(false)
     }
   }
 
@@ -234,6 +304,7 @@ function SettingsContent() {
     try {
       await fetch(`/api/orgs/${activeOrgId}/members?member_id=${memberId}`, { method: "DELETE" })
       setMembers((prev) => prev.filter((m) => m.id !== memberId))
+      fetchAvailableLarkAccounts()
     } catch { /* ignore */ } finally {
       setRemoving(null)
     }
@@ -332,6 +403,65 @@ function SettingsContent() {
               </CardDescription>
             </CardHeader>
           </Card>
+
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <IconUserPlus className="size-5" />
+                  Lark Company Accounts
+                </CardTitle>
+                <CardDescription>
+                  People who have signed in with company Lark and are not members of this organization yet.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleAddLarkAccount} className="flex items-end gap-3">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label>Account</Label>
+                    <Select value={selectedLarkAccountId} onValueChange={setSelectedLarkAccountId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a Lark account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableLarkAccounts.length === 0 ? (
+                          <SelectItem value="none" disabled>
+                            No Lark accounts waiting
+                          </SelectItem>
+                        ) : (
+                          availableLarkAccounts.map((account) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.full_name ? `${account.full_name} - ${account.email}` : account.email}
+                              {account.last_sign_in_at ? ` - last login ${new Date(account.last_sign_in_at).toLocaleDateString()}` : ""}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-32 space-y-2">
+                    <Label>Role</Label>
+                    <Select value={selectedLarkRole} onValueChange={setSelectedLarkRole}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="admin">Admin</SelectItem>
+                        <SelectItem value="editor">Editor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={addingLarkAccount || !selectedLarkAccountId || availableLarkAccounts.length === 0}
+                  >
+                    {addingLarkAccount ? <IconLoader2 className="size-4 animate-spin" /> : <IconPlus className="size-4" />}
+                    Add
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Invite Member */}
           <Card>

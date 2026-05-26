@@ -23,6 +23,18 @@ type AccountRow = {
   full_name: string | null
   avatar_url: string | null
   created_at?: string
+  last_sign_in_at?: string | null
+  raw_user_meta_data?: {
+    provider?: string
+    [key: string]: unknown
+  } | null
+}
+
+const COMPANY_LARK_DOMAINS = new Set(["patigroup.com", "patiagency.com"])
+
+function isCompanyLarkAccount(account: AccountRow) {
+  const domain = account.email.split("@").pop()?.toLowerCase()
+  return account.raw_user_meta_data?.provider === "lark" && !!domain && COMPANY_LARK_DOMAINS.has(domain)
 }
 
 // List org members
@@ -70,9 +82,10 @@ export async function GET(
         ((existingMembers || []) as Array<{ user_id: string }>).map((m) => m.user_id)
       )
 
+      const source = request.nextUrl.searchParams.get("source")
       const { data: accounts, error: accountsError } = await adminSupabase
         .from("accounts")
-        .select("id, email, full_name, avatar_url, created_at")
+        .select("id, email, full_name, avatar_url, created_at, last_sign_in_at, raw_user_meta_data")
         .is("disabled_at", null)
         .order("email")
 
@@ -83,12 +96,15 @@ export async function GET(
 
       const availableAccounts = (accounts || [])
         .filter((account: AccountRow) => !memberIds.has(account.id))
+        .filter((account: AccountRow) => source === "lark_company" ? isCompanyLarkAccount(account) : true)
         .map((account: AccountRow) => ({
           id: account.id,
           email: account.email,
           full_name: account.full_name,
           avatar_url: account.avatar_url,
           created_at: account.created_at,
+          last_sign_in_at: account.last_sign_in_at,
+          provider: account.raw_user_meta_data?.provider || null,
         }))
 
       return NextResponse.json({ accounts: availableAccounts })
