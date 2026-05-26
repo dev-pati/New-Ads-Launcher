@@ -3,47 +3,6 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createSession } from "@/lib/custom-auth"
 
 const LARK_BASE = "https://open.larksuite.com"
-const AUTO_JOIN_DOMAINS = new Set(["patigroup.com", "patiagency.com"])
-
-function slugify(value: string) {
-  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
-}
-
-function shouldAutoJoin(email: string) {
-  const domain = email.split("@").pop()?.toLowerCase()
-  return !!domain && AUTO_JOIN_DOMAINS.has(domain)
-}
-
-async function autoJoinPrimaryOrg(db: ReturnType<typeof createAdminClient>, accountId: string) {
-  const { data: primaryOrg, error: orgError } = await db
-    .from("organizations")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle()
-
-  if (orgError || !primaryOrg) {
-    if (orgError) console.error("[lark-callback] primary org lookup failed", orgError)
-    return
-  }
-
-  const { data: membership } = await db
-    .from("org_members")
-    .select("id")
-    .eq("org_id", primaryOrg.id)
-    .eq("user_id", accountId)
-    .maybeSingle()
-
-  if (membership) return
-
-  const { error: insertError } = await db
-    .from("org_members")
-    .insert({ org_id: primaryOrg.id, user_id: accountId, role: "editor" })
-
-  if (insertError && insertError.code !== "23505") {
-    console.error("[lark-callback] auto-join failed", insertError)
-  }
-}
 
 async function getAppAccessToken(): Promise<string> {
   const res = await fetch(`${LARK_BASE}/open-apis/auth/v3/app_access_token/internal`, {
@@ -145,29 +104,11 @@ export async function GET(request: NextRequest) {
       accountEmail = created.email
       accountName = created.full_name
       accountAvatar = created.avatar_url
-
-      const orgName = `${fullName}'s Workspace`
-      const slug = `${slugify(orgName) || "workspace"}-${accountId.slice(0, 8)}`
-      const { data: org } = await db
-        .from("organizations")
-        .insert({ name: orgName, slug, created_by: accountId })
-        .select("id")
-        .single()
-
-      if (org) {
-        await Promise.all([
-          db.from("profiles").upsert({ id: accountId, full_name: fullName, avatar_url: accountAvatar }),
-          db.from("org_members").insert({ org_id: org.id, user_id: accountId, role: "admin" }),
-        ])
-      }
     }
 
-    if (shouldAutoJoin(accountEmail)) {
-      await db
-        .from("profiles")
-        .upsert({ id: accountId, full_name: accountName, avatar_url: accountAvatar })
-      await autoJoinPrimaryOrg(db, accountId)
-    }
+    await db
+      .from("profiles")
+      .upsert({ id: accountId, full_name: accountName, avatar_url: accountAvatar })
 
     await createSession({ id: accountId, email: accountEmail, full_name: accountName, avatar_url: accountAvatar })
 
