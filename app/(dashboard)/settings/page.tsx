@@ -56,6 +56,31 @@ import {
   IconPencil,
 } from "@tabler/icons-react"
 
+const ROLES = [
+  { value: "admin",     label: "Admin",     description: "Full access. Can invite/remove members, manage settings, launch ads, edit ads, and delete ads." },
+  { value: "editor",    label: "Editor",    description: "Can create workspaces, manage integrations, launch ads, edit ads in Manage, and delete ads." },
+  { value: "launcher",  label: "Launcher",  description: "Can launch ads and edit ads in Manage. Cannot delete ads or manage team/workspace settings." },
+  { value: "uploader",  label: "Uploader",  description: "Can upload media and content. Cannot launch, edit, or delete ads." },
+  { value: "analyst",   label: "Analyst",   description: "Can view reports and statistics. Cannot launch, edit, or delete ads." },
+  { value: "commenter", label: "Commenter", description: "Can view and write comments. Cannot launch, edit, or delete ads." },
+]
+
+function RoleBadge({ role }: { role: string }) {
+  const cls: Record<string, string> = {
+    admin:     "bg-primary text-primary-foreground",
+    editor:    "bg-secondary text-secondary-foreground",
+    launcher:  "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    uploader:  "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+    analyst:   "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+    commenter: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls[role] ?? cls.editor}`}>
+      {role}
+    </span>
+  )
+}
+
 interface FbConnection {
   connected: boolean
   user?: { id: string; name: string; picture?: string }
@@ -118,6 +143,7 @@ function SettingsContent() {
   const [inviting, setInviting] = useState(false)
   const [addingLarkAccount, setAddingLarkAccount] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [updatingRole, setUpdatingRole] = useState<string | null>(null)
   const [resending, setResending] = useState<string | null>(null)
   const [deletingInvite, setDeletingInvite] = useState<string | null>(null)
   const [message, setMessage] = useState("")
@@ -312,6 +338,21 @@ function SettingsContent() {
       setMessageType("error"); setMessage("Failed to add Lark account")
     } finally {
       setAddingLarkAccount(null)
+    }
+  }
+
+  const handleUpdateRole = async (memberId: string, newRole: string) => {
+    if (!activeOrgId) return
+    setUpdatingRole(memberId)
+    try {
+      await fetch(`/api/orgs/${activeOrgId}/members`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member_id: memberId, role: newRole }),
+      })
+      setMembers((prev) => prev.map((m) => m.id === memberId ? { ...m, role: newRole } : m))
+    } catch { /* ignore */ } finally {
+      setUpdatingRole(null)
     }
   }
 
@@ -549,12 +590,20 @@ function SettingsContent() {
                               setLarkAccountRoles((current) => ({ ...current, [account.id]: role }))
                             }}
                           >
-                            <SelectTrigger className="h-9 w-28">
-                              <SelectValue />
+                            <SelectTrigger className="h-9 w-32">
+                              <SelectValue>
+                                {ROLES.find(r => r.value === (larkAccountRoles[account.id] || "editor"))?.label}
+                              </SelectValue>
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="editor">Editor</SelectItem>
+                              {ROLES.map((r) => (
+                                <SelectItem key={r.value} value={r.value} textValue={r.label}>
+                                  <div>
+                                    <p className="font-medium">{r.label}</p>
+                                    <p className="text-xs text-muted-foreground">{r.description}</p>
+                                  </div>
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                           <Button
@@ -606,11 +655,19 @@ function SettingsContent() {
                   <Label>Role</Label>
                   <Select value={inviteRole} onValueChange={setInviteRole}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue>
+                        {ROLES.find(r => r.value === inviteRole)?.label}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="editor">Editor</SelectItem>
+                      {ROLES.map((r) => (
+                        <SelectItem key={r.value} value={r.value} textValue={r.label}>
+                          <div>
+                            <p className="font-medium">{r.label}</p>
+                            <p className="text-xs text-muted-foreground">{r.description}</p>
+                          </div>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -662,8 +719,37 @@ function SettingsContent() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={m.role === "admin" ? "default" : "secondary"}>{m.role}</Badge>
-                        {members.length > 1 && (
+                        {isAdmin ? (
+                          <div className="relative">
+                            {updatingRole === m.id && (
+                              <IconLoader2 className="absolute right-7 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
+                            )}
+                            <Select
+                              value={m.role}
+                              onValueChange={(val) => handleUpdateRole(m.id, val)}
+                              disabled={updatingRole === m.id}
+                            >
+                              <SelectTrigger className="h-7 w-32 text-xs">
+                                <SelectValue>
+                                  {ROLES.find(r => r.value === m.role)?.label ?? m.role}
+                                </SelectValue>
+                              </SelectTrigger>
+                              <SelectContent align="end">
+                                {ROLES.map((r) => (
+                                  <SelectItem key={r.value} value={r.value} textValue={r.label}>
+                                    <div>
+                                      <p className="font-medium">{r.label}</p>
+                                      <p className="text-xs text-muted-foreground">{r.description}</p>
+                                    </div>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        ) : (
+                          <RoleBadge role={m.role} />
+                        )}
+                        {isAdmin && members.length > 1 && (
                           <Button variant="ghost" size="icon" className="size-8" onClick={() => handleRemove(m.id)} disabled={removing === m.id}>
                             {removing === m.id ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconTrash className="size-3.5 text-muted-foreground" />}
                           </Button>

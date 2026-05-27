@@ -274,7 +274,7 @@ export default function HomePage() {
                     <CardTitle className="mt-3 text-lg">{org.name}</CardTitle>
                     <CardDescription className="flex items-center gap-1">
                       <IconUsers className="size-3.5" />
-                      {org.role === "admin" ? "Admin" : "Editor"}
+                      {org.role ? org.role.charAt(0).toUpperCase() + org.role.slice(1) : "Member"}
                     </CardDescription>
                   </CardHeader>
                 </Card>

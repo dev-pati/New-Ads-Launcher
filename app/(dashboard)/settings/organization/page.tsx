@@ -19,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 import {
   IconUsers,
   IconPlus,
@@ -28,6 +27,31 @@ import {
   IconMail,
   IconUserPlus,
 } from "@tabler/icons-react"
+
+const ROLES = [
+  { value: "admin",     label: "Admin",     description: "Full access. Can invite/remove members, manage settings, launch ads, edit ads, and delete ads." },
+  { value: "editor",    label: "Editor",    description: "Can create workspaces, manage integrations, launch ads, edit ads in Manage, and delete ads." },
+  { value: "launcher",  label: "Launcher",  description: "Can launch ads and edit ads in Manage. Cannot delete ads or manage team/workspace settings." },
+  { value: "uploader",  label: "Uploader",  description: "Can upload media and content. Cannot launch, edit, or delete ads." },
+  { value: "analyst",   label: "Analyst",   description: "Can view reports and statistics. Cannot launch, edit, or delete ads." },
+  { value: "commenter", label: "Commenter", description: "Can view and write comments. Cannot launch, edit, or delete ads." },
+]
+
+function RoleBadge({ role }: { role: string }) {
+  const cls: Record<string, string> = {
+    admin:     "bg-primary text-primary-foreground",
+    editor:    "bg-secondary text-secondary-foreground",
+    launcher:  "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    uploader:  "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
+    analyst:   "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
+    commenter: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${cls[role] ?? cls.editor}`}>
+      {role}
+    </span>
+  )
+}
 
 interface Member {
   id: string
@@ -60,6 +84,7 @@ export default function OrganizationPage() {
   const [inviting, setInviting] = useState(false)
   const [addingExisting, setAddingExisting] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
+  const [updatingRole, setUpdatingRole] = useState<string | null>(null)
   const [message, setMessage] = useState("")
   const isAdmin = activeOrg?.role === "admin"
 
@@ -83,19 +108,13 @@ export default function OrganizationPage() {
       setSelectedAccountId("")
       return
     }
-
     try {
       const res = await fetch(`/api/orgs/${activeOrgId}/members?available=true`)
-      if (!res.ok) {
-        setAvailableAccounts([])
-        return
-      }
+      if (!res.ok) { setAvailableAccounts([]); return }
       const data = await res.json()
       setAvailableAccounts(data.accounts || [])
       setSelectedAccountId((current) => (
-        (data.accounts || []).some((account: AvailableAccount) => account.id === current)
-          ? current
-          : ""
+        (data.accounts || []).some((a: AvailableAccount) => a.id === current) ? current : ""
       ))
     } catch {
       setAvailableAccounts([])
@@ -110,7 +129,6 @@ export default function OrganizationPage() {
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!inviteEmail || !activeOrgId) return
-
     setInviting(true)
     setMessage("")
     try {
@@ -120,20 +138,11 @@ export default function OrganizationPage() {
         body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
       })
       const data = await res.json()
-
-      if (!res.ok) {
-        setMessage(data.error || "Failed to invite")
-        return
-      }
-
-      if (data.added) {
-        setMessage("Member added successfully!")
-        fetchMembers()
-        fetchAvailableAccounts()
-      } else {
-        setMessage("Invitation sent!")
-      }
+      if (!res.ok) { setMessage(data.error || "Failed to invite"); return }
+      setMessage(data.added ? "Member added successfully!" : "Invitation sent!")
       setInviteEmail("")
+      fetchMembers()
+      fetchAvailableAccounts()
     } catch {
       setMessage("Failed to invite member")
     } finally {
@@ -144,7 +153,6 @@ export default function OrganizationPage() {
   const handleAddExisting = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedAccountId || !activeOrgId) return
-
     setAddingExisting(true)
     setMessage("")
     try {
@@ -154,12 +162,7 @@ export default function OrganizationPage() {
         body: JSON.stringify({ user_id: selectedAccountId, role: existingRole }),
       })
       const data = await res.json()
-
-      if (!res.ok) {
-        setMessage(data.error || "Failed to add account")
-        return
-      }
-
+      if (!res.ok) { setMessage(data.error || "Failed to add account"); return }
       setMessage("Member added successfully!")
       setSelectedAccountId("")
       fetchMembers()
@@ -171,13 +174,28 @@ export default function OrganizationPage() {
     }
   }
 
+  const handleUpdateRole = async (memberId: string, newRole: string) => {
+    if (!activeOrgId) return
+    setUpdatingRole(memberId)
+    try {
+      await fetch(`/api/orgs/${activeOrgId}/members`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member_id: memberId, role: newRole }),
+      })
+      setMembers((prev) => prev.map((m) => m.id === memberId ? { ...m, role: newRole } : m))
+    } catch {
+      // ignore
+    } finally {
+      setUpdatingRole(null)
+    }
+  }
+
   const handleRemove = async (memberId: string) => {
     if (!activeOrgId) return
     setRemoving(memberId)
     try {
-      await fetch(`/api/orgs/${activeOrgId}/members?member_id=${memberId}`, {
-        method: "DELETE",
-      })
+      await fetch(`/api/orgs/${activeOrgId}/members?member_id=${memberId}`, { method: "DELETE" })
       setMembers((prev) => prev.filter((m) => m.id !== memberId))
       fetchAvailableAccounts()
     } catch {
@@ -209,6 +227,7 @@ export default function OrganizationPage() {
         </CardHeader>
       </Card>
 
+      {/* Add Existing Account */}
       {isAdmin && (
         <Card>
           <CardHeader>
@@ -230,9 +249,7 @@ export default function OrganizationPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {availableAccounts.length === 0 ? (
-                      <SelectItem value="none" disabled>
-                        No accounts available
-                      </SelectItem>
+                      <SelectItem value="none" disabled>No accounts available</SelectItem>
                     ) : (
                       availableAccounts.map((account) => (
                         <SelectItem key={account.id} value={account.id}>
@@ -243,27 +260,26 @@ export default function OrganizationPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-32 space-y-2">
+              <div className="w-44 space-y-2">
                 <Label>Role</Label>
                 <Select value={existingRole} onValueChange={setExistingRole}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue>{ROLES.find(r => r.value === existingRole)?.label}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="editor">Editor</SelectItem>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r.value} value={r.value} textValue={r.label}>
+                        <div>
+                          <p className="font-medium">{r.label}</p>
+                          <p className="text-xs text-muted-foreground">{r.description}</p>
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-              <Button
-                type="submit"
-                disabled={addingExisting || !selectedAccountId || availableAccounts.length === 0}
-              >
-                {addingExisting ? (
-                  <IconLoader2 className="size-4 animate-spin" />
-                ) : (
-                  <IconPlus className="size-4" />
-                )}
+              <Button type="submit" disabled={addingExisting || !selectedAccountId || availableAccounts.length === 0}>
+                {addingExisting ? <IconLoader2 className="size-4 animate-spin" /> : <IconPlus className="size-4" />}
                 Add
               </Button>
             </form>
@@ -294,24 +310,26 @@ export default function OrganizationPage() {
                 required
               />
             </div>
-            <div className="w-32 space-y-2">
+            <div className="w-44 space-y-2">
               <Label>Role</Label>
               <Select value={inviteRole} onValueChange={setInviteRole}>
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue>{ROLES.find(r => r.value === inviteRole)?.label}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="editor">Editor</SelectItem>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r.value} value={r.value} textValue={r.label}>
+                      <div>
+                        <p className="font-medium">{r.label}</p>
+                        <p className="text-xs text-muted-foreground">{r.description}</p>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <Button type="submit" disabled={inviting}>
-              {inviting ? (
-                <IconLoader2 className="size-4 animate-spin" />
-              ) : (
-                <IconPlus className="size-4" />
-              )}
+              {inviting ? <IconLoader2 className="size-4 animate-spin" /> : <IconPlus className="size-4" />}
               Invite
             </Button>
           </form>
@@ -335,40 +353,54 @@ export default function OrganizationPage() {
           ) : (
             <div className="space-y-3">
               {members.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-center justify-between rounded-lg border p-3"
-                >
+                <div key={m.id} className="flex items-center justify-between rounded-lg border p-3">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-                      {m.user?.full_name?.charAt(0)?.toUpperCase() || "?"}
-                    </div>
+                    {m.user?.avatar_url ? (
+                      <img src={m.user.avatar_url} alt={m.user.full_name || ""} className="size-8 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+                        {m.user?.full_name?.charAt(0)?.toUpperCase() || "?"}
+                      </div>
+                    )}
                     <div>
-                      <p className="text-sm font-medium">
-                        {m.user?.full_name || "Unknown"}
-                      </p>
+                      <p className="text-sm font-medium">{m.user?.full_name || "Unknown"}</p>
                       <p className="text-xs text-muted-foreground">
                         Joined {new Date(m.joined_at).toLocaleDateString()}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={m.role === "admin" ? "default" : "secondary"}>
-                      {m.role}
-                    </Badge>
-                    {members.length > 1 && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        onClick={() => handleRemove(m.id)}
-                        disabled={removing === m.id}
-                      >
-                        {removing === m.id ? (
-                          <IconLoader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <IconTrash className="size-3.5 text-muted-foreground" />
+                    {isAdmin ? (
+                      <div className="relative">
+                        {updatingRole === m.id && (
+                          <IconLoader2 className="absolute right-7 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-muted-foreground" />
                         )}
+                        <Select
+                          value={m.role}
+                          onValueChange={(val) => handleUpdateRole(m.id, val)}
+                          disabled={updatingRole === m.id}
+                        >
+                          <SelectTrigger className="h-7 w-32 text-xs">
+                            <SelectValue>{ROLES.find(r => r.value === m.role)?.label ?? m.role}</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent align="end">
+                            {ROLES.map((r) => (
+                              <SelectItem key={r.value} value={r.value} textValue={r.label}>
+                                <div>
+                                  <p className="font-medium">{r.label}</p>
+                                  <p className="text-xs text-muted-foreground">{r.description}</p>
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <RoleBadge role={m.role} />
+                    )}
+                    {isAdmin && members.length > 1 && (
+                      <Button variant="ghost" size="icon" className="size-8" onClick={() => handleRemove(m.id)} disabled={removing === m.id}>
+                        {removing === m.id ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconTrash className="size-3.5 text-muted-foreground" />}
                       </Button>
                     )}
                   </div>

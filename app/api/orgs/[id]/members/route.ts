@@ -113,23 +113,30 @@ export async function GET(
       .eq("org_id", orgId)
       .order("joined_at")
 
-    // Fetch profiles separately
     const memberRows = (members || []) as MemberRow[]
     const userIds = memberRows.map((m) => m.user_id)
-    const { data: profiles } = await adminSupabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", userIds)
+
+    const [{ data: profiles }, { data: accountAvatars }] = await Promise.all([
+      adminSupabase.from("profiles").select("id, full_name, avatar_url").in("id", userIds),
+      adminSupabase.from("accounts").select("id, avatar_url").in("id", userIds),
+    ])
+
+const accountAvatarMap = new Map(
+      ((accountAvatars || []) as Array<{ id: string; avatar_url: string | null }>).map((a) => [a.id, a.avatar_url])
+    )
 
     const profileMap = new Map(
-      ((profiles || []) as ProfileRow[]).map((p) => [p.id, p])
+      ((profiles || []) as ProfileRow[]).map((p) => [p.id, {
+        ...p,
+        avatar_url: p.avatar_url || accountAvatarMap.get(p.id) || null,
+      }])
     )
 
     const result = memberRows.map((m) => ({
       id: m.id,
       role: m.role,
       joined_at: m.joined_at,
-      user: profileMap.get(m.user_id) || { id: m.user_id, full_name: "Unknown" },
+      user: profileMap.get(m.user_id) || { id: m.user_id, full_name: "Unknown", avatar_url: accountAvatarMap.get(m.user_id) || null },
     }))
 
     return NextResponse.json({ members: result })
@@ -157,7 +164,7 @@ export async function POST(
       return NextResponse.json({ error: "Invalid email address" }, { status: 400 })
     }
 
-    const VALID_ROLES = ["admin", "editor"]
+    const VALID_ROLES = ["admin", "editor", "launcher", "uploader", "analyst", "commenter"]
     const sanitizedRole: string = VALID_ROLES.includes(role) ? role : "editor"
 
     const supabase = createAdminClient()
@@ -307,6 +314,51 @@ export async function POST(
   } catch (err) {
     console.error("Failed to invite member:", err)
     return NextResponse.json({ error: "Failed to invite member" }, { status: 500 })
+  }
+}
+
+// Update a member's role
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getAuthUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { id: orgId } = await params
+    const { member_id: memberId, role } = await request.json()
+
+    if (!memberId) return NextResponse.json({ error: "member_id is required" }, { status: 400 })
+
+    const VALID_ROLES = ["admin", "editor", "launcher", "uploader", "analyst", "commenter"]
+    if (!VALID_ROLES.includes(role)) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 })
+    }
+
+    const supabase = createAdminClient()
+
+    const { data: callerMember } = await supabase
+      .from("org_members")
+      .select("role")
+      .eq("org_id", orgId)
+      .eq("user_id", user.id)
+      .single()
+
+    if (!callerMember || callerMember.role !== "admin") {
+      return NextResponse.json({ error: "Only admins can change roles" }, { status: 403 })
+    }
+
+    await supabase
+      .from("org_members")
+      .update({ role })
+      .eq("id", memberId)
+      .eq("org_id", orgId)
+
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error("Failed to update member role:", err)
+    return NextResponse.json({ error: "Failed to update role" }, { status: 500 })
   }
 }
 
