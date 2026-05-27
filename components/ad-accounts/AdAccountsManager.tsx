@@ -40,8 +40,14 @@ interface AccountMetricSnapshot {
   fb_ad_account_id: string
   fb_account_id: string
   name: string | null
+  account_status: number | null
   currency: string | null
-  spend_cap_minor: string | number | null
+  timezone_name: string | null
+  spend_cap_minor: number | null
+  remaining_minor: number | null
+  amount_spent_minor: number | null
+  ownership: string | null
+  owner_business_name: string | null
   synced_at: string
 }
 
@@ -120,6 +126,11 @@ export function AdAccountsManager() {
   const [limitLoading, setLimitLoading] = useState(false)
   const [dateFrom, setDateFrom] = useState("")
   const [dateTo, setDateTo] = useState("")
+  // Historical data for Ad Accounts tab
+  const [acctDateFrom, setAcctDateFrom] = useState("")
+  const [acctDateTo, setAcctDateTo] = useState("")
+  const [historicalAccounts, setHistoricalAccounts] = useState<AccountMetricSnapshot[]>([])
+  const [historicalLoading, setHistoricalLoading] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // Close dropdown on outside click
@@ -178,6 +189,29 @@ export function AdAccountsManager() {
     }
   }, [activeTab, selectedAccountId, fetchLimitSnapshots])
 
+  const fetchHistoricalAccounts = useCallback(async (from: string, to: string) => {
+    if (!from && !to) { setHistoricalAccounts([]); return }
+    setHistoricalLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (from) params.set("date_from", from)
+      if (to) params.set("date_to", to)
+      const res = await fetch(`/api/facebook/ad-account-metrics?${params}`)
+      const data = await res.json()
+      setHistoricalAccounts(data.snapshots || [])
+    } catch {
+      setHistoricalAccounts([])
+    } finally {
+      setHistoricalLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === "accounts") {
+      fetchHistoricalAccounts(acctDateFrom, acctDateTo)
+    }
+  }, [activeTab, acctDateFrom, acctDateTo, fetchHistoricalAccounts])
+
   const filteredAccounts = accounts.filter(account => {
     const text = `${account.account_id} ${account.name}`.toLowerCase()
     const matchesQuery = text.includes(query.trim().toLowerCase())
@@ -192,6 +226,21 @@ export function AdAccountsManager() {
       (ownershipFilter === "agency" && account.ownership === "agency")
     return matchesQuery && matchesStatus && matchesOwnership
   })
+
+  const hasAcctDateFilter = Boolean(acctDateFrom || acctDateTo)
+
+  const filteredHistorical = historicalAccounts.filter(s => {
+    const text = `${s.fb_account_id || ""} ${s.name || ""}`.toLowerCase()
+    if (!text.includes(query.trim().toLowerCase())) return false
+    const isActive = s.account_status === 1
+    if (statusFilter === "active" && !isActive) return false
+    if (statusFilter === "disabled" && isActive) return false
+    if (ownershipFilter === "own" && s.ownership !== "own") return false
+    if (ownershipFilter === "agency" && s.ownership !== "agency") return false
+    return true
+  })
+
+  const displayRows = hasAcctDateFilter ? filteredHistorical : filteredAccounts
 
   const activeCount = accounts.filter(a => a.account_status === 1).length
   const ownCount = accounts.filter(a => a.ownership === "own").length
@@ -304,7 +353,7 @@ export function AdAccountsManager() {
               </Button>
             </div>
 
-            {/* Row 2: summary chips + filters */}
+            {/* Row 2: summary chips + filters + date */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Summary badges */}
               <span className="rounded-full bg-[#E8F3FF] px-2.5 py-0.5 text-[11px] font-bold text-[#0064E0]">Own {ownCount}</span>
@@ -339,6 +388,52 @@ export function AdAccountsManager() {
                     {s === "all" ? "All" : s === "active" ? "Active" : "Disabled"}
                   </button>
                 ))}
+              </div>
+
+              <div className="mx-1 h-4 w-px bg-[#DEE3E9]" />
+
+              {/* DATE filter — keep FROM/TO/Clear together so they never wrap apart */}
+              <div className="flex shrink-0 items-center gap-2">
+                <div className={cn(
+                  "flex items-center gap-2 rounded-full border px-3 py-1.5 transition-colors",
+                  hasAcctDateFilter ? "border-[#0064E0] bg-[#E8F3FF]" : "border-[#DEE3E9] bg-[#F7F8FA]"
+                )}>
+                  <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")} />
+                  <span className={cn("text-[10px] font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")}>From</span>
+                  <input
+                    type="date"
+                    value={acctDateFrom}
+                    onChange={e => setAcctDateFrom(e.target.value)}
+                    max={acctDateTo || toDateInputValue(new Date().toISOString())}
+                    className="h-6 border-0 bg-transparent text-sm font-medium text-[#1C2B33] outline-none [color-scheme:light]"
+                  />
+                </div>
+
+                <div className={cn(
+                  "flex items-center gap-2 rounded-full border px-3 py-1.5 transition-colors",
+                  hasAcctDateFilter ? "border-[#0064E0] bg-[#E8F3FF]" : "border-[#DEE3E9] bg-[#F7F8FA]"
+                )}>
+                  <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")} />
+                  <span className={cn("text-[10px] font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")}>To</span>
+                  <input
+                    type="date"
+                    value={acctDateTo}
+                    onChange={e => setAcctDateTo(e.target.value)}
+                    min={acctDateFrom || undefined}
+                    max={toDateInputValue(new Date().toISOString())}
+                    className="h-6 border-0 bg-transparent text-sm font-medium text-[#1C2B33] outline-none [color-scheme:light]"
+                  />
+                </div>
+
+                {hasAcctDateFilter && (
+                  <button
+                    onClick={() => { setAcctDateFrom(""); setAcctDateTo("") }}
+                    className="flex items-center gap-1 rounded-full bg-[#E8F3FF] px-3 py-1.5 text-xs font-semibold text-[#0064E0] transition-colors hover:bg-[#D0E8FF]"
+                  >
+                    <IconX className="size-3" />
+                    Clear
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -483,66 +578,100 @@ export function AdAccountsManager() {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {(loading || historicalLoading) ? (
                   <tr>
                     <td colSpan={11} className="py-16 text-center">
                       <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-[#0064E0]" />
-                      <p className="text-sm text-[#8595A4]">Loading ad accounts…</p>
+                      <p className="text-sm text-[#8595A4]">{historicalLoading ? "Loading historical data…" : "Loading ad accounts…"}</p>
                     </td>
                   </tr>
-                ) : filteredAccounts.length === 0 ? (
+                ) : displayRows.length === 0 ? (
                   <tr>
                     <td colSpan={11} className="py-16 text-center text-sm text-[#8595A4]">
-                      No ad accounts found.
+                      {hasAcctDateFilter ? "No snapshot data found for the selected date range." : "No ad accounts found."}
                     </td>
                   </tr>
-                ) : filteredAccounts.map((account, index) => {
-                  const currency = account.currency || "USD"
-                  const spent = parseMinorMoney(account.amount_spent, currency)
-                  const cap = parseMinorMoney(account.spend_cap, currency)
-                  const remaining = cap !== null && spent !== null ? Math.max(cap - spent, 0) : null
-                  const isActive = account.account_status === 1
-
-                  return (
-                    <tr key={account.id || account.account_id}
-                      className="border-b border-[#EAECEF] last:border-0 transition-colors hover:bg-[#F7F8FA]">
-                      <td className="px-5 py-3.5 text-sm text-[#C4CAD4]">{index + 1}</td>
-                      <td className="px-5 py-3.5 font-mono text-xs text-[#465A69]">{account.account_id}</td>
-                      <td className="px-5 py-3.5 text-sm font-semibold text-[#1C2B33]">{account.name}</td>
-                      <td className="px-5 py-3.5">
-                        <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold",
-                          account.ownership === "own"
-                            ? "bg-[#E8F3FF] text-[#0064E0]"
-                            : account.ownership === "agency"
-                              ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
+                ) : hasAcctDateFilter
+                  ? filteredHistorical.map((snap, index) => {
+                    const currency = snap.currency || "USD"
+                    const isActive = snap.account_status === 1
+                    return (
+                      <tr key={snap.id}
+                        className="border-b border-[#EAECEF] last:border-0 transition-colors hover:bg-[#F7F8FA]">
+                        <td className="px-5 py-3.5 text-sm text-[#C4CAD4]">{index + 1}</td>
+                        <td className="px-5 py-3.5 font-mono text-xs text-[#465A69]">{snap.fb_account_id}</td>
+                        <td className="px-5 py-3.5 text-sm font-semibold text-[#1C2B33]">{snap.name || "-"}</td>
+                        <td className="px-5 py-3.5">
+                          <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                            snap.ownership === "own" ? "bg-[#E8F3FF] text-[#0064E0]"
+                              : snap.ownership === "agency" ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
                               : "bg-[rgba(120,86,255,0.10)] text-[#5C3FB5]"
-                        )}>
-                          {account.ownership === "own" ? "Own" : account.ownership === "agency" ? "Agency/Shared" : "Personal"}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-[#465A69]">
-                        {account.owner_business?.name || account.owner_business?.id || account.business?.name || account.business?.id || "-"}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
-                          isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
-                        )}>
-                          <span className={cn("size-1.5 rounded-full", isActive ? "bg-[#31A24C]" : "bg-[#E41E3F]")} />
-                          {ACCOUNT_STATUS_LABELS[account.account_status] || `status ${account.account_status}`}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-[#1C2B33]">{currency}</td>
-                      <td className="px-5 py-3.5 text-sm text-[#8595A4]">{account.timezone_name || "-"}</td>
-                      <td className="px-5 py-3.5 text-right text-sm text-[#1C2B33]">{formatAccountMoney(account.spend_cap, currency)}</td>
-                      <td className="px-5 py-3.5 text-right text-sm font-bold text-[#0064E0]">
-                        {remaining === null ? "-" : formatMajorMoney(remaining, currency)}
-                      </td>
-                      <td className="px-5 py-3.5 text-right text-sm font-bold text-[#007D1E]">
-                        {formatAccountMoney(account.amount_spent, currency)}
-                      </td>
-                    </tr>
-                  )
-                })}
+                          )}>
+                            {snap.ownership === "own" ? "Own" : snap.ownership === "agency" ? "Agency/Shared" : "Personal"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-[#465A69]">{snap.owner_business_name || "-"}</td>
+                        <td className="px-5 py-3.5">
+                          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                            isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
+                          )}>
+                            <span className={cn("size-1.5 rounded-full", isActive ? "bg-[#31A24C]" : "bg-[#E41E3F]")} />
+                            {ACCOUNT_STATUS_LABELS[snap.account_status ?? 0] || `status ${snap.account_status}`}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-[#1C2B33]">{currency}</td>
+                        <td className="px-5 py-3.5 text-sm text-[#8595A4]">{snap.timezone_name || "-"}</td>
+                        <td className="px-5 py-3.5 text-right text-sm text-[#1C2B33]">{formatMinorMoney(snap.spend_cap_minor, currency)}</td>
+                        <td className="px-5 py-3.5 text-right text-sm font-bold text-[#0064E0]">{formatMinorMoney(snap.remaining_minor, currency)}</td>
+                        <td className="px-5 py-3.5 text-right text-sm font-bold text-[#007D1E]">{formatMinorMoney(snap.amount_spent_minor, currency)}</td>
+                      </tr>
+                    )
+                  })
+                  : filteredAccounts.map((account, index) => {
+                    const currency = account.currency || "USD"
+                    const spent = parseMinorMoney(account.amount_spent, currency)
+                    const cap = parseMinorMoney(account.spend_cap, currency)
+                    const remaining = cap !== null && spent !== null ? Math.max(cap - spent, 0) : null
+                    const isActive = account.account_status === 1
+                    return (
+                      <tr key={account.id || account.account_id}
+                        className="border-b border-[#EAECEF] last:border-0 transition-colors hover:bg-[#F7F8FA]">
+                        <td className="px-5 py-3.5 text-sm text-[#C4CAD4]">{index + 1}</td>
+                        <td className="px-5 py-3.5 font-mono text-xs text-[#465A69]">{account.account_id}</td>
+                        <td className="px-5 py-3.5 text-sm font-semibold text-[#1C2B33]">{account.name}</td>
+                        <td className="px-5 py-3.5">
+                          <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                            account.ownership === "own" ? "bg-[#E8F3FF] text-[#0064E0]"
+                              : account.ownership === "agency" ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
+                              : "bg-[rgba(120,86,255,0.10)] text-[#5C3FB5]"
+                          )}>
+                            {account.ownership === "own" ? "Own" : account.ownership === "agency" ? "Agency/Shared" : "Personal"}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-[#465A69]">
+                          {account.owner_business?.name || account.owner_business?.id || account.business?.name || account.business?.id || "-"}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                            isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
+                          )}>
+                            <span className={cn("size-1.5 rounded-full", isActive ? "bg-[#31A24C]" : "bg-[#E41E3F]")} />
+                            {ACCOUNT_STATUS_LABELS[account.account_status] || `status ${account.account_status}`}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-sm text-[#1C2B33]">{currency}</td>
+                        <td className="px-5 py-3.5 text-sm text-[#8595A4]">{account.timezone_name || "-"}</td>
+                        <td className="px-5 py-3.5 text-right text-sm text-[#1C2B33]">{formatAccountMoney(account.spend_cap, currency)}</td>
+                        <td className="px-5 py-3.5 text-right text-sm font-bold text-[#0064E0]">
+                          {remaining === null ? "-" : formatMajorMoney(remaining, currency)}
+                        </td>
+                        <td className="px-5 py-3.5 text-right text-sm font-bold text-[#007D1E]">
+                          {formatAccountMoney(account.amount_spent, currency)}
+                        </td>
+                      </tr>
+                    )
+                  })
+                }
               </tbody>
             </table>
           </div>
