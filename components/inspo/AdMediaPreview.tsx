@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect } from "react"
 import {
-  IconPlayerPlay, IconPlayerPause, IconPlayerStop,
-  IconChevronLeft, IconChevronRight,
+  IconPlayerPlay, IconPlayerPause,
+  IconChevronLeft, IconChevronRight, IconExternalLink,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import type { DiscoveryAd } from "@/types/inspo"
@@ -30,6 +30,9 @@ export function AdMediaPreview({ ad, hasPrev, hasNext, onPrev, onNext }: Props) 
   const [progress, setProgress] = useState(0)
   const videoRef = useRef<HTMLVideoElement>(null)
   const isVideo = ad.mediaType === "video"
+  const isRealVideoUrl = ad.mediaUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i)
+  const previewUrl = ad.adSnapshotUrl || ad.mediaUrl
+  const isThumbnailOnlyVideo = isVideo && !isRealVideoUrl
 
   // Reset play state when ad changes
   useEffect(() => {
@@ -51,8 +54,6 @@ export function AdMediaPreview({ ad, hasPrev, hasNext, onPrev, onNext }: Props) 
     if (playing) { v.pause(); setPlaying(false) }
     else         { v.play().then(() => setPlaying(true)).catch(() => setPlaying(false)) }
   }
-
-  const isRealVideoUrl = ad.mediaUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i)
 
   return (
     <div className="flex-1 flex flex-col bg-neutral-950 overflow-hidden relative">
@@ -88,8 +89,12 @@ export function AdMediaPreview({ ad, hasPrev, hasNext, onPrev, onNext }: Props) 
             {/* Video overlay for non-real-video mediaType */}
             {isVideo && (
               <button
-                onClick={togglePlay}
+                onClick={() => {
+                  if (isThumbnailOnlyVideo) window.open(previewUrl, "_blank")
+                  else togglePlay()
+                }}
                 className="absolute inset-0 flex items-center justify-center group"
+                title={isThumbnailOnlyVideo ? "Open video in Meta Ad Library" : "Play video"}
               >
                 {/* Gradient overlay */}
                 <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 transition-colors rounded-xl" />
@@ -106,7 +111,9 @@ export function AdMediaPreview({ ad, hasPrev, hasNext, onPrev, onNext }: Props) 
                   "relative z-10 size-16 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center",
                   "transition-all duration-200 group-hover:scale-110 group-hover:bg-black/70"
                 )}>
-                  {playing
+                  {isThumbnailOnlyVideo
+                    ? <IconExternalLink className="size-7 text-white" />
+                    : playing
                     ? <IconPlayerPause className="size-7 text-white fill-white" />
                     : <IconPlayerPlay  className="size-7 text-white fill-white ml-1" />
                   }
@@ -158,7 +165,7 @@ export function AdMediaPreview({ ad, hasPrev, hasNext, onPrev, onNext }: Props) 
       {/* Bottom bar: Meta Preview */}
       <div className="flex items-center justify-center py-3 border-t border-white/10 shrink-0">
         <a
-          href={ad.mediaUrl}
+          href={previewUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium transition-colors"

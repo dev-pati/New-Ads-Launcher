@@ -3,7 +3,7 @@
 import { useState } from "react"
 import {
   IconCopy, IconCheck, IconDownload, IconSparkles,
-  IconPhoto, IconChevronDown, IconChevronUp,
+  IconPhoto, IconChevronDown, IconChevronUp, IconExternalLink,
 } from "@tabler/icons-react"
 import type { DiscoveryAd, InspoBoard } from "@/types/inspo"
 import { formatViews, formatSpend, timeAgo } from "@/lib/inspo-mock-data"
@@ -53,6 +53,10 @@ export function AdDetailLeftPanel({
   }
 
   function download() {
+    if (ad.mediaType === "video" && !ad.mediaUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i)) {
+      window.open(ad.adSnapshotUrl || ad.mediaUrl, "_blank")
+      return
+    }
     const a = document.createElement("a")
     a.href = ad.mediaUrl
     a.download = `${ad.brandName.replace(/\s+/g, "_")}_ad`
@@ -202,12 +206,21 @@ export function AdDetailLeftPanel({
             }
             {scriptCopied ? "Copied!" : "Copy Script"}
           </button>
+          {ad.adSnapshotUrl && (
+            <button
+              onClick={() => window.open(ad.adSnapshotUrl, "_blank")}
+              className="flex-1 flex items-center justify-center gap-1.5 h-9 text-[13px] border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80"
+            >
+              <IconExternalLink className="size-3.5" />
+              Meta
+            </button>
+          )}
           <button
             onClick={download}
             className="flex-1 flex items-center justify-center gap-1.5 h-9 text-[13px] border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80"
           >
             <IconDownload className="size-3.5" />
-            Download
+            {ad.mediaType === "video" && !ad.mediaUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) ? "Open" : "Download"}
           </button>
         </div>
 

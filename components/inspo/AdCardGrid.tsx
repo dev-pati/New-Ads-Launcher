@@ -19,10 +19,11 @@ interface Props {
 export function AdCardGrid({ ads, boards, savedMap, onSave, onUnsave, onCreateBoard, onAdClick, onBrandClick, loading }: Props) {
   if (loading) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
         {Array.from({ length: 10 }).map((_, i) => (
-          <div key={i} className="rounded-2xl border border-border/60 overflow-hidden animate-pulse bg-card">
-            <div className="aspect-[4/3] bg-muted" />
+          <div key={i} className="rounded-lg border border-[#dfe3ea] overflow-hidden animate-pulse bg-white">
+            <div className="h-32 bg-slate-100" />
+            <div className="aspect-[3/4] bg-slate-100" />
             <div className="px-3 pt-2.5 pb-3 space-y-2">
               <div className="flex items-center gap-2">
                 <div className="size-6 rounded-full bg-muted" />
@@ -54,7 +55,7 @@ export function AdCardGrid({ ads, boards, savedMap, onSave, onUnsave, onCreateBo
   }
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
       {ads.map(ad => (
         <AdCard
           key={ad.id}

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getAdAccounts } from "@/lib/facebook"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getDbCachedFacebookMetadata } from "../_db-cache"
+import { annotateAdAccounts, persistAdAccountMetrics } from "@/lib/sync-ad-accounts"
 
 const AD_ACCOUNTS_TTL_MS = 15 * 60 * 1000
 
@@ -28,12 +30,22 @@ export async function GET(request: NextRequest) {
       loader: () => getAdAccounts(connection.access_token),
     })
 
+    const supabase = createAdminClient()
+    const adAccounts = await annotateAdAccounts(supabase, ctx.orgId, result.value)
+    const syncedAt = new Date().toISOString()
+
+    if (forceRefresh) {
+      await persistAdAccountMetrics(supabase, ctx.orgId, ctx.user.id, adAccounts, syncedAt)
+    }
+
     return NextResponse.json({
-      adAccounts: result.value,
+      adAccounts,
       connected: true,
       cached: result.source !== "meta",
       stale: result.stale,
       retryAfterMs: result.retryAfterMs,
+      saved: forceRefresh,
+      syncedAt,
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to fetch ad accounts"

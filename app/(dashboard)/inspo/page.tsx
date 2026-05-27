@@ -750,12 +750,6 @@ export default function InspoPage() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-4 border-b shrink-0">
-        <h1 className="font-heading text-xl font-bold">Inspo</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Research competitors, scan winning ads, and generate creative inspiration.</p>
-      </div>
-
       {/* Sidebar + Content */}
       <div className="flex flex-1 overflow-hidden">
         <BoardSidebar

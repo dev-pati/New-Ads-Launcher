@@ -23,6 +23,7 @@ import {
   IconBell,
   IconChevronLeft,
   IconChevronRight,
+  IconCreditCard,
   IconSun,
   IconMoon,
   IconLogout,
@@ -83,6 +84,14 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    id: "ad-accounts",
+    label: "Ad Accounts",
+    icon: IconCreditCard,
+    subItems: [
+      { label: "Ad Accounts", href: "/ad-accounts" },
+    ],
+  },
+  {
     id: "inspo",
     label: "Inspo",
     icon: IconBulb,
@@ -105,6 +114,7 @@ function getActiveSection(pathname: string): string {
   if (pathname.startsWith("/insights")) return "insights"
   if (pathname.startsWith("/automate")) return "automate"
   if (pathname.startsWith("/connect") || pathname.startsWith("/rate-limit")) return "connect"
+  if (pathname.startsWith("/ad-accounts")) return "ad-accounts"
   if (pathname.startsWith("/inspo")) return "inspo"
   if (pathname.startsWith("/project")) return "projects"
   if (pathname.startsWith("/search")) return "search"

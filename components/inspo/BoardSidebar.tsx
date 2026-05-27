@@ -33,10 +33,10 @@ export function BoardSidebar({
   activeBoardId, onBoardSelect,
   boards, boardsLoading, onCreateBoard,
 }: Props) {
-  const [creatingBoard, setCreatingBoard]   = useState(false)
-  const [newBoardName,  setNewBoardName]    = useState("")
-  const [saving,        setSaving]          = useState(false)
-  const [boardsOpen,    setBoardsOpen]      = useState(true)
+  const [creatingBoard, setCreatingBoard] = useState(false)
+  const [newBoardName, setNewBoardName] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [boardsOpen, setBoardsOpen] = useState(true)
 
   async function handleCreate() {
     if (!newBoardName.trim()) return
@@ -53,7 +53,6 @@ export function BoardSidebar({
 
   return (
     <aside className="w-52 shrink-0 border-r border-border bg-background flex flex-col h-full overflow-y-auto">
-      {/* Nav items */}
       <nav className="pt-2 pb-1 px-2">
         {NAV_ITEMS.map(item => {
           const Icon = item.icon
@@ -76,10 +75,8 @@ export function BoardSidebar({
         })}
       </nav>
 
-      {/* Divider */}
       <div className="mx-3 my-1 border-t border-border/50" />
 
-      {/* Boards section */}
       <div className="px-2 pb-4 flex-1">
         <button
           onClick={() => setBoardsOpen(p => !p)}
@@ -106,7 +103,7 @@ export function BoardSidebar({
             {boardsLoading && (
               <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
                 <IconLoader2 className="size-3.5 animate-spin" />
-                Loading…
+                Loading...
               </div>
             )}
 
@@ -154,7 +151,7 @@ export function BoardSidebar({
                     if (e.key === "Enter") handleCreate()
                     if (e.key === "Escape") { setCreatingBoard(false); setNewBoardName("") }
                   }}
-                  placeholder="Board name…"
+                  placeholder="Board name..."
                   className="flex-1 h-7 px-2 text-xs border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40 bg-background"
                 />
                 <button

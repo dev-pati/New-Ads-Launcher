@@ -11,8 +11,30 @@ import { AdCardGrid } from "./AdCardGrid"
 import { AdDetailModal } from "./AdDetailModal"
 import { IconBookmarkFilled, IconSearch } from "@tabler/icons-react"
 
+type RawAdLibraryAd = {
+  id: string
+  page_name?: string
+  ad_creative_link_titles?: string[]
+  ad_creative_bodies?: string[]
+  publisher_platforms?: string[]
+  languages?: string[]
+  ad_delivery_start_time?: string
+  ad_delivery_stop_time?: string
+  ad_snapshot_url?: string
+  brand_avatar?: string
+  media_url?: string
+  media_type?: "image" | "video"
+  cta?: string
+  format?: string
+  category?: string
+  running_days?: number
+  eu_total_reach?: number
+  impressions?: { lower_bound?: number; upper_bound?: number }
+  spend?: { lower_bound?: number; upper_bound?: number }
+}
+
 // Map raw Ad Library API response → DiscoveryAd
-function mapApiAd(raw: any): DiscoveryAd {
+function mapApiAd(raw: RawAdLibraryAd): DiscoveryAd {
   const startDate = raw.ad_delivery_start_time
   const stopDate  = raw.ad_delivery_stop_time
   const runningDays = startDate
@@ -23,13 +45,19 @@ function mapApiAd(raw: any): DiscoveryAd {
     brandName:      raw.page_name || "Unknown",
     headline:       raw.ad_creative_link_titles?.[0] || undefined,
     primaryText:    raw.ad_creative_bodies?.[0] || "",
-    mediaUrl:       "",
-    mediaType:      "image",
+    mediaUrl:       raw.media_url || "",
+    mediaType:      raw.media_type || "image",
     platform:       raw.publisher_platforms?.[0]?.toLowerCase() || "facebook",
     language:       raw.languages?.[0] || undefined,
     firstSeenAt:    startDate || undefined,
-    runningDays,
+    runningDays:    raw.running_days ?? runningDays,
     adSnapshotUrl:  raw.ad_snapshot_url,
+    brandAvatar:    raw.brand_avatar,
+    cta:            raw.cta,
+    format:         raw.format,
+    category:       raw.category,
+    views:          raw.eu_total_reach ?? raw.impressions?.upper_bound,
+    estimatedSpend: raw.spend?.upper_bound,
   }
 }
 
@@ -74,7 +102,7 @@ export function InspoDiscoveryPage({
   boards, savedMap, onSave, onUnsave, onCreateBoard, activeBoardId, boardAds, onAnalyzeAd, onBrandClick,
 }: Props) {
   const [activeTab, setActiveTab] = useState<InspoTab>("explore")
-  const [search,    setSearch]    = useState("")
+  const [search,    setSearch]    = useState("myprotein")
   const [filters,   setFilters]   = useState<FilterState>(DEFAULT_FILTERS)
   const [sort,      setSort]      = useState<SortOption>("recommended")
   const [selected,  setSelected]  = useState<DiscoveryAd | null>(null)
@@ -107,11 +135,11 @@ export function InspoDiscoveryPage({
         else setErrorType("generic")
         throw new Error(data.error || "Failed to fetch ads")
       }
-      const mapped = (data.ads || []).map(mapApiAd)
+      const mapped = ((data.ads || []) as RawAdLibraryAd[]).map(mapApiAd)
       queryCache.set(key, { ads: mapped, ts: Date.now() })
       setApiAds(mapped)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to fetch ads")
       setApiAds([])
     } finally {
       setLoading(false)
@@ -149,9 +177,9 @@ export function InspoDiscoveryPage({
   const activeBoard = activeBoardId ? boards.find(b => b.id === activeBoardId) : null
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-background">
+    <div className="flex flex-col h-full overflow-hidden bg-white">
       {/* Top bar: Tabs + board label */}
-      <div className="flex items-center justify-between px-5 pt-1 border-b border-border shrink-0">
+      <div className="flex items-center justify-between px-5 pt-2 border-b border-[#e4e7ec] shrink-0">
         <InspoTabs active={activeTab} onChange={setActiveTab} />
         {activeBoard && (
           <div className="flex items-center gap-1.5 pb-2.5 text-[13px] font-semibold text-primary">
@@ -165,9 +193,16 @@ export function InspoDiscoveryPage({
       </div>
 
       {/* Search + Sort + Filters combined row */}
-      <div className="px-5 py-2.5 border-b border-border shrink-0 space-y-2">
+      <div className="relative z-30 px-5 py-3 border-b border-[#e4e7ec] shrink-0 space-y-2 bg-white overflow-visible">
         <div className="flex items-center gap-2">
-          <InspoSearchBar value={search} onChange={setSearch} />
+          <div className="w-full max-w-[520px]">
+            <InspoSearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Search for ads by brand or keywords..."
+            />
+          </div>
+          <span className="text-xs text-slate-500">1.4s</span>
           <InspoSortControl
             sort={sort}
             onSortChange={setSort}
@@ -175,13 +210,13 @@ export function InspoDiscoveryPage({
             onClearFilters={() => setFilters(DEFAULT_FILTERS)}
           />
         </div>
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-2 overflow-visible">
           <InspoFilterBar filters={filters} onChange={setFilters} />
         </div>
       </div>
 
       {/* Results count */}
-      {searchedQuery && !loading && (
+      {searchedQuery && !loading && !error && (
         <div className="px-5 py-1.5 shrink-0">
           <p className="text-[11px] text-muted-foreground/60">
             {filteredAds.length} ad{filteredAds.length !== 1 ? "s" : ""} for &quot;{searchedQuery}&quot;
@@ -190,12 +225,14 @@ export function InspoDiscoveryPage({
       )}
 
       {/* Grid / Empty state */}
-      <div className="flex-1 overflow-y-auto px-5 pb-6">
+      <div className="relative z-0 flex-1 overflow-y-auto px-5 py-7">
         {!searchedQuery && !loading && !error ? (
-          <div className="flex flex-col items-center justify-center py-32 text-muted-foreground">
-            <IconSearch className="size-10 mb-3 opacity-20" />
-            <p className="font-medium text-sm">Search Facebook Ad Library</p>
-            <p className="text-xs mt-1 opacity-70">Enter a brand name, keyword, or ad copy</p>
+          <div className="flex flex-col items-center justify-center py-32 text-center text-muted-foreground">
+            <IconSearch className="size-10 mb-3 opacity-25" />
+            <p className="font-medium text-sm">Search real ads</p>
+            <p className="text-xs mt-1 max-w-sm opacity-75">
+              Results come from SearchAPI when SEARCHAPI_API_KEY is configured, otherwise Meta Ad Library API.
+            </p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-center px-4">

@@ -261,11 +261,19 @@ export interface AdAccount {
   name: string
   account_status: number
   currency: string
+  amount_spent?: string
+  balance?: string
+  spend_cap?: string
+  timezone_name?: string
+  business?: {
+    id: string
+    name?: string
+  }
 }
 
 export async function getAdAccounts(accessToken: string): Promise<AdAccount[]> {
   const res = await fetch(
-    `${GRAPH_API_BASE}/me/adaccounts?fields=id,account_id,name,account_status,currency,amount_spent,balance&access_token=${accessToken}`
+    `${GRAPH_API_BASE}/me/adaccounts?fields=id,account_id,name,account_status,currency,amount_spent,balance,spend_cap,timezone_name,business{id,name}&limit=200&access_token=${accessToken}`
   )
   // Record headers (including X-Business-Use-Case-Usage) for the status monitor
   try {

@@ -1,9 +1,15 @@
 "use client"
 
-import { IconPlayerPlay, IconExternalLink, IconBookmark } from "@tabler/icons-react"
+import {
+  IconBookmark,
+  IconExternalLink,
+  IconPlayerPlay,
+  IconShare3,
+  IconStarFilled,
+} from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import type { DiscoveryAd, InspoBoard } from "@/types/inspo"
-import { formatViews, formatSpend, timeAgo } from "@/lib/inspo-mock-data"
+import { formatSpend, formatViews, timeAgo } from "@/lib/inspo-mock-data"
 import { SaveToBoardButton } from "./SaveToBoardButton"
 
 function BrandAvatar({ name, src }: { name: string; src?: string }) {
@@ -14,11 +20,15 @@ function BrandAvatar({ name, src }: { name: string; src?: string }) {
   ]
   const color = colors[name.charCodeAt(0) % colors.length]
   if (src) return (
-    <img src={src} alt={name} className="size-6 rounded-full object-cover ring-1 ring-white/20 shrink-0"
-      onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
+    <img
+      src={src}
+      alt={name}
+      className="size-12 rounded-full object-cover shadow-sm ring-1 ring-slate-200 shrink-0"
+      onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
+    />
   )
   return (
-    <div className={cn("size-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0", color)}>
+    <div className={cn("size-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0", color)}>
       {name.charAt(0).toUpperCase()}
     </div>
   )
@@ -37,80 +47,46 @@ interface Props {
 
 export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBoard, onClick, onBrandClick }: Props) {
   const isSaved = savedBoardIds.size > 0
+  const openPreview = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    window.open(ad.adSnapshotUrl || ad.mediaUrl || "#", "_blank")
+  }
 
   return (
     <div
       onClick={onClick}
-      className="group bg-card rounded-2xl border border-border/60 overflow-hidden cursor-pointer hover:shadow-xl hover:shadow-black/8 hover:-translate-y-0.5 hover:border-border transition-all duration-200"
+      className="group cursor-pointer overflow-hidden rounded-lg border border-[#dfe3ea] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg hover:shadow-slate-900/10"
     >
-      {/* Media */}
-      <div className="relative bg-neutral-100 dark:bg-neutral-900 overflow-hidden aspect-[4/3]">
-        {ad.mediaUrl ? (
-          <img
-            src={ad.mediaUrl}
-            alt={ad.headline || ad.brandName}
-            className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300"
-            loading="lazy"
-            onError={e => {
-              const el = e.target as HTMLImageElement
-              el.style.display = "none"
-              el.parentElement?.classList.add("ad-img-fallback")
-            }}
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <span className="text-4xl font-bold text-neutral-300 dark:text-neutral-700 select-none">
-              {ad.brandName.charAt(0).toUpperCase()}
-            </span>
-          </div>
-        )}
-
-        {/* Duration badge */}
-        {ad.duration && (
-          <span className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-mono font-medium px-1.5 py-0.5 rounded-md backdrop-blur-sm">
-            {ad.duration}
-          </span>
-        )}
-
-        {/* Stats badges top-right */}
-        <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
-          {ad.views != null && (
-            <span className="bg-black/65 backdrop-blur-sm text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none">
-              {formatViews(ad.views)}
-            </span>
-          )}
-          {ad.estimatedSpend != null && (
-            <span className="bg-black/65 backdrop-blur-sm text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded-md leading-none">
-              {formatSpend(ad.estimatedSpend)}
-            </span>
-          )}
-        </div>
-
-        {/* Play button */}
-        {ad.mediaType === "video" && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="size-11 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center group-hover:scale-110 group-hover:bg-black/70 transition-all duration-200">
-              <IconPlayerPlay className="size-5 text-white fill-white ml-0.5" />
-            </div>
-          </div>
-        )}
-
-        {/* Hover action overlay */}
-        <div
-          className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-end justify-end p-2 gap-1.5"
-          onClick={e => e.stopPropagation()}
-        >
+      <div className="space-y-2.5 px-4 pb-3 pt-4">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={e => { e.stopPropagation(); onBrandClick?.(ad.brandName) }}
+            className={onBrandClick ? "shrink-0 hover:opacity-80 transition-opacity" : "shrink-0 cursor-default"}
+            tabIndex={onBrandClick ? 0 : -1}
+          >
+            <BrandAvatar name={ad.brandName} src={ad.brandAvatar} />
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); onBrandClick?.(ad.brandName) }}
+            className={cn(
+              "min-w-0 flex-1 text-left text-[15px] font-semibold leading-tight text-slate-950",
+              onBrandClick && "hover:text-primary transition-colors"
+            )}
+            tabIndex={onBrandClick ? 0 : -1}
+          >
+            <span className="block truncate">{ad.brandName}</span>
+          </button>
           <a
             href={ad.adSnapshotUrl || ad.mediaUrl || "#"}
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
-            className="size-7 flex items-center justify-center rounded-lg bg-white/90 backdrop-blur-sm text-neutral-700 hover:bg-white hover:text-neutral-900 transition-colors shadow"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
             title="Open in Ad Library"
           >
-            <IconExternalLink className="size-3.5" />
+            <IconShare3 className="size-4" />
           </a>
-          <div className="size-7 flex items-center justify-center">
+          <div onClick={e => e.stopPropagation()} className="flex size-8 shrink-0 items-center justify-center">
             <SaveToBoardButton
               ad={ad}
               boards={boards}
@@ -123,53 +99,97 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
             />
           </div>
         </div>
-      </div>
 
-      {/* Card body */}
-      <div className="px-3 pt-2.5 pb-3 space-y-2">
-        {/* Brand + meta row */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={e => { e.stopPropagation(); onBrandClick?.(ad.brandName) }}
-            className={onBrandClick ? "shrink-0 hover:opacity-80 transition-opacity" : "shrink-0 cursor-default"}
-            tabIndex={onBrandClick ? 0 : -1}
-          >
-            <BrandAvatar name={ad.brandName} src={ad.brandAvatar} />
-          </button>
-          <div className="flex-1 min-w-0">
-            <button
-              onClick={e => { e.stopPropagation(); onBrandClick?.(ad.brandName) }}
-              className={onBrandClick ? "text-[12px] font-semibold text-foreground truncate leading-tight hover:text-primary transition-colors block w-full text-left" : "text-[12px] font-semibold text-foreground truncate leading-tight block w-full text-left"}
-              tabIndex={onBrandClick ? 0 : -1}
-            >{ad.brandName}</button>
-            <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
-              {[
-                ad.firstSeenAt ? timeAgo(ad.firstSeenAt) : null,
-                ad.runningDays ? `ran ${ad.runningDays}d` : null,
-              ].filter(Boolean).join(" · ")}
-            </p>
-          </div>
-          {/* Saved indicator (non-hover) */}
-          {isSaved && (
-            <IconBookmark className="size-3.5 text-primary fill-primary shrink-0" />
+        <div className="flex min-h-6 flex-wrap items-center gap-1.5 text-xs text-slate-600">
+          <span className={cn("size-2 rounded-full", (ad.runningDays ?? 0) > 60 ? "bg-emerald-500" : "bg-red-500")} />
+          <span>{ad.firstSeenAt ? timeAgo(ad.firstSeenAt) : "recently"}</span>
+          {ad.runningDays && <span>- ran for {ad.runningDays}d</span>}
+          {ad.views != null && (
+            <span className="ml-1 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+              {formatViews(ad.views)} views
+            </span>
+          )}
+          {ad.estimatedSpend != null && (
+            <span className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+              {formatSpend(ad.estimatedSpend)}
+            </span>
           )}
         </div>
 
-        {/* Headline */}
         {(ad.headline || ad.primaryText) && (
-          <p className="text-[12px] text-foreground/85 line-clamp-2 leading-snug">
+          <p className="line-clamp-1 text-[13px] leading-snug text-slate-950">
             {ad.headline || ad.primaryText}
           </p>
         )}
+      </div>
 
-        {/* CTA */}
-        {ad.cta && (
-          <div>
-            <span className="inline-block text-[11px] font-medium border border-border/80 rounded-lg px-2.5 py-1 text-foreground/70 bg-muted/50">
-              {ad.cta}
+      <div className="relative aspect-[3/4] overflow-hidden bg-slate-100">
+        {ad.mediaUrl ? (
+          <img
+            src={ad.mediaUrl}
+            alt={ad.headline || ad.brandName}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            loading="lazy"
+            onError={e => {
+              const el = e.target as HTMLImageElement
+              el.style.display = "none"
+              el.parentElement?.classList.add("ad-img-fallback")
+            }}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <span className="select-none text-6xl font-bold text-slate-300">
+              {ad.brandName.charAt(0).toUpperCase()}
             </span>
           </div>
         )}
+
+        <div className="absolute left-4 top-4 flex items-center gap-2">
+          {ad.duration && (
+            <span className="rounded-full bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-950 shadow">
+              {ad.duration}
+            </span>
+          )}
+          <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-950 shadow">View</span>
+        </div>
+
+        <button
+          className="absolute right-4 top-4 flex size-12 items-center justify-center rounded-full bg-black/70 text-white shadow-lg transition-colors hover:bg-black/80"
+          onClick={e => {
+            e.stopPropagation()
+            window.open(ad.adSnapshotUrl || ad.mediaUrl || "#", "_blank")
+          }}
+          title="Open media"
+        >
+          <IconExternalLink className="size-5" />
+        </button>
+
+        {ad.mediaType === "video" && (
+          <button
+            onClick={openPreview}
+            className="absolute inset-0 flex items-center justify-center"
+            title="Open video in Meta Ad Library"
+          >
+            <div className="flex size-16 items-center justify-center rounded-full bg-black/45 backdrop-blur-sm transition-all duration-200 group-hover:scale-110 group-hover:bg-black/65">
+              <IconPlayerPlay className="ml-1 size-8 fill-white text-white" />
+            </div>
+          </button>
+        )}
+      </div>
+
+      <div className="flex min-h-[64px] items-center gap-3 border-t border-[#edf0f4] px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold text-slate-950">{ad.primaryText || ad.headline || ad.brandName}</p>
+          {ad.cta && <p className="mt-1 text-xs text-slate-500">{ad.cta}</p>}
+        </div>
+        {isSaved && (
+          <IconBookmark className="size-4 shrink-0 fill-primary text-primary" />
+        )}
+        <div className="hidden items-center gap-0.5 text-amber-400 xl:flex">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <IconStarFilled key={i} className="size-3.5" />
+          ))}
+        </div>
       </div>
     </div>
   )

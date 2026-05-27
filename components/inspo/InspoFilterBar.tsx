@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { IconChevronDown, IconCheck } from "@tabler/icons-react"
+import { IconChevronDown, IconCheck, IconTag, IconWorld, IconBuildingStore, IconCursorText, IconEye, IconPhotoVideo } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 import type { FilterState } from "@/types/inspo"
 import { MOCK_ADS } from "@/lib/inspo-mock-data"
@@ -37,6 +37,15 @@ const FILTER_LABELS: Record<keyof FilterState, string> = {
   emotion: "Emotion", theme: "Theme", views: "Views",
 }
 
+const FILTER_ICONS: Partial<Record<keyof FilterState, React.ElementType>> = {
+  company: IconBuildingStore,
+  language: IconWorld,
+  cta: IconCursorText,
+  platform: IconWorld,
+  format: IconPhotoVideo,
+  views: IconEye,
+}
+
 interface DropdownProps {
   label: string
   options: string[]
@@ -61,34 +70,36 @@ function MultiSelectDropdown({ label, options, selected, onChange }: DropdownPro
   }
 
   const active = selected.length > 0
+  const Icon = FILTER_ICONS[label.toLowerCase().replace("ad ", "") as keyof FilterState] ?? IconTag
 
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(p => !p)}
         className={cn(
-          "flex items-center gap-1 h-7 px-2.5 text-[12px] rounded-lg border whitespace-nowrap transition-colors font-medium",
+          "flex items-center gap-2 h-9 px-3 text-[13px] rounded-xl border whitespace-nowrap transition-colors font-medium shadow-sm",
           active
-            ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15"
-            : "bg-muted/40 hover:bg-muted border-border/60 text-foreground/70 hover:text-foreground"
+            ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+            : "bg-white hover:bg-slate-50 border-[#dfe3ea] text-slate-950"
         )}
       >
+        <Icon className="size-4 text-current" />
         {label}
         {active && (
-          <span className="inline-flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold leading-none">
+          <span className="inline-flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-[9px] font-semibold leading-none">
             {selected.length}
           </span>
         )}
-        <IconChevronDown className={cn("size-3 transition-transform text-current opacity-60", open && "rotate-180")} />
+        <IconChevronDown className={cn("size-3.5 transition-transform text-current opacity-60", open && "rotate-180")} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 z-50 bg-popover border border-border/80 rounded-xl shadow-xl min-w-[160px] max-h-60 overflow-y-auto py-1.5">
+        <div className="absolute top-full left-0 mt-1.5 z-[80] bg-white border border-[#dfe3ea] rounded-xl shadow-xl min-w-[190px] max-h-72 overflow-y-auto py-1.5">
           {options.map(opt => (
             <button
               key={opt}
               onClick={() => toggle(opt)}
-              className="flex items-center gap-2 w-full px-3 py-1.5 text-sm hover:bg-muted text-left transition-colors"
+              className="flex items-center gap-2 w-full px-3 py-2 text-[13px] hover:bg-slate-50 text-left transition-colors"
             >
               <span className={cn(
                 "size-4 rounded-[4px] border flex items-center justify-center shrink-0 transition-colors",
@@ -96,7 +107,7 @@ function MultiSelectDropdown({ label, options, selected, onChange }: DropdownPro
               )}>
                 {selected.includes(opt) && <IconCheck className="size-3 text-primary-foreground" />}
               </span>
-              <span className="text-foreground/85">{opt}</span>
+              <span className="text-slate-800">{opt}</span>
             </button>
           ))}
         </div>
@@ -128,18 +139,19 @@ function ViewsDropdown({ value, onChange }: ViewsDropdownProps) {
       <button
         onClick={() => setOpen(p => !p)}
         className={cn(
-          "flex items-center gap-1 h-7 px-2.5 text-[12px] rounded-lg border whitespace-nowrap transition-colors font-medium",
+          "flex items-center gap-2 h-9 px-3 text-[13px] rounded-xl border whitespace-nowrap transition-colors font-medium shadow-sm",
           value !== "all"
-            ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/15"
-            : "bg-muted/40 hover:bg-muted border-border/60 text-foreground/70 hover:text-foreground"
+            ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+            : "bg-white hover:bg-slate-50 border-[#dfe3ea] text-slate-950"
         )}
       >
+        <IconEye className="size-4 text-current" />
         {label}
-        <IconChevronDown className={cn("size-3 transition-transform opacity-60", open && "rotate-180")} />
+        <IconChevronDown className={cn("size-3.5 transition-transform opacity-60", open && "rotate-180")} />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 z-50 bg-popover border border-border/80 rounded-xl shadow-xl min-w-[140px] py-1.5">
+        <div className="absolute top-full left-0 mt-1.5 z-[80] bg-white border border-[#dfe3ea] rounded-xl shadow-xl min-w-[150px] py-1.5">
           {VIEW_OPTIONS.map(opt => (
             <button
               key={opt.value}
@@ -167,7 +179,7 @@ interface Props {
 }
 
 export function InspoFilterBar({ filters, onChange }: Props) {
-  const set = (key: keyof FilterState, val: any) => onChange({ ...filters, [key]: val })
+  const set = <K extends keyof FilterState>(key: K, val: FilterState[K]) => onChange({ ...filters, [key]: val })
 
   const multiFilters: (keyof typeof FILTER_OPTIONS)[] = [
     "company", "language", "categories", "cta", "platform",
@@ -175,7 +187,7 @@ export function InspoFilterBar({ filters, onChange }: Props) {
   ]
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="flex min-w-0 flex-1 items-center gap-2 flex-wrap">
       {multiFilters.map(key => (
         <MultiSelectDropdown
           key={key}

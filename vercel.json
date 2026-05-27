@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/activate-scheduled-ads",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/sync-ad-accounts",
+      "schedule": "*/30 * * * *"
+    }
+  ]
+}
