@@ -41,22 +41,23 @@ async function queryAdLibrary(accessToken: string, q: string, country: string, s
   return data
 }
 
-// Try to get a valid access token: prefer org's connected FB user token, fall back to App Token
-async function getAccessToken(orgId: string): Promise<{ token: string; source: "user" | "app" } | null> {
-  // 1. Try org's connected Facebook user token
+// Try to get a valid access token — priority: dedicated env token > org user token > App Token
+async function getAccessToken(orgId: string): Promise<{ token: string; source: "dedicated" | "user" | "app" } | null> {
+  // 1. Dedicated long-lived Ad Library token (best — no user connection required)
+  const dedicatedToken = process.env.FACEBOOK_AD_LIBRARY_TOKEN
+  if (dedicatedToken) return { token: dedicatedToken, source: "dedicated" }
+
+  // 2. Org's connected Facebook user token
   try {
     const conn = await getFacebookConnection(orgId)
     if (conn?.access_token) {
-      // Check token not expired
       if (!conn.token_expires_at || new Date(conn.token_expires_at) > new Date()) {
         return { token: conn.access_token, source: "user" }
       }
     }
-  } catch {
-    // no connection, fall through
-  }
+  } catch { /* no connection */ }
 
-  // 2. Fall back to App Access Token
+  // 3. App Access Token fallback
   const appId = process.env.FACEBOOK_APP_ID
   const appSecret = process.env.FACEBOOK_APP_SECRET
   if (appId && appSecret) {
