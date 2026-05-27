@@ -50,6 +50,7 @@ export const FB_PERMISSIONS = [
   "ads_read",
   "ads_management",
   "catalog_management",
+  "ads_library",
 ].join(",")
 
 export function getFacebookLoginUrl(redirectUri: string, state: string) {

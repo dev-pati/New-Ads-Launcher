@@ -83,6 +83,7 @@ export function InspoDiscoveryPage({
   const [apiAds,        setApiAds]        = useState<DiscoveryAd[]>([])
   const [loading,       setLoading]       = useState(false)
   const [error,         setError]         = useState<string | null>(null)
+  const [errorType,     setErrorType]     = useState<"no_connection" | "no_permission" | "generic" | null>(null)
   const [searchedQuery, setSearchedQuery] = useState("")
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -96,10 +97,16 @@ export function InspoDiscoveryPage({
     }
     setLoading(true)
     setError(null)
+    setErrorType(null)
     try {
       const res  = await fetch(`/api/inspo/adscan?q=${encodeURIComponent(q)}&limit=50`)
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || "Failed to fetch ads")
+      if (!res.ok) {
+        if (data.no_connection) setErrorType("no_connection")
+        else if (data.error_code === 200 || data.error_subcode === 2332002) setErrorType("no_permission")
+        else setErrorType("generic")
+        throw new Error(data.error || "Failed to fetch ads")
+      }
       const mapped = (data.ads || []).map(mapApiAd)
       queryCache.set(key, { ads: mapped, ts: Date.now() })
       setApiAds(mapped)
@@ -191,8 +198,32 @@ export function InspoDiscoveryPage({
             <p className="text-xs mt-1 opacity-70">Enter a brand name, keyword, or ad copy</p>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-            <p className="text-sm text-destructive">{error}</p>
+          <div className="flex flex-col items-center justify-center py-24 gap-3 text-center px-4">
+            {errorType === "no_connection" ? (
+              <>
+                <p className="font-semibold text-sm">Facebook chưa được kết nối</p>
+                <p className="text-xs text-muted-foreground max-w-xs">Kết nối tài khoản Facebook để sử dụng Meta Ad Library.</p>
+                <a href="/connect" className="text-xs text-primary hover:underline font-medium">Đi đến trang Connect →</a>
+              </>
+            ) : errorType === "no_permission" ? (
+              <>
+                <p className="font-semibold text-sm">Chưa có quyền truy cập Ad Library</p>
+                <p className="text-xs text-muted-foreground max-w-sm">
+                  Cần chấp nhận điều khoản Meta Ad Library API, sau đó reconnect tài khoản Facebook trong trang Connect.
+                </p>
+                <div className="flex flex-col gap-2 w-full max-w-xs">
+                  <a href="https://www.facebook.com/ads/library/api/" target="_blank" rel="noopener noreferrer"
+                    className="text-xs px-3 py-2 rounded-lg border text-center hover:bg-muted transition-colors">
+                    Chấp nhận ToS tại facebook.com/ads/library/api ↗
+                  </a>
+                  <a href="/connect" className="text-xs px-3 py-2 rounded-lg bg-primary text-primary-foreground text-center hover:bg-primary/90 transition-colors">
+                    Reconnect Facebook →
+                  </a>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
           </div>
         ) : (
           <AdCardGrid

@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext } from "@/lib/auth"
-
-// App Access Token = app_id|app_secret — never expires, no user ToS required
-function getAppAccessToken() {
-  const appId = process.env.FACEBOOK_APP_ID
-  const appSecret = process.env.FACEBOOK_APP_SECRET
-  if (!appId || !appSecret) return null
-  return `${appId}|${appSecret}`
-}
+import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 const AD_LIBRARY_URL = "https://graph.facebook.com/v25.0/ads_archive"
 const FIELDS = [
@@ -23,7 +16,7 @@ const FIELDS = [
   "languages",
 ].join(",")
 
-// Server-side cache: key = "q|country|status" → { data, ts }
+// Server-side cache: key = "q|country|status|limit" → { data, ts }
 const serverCache = new Map<string, { data: any; ts: number }>()
 const SERVER_CACHE_TTL = 5 * 60 * 1000
 
@@ -48,6 +41,31 @@ async function queryAdLibrary(accessToken: string, q: string, country: string, s
   return data
 }
 
+// Try to get a valid access token: prefer org's connected FB user token, fall back to App Token
+async function getAccessToken(orgId: string): Promise<{ token: string; source: "user" | "app" } | null> {
+  // 1. Try org's connected Facebook user token
+  try {
+    const conn = await getFacebookConnection(orgId)
+    if (conn?.access_token) {
+      // Check token not expired
+      if (!conn.token_expires_at || new Date(conn.token_expires_at) > new Date()) {
+        return { token: conn.access_token, source: "user" }
+      }
+    }
+  } catch {
+    // no connection, fall through
+  }
+
+  // 2. Fall back to App Access Token
+  const appId = process.env.FACEBOOK_APP_ID
+  const appSecret = process.env.FACEBOOK_APP_SECRET
+  if (appId && appSecret) {
+    return { token: `${appId}|${appSecret}`, source: "app" }
+  }
+
+  return null
+}
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
@@ -61,18 +79,36 @@ export async function GET(request: NextRequest) {
 
     if (!q) return NextResponse.json({ ads: [] })
 
-    const token = getAppAccessToken()
-    if (!token) {
+    const tokenInfo = await getAccessToken(ctx.orgId)
+    if (!tokenInfo) {
       return NextResponse.json(
-        { error: "Facebook App credentials not configured." },
-        { status: 500 }
+        { error: "Facebook not connected. Go to Connect → Facebook to link your account.", no_connection: true },
+        { status: 400 }
       )
     }
 
-    const data = await queryAdLibrary(token, q, country, status, limit)
+    const data = await queryAdLibrary(tokenInfo.token, q, country, status, limit)
+
     if (data.error) {
       console.error("Meta Ad Library error:", data.error)
-      return NextResponse.json({ error: data.error.message, error_subcode: data.error?.error_subcode }, { status: 400 })
+
+      // If user token failed (e.g. expired), try App Token as fallback
+      if (tokenInfo.source === "user") {
+        const appId = process.env.FACEBOOK_APP_ID
+        const appSecret = process.env.FACEBOOK_APP_SECRET
+        if (appId && appSecret) {
+          const appData = await queryAdLibrary(`${appId}|${appSecret}`, q, country, status, limit)
+          if (!appData.error) {
+            return NextResponse.json({ ads: appData.data || [], paging: appData.paging })
+          }
+        }
+      }
+
+      return NextResponse.json({
+        error: data.error.message,
+        error_subcode: data.error?.error_subcode,
+        error_code: data.error?.code,
+      }, { status: 400 })
     }
 
     return NextResponse.json({ ads: data.data || [], paging: data.paging })
