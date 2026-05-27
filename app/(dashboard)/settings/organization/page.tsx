@@ -37,6 +37,26 @@ const ROLES = [
   { value: "commenter", label: "Commenter", description: "Can view and write comments. Cannot launch, edit, or delete ads." },
 ]
 
+function MemberAvatar({ name, avatarUrl }: { name?: string | null; avatarUrl?: string | null }) {
+  const [imgFailed, setImgFailed] = useState(false)
+  const initial = name?.charAt(0)?.toUpperCase() || "?"
+  if (avatarUrl && !imgFailed) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name || ""}
+        className="size-8 rounded-full object-cover"
+        onError={() => setImgFailed(true)}
+      />
+    )
+  }
+  return (
+    <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+      {initial}
+    </div>
+  )
+}
+
 function RoleBadge({ role }: { role: string }) {
   const cls: Record<string, string> = {
     admin:     "bg-primary text-primary-foreground",
@@ -355,13 +375,7 @@ export default function OrganizationPage() {
               {members.map((m) => (
                 <div key={m.id} className="flex items-center justify-between rounded-lg border p-3">
                   <div className="flex items-center gap-3">
-                    {m.user?.avatar_url ? (
-                      <img src={m.user.avatar_url} alt={m.user.full_name || ""} className="size-8 rounded-full object-cover" />
-                    ) : (
-                      <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-                        {m.user?.full_name?.charAt(0)?.toUpperCase() || "?"}
-                      </div>
-                    )}
+                    <MemberAvatar name={m.user?.full_name} avatarUrl={m.user?.avatar_url} />
                     <div>
                       <p className="text-sm font-medium">{m.user?.full_name || "Unknown"}</p>
                       <p className="text-xs text-muted-foreground">
