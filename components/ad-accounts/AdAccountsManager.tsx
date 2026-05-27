@@ -1,16 +1,18 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import {
   IconAlertCircle,
   IconArrowsSort,
+  IconCalendar,
   IconChevronDown,
   IconLoader2,
   IconRefresh,
   IconSearch,
+  IconX,
 } from "@tabler/icons-react"
 
 type AccountStatusFilter = "all" | "active" | "disabled"
@@ -28,14 +30,8 @@ interface ManagedAdAccount {
   balance?: string
   spend_cap?: string
   timezone_name?: string
-  business?: {
-    id: string
-    name?: string
-  }
-  owner_business?: {
-    id: string
-    name?: string
-  }
+  business?: { id: string; name?: string }
+  owner_business?: { id: string; name?: string }
   ownership?: AccountOwnership
 }
 
@@ -50,20 +46,13 @@ interface AccountMetricSnapshot {
 }
 
 const ACCOUNT_STATUS_LABELS: Record<number, string> = {
-  1: "active",
-  2: "disabled",
-  3: "unsettled",
-  7: "pending review",
-  8: "pending settlement",
-  9: "in grace period",
-  100: "pending closure",
-  101: "closed",
-  201: "any active",
-  202: "any closed",
+  1: "active", 2: "disabled", 3: "unsettled", 7: "pending review",
+  8: "pending settlement", 9: "in grace period", 100: "pending closure",
+  101: "closed", 201: "any active", 202: "any closed",
 }
 
 const ZERO_DECIMAL_CURRENCIES = new Set([
-  "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
+  "BIF","CLP","DJF","GNF","JPY","KMF","KRW","MGA","PYG","RWF","UGX","VND","VUV","XAF","XOF","XPF",
 ])
 
 function parseMinorMoney(value?: string | number | null, currency = "USD") {
@@ -75,8 +64,7 @@ function parseMinorMoney(value?: string | number | null, currency = "USD") {
 
 function formatMajorMoney(amount: number, currency = "USD") {
   return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency,
+    style: "currency", currency,
     maximumFractionDigits: ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase()) ? 0 : 2,
   }).format(amount)
 }
@@ -90,24 +78,16 @@ function formatAccountMoney(value?: string | number | null, currency = "USD") {
 function formatLastSynced(date: Date | null) {
   if (!date) return "Never"
   return new Intl.DateTimeFormat("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour12: false,
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric", hour12: false,
   }).format(date)
 }
 
 function formatDateTime(value?: string | null) {
   if (!value) return "-"
   return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
+    month: "short", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit",
   }).format(new Date(value))
 }
 
@@ -116,6 +96,11 @@ function formatMinorMoney(value?: string | number | null, currency = "USD") {
   const amount = typeof value === "number" ? value : Number(value)
   if (!Number.isFinite(amount)) return "-"
   return formatAccountMoney(amount, currency)
+}
+
+function toDateInputValue(iso?: string | null) {
+  if (!iso) return ""
+  return iso.slice(0, 10)
 }
 
 export function AdAccountsManager() {
@@ -133,17 +118,29 @@ export function AdAccountsManager() {
   const [accountSearch, setAccountSearch] = useState("")
   const [limitSnapshots, setLimitSnapshots] = useState<AccountMetricSnapshot[]>([])
   const [limitLoading, setLimitLoading] = useState(false)
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setAccountMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
 
   const fetchAccounts = useCallback(async (refresh = false) => {
     if (refresh) setSyncing(true)
     else setLoading(true)
     setError("")
-
     try {
       const res = await fetch(`/api/facebook/ad-accounts${refresh ? "?refresh=true" : ""}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to fetch ad accounts")
-
       setAccounts(data.adAccounts || [])
       if (data.adAccounts?.[0]?.account_id) {
         setSelectedAccountId(current => current || data.adAccounts[0].account_id)
@@ -157,16 +154,10 @@ export function AdAccountsManager() {
     }
   }, [])
 
-  useEffect(() => {
-    fetchAccounts()
-  }, [fetchAccounts])
+  useEffect(() => { fetchAccounts() }, [fetchAccounts])
 
   const fetchLimitSnapshots = useCallback(async (accountId: string) => {
-    if (!accountId) {
-      setLimitSnapshots([])
-      return
-    }
-
+    if (!accountId) { setLimitSnapshots([]); return }
     setLimitLoading(true)
     try {
       const res = await fetch(`/api/facebook/ad-account-metrics?account_id=${encodeURIComponent(accountId)}&limit=200`)
@@ -199,20 +190,23 @@ export function AdAccountsManager() {
       ownershipFilter === "all" ||
       (ownershipFilter === "own" && account.ownership === "own") ||
       (ownershipFilter === "agency" && account.ownership === "agency")
-
     return matchesQuery && matchesStatus && matchesOwnership
   })
 
-  const activeCount = accounts.filter(account => account.account_status === 1).length
-  const ownCount = accounts.filter(account => account.ownership === "own").length
-  const agencyCount = accounts.filter(account => account.ownership === "agency").length
-  const personalCount = accounts.filter(account => account.ownership === "unknown").length
-  const selectedAccount = accounts.find(account => account.account_id === selectedAccountId || account.id === selectedAccountId) || accounts[0]
+  const activeCount = accounts.filter(a => a.account_status === 1).length
+  const ownCount = accounts.filter(a => a.ownership === "own").length
+  const agencyCount = accounts.filter(a => a.ownership === "agency").length
+  const personalCount = accounts.filter(a => a.ownership === "unknown").length
+
+  const selectedAccount =
+    accounts.find(a => a.account_id === selectedAccountId || a.id === selectedAccountId) || accounts[0]
+
   const accountOptions = accounts.filter(account => {
     const term = accountSearch.trim().toLowerCase()
     if (!term) return true
     return `${account.name} ${account.account_id}`.toLowerCase().includes(term)
   })
+
   const spendingLimitRows = (() => {
     const rows = limitSnapshots.length > 0
       ? limitSnapshots
@@ -228,342 +222,386 @@ export function AdAccountsManager() {
           }]
         : []
 
-    return rows.map((row, index) => ({
-      id: row.id,
-      startDate: row.synced_at,
-      endDate: index === 0 ? null : rows[index - 1]?.synced_at,
-      currency: row.currency || selectedAccount?.currency || "USD",
-      spendCap: row.spend_cap_minor,
-    }))
+    return rows
+      .map((row, index) => ({
+        id: row.id,
+        startDate: row.synced_at,
+        endDate: index === 0 ? null : rows[index - 1]?.synced_at,
+        currency: row.currency || selectedAccount?.currency || "USD",
+        spendCap: row.spend_cap_minor,
+      }))
+      .filter(row => {
+        if (dateFrom) {
+          const start = new Date(row.startDate)
+          if (start < new Date(dateFrom)) return false
+        }
+        if (dateTo) {
+          const start = new Date(row.startDate)
+          if (start > new Date(dateTo + "T23:59:59")) return false
+        }
+        return true
+      })
   })()
 
+  const hasDateFilter = Boolean(dateFrom || dateTo)
+
+  const FILTER_BTN = (active: boolean) =>
+    cn("flex h-8 items-center px-3.5 text-sm font-medium transition-all rounded-full",
+      active ? "bg-[#0064E0] text-white shadow-sm" : "text-[#465A69] hover:bg-[#F1F4F7] hover:text-[#1C2B33]")
+
   return (
-    <div className="mx-auto w-full max-w-[1440px] space-y-5">
-      <div className="relative z-10 overflow-visible rounded-[24px] bg-white shadow-[0_2px_4px_0_rgba(0,0,0,0.10)]">
-        <div className="flex h-12 items-center gap-7 border-b border-[#DEE3E9] px-7">
-          <button
-            onClick={() => setActiveTab("accounts")}
-            className={cn(
-              "flex h-full items-center border-b-2 text-sm font-semibold transition-colors",
-              activeTab === "accounts"
-                ? "border-[#0064E0] text-[#0064E0]"
-                : "border-transparent text-[#5D6C7B] hover:text-[#1C2B33]"
-            )}
-          >
-            Ad Accounts
-          </button>
-          <button
-            onClick={() => setActiveTab("spending-limit")}
-            className={cn(
-              "flex h-full items-center border-b-2 text-sm font-semibold transition-colors",
-              activeTab === "spending-limit"
-                ? "border-[#0064E0] text-[#0064E0]"
-                : "border-transparent text-[#5D6C7B] hover:text-[#1C2B33]"
-            )}
-          >
-            Account Spending Limit
-          </button>
+    <div className="mx-auto w-full max-w-[1440px] space-y-4">
+
+      {/* ── Top card ─────────────────────────────────────────────── */}
+      <div className="relative z-10 overflow-visible rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.06]">
+
+        {/* Tabs */}
+        <div className="flex h-11 items-center gap-6 border-b border-[#EAECEF] px-6">
+          {(["accounts", "spending-limit"] as AccountTab[]).map(tab => (
+            <button key={tab} onClick={() => setActiveTab(tab)}
+              className={cn("flex h-full items-center gap-1.5 border-b-2 text-sm font-semibold transition-colors",
+                activeTab === tab
+                  ? "border-[#0064E0] text-[#0064E0]"
+                  : "border-transparent text-[#8595A4] hover:text-[#1C2B33]"
+              )}>
+              {tab === "accounts" ? "Ad Accounts" : "Account Spending Limit"}
+            </button>
+          ))}
         </div>
 
+        {/* ── Ad Accounts controls ── */}
         {activeTab === "accounts" ? (
-        <div className="grid gap-5 px-7 py-6 xl:grid-cols-[minmax(240px,340px)_minmax(520px,1fr)] xl:items-start">
-          <div>
-            <h2 className="text-xl font-bold leading-tight text-[#1C2B33]">
-              Ad Accounts <span className="text-[#5D6C7B]">({accounts.length})</span>
-            </h2>
-            <p className="mt-1 text-xs leading-5 text-[#5D6C7B]">Last synced: {formatLastSynced(lastSynced)}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-full bg-[#E8F3FF] px-2.5 py-1 text-xs font-semibold text-[#0064E0]">
-                Own {ownCount}
-              </span>
-              <span className="rounded-full bg-[#F7F8FA] px-2.5 py-1 text-xs font-semibold text-[#465A69]">
-                Agency/Shared {agencyCount}
-              </span>
-              {personalCount > 0 && (
-                <span className="rounded-full bg-[rgba(120,86,255,0.12)] px-2.5 py-1 text-xs font-semibold text-[#5C3FB5]">
-                  Personal {personalCount}
-                </span>
-              )}
-              <span className="rounded-full bg-[#F7F8FA] px-2.5 py-1 text-xs font-semibold text-[#465A69]">
-                Active {activeCount}
-              </span>
-            </div>
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_auto]">
-            <div className="relative">
-              <IconSearch className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-[#465A69]" />
-              <Input
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                placeholder="Search ad account..."
-                className="h-11 rounded-full border-[#CED0D4] bg-white pl-11 pr-4 text-sm text-[#1C2B33] shadow-none placeholder:text-[#65676B] focus-visible:border-[#0064E0] focus-visible:ring-[#0064E0]/20"
-              />
-            </div>
-
-            <Button
-              onClick={() => fetchAccounts(true)}
-              disabled={syncing}
-              className="h-11 rounded-full bg-[#0064E0] px-6 text-sm font-medium text-white shadow-none transition-transform hover:scale-[1.03] hover:bg-[#0143B5] active:scale-[0.97] disabled:bg-[#DEE3E9] disabled:text-[#8595A4]"
-            >
-              {syncing ? <IconLoader2 className="mr-2 size-4 animate-spin" /> : <IconRefresh className="mr-2 size-4" />}
-              Sync Meta
-            </Button>
-
-            <div className="flex flex-wrap items-center gap-3 lg:col-span-2">
-              <div className="flex h-10 items-center overflow-hidden rounded-full border border-[#CED0D4] bg-white">
-                <span className="px-4 text-[12px] font-bold uppercase leading-4 text-[#5D6C7B]">Type</span>
-                {(["all", "agency", "own"] as AccountOwnershipFilter[]).map(type => (
-                  <button
-                    key={type}
-                    onClick={() => setOwnershipFilter(type)}
-                    className={cn(
-                      "flex h-full items-center px-4 text-sm font-medium transition-colors",
-                      ownershipFilter === type
-                        ? "bg-[#0064E0] text-white"
-                        : "text-[#1C2B33] hover:bg-[#F1F4F7]"
-                    )}
-                  >
-                    {type === "all" ? "All" : type === "agency" ? "Agency" : "Own"}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex h-10 items-center overflow-hidden rounded-full border border-[#CED0D4] bg-white">
-                <span className="px-4 text-[12px] font-bold uppercase leading-4 text-[#5D6C7B]">Status</span>
-                {(["all", "active", "disabled"] as AccountStatusFilter[]).map(status => (
-                  <button
-                    key={status}
-                    onClick={() => setStatusFilter(status)}
-                    className={cn(
-                      "flex h-full items-center gap-2 px-4 text-sm font-medium transition-colors",
-                      statusFilter === status
-                        ? "bg-[#0064E0] text-white"
-                        : "text-[#1C2B33] hover:bg-[#F1F4F7]"
-                    )}
-                  >
-                    <span className={cn(
-                      "size-2 rounded-full",
-                      status === "active" ? "bg-[#31A24C]" : status === "disabled" ? "bg-[#E41E3F]" : "bg-[#8595A4]",
-                      statusFilter === status && "bg-white/80"
-                    )} />
-                    {status === "all" ? "All" : status === "active" ? "Active" : "Disabled"}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-        ) : (
-        <div className="grid gap-5 px-7 py-6 xl:grid-cols-[minmax(260px,1fr)_auto] xl:items-start">
-          <div>
-            <h2 className="text-xl font-bold leading-tight text-[#1C2B33]">Account spending limit</h2>
-            <p className="mt-1 text-xs leading-5 text-[#5D6C7B]">
-              {selectedAccount ? `${selectedAccount.name} / ${selectedAccount.account_id}` : "Select an ad account"}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-start justify-end gap-3">
+          <div className="px-6 py-4 space-y-3">
+            {/* Row 1: title + search + sync */}
             <div className="flex items-center gap-3">
-              <span className="mt-3 text-xs font-bold uppercase leading-4 text-[#5D6C7B]">Select ad account:</span>
-              <div className="relative w-[360px]">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline gap-2">
+                  <h2 className="text-lg font-bold text-[#1C2B33]">Ad Accounts</h2>
+                  <span className="text-sm font-semibold text-[#8595A4]">({accounts.length})</span>
+                </div>
+                <p className="text-[11px] text-[#8595A4] mt-0.5">Last synced: {formatLastSynced(lastSynced)}</p>
+              </div>
+
+              <div className="relative w-72 shrink-0">
+                <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8595A4]" />
+                <Input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Search by name or ID..."
+                  className="h-9 rounded-full border-[#DEE3E9] bg-[#F7F8FA] pl-9 pr-3 text-sm shadow-none placeholder:text-[#8595A4] focus-visible:bg-white focus-visible:border-[#0064E0] focus-visible:ring-2 focus-visible:ring-[#0064E0]/15"
+                />
+              </div>
+
+              <Button
+                onClick={() => fetchAccounts(true)}
+                disabled={syncing}
+                className="h-9 shrink-0 rounded-full bg-[#0064E0] px-5 text-sm font-semibold shadow-none transition-transform hover:scale-[1.02] hover:bg-[#0052C2] active:scale-[0.98] disabled:bg-[#DEE3E9] disabled:text-[#8595A4]"
+              >
+                {syncing
+                  ? <IconLoader2 className="mr-1.5 size-3.5 animate-spin" />
+                  : <IconRefresh className="mr-1.5 size-3.5" />}
+                Sync Meta
+              </Button>
+            </div>
+
+            {/* Row 2: summary chips + filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Summary badges */}
+              <span className="rounded-full bg-[#E8F3FF] px-2.5 py-0.5 text-[11px] font-bold text-[#0064E0]">Own {ownCount}</span>
+              <span className="rounded-full bg-[#F1F4F7] px-2.5 py-0.5 text-[11px] font-bold text-[#465A69]">Agency {agencyCount}</span>
+              {personalCount > 0 && (
+                <span className="rounded-full bg-[rgba(120,86,255,0.10)] px-2.5 py-0.5 text-[11px] font-bold text-[#5C3FB5]">Personal {personalCount}</span>
+              )}
+              <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-[11px] font-bold text-[#007D1E]">Active {activeCount}</span>
+
+              <div className="mx-1 h-4 w-px bg-[#DEE3E9]" />
+
+              {/* TYPE filter */}
+              <div className="flex items-center gap-0.5 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] p-0.5">
+                <span className="px-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#8595A4]">Type</span>
+                {(["all", "agency", "own"] as AccountOwnershipFilter[]).map(t => (
+                  <button key={t} onClick={() => setOwnershipFilter(t)} className={FILTER_BTN(ownershipFilter === t)}>
+                    {t === "all" ? "All" : t === "agency" ? "Agency" : "Own"}
+                  </button>
+                ))}
+              </div>
+
+              {/* STATUS filter */}
+              <div className="flex items-center gap-0.5 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] p-0.5">
+                <span className="px-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#8595A4]">Status</span>
+                {(["all", "active", "disabled"] as AccountStatusFilter[]).map(s => (
+                  <button key={s} onClick={() => setStatusFilter(s)}
+                    className={cn(FILTER_BTN(statusFilter === s), "gap-1.5")}>
+                    <span className={cn("size-1.5 rounded-full shrink-0",
+                      s === "active" ? "bg-[#31A24C]" : s === "disabled" ? "bg-[#E41E3F]" : "bg-[#8595A4]",
+                      statusFilter === s && "bg-white/80"
+                    )} />
+                    {s === "all" ? "All" : s === "active" ? "Active" : "Disabled"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+        ) : (
+        /* ── Spending Limit controls ── */
+          <div className="px-6 py-4 space-y-3">
+            {/* Row 1: title + account selector + sync */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-lg font-bold text-[#1C2B33]">Account Spending Limit</h2>
+                <p className="text-[11px] text-[#8595A4] mt-0.5">
+                  {selectedAccount ? `${selectedAccount.name} · ${selectedAccount.account_id}` : "Select an ad account"}
+                </p>
+              </div>
+
+              {/* Account dropdown */}
+              <div className="relative w-72 shrink-0" ref={dropdownRef}>
                 <button
                   type="button"
-                  onClick={() => setAccountMenuOpen(open => !open)}
-                  className="flex h-11 w-full items-center justify-between rounded-lg border border-[#CED0D4] bg-white px-4 text-left text-sm font-medium text-[#1C2B33] shadow-none transition-colors hover:border-[#0064E0]"
+                  onClick={() => setAccountMenuOpen(o => !o)}
+                  className="flex h-9 w-full items-center justify-between rounded-full border border-[#DEE3E9] bg-[#F7F8FA] px-4 text-left text-sm font-medium text-[#1C2B33] transition-colors hover:border-[#0064E0] hover:bg-white"
                 >
                   <span className="truncate">
                     {selectedAccount ? `${selectedAccount.name} (${selectedAccount.account_id})` : "Select account"}
                   </span>
-                  <IconChevronDown className="ml-2 size-4 shrink-0 text-[#465A69]" />
+                  <IconChevronDown className={cn("ml-2 size-4 shrink-0 text-[#8595A4] transition-transform", accountMenuOpen && "rotate-180")} />
                 </button>
 
                 {accountMenuOpen && (
-                  <div className="absolute right-0 top-12 z-50 w-full overflow-hidden rounded-[12px] border border-[#DEE3E9] bg-white shadow-[0_12px_28px_0_rgba(0,0,0,0.20),0_2px_4px_0_rgba(0,0,0,0.10)]">
-                    <div className="border-b border-[#DEE3E9] p-2">
+                  <div className="absolute left-0 top-11 z-50 w-full overflow-hidden rounded-xl border border-[#EAECEF] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                    <div className="border-b border-[#EAECEF] p-2">
                       <Input
                         autoFocus
                         value={accountSearch}
-                        onChange={event => setAccountSearch(event.target.value)}
+                        onChange={e => setAccountSearch(e.target.value)}
                         placeholder="Search by name or ID..."
-                        className="h-10 rounded-lg border-[#0064E0] text-sm focus-visible:ring-[#0064E0]/20"
+                        className="h-9 rounded-lg border-[#0064E0] text-sm focus-visible:ring-[#0064E0]/20"
                       />
                     </div>
-                    <div className="max-h-64 overflow-auto py-1">
-                      {accountOptions.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-[#5D6C7B]">No accounts found.</div>
-                      ) : accountOptions.map(account => (
-                        <button
-                          key={account.id || account.account_id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedAccountId(account.account_id)
-                            setAccountMenuOpen(false)
-                            setAccountSearch("")
-                          }}
-                          className={cn(
-                            "flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition-colors hover:bg-[#F1F4F7]",
-                            selectedAccount?.account_id === account.account_id ? "bg-[#E8F3FF] text-[#0064E0]" : "text-[#1C2B33]"
-                          )}
-                        >
-                          <span className="truncate font-semibold">{account.name}</span>
-                          <span className="shrink-0 text-[#5D6C7B]">{account.account_id}</span>
-                        </button>
-                      ))}
+                    <div className="max-h-56 overflow-auto py-1">
+                      {accountOptions.length === 0
+                        ? <div className="px-4 py-3 text-sm text-[#8595A4]">No accounts found.</div>
+                        : accountOptions.map(account => (
+                          <button key={account.id || account.account_id} type="button"
+                            onClick={() => { setSelectedAccountId(account.account_id); setAccountMenuOpen(false); setAccountSearch("") }}
+                            className={cn("flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[#F7F8FA]",
+                              selectedAccount?.account_id === account.account_id ? "bg-[#E8F3FF] text-[#0064E0]" : "text-[#1C2B33]"
+                            )}>
+                            <span className="truncate font-semibold">{account.name}</span>
+                            <span className="shrink-0 font-mono text-xs text-[#8595A4]">{account.account_id}</span>
+                          </button>
+                        ))
+                      }
                     </div>
                   </div>
                 )}
               </div>
+
+              <Button
+                onClick={async () => { await fetchAccounts(true); if (selectedAccountId) await fetchLimitSnapshots(selectedAccountId) }}
+                disabled={syncing}
+                className="h-9 shrink-0 rounded-full bg-[#0064E0] px-5 text-sm font-semibold shadow-none transition-transform hover:scale-[1.02] hover:bg-[#0052C2] active:scale-[0.98] disabled:bg-[#DEE3E9] disabled:text-[#8595A4]"
+              >
+                {syncing ? <IconLoader2 className="mr-1.5 size-3.5 animate-spin" /> : <IconRefresh className="mr-1.5 size-3.5" />}
+                Sync Meta
+              </Button>
             </div>
 
-            <Button
-              onClick={async () => {
-                await fetchAccounts(true)
-                if (selectedAccountId) await fetchLimitSnapshots(selectedAccountId)
-              }}
-              disabled={syncing}
-              className="h-11 rounded-full bg-[#0064E0] px-6 text-sm font-medium text-white shadow-none transition-transform hover:scale-[1.03] hover:bg-[#0143B5] active:scale-[0.97] disabled:bg-[#DEE3E9] disabled:text-[#8595A4]"
-            >
-              {syncing ? <IconLoader2 className="mr-2 size-4 animate-spin" /> : <IconRefresh className="mr-2 size-4" />}
-              Sync Meta
-            </Button>
+            {/* Row 2: date range filter */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] px-3 py-1.5">
+                <IconCalendar className="size-3.5 shrink-0 text-[#8595A4]" />
+                <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#8595A4]">From</span>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                  max={dateTo || toDateInputValue(new Date().toISOString())}
+                  className="h-6 border-0 bg-transparent text-sm font-medium text-[#1C2B33] outline-none [color-scheme:light]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] px-3 py-1.5">
+                <IconCalendar className="size-3.5 shrink-0 text-[#8595A4]" />
+                <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#8595A4]">To</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                  min={dateFrom || undefined}
+                  max={toDateInputValue(new Date().toISOString())}
+                  className="h-6 border-0 bg-transparent text-sm font-medium text-[#1C2B33] outline-none [color-scheme:light]"
+                />
+              </div>
+
+              {hasDateFilter && (
+                <button
+                  onClick={() => { setDateFrom(""); setDateTo("") }}
+                  className="flex items-center gap-1 rounded-full bg-[#F1F4F7] px-3 py-1.5 text-xs font-semibold text-[#465A69] transition-colors hover:bg-[#DEE3E9]"
+                >
+                  <IconX className="size-3" />
+                  Clear
+                </button>
+              )}
+
+              {hasDateFilter && (
+                <span className="text-xs text-[#8595A4]">
+                  {spendingLimitRows.length} result{spendingLimitRows.length !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
         )}
       </div>
 
+      {/* ── Error ── */}
       {error && (
-        <div className="flex items-center gap-2 rounded-[20px] border border-[#E41E3F]/30 bg-[rgba(255,123,145,0.15)] px-5 py-3 text-sm text-[#C80A28]">
-          <IconAlertCircle className="size-4" />
+        <div className="flex items-center gap-2 rounded-xl border border-[#E41E3F]/20 bg-[#FFF0F3] px-4 py-3 text-sm font-medium text-[#C80A28]">
+          <IconAlertCircle className="size-4 shrink-0" />
           {error}
         </div>
       )}
 
+      {/* ── Ad Accounts table ── */}
       {activeTab === "accounts" ? (
-      <>
-      <div className="overflow-x-auto rounded-[20px] bg-white shadow-[0_2px_4px_0_rgba(0,0,0,0.10)]">
-        <table className="w-full min-w-[1160px]">
-          <thead className="bg-[#F7F8FA]">
-            <tr className="border-b border-[#DEE3E9]">
-              {["#", "Account ID", "Name", "Type", "Owner", "Status", "Currency", "Timezone", "Spend Cap", "Remaining", "Spent"].map(label => (
-                <th key={label} className="px-5 py-3.5 text-left text-xs font-bold leading-5 text-[#465A69]">
-                  {label}
-                  {["Spend Cap", "Remaining", "Spent"].includes(label) && <IconArrowsSort className="ml-1 inline size-3 text-muted-foreground" />}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={11} className="px-5 py-14 text-center text-sm text-[#5D6C7B]">
-                  <IconLoader2 className="mx-auto mb-3 size-6 animate-spin" />
-                  Loading ad accounts...
-                </td>
-              </tr>
-            ) : filteredAccounts.length === 0 ? (
-              <tr>
-                <td colSpan={11} className="px-5 py-14 text-center text-sm text-[#5D6C7B]">
-                  No ad accounts found.
-                </td>
-              </tr>
-            ) : (
-              filteredAccounts.map((account, index) => {
-                const currency = account.currency || "USD"
-                const spent = parseMinorMoney(account.amount_spent, currency)
-                const cap = parseMinorMoney(account.spend_cap, currency)
-                const remaining = cap !== null && spent !== null ? Math.max(cap - spent, 0) : null
-                const isActive = account.account_status === 1
-
-                return (
-                  <tr key={account.id || account.account_id} className="border-b border-[#DEE3E9] last:border-0 hover:bg-[#F7F8FA]">
-                    <td className="px-5 py-4 text-sm text-[#5D6C7B]">{index + 1}</td>
-                    <td className="px-5 py-4 font-mono text-sm text-[#1C2B33]">{account.account_id}</td>
-                    <td className="px-5 py-4 text-sm font-semibold leading-5 text-[#1C2B33]">{account.name}</td>
-                    <td className="px-5 py-4">
-                      <span className={cn(
-                        "inline-flex rounded-full px-2.5 py-1 text-xs font-bold leading-4",
-                        account.ownership === "own"
-                          ? "bg-[#E8F3FF] text-[#0064E0]"
-                          : account.ownership === "agency"
-                            ? "bg-[rgba(255,226,0,0.15)] text-[#9A6700]"
-                            : "bg-[rgba(120,86,255,0.12)] text-[#5C3FB5]"
-                      )}>
-                        {account.ownership === "own" ? "Own" : account.ownership === "agency" ? "Agency/Shared" : "Personal"}
+        <>
+          <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.06]">
+            <table className="w-full min-w-[1100px]">
+              <thead>
+                <tr className="border-b border-[#EAECEF] bg-[#F7F8FA]">
+                  {["#", "Account ID", "Name", "Type", "Owner", "Status", "Currency", "Timezone", "Spend Cap", "Remaining", "Spent"].map(label => (
+                    <th key={label} className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#8595A4]">
+                      <span className="flex items-center gap-1">
+                        {label}
+                        {["Spend Cap", "Remaining", "Spent"].includes(label) && (
+                          <IconArrowsSort className="size-3 text-[#C4CAD4]" />
+                        )}
                       </span>
-                    </td>
-                    <td className="px-5 py-4 text-sm leading-5 text-[#5D6C7B]">
-                      {account.owner_business?.name || account.owner_business?.id || account.business?.name || account.business?.id || "-"}
-                    </td>
-                    <td className="px-5 py-4">
-                      <span className={cn(
-                        "inline-flex rounded-full px-2.5 py-1 text-xs font-bold leading-4",
-                        isActive ? "bg-[rgba(36,228,0,0.15)] text-[#007D1E]" : "bg-[rgba(255,123,145,0.15)] text-[#C80A28]"
-                      )}>
-                        {ACCOUNT_STATUS_LABELS[account.account_status] || `status ${account.account_status}`}
-                      </span>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-[#1C2B33]">{currency}</td>
-                    <td className="px-5 py-4 text-sm text-[#5D6C7B]">{account.timezone_name || "-"}</td>
-                    <td className="px-5 py-4 text-right text-sm text-[#1C2B33]">{formatAccountMoney(account.spend_cap, currency)}</td>
-                    <td className="px-5 py-4 text-right text-sm font-bold text-[#0064E0]">
-                      {remaining === null ? "-" : formatMajorMoney(remaining, currency)}
-                    </td>
-                    <td className="px-5 py-4 text-right text-sm font-bold text-[#007D1E]">
-                      {formatAccountMoney(account.amount_spent, currency)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={11} className="py-16 text-center">
+                      <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-[#0064E0]" />
+                      <p className="text-sm text-[#8595A4]">Loading ad accounts…</p>
                     </td>
                   </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : filteredAccounts.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="py-16 text-center text-sm text-[#8595A4]">
+                      No ad accounts found.
+                    </td>
+                  </tr>
+                ) : filteredAccounts.map((account, index) => {
+                  const currency = account.currency || "USD"
+                  const spent = parseMinorMoney(account.amount_spent, currency)
+                  const cap = parseMinorMoney(account.spend_cap, currency)
+                  const remaining = cap !== null && spent !== null ? Math.max(cap - spent, 0) : null
+                  const isActive = account.account_status === 1
 
-      <p className="px-1 text-sm leading-5 text-[#5D6C7B]">
-        Showing {filteredAccounts.length} of {accounts.length} accounts, {activeCount} active.
-      </p>
-      </>
+                  return (
+                    <tr key={account.id || account.account_id}
+                      className="border-b border-[#EAECEF] last:border-0 transition-colors hover:bg-[#F7F8FA]">
+                      <td className="px-5 py-3.5 text-sm text-[#C4CAD4]">{index + 1}</td>
+                      <td className="px-5 py-3.5 font-mono text-xs text-[#465A69]">{account.account_id}</td>
+                      <td className="px-5 py-3.5 text-sm font-semibold text-[#1C2B33]">{account.name}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                          account.ownership === "own"
+                            ? "bg-[#E8F3FF] text-[#0064E0]"
+                            : account.ownership === "agency"
+                              ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
+                              : "bg-[rgba(120,86,255,0.10)] text-[#5C3FB5]"
+                        )}>
+                          {account.ownership === "own" ? "Own" : account.ownership === "agency" ? "Agency/Shared" : "Personal"}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-[#465A69]">
+                        {account.owner_business?.name || account.owner_business?.id || account.business?.name || account.business?.id || "-"}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                          isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
+                        )}>
+                          <span className={cn("size-1.5 rounded-full", isActive ? "bg-[#31A24C]" : "bg-[#E41E3F]")} />
+                          {ACCOUNT_STATUS_LABELS[account.account_status] || `status ${account.account_status}`}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-[#1C2B33]">{currency}</td>
+                      <td className="px-5 py-3.5 text-sm text-[#8595A4]">{account.timezone_name || "-"}</td>
+                      <td className="px-5 py-3.5 text-right text-sm text-[#1C2B33]">{formatAccountMoney(account.spend_cap, currency)}</td>
+                      <td className="px-5 py-3.5 text-right text-sm font-bold text-[#0064E0]">
+                        {remaining === null ? "-" : formatMajorMoney(remaining, currency)}
+                      </td>
+                      <td className="px-5 py-3.5 text-right text-sm font-bold text-[#007D1E]">
+                        {formatAccountMoney(account.amount_spent, currency)}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <p className="px-1 text-xs text-[#8595A4]">
+            Showing <span className="font-semibold text-[#465A69]">{filteredAccounts.length}</span> of{" "}
+            <span className="font-semibold text-[#465A69]">{accounts.length}</span> accounts,{" "}
+            <span className="font-semibold text-[#007D1E]">{activeCount}</span> active.
+          </p>
+        </>
+
       ) : (
-      <div className="overflow-x-auto rounded-[20px] bg-white shadow-[0_2px_4px_0_rgba(0,0,0,0.10)]">
-        <table className="w-full min-w-[820px]">
-          <thead className="bg-[#F7F8FA]">
-            <tr className="border-b border-[#DEE3E9]">
-              <th className="px-5 py-3.5 text-left text-xs font-bold leading-5 text-[#465A69]">Start date</th>
-              <th className="px-5 py-3.5 text-left text-xs font-bold leading-5 text-[#465A69]">End date</th>
-              <th className="px-5 py-3.5 text-left text-xs font-bold leading-5 text-[#465A69]">Spending limit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {limitLoading ? (
-              <tr>
-                <td colSpan={3} className="px-5 py-14 text-center text-sm text-[#5D6C7B]">
-                  <IconLoader2 className="mx-auto mb-3 size-6 animate-spin" />
-                  Loading spending limit history...
-                </td>
+      /* ── Spending Limit table ── */
+        <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.06]">
+          <table className="w-full min-w-[640px]">
+            <thead>
+              <tr className="border-b border-[#EAECEF] bg-[#F7F8FA]">
+                {["Start date", "End date", "Activity"].map(label => (
+                  <th key={label} className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#8595A4]">
+                    {label}
+                  </th>
+                ))}
               </tr>
-            ) : spendingLimitRows.length === 0 ? (
-              <tr>
-                <td colSpan={3} className="px-5 py-14 text-center text-sm text-[#5D6C7B]">
-                  No spending limit snapshots yet. Click Sync Meta to save the first snapshot.
-                </td>
-              </tr>
-            ) : (
-              spendingLimitRows.map(row => (
-                <tr key={row.id} className="border-b border-[#DEE3E9] last:border-0 hover:bg-[#F7F8FA]">
-                  <td className="px-5 py-4 text-sm text-[#1C2B33]">{formatDateTime(row.startDate)}</td>
-                  <td className="px-5 py-4 text-sm text-[#1C2B33]">{row.endDate ? formatDateTime(row.endDate) : "Current"}</td>
-                  <td className="px-5 py-4 text-sm text-[#1C2B33]">
-                    {row.spendCap !== null && row.spendCap !== undefined && row.spendCap !== "" && Number(row.spendCap) !== 0
-                      ? `Set to ${formatMinorMoney(row.spendCap, row.currency)}`
-                      : "Removed spending limit"}
+            </thead>
+            <tbody>
+              {limitLoading ? (
+                <tr>
+                  <td colSpan={3} className="py-16 text-center">
+                    <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-[#0064E0]" />
+                    <p className="text-sm text-[#8595A4]">Loading spending limit history…</p>
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : spendingLimitRows.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="py-16 text-center text-sm text-[#8595A4]">
+                    {hasDateFilter
+                      ? "No records found for the selected date range."
+                      : "No spending limit snapshots yet. Click Sync Meta to save the first snapshot."}
+                  </td>
+                </tr>
+              ) : spendingLimitRows.map(row => (
+                <tr key={row.id} className="border-b border-[#EAECEF] last:border-0 transition-colors hover:bg-[#F7F8FA]">
+                  <td className="px-5 py-3.5 text-sm text-[#1C2B33]">{formatDateTime(row.startDate)}</td>
+                  <td className="px-5 py-3.5 text-sm text-[#1C2B33]">
+                    {row.endDate
+                      ? formatDateTime(row.endDate)
+                      : <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-[11px] font-bold text-[#007D1E]">Current</span>
+                    }
+                  </td>
+                  <td className="px-5 py-3.5 text-sm font-medium text-[#1C2B33]">
+                    {row.spendCap !== null && row.spendCap !== undefined && row.spendCap !== "" && Number(row.spendCap) !== 0
+                      ? <span>Set to <span className="font-bold text-[#0064E0]">{formatMinorMoney(row.spendCap, row.currency)}</span></span>
+                      : <span className="text-[#8595A4]">Removed spending limit</span>
+                    }
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )
