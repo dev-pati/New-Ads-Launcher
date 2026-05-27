@@ -31,7 +31,7 @@ interface Props {
   ads: DiscoveryAd[]               // full filtered list — for prev/next + similar
   boards: InspoBoard[]
   savedMap: Map<string, Set<string>>
-  onSave: (adId: string, boardId: string) => Promise<void>
+  onSave: (ad: DiscoveryAd, boardId: string) => Promise<void>
   onUnsave: (adId: string, boardId: string) => Promise<void>
   onCreateBoard: (name: string) => Promise<InspoBoard>
   onClose: () => void
@@ -149,7 +149,7 @@ export function AdDetailModal({
           ad={ad}
           boards={boards}
           savedBoardIds={savedBoardIds}
-          onSave={boardId => onSave(ad.id, boardId)}
+          onSave={boardId => onSave(ad, boardId)}
           onUnsave={boardId => onUnsave(ad.id, boardId)}
           onCreateBoard={onCreateBoard}
           onCloneWithAI={handleCloneWithAI}

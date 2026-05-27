@@ -61,7 +61,7 @@ function applyFilters(ads: DiscoveryAd[], filters: FilterState, sort: SortOption
 interface Props {
   boards: InspoBoard[]
   savedMap: Map<string, Set<string>>   // adId → Set<boardId>
-  onSave: (adId: string, boardId: string) => Promise<void>
+  onSave: (ad: DiscoveryAd, boardId: string) => Promise<void>
   onUnsave: (adId: string, boardId: string) => Promise<void>
   onCreateBoard: (name: string) => Promise<InspoBoard>
   activeBoardId: string | null
@@ -199,7 +199,10 @@ export function InspoDiscoveryPage({
             ads={filteredAds}
             boards={boards}
             savedMap={savedMap}
-            onSave={onSave}
+            onSave={async (adId, boardId) => {
+              const ad = apiAds.find(a => a.id === adId)
+              if (ad) await onSave(ad, boardId)
+            }}
             onUnsave={onUnsave}
             onCreateBoard={onCreateBoard}
             onAdClick={setSelected}

@@ -37,7 +37,6 @@ import { BoardSidebar, type InspoSection } from "@/components/inspo/BoardSidebar
 import { InspoDiscoveryPage } from "@/components/inspo/InspoDiscoveryPage"
 import { BrandSpyPage } from "@/components/inspo/BrandSpyPage"
 import type { InspoBoard, DiscoveryAd } from "@/types/inspo"
-import { MOCK_ADS } from "@/lib/inspo-mock-data"
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -577,9 +576,7 @@ export default function InspoPage() {
     return data.board
   }, [])
 
-  const handleDiscoverySave = useCallback(async (adId: string, boardId: string) => {
-    const ad = MOCK_ADS.find(a => a.id === adId)
-    if (!ad) return
+  const handleDiscoverySave = useCallback(async (ad: DiscoveryAd, boardId: string) => {
     await fetch(`/api/inspo/boards/${boardId}/saves`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -587,8 +584,8 @@ export default function InspoPage() {
     })
     setSavedMap(prev => {
       const next = new Map(prev)
-      if (!next.has(adId)) next.set(adId, new Set())
-      next.get(adId)!.add(boardId)
+      if (!next.has(ad.id)) next.set(ad.id, new Set())
+      next.get(ad.id)!.add(boardId)
       return next
     })
     setBoards(prev => prev.map(b => b.id === boardId ? { ...b, ad_count: (b.ad_count || 0) + 1 } : b))
