@@ -564,6 +564,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
                 onChange={c => handleUpdateTrigger(selectedStep.id, c)}
                 adAccountName={adAccountName}
                 onClose={() => setSelectedId(null)}
+                onChangeApp={() => setChoosingAppForStep(selectedStep.id)}
               />
             ) : (
               <ActionConfigPanel
