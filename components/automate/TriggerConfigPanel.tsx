@@ -525,19 +525,22 @@ const MEDIA_TYPE_LABELS: Record<string, string> = { all: "All Media", images: "I
 const TRIGGER_TIMING_LABELS: Record<string, string> = { immediately: "Immediately on Upload", on_approved: "When Media is Approved" }
 const ASSET_STATUS_LABELS: Record<string, string> = { all: "All Status", approved: "Approved", in_progress: "In Progress", archived: "Archived" }
 
-// ─── Mock media matches ───────────────────────────────────────────────────────
+// ─── Creative result type ─────────────────────────────────────────────────────
 
-const MOCK_MEDIA_MATCHES = [
-  { id: "1", name: "11643-Swap~product-V1-FusiForce-M....", type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#6B7280" },
-  { id: "2", name: "11634-NET~NEW-V1-FusiForce-M.Gy....",  type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#1F2937" },
-  { id: "3", name: "11653-Swap product-V1-FusiForce-Per...",type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#374151" },
-  { id: "4", name: "11653-Swap~product-V1-FusiForce-Pe...", type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#4B5563" },
-  { id: "5", name: "11657-Swap~product-V1-FusiForce-Per...",type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#374151" },
-]
+interface CreativeMatch {
+  id: string
+  file_name?: string | null
+  media_type: "image" | "video"
+  file_url?: string | null
+  fb_thumbnail_url?: string | null
+  status?: string | null
+  created_at?: string | null
+}
 
 function PreviewTab({ config }: { config: TriggerConfig }) {
   const [finding, setFinding] = useState(false)
-  const [matches, setMatches] = useState<typeof MOCK_MEDIA_MATCHES | null>(null)
+  const [matches, setMatches] = useState<CreativeMatch[] | null>(null)
+  const [findError, setFindError] = useState<string | null>(null)
 
   const appMeta    = APP_META[config.appId] ?? APP_META["meta"]
   const eventLabel = EVENT_LABELS[config.event] ?? config.event?.replace(/_/g, " ")
@@ -583,13 +586,32 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
 
   const hasChips = firesWhenChips.length > 0
 
-  function handleFindRecords() {
+  async function handleFindRecords() {
     setFinding(true)
     setMatches(null)
-    setTimeout(() => {
+    setFindError(null)
+    try {
+      const params = new URLSearchParams({ limit: "5" })
+
+      if (config.appId === "media_library") {
+        if (config.mediaType === "images") params.set("media_type", "image")
+        else if (config.mediaType === "videos") params.set("media_type", "video")
+
+        // Map asset status to DB status values
+        if (config.assetStatus === "approved")    params.set("status", "uploaded")
+        else if (config.assetStatus === "in_progress") params.set("status", "processing")
+        else if (config.assetStatus === "archived")    params.set("status", "archived")
+      }
+
+      const res = await fetch(`/api/creatives?${params}`)
+      if (!res.ok) throw new Error("Failed to fetch")
+      const data = await res.json()
+      setMatches(data.creatives ?? [])
+    } catch {
+      setFindError("Could not load matching records.")
+    } finally {
       setFinding(false)
-      setMatches(MOCK_MEDIA_MATCHES)
-    }, 1200)
+    }
   }
 
   return (
@@ -623,6 +645,11 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
           <span className="font-medium text-foreground">Run</span> button in the header to execute with the latest match.
         </p>
 
+        {/* Error */}
+        {findError && (
+          <p className="text-[12px] text-red-500">{findError}</p>
+        )}
+
         {/* Results */}
         {matches && (
           <div className="space-y-2 pt-1">
@@ -632,24 +659,36 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
             {config.appId === "media_library" && (
               <p className="text-[11px] text-primary/80">Files from your media library</p>
             )}
-            <div className="space-y-1.5">
-              {matches.map(m => (
-                <div key={m.id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border bg-background hover:bg-muted/40 transition-colors cursor-pointer">
-                  <div
-                    className="size-10 rounded-lg shrink-0 flex items-center justify-center overflow-hidden"
-                    style={{ backgroundColor: m.thumbBg }}
-                  >
-                    <IconFile className="size-4 text-white/60" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-medium text-foreground truncate">{m.name}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {m.type} • {m.status} • {m.date}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {matches.length === 0 ? (
+              <p className="text-[12px] text-muted-foreground italic">No matching records found.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {matches.map(m => {
+                  const thumb = m.fb_thumbnail_url || m.file_url
+                  const name  = m.file_name ?? m.id
+                  const type  = m.media_type === "video" ? "Video" : "Image"
+                  const date  = m.created_at
+                    ? new Date(m.created_at).toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "numeric" })
+                    : ""
+                  return (
+                    <div key={m.id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border bg-background hover:bg-muted/40 transition-colors cursor-pointer">
+                      <div className="size-10 rounded-lg shrink-0 overflow-hidden bg-muted flex items-center justify-center">
+                        {thumb
+                          ? <img src={thumb} alt={name} className="size-full object-cover" />
+                          : <IconFile className="size-4 text-muted-foreground" />
+                        }
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-medium text-foreground truncate">{name}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {type} • {m.status ?? "raw"} • {date}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 

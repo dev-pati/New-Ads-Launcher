@@ -43,7 +43,10 @@ export async function GET(request: NextRequest) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const url = new URL(request.url)
-    const adAccountId = url.searchParams.get("ad_account_id")
+    const adAccountId  = url.searchParams.get("ad_account_id")
+    const mediaType    = url.searchParams.get("media_type")   // "image" | "video"
+    const statusFilter = url.searchParams.get("status")       // "uploaded" | "pending" | "processing" | "archived"
+    const nameContains = url.searchParams.get("name_contains")
     const limit  = Math.min(parseInt(url.searchParams.get("limit") || "20", 10), 200)
     const cursor = url.searchParams.get("cursor") || null  // last item's created_at (ISO string)
 
@@ -76,8 +79,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ creatives: (data ?? []).map(mapCreativeForClient) })
     }
 
-    if (adAccountId) query = query.eq("ad_account_id", adAccountId)
-    if (cursor)      query = query.lt("created_at", cursor)
+    if (adAccountId)  query = query.eq("ad_account_id", adAccountId)
+    if (mediaType)    query = query.eq("media_type", mediaType)
+    if (statusFilter) query = query.eq("status", statusFilter)
+    if (nameContains) query = (query as any).ilike("file_name", `%${nameContains}%`)
+    if (cursor)       query = query.lt("created_at", cursor)
 
     const { data, error } = await query
 
