@@ -66,7 +66,16 @@ function defaultTriggerForApp(appId: AppId): TriggerConfig {
     case "manual":
       return { appId: "manual", event: "manual", checkFrequency: "daily" }
     case "media_library":
-      return { appId: "media_library", event: "media_uploaded", checkFrequency: "daily" }
+      return {
+        appId: "media_library",
+        event: "media_uploaded",
+        mediaBoard: "all",
+        mediaAssetName: "all",
+        mediaType: "all",
+        triggerTiming: "immediately",
+        assetStatus: "all",
+        assetGrouping: false,
+      }
     case "dropbox":
       return { appId: "dropbox", event: "new_dropbox_file", checkFrequency: "daily" }
     case "sharepoint":

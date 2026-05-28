@@ -41,7 +41,7 @@ const EVENT_LABELS: Partial<Record<string, string>> = {
   new_drive_folder:       "New Drive Folder",
   schedule:               "Schedule",
   manual:                 "Manual Trigger",
-  media_uploaded:         "Media Uploaded",
+  media_uploaded:         "Media Uploaded to Board",
   new_dropbox_file:       "New Dropbox File",
   new_sharepoint_file:    "New SharePoint File",
   new_air_asset:          "New AIR Asset",
@@ -204,6 +204,7 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
   const isMetaApp = config.appId === "meta"
   const isSchedule = config.appId === "schedule"
   const isManual = config.appId === "manual"
+  const isMediaLibrary = config.appId === "media_library"
 
   const conditions = config.metricConditions ?? [{ metric: "spend", operator: "decreases_by" as const, value: 20, unit: "%" as const }]
 
@@ -395,8 +396,101 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
           </div>
         )}
 
+        {/* MEDIA LIBRARY: Board, Asset Name, Media Type, Trigger Timing, Asset Status, Asset Grouping */}
+        {isMediaLibrary && (
+          <>
+            <SelectField
+              label="Board"
+              value={config.mediaBoard ?? "all"}
+              options={[
+                { value: "all",                   label: "All Boards" },
+                { value: "name_contains",          label: "Name contains" },
+                { value: "name_equals",            label: "Name equals" },
+                { value: "name_does_not_contain",  label: "Name does not contain" },
+                { value: "name_starts_with",       label: "Name starts with" },
+                { value: "name_ends_with",         label: "Name ends with" },
+                { value: "specific",               label: "Select specific board" },
+              ]}
+              onChange={v => onChange({ ...config, mediaBoard: v as TriggerConfig["mediaBoard"] })}
+              description="Triggers for uploads to any board"
+            />
+            <SelectField
+              label="Asset Name"
+              value={config.mediaAssetName ?? "all"}
+              options={[
+                { value: "all",                   label: "All Names" },
+                { value: "name_contains",          label: "Name contains" },
+                { value: "name_equals",            label: "Name equals" },
+                { value: "name_does_not_contain",  label: "Name does not contain" },
+                { value: "name_starts_with",       label: "Name starts with" },
+                { value: "name_ends_with",         label: "Name ends with" },
+              ]}
+              onChange={v => onChange({ ...config, mediaAssetName: v as TriggerConfig["mediaAssetName"] })}
+              description="Triggers for assets with any name"
+            />
+            <SelectField
+              label="Media Type"
+              value={config.mediaType ?? "all"}
+              options={[
+                { value: "all",    label: "All Media" },
+                { value: "images", label: "Images Only" },
+                { value: "videos", label: "Videos Only" },
+              ]}
+              onChange={v => onChange({ ...config, mediaType: v as TriggerConfig["mediaType"] })}
+            />
+            <SelectField
+              label="Trigger Timing"
+              value={config.triggerTiming ?? "immediately"}
+              options={[
+                { value: "immediately", label: "Immediately on Upload" },
+                { value: "on_approved", label: "When Media is Approved" },
+              ]}
+              onChange={v => onChange({ ...config, triggerTiming: v as TriggerConfig["triggerTiming"] })}
+              description={config.triggerTiming === "on_approved"
+                ? "Automation will run when media is approved."
+                : "Automation will run immediately when media is added to the board"}
+            />
+            <SelectField
+              label="Asset Status"
+              value={config.assetStatus ?? "all"}
+              options={[
+                { value: "all",         label: "All Status" },
+                { value: "approved",    label: "Approved" },
+                { value: "in_progress", label: "In Progress" },
+                { value: "archived",    label: "Archived" },
+              ]}
+              onChange={v => onChange({ ...config, assetStatus: v as TriggerConfig["assetStatus"] })}
+              description="Filter by asset approval status (default: all)"
+            />
+            {/* Asset Grouping toggle */}
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Asset Grouping</label>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  {config.assetGrouping
+                    ? "Enabled — uploads are grouped before triggering"
+                    : "Disabled — each upload triggers actions immediately"}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...config, assetGrouping: !config.assetGrouping })}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none",
+                    config.assetGrouping ? "bg-primary" : "bg-muted-foreground/30"
+                  )}
+                >
+                  <span className={cn(
+                    "pointer-events-none inline-block size-4 rounded-full bg-white shadow transform transition-transform duration-200",
+                    config.assetGrouping ? "translate-x-4" : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
         {/* OTHER APPS: generic placeholder */}
-        {!isMetaApp && !isSchedule && !isManual && (
+        {!isMetaApp && !isSchedule && !isManual && !isMediaLibrary && (
           <div className="flex items-center gap-3 p-4 bg-muted/40 border border-border rounded-xl">
             <AppIcon className="size-5 text-muted-foreground shrink-0" style={{ color: appMeta.iconColor }} />
             <div>
