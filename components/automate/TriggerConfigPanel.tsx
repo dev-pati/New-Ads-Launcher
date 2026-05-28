@@ -752,15 +752,15 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
         if (!res.ok) throw new Error("Drive API error")
         const data = await res.json()
         if (data.connected === false) throw new Error("Google Drive not connected")
-        // Map Drive files to CreativeMatch shape
+        // Map Drive files to CreativeMatch shape — proxy thumbnails through our API
         const files: CreativeMatch[] = (data.files ?? []).map((f: any) => ({
-          id:             f.id,
-          file_name:      f.name,
-          media_type:     f.mimeType?.includes("video") ? "video" : "image",
-          fb_thumbnail_url: f.thumbnailLink ? `${f.thumbnailLink}&sz=80` : null,
-          file_url:       null,
-          status:         "raw",
-          created_at:     f.createdTime ?? f.modifiedTime,
+          id:               f.id,
+          file_name:        f.name,
+          media_type:       f.mimeType?.includes("video") ? "video" : "image",
+          fb_thumbnail_url: `/api/google/drive/thumbnail?file_id=${f.id}&size=120`,
+          file_url:         null,
+          status:           "raw",
+          created_at:       f.createdTime ?? f.modifiedTime,
         }))
         setMatches(files)
       } else {
