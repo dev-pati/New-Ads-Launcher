@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import {
   IconBrandMeta, IconChartBar, IconPlus, IconX, IconChevronDown,
@@ -180,6 +180,239 @@ function MetricConditionRow({ cond, onChange, onRemove, canRemove }: {
         Preview historical changes
       </button>
     </div>
+  )
+}
+
+// ─── Media Library Setup (Google Drive) ──────────────────────────────────────
+
+interface DriveFolder { id: string; name: string }
+
+function MediaLibrarySetup({ config, onChange }: {
+  config: TriggerConfig
+  onChange: (c: TriggerConfig) => void
+}) {
+  const [connected, setConnected]   = useState<boolean | null>(null)
+  const [folders, setFolders]       = useState<DriveFolder[]>([])
+  const [loadingFolders, setLoadingFolders] = useState(false)
+
+  // Check Google Drive connection on mount
+  useEffect(() => {
+    fetch("/api/google/token")
+      .then(r => r.json())
+      .then(d => setConnected(d.connected === true))
+      .catch(() => setConnected(false))
+  }, [])
+
+  // Load folders when "specific" board is selected
+  useEffect(() => {
+    if (config.mediaBoard !== "specific") return
+    setLoadingFolders(true)
+    fetch("/api/google/drive/folders")
+      .then(r => r.json())
+      .then(d => setFolders(d.folders ?? []))
+      .catch(() => setFolders([]))
+      .finally(() => setLoadingFolders(false))
+  }, [config.mediaBoard])
+
+  if (connected === null) return (
+    <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+      <IconLoader2 className="size-3.5 animate-spin" /> Checking Google Drive…
+    </div>
+  )
+
+  if (!connected) return (
+    <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+      <div className="flex items-center gap-2.5">
+        <IconBrandGoogleDrive className="size-5 text-[#34A853] shrink-0" />
+        <div>
+          <p className="text-[13px] font-semibold">Connect Google Drive</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Required to use Media Library trigger</p>
+        </div>
+      </div>
+      <a
+        href="/connect"
+        className="flex items-center justify-center h-8 w-full rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors"
+      >
+        Connect Google Drive
+      </a>
+    </div>
+  )
+
+  const boardOp = config.mediaBoard ?? "all"
+  const nameFilterOps = ["name_contains","name_equals","name_does_not_contain","name_starts_with","name_ends_with"]
+
+  return (
+    <>
+      {/* Board */}
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Board</label>
+        <div className="relative">
+          <select
+            value={boardOp}
+            onChange={e => onChange({ ...config, mediaBoard: e.target.value as TriggerConfig["mediaBoard"], mediaBoardId: undefined, mediaBoardName: undefined })}
+            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+          >
+            <option value="all">All Boards</option>
+            <option value="name_contains">Name contains</option>
+            <option value="name_equals">Name equals</option>
+            <option value="name_does_not_contain">Name does not contain</option>
+            <option value="name_starts_with">Name starts with</option>
+            <option value="name_ends_with">Name ends with</option>
+            <option value="specific">Select specific board</option>
+          </select>
+          <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+        </div>
+        {boardOp === "all" && (
+          <p className="text-[11px] text-muted-foreground">Triggers for uploads to any board</p>
+        )}
+
+        {/* Name filter text input */}
+        {nameFilterOps.includes(boardOp) && (
+          <input
+            type="text"
+            placeholder="Enter folder name…"
+            value={config.mediaBoardFilter ?? ""}
+            onChange={e => onChange({ ...config, mediaBoardFilter: e.target.value })}
+            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+          />
+        )}
+
+        {/* Specific folder picker */}
+        {boardOp === "specific" && (
+          <div className="relative">
+            <select
+              value={config.mediaBoardId ?? ""}
+              onChange={e => {
+                const folder = folders.find(f => f.id === e.target.value)
+                onChange({ ...config, mediaBoardId: folder?.id, mediaBoardName: folder?.name })
+              }}
+              className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+              disabled={loadingFolders}
+            >
+              <option value="">{loadingFolders ? "Loading folders…" : "Select a folder"}</option>
+              {folders.map(f => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+            <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+          </div>
+        )}
+      </div>
+
+      {/* Asset Name */}
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Asset Name</label>
+        <div className="relative">
+          <select
+            value={config.mediaAssetName ?? "all"}
+            onChange={e => onChange({ ...config, mediaAssetName: e.target.value as TriggerConfig["mediaAssetName"], mediaNameFilter: undefined })}
+            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+          >
+            <option value="all">All Names</option>
+            <option value="name_contains">Name contains</option>
+            <option value="name_equals">Name equals</option>
+            <option value="name_does_not_contain">Name does not contain</option>
+            <option value="name_starts_with">Name starts with</option>
+            <option value="name_ends_with">Name ends with</option>
+          </select>
+          <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+        </div>
+        {(config.mediaAssetName && config.mediaAssetName !== "all") && (
+          <input
+            type="text"
+            placeholder="Enter asset name…"
+            value={config.mediaNameFilter ?? ""}
+            onChange={e => onChange({ ...config, mediaNameFilter: e.target.value })}
+            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+          />
+        )}
+        {(!config.mediaAssetName || config.mediaAssetName === "all") && (
+          <p className="text-[11px] text-muted-foreground">Triggers for assets with any name</p>
+        )}
+      </div>
+
+      {/* Media Type */}
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Media Type</label>
+        <div className="relative">
+          <select
+            value={config.mediaType ?? "all"}
+            onChange={e => onChange({ ...config, mediaType: e.target.value as TriggerConfig["mediaType"] })}
+            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+          >
+            <option value="all">All Media</option>
+            <option value="images">Images Only</option>
+            <option value="videos">Videos Only</option>
+          </select>
+          <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+        </div>
+      </div>
+
+      {/* Trigger Timing */}
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Trigger Timing</label>
+        <div className="relative">
+          <select
+            value={config.triggerTiming ?? "immediately"}
+            onChange={e => onChange({ ...config, triggerTiming: e.target.value as TriggerConfig["triggerTiming"] })}
+            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+          >
+            <option value="immediately">Immediately on Upload</option>
+            <option value="on_approved">When Media is Approved</option>
+          </select>
+          <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          {config.triggerTiming === "on_approved"
+            ? "Automation will run when media is approved."
+            : "Automation will run immediately when media is added to the board"}
+        </p>
+      </div>
+
+      {/* Asset Status */}
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Asset Status</label>
+        <div className="relative">
+          <select
+            value={config.assetStatus ?? "all"}
+            onChange={e => onChange({ ...config, assetStatus: e.target.value as TriggerConfig["assetStatus"] })}
+            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+          >
+            <option value="all">All Status</option>
+            <option value="approved">Approved</option>
+            <option value="in_progress">In Progress</option>
+            <option value="archived">Archived</option>
+          </select>
+          <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+        </div>
+        <p className="text-[11px] text-muted-foreground">Filter by asset approval status (default: all)</p>
+      </div>
+
+      {/* Asset Grouping toggle */}
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Asset Grouping</label>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            {config.assetGrouping
+              ? "Enabled — uploads are grouped before triggering"
+              : "Disabled — each upload triggers actions immediately"}
+          </p>
+          <button
+            type="button"
+            onClick={() => onChange({ ...config, assetGrouping: !config.assetGrouping })}
+            className={cn(
+              "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none",
+              config.assetGrouping ? "bg-primary" : "bg-muted-foreground/30"
+            )}
+          >
+            <span className={cn(
+              "pointer-events-none inline-block size-4 rounded-full bg-white shadow transform transition-transform duration-200",
+              config.assetGrouping ? "translate-x-4" : "translate-x-0"
+            )} />
+          </button>
+        </div>
+      </div>
+    </>
   )
 }
 
@@ -396,97 +629,9 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
           </div>
         )}
 
-        {/* MEDIA LIBRARY: Board, Asset Name, Media Type, Trigger Timing, Asset Status, Asset Grouping */}
+        {/* MEDIA LIBRARY: Google Drive backed */}
         {isMediaLibrary && (
-          <>
-            <SelectField
-              label="Board"
-              value={config.mediaBoard ?? "all"}
-              options={[
-                { value: "all",                   label: "All Boards" },
-                { value: "name_contains",          label: "Name contains" },
-                { value: "name_equals",            label: "Name equals" },
-                { value: "name_does_not_contain",  label: "Name does not contain" },
-                { value: "name_starts_with",       label: "Name starts with" },
-                { value: "name_ends_with",         label: "Name ends with" },
-                { value: "specific",               label: "Select specific board" },
-              ]}
-              onChange={v => onChange({ ...config, mediaBoard: v as TriggerConfig["mediaBoard"] })}
-              description="Triggers for uploads to any board"
-            />
-            <SelectField
-              label="Asset Name"
-              value={config.mediaAssetName ?? "all"}
-              options={[
-                { value: "all",                   label: "All Names" },
-                { value: "name_contains",          label: "Name contains" },
-                { value: "name_equals",            label: "Name equals" },
-                { value: "name_does_not_contain",  label: "Name does not contain" },
-                { value: "name_starts_with",       label: "Name starts with" },
-                { value: "name_ends_with",         label: "Name ends with" },
-              ]}
-              onChange={v => onChange({ ...config, mediaAssetName: v as TriggerConfig["mediaAssetName"] })}
-              description="Triggers for assets with any name"
-            />
-            <SelectField
-              label="Media Type"
-              value={config.mediaType ?? "all"}
-              options={[
-                { value: "all",    label: "All Media" },
-                { value: "images", label: "Images Only" },
-                { value: "videos", label: "Videos Only" },
-              ]}
-              onChange={v => onChange({ ...config, mediaType: v as TriggerConfig["mediaType"] })}
-            />
-            <SelectField
-              label="Trigger Timing"
-              value={config.triggerTiming ?? "immediately"}
-              options={[
-                { value: "immediately", label: "Immediately on Upload" },
-                { value: "on_approved", label: "When Media is Approved" },
-              ]}
-              onChange={v => onChange({ ...config, triggerTiming: v as TriggerConfig["triggerTiming"] })}
-              description={config.triggerTiming === "on_approved"
-                ? "Automation will run when media is approved."
-                : "Automation will run immediately when media is added to the board"}
-            />
-            <SelectField
-              label="Asset Status"
-              value={config.assetStatus ?? "all"}
-              options={[
-                { value: "all",         label: "All Status" },
-                { value: "approved",    label: "Approved" },
-                { value: "in_progress", label: "In Progress" },
-                { value: "archived",    label: "Archived" },
-              ]}
-              onChange={v => onChange({ ...config, assetStatus: v as TriggerConfig["assetStatus"] })}
-              description="Filter by asset approval status (default: all)"
-            />
-            {/* Asset Grouping toggle */}
-            <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Asset Grouping</label>
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] text-muted-foreground leading-snug">
-                  {config.assetGrouping
-                    ? "Enabled — uploads are grouped before triggering"
-                    : "Disabled — each upload triggers actions immediately"}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => onChange({ ...config, assetGrouping: !config.assetGrouping })}
-                  className={cn(
-                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none",
-                    config.assetGrouping ? "bg-primary" : "bg-muted-foreground/30"
-                  )}
-                >
-                  <span className={cn(
-                    "pointer-events-none inline-block size-4 rounded-full bg-white shadow transform transition-transform duration-200",
-                    config.assetGrouping ? "translate-x-4" : "translate-x-0"
-                  )} />
-                </button>
-              </div>
-            </div>
-          </>
+          <MediaLibrarySetup config={config} onChange={onChange} />
         )}
 
         {/* OTHER APPS: generic placeholder */}
@@ -591,24 +736,43 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
     setMatches(null)
     setFindError(null)
     try {
-      const params = new URLSearchParams({ limit: "5" })
-
       if (config.appId === "media_library") {
-        if (config.mediaType === "images") params.set("media_type", "image")
-        else if (config.mediaType === "videos") params.set("media_type", "video")
-
-        // Map asset status to DB status values
-        if (config.assetStatus === "approved")    params.set("status", "uploaded")
-        else if (config.assetStatus === "in_progress") params.set("status", "processing")
-        else if (config.assetStatus === "archived")    params.set("status", "archived")
+        // Query Google Drive API
+        const params = new URLSearchParams({ limit: "5" })
+        if (config.mediaType === "images")       params.set("media_type", "image")
+        else if (config.mediaType === "videos")  params.set("media_type", "video")
+        if (config.mediaBoard === "specific" && config.mediaBoardId) {
+          params.set("folder_id", config.mediaBoardId)
+        }
+        if (config.mediaAssetName && config.mediaAssetName !== "all" && config.mediaNameFilter) {
+          params.set("name_op", config.mediaAssetName)
+          params.set("name_val", config.mediaNameFilter)
+        }
+        const res = await fetch(`/api/google/drive/files?${params}`)
+        if (!res.ok) throw new Error("Drive API error")
+        const data = await res.json()
+        if (data.connected === false) throw new Error("Google Drive not connected")
+        // Map Drive files to CreativeMatch shape
+        const files: CreativeMatch[] = (data.files ?? []).map((f: any) => ({
+          id:             f.id,
+          file_name:      f.name,
+          media_type:     f.mimeType?.includes("video") ? "video" : "image",
+          fb_thumbnail_url: f.thumbnailLink ? `${f.thumbnailLink}&sz=80` : null,
+          file_url:       null,
+          status:         "raw",
+          created_at:     f.createdTime ?? f.modifiedTime,
+        }))
+        setMatches(files)
+      } else {
+        // Fallback: query internal creatives DB
+        const params = new URLSearchParams({ limit: "5" })
+        const res = await fetch(`/api/creatives?${params}`)
+        if (!res.ok) throw new Error("Failed to fetch")
+        const data = await res.json()
+        setMatches(data.creatives ?? [])
       }
-
-      const res = await fetch(`/api/creatives?${params}`)
-      if (!res.ok) throw new Error("Failed to fetch")
-      const data = await res.json()
-      setMatches(data.creatives ?? [])
-    } catch {
-      setFindError("Could not load matching records.")
+    } catch (e: any) {
+      setFindError(e.message ?? "Could not load matching records.")
     } finally {
       setFinding(false)
     }
@@ -657,7 +821,11 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
               Recent matches ({matches.length}):
             </p>
             {config.appId === "media_library" && (
-              <p className="text-[11px] text-primary/80">Files from your media library</p>
+              <p className="text-[11px] text-primary/80">
+                {config.mediaBoard === "specific" && config.mediaBoardName
+                  ? `Files from folder: ${config.mediaBoardName}`
+                  : "Files from your Google Drive"}
+              </p>
             )}
             {matches.length === 0 ? (
               <p className="text-[12px] text-muted-foreground italic">No matching records found.</p>

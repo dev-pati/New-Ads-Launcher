@@ -55,9 +55,13 @@ export interface TriggerConfig {
   checkFrequency?: "hourly" | "every_6h" | "daily"
   scheduleTime?: string   // "09:00"
   scheduleDays?: string[] // ["mon","tue","wed"]
-  // Media Library
+  // Media Library (Google Drive backed)
   mediaBoard?: "all" | "name_contains" | "name_equals" | "name_does_not_contain" | "name_starts_with" | "name_ends_with" | "specific"
+  mediaBoardId?: string    // Google Drive folder ID when board = "specific"
+  mediaBoardName?: string  // Display name for the selected folder
+  mediaBoardFilter?: string // text value for name_contains/equals/etc. operators
   mediaAssetName?: "all" | "name_contains" | "name_equals" | "name_does_not_contain" | "name_starts_with" | "name_ends_with"
+  mediaNameFilter?: string // text value for asset name filter
   mediaType?: "all" | "images" | "videos"
   triggerTiming?: "immediately" | "on_approved"
   assetStatus?: "all" | "approved" | "in_progress" | "archived"
