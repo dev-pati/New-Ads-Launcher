@@ -7,6 +7,7 @@ import {
   IconBell, IconBrandGoogleDrive, IconBrandTiktok, IconBrandSnapchat,
   IconBrandPinterest, IconBrandSlack, IconTable, IconCalendar,
   IconHandClick, IconPlayerPlay,
+  IconPhoto, IconBrandDropbox, IconApps, IconWind, IconBrandFramer, IconScan,
 } from "@tabler/icons-react"
 import type { TriggerConfig, MetricCondition, AppId } from "@/lib/workflow-types"
 
@@ -23,6 +24,12 @@ const APP_META: Record<AppId, { label: string; Icon: React.ElementType; iconBg: 
   sheets:       { label: "Google Sheets",  Icon: IconTable,            iconBg: "#F0FDF4", iconColor: "#0F9D58" },
   schedule:     { label: "Scheduled",      Icon: IconCalendar,         iconBg: "#EEF2FF", iconColor: "#6366F1" },
   manual:       { label: "Manual Trigger", Icon: IconHandClick,        iconBg: "#EFF6FF", iconColor: "#2563EB" },
+  media_library:{ label: "Media Library",  Icon: IconPhoto,            iconBg: "#FFF3F0", iconColor: "#FF7043" },
+  dropbox:      { label: "Dropbox",        Icon: IconBrandDropbox,     iconBg: "#EFF6FF", iconColor: "#0061FF" },
+  sharepoint:   { label: "SharePoint",     Icon: IconApps,             iconBg: "#F0FDFA", iconColor: "#038387" },
+  air:          { label: "AIR",            Icon: IconWind,             iconBg: "#F4F4F5", iconColor: "#1A1A1A" },
+  frameio:      { label: "Frame.io",       Icon: IconBrandFramer,      iconBg: "#EEF2FF", iconColor: "#4353FF" },
+  adscan:       { label: "Adscan",         Icon: IconScan,             iconBg: "#F5F3FF", iconColor: "#7C3AED" },
 }
 
 const EVENT_LABELS: Partial<Record<string, string>> = {
@@ -34,6 +41,12 @@ const EVENT_LABELS: Partial<Record<string, string>> = {
   new_drive_folder:       "New Drive Folder",
   schedule:               "Schedule",
   manual:                 "Manual Trigger",
+  media_uploaded:         "Media Uploaded",
+  new_dropbox_file:       "New Dropbox File",
+  new_sharepoint_file:    "New SharePoint File",
+  new_air_asset:          "New AIR Asset",
+  new_frameio_file:       "New Frame.io File",
+  adscan_alert:           "Competitor Ad Alert",
 }
 
 // ─── Field helpers ────────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@ import {
   IconBrandSnapchat, IconBrandPinterest, IconCalendar,
   IconBrandSlack, IconTable, IconBolt, IconPlayerPlay,
   IconDots, IconTrash, IconHandClick,
+  IconPhoto, IconBrandDropbox, IconApps, IconWind, IconBrandFramer, IconScan,
 } from "@tabler/icons-react"
 import type { AppId, NodeKind, NodeStatus } from "@/lib/workflow-types"
 
@@ -24,6 +25,12 @@ const APP_ICONS: Record<AppId, React.ElementType> = {
   sheets:       IconTable,
   schedule:     IconCalendar,
   manual:       IconHandClick,
+  media_library:IconPhoto,
+  dropbox:      IconBrandDropbox,
+  sharepoint:   IconApps,
+  air:          IconWind,
+  frameio:      IconBrandFramer,
+  adscan:       IconScan,
 }
 
 const APP_COLORS: Record<AppId, string> = {
@@ -37,6 +44,12 @@ const APP_COLORS: Record<AppId, string> = {
   sheets:       "bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400",
   schedule:     "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400",
   manual:       "bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400",
+  media_library:"bg-orange-100 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400",
+  dropbox:      "bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400",
+  sharepoint:   "bg-teal-100 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400",
+  air:          "bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200",
+  frameio:      "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400",
+  adscan:       "bg-violet-100 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400",
 }
 
 const KIND_BADGE: Record<NodeKind, { label: string; color: string }> = {

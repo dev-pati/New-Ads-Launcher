@@ -11,6 +11,7 @@ import {
   IconBrandMeta, IconBrandTiktok, IconBrandSnapchat,
   IconBrandPinterest, IconBrandSlack, IconBrandGoogleDrive,
   IconTable, IconCalendar, IconHandClick,
+  IconPhoto, IconBrandDropbox, IconApps, IconWind, IconBrandFramer, IconScan,
 } from "@tabler/icons-react"
 import { WorkflowCanvas, type ClickPos } from "./WorkflowCanvas"
 import { TriggerConfigPanel } from "./TriggerConfigPanel"
@@ -37,7 +38,13 @@ const TRIGGER_APPS: {
   { appId: "slack",        name: "Slack",         desc: "Connect Slack to trigger automations from messages",      Icon: IconBrandSlack,       iconBg: "#4A154B", iconFg: "#fff" },
   { appId: "snapchat",     name: "Snapchat",      desc: "Monitor Snapchat ad performance and automations",         Icon: IconBrandSnapchat,    iconBg: "#FFFC00", iconFg: "#000" },
   { appId: "pinterest",    name: "Pinterest",     desc: "Monitor Pinterest ad performance and automations",        Icon: IconBrandPinterest,   iconBg: "#E60023", iconFg: "#fff" },
-  { appId: "manual",       name: "Manual Trigger",desc: "Run this automation manually on demand",                 Icon: IconHandClick,        iconBg: "#2563EB", iconFg: "#fff" },
+  { appId: "manual",        name: "Manual Trigger", desc: "Run this automation manually on demand",                   Icon: IconHandClick,    iconBg: "#2563EB", iconFg: "#fff" },
+  { appId: "media_library", name: "Media Library",  desc: "Upload media to your library or trigger from assets",     Icon: IconPhoto,        iconBg: "#FF7043", iconFg: "#fff" },
+  { appId: "dropbox",       name: "Dropbox",        desc: "Dropbox is a secure partner with AdLauncher",             Icon: IconBrandDropbox, iconBg: "#0061FF", iconFg: "#fff" },
+  { appId: "sharepoint",    name: "SharePoint",     desc: "SharePoint is a secure partner with AdLauncher",          Icon: IconApps,         iconBg: "#038387", iconFg: "#fff" },
+  { appId: "air",           name: "AIR",            desc: "Trigger automations from a publicly shared AIR board",    Icon: IconWind,         iconBg: "#1A1A1A", iconFg: "#fff" },
+  { appId: "frameio",       name: "Frame.io",       desc: "Trigger automations when new files are added in Frame.io",Icon: IconBrandFramer,  iconBg: "#4353FF", iconFg: "#fff" },
+  { appId: "adscan",        name: "Adscan",         desc: "Trigger automations when competitor ad activity detected", Icon: IconScan,         iconBg: "#7C3AED", iconFg: "#fff" },
 ]
 
 function defaultTriggerForApp(appId: AppId): TriggerConfig {
@@ -58,6 +65,18 @@ function defaultTriggerForApp(appId: AppId): TriggerConfig {
       return { appId: "google_drive", event: "new_drive_folder", checkFrequency: "daily" }
     case "manual":
       return { appId: "manual", event: "manual", checkFrequency: "daily" }
+    case "media_library":
+      return { appId: "media_library", event: "media_uploaded", checkFrequency: "daily" }
+    case "dropbox":
+      return { appId: "dropbox", event: "new_dropbox_file", checkFrequency: "daily" }
+    case "sharepoint":
+      return { appId: "sharepoint", event: "new_sharepoint_file", checkFrequency: "daily" }
+    case "air":
+      return { appId: "air", event: "new_air_asset", checkFrequency: "daily" }
+    case "frameio":
+      return { appId: "frameio", event: "new_frameio_file", checkFrequency: "daily" }
+    case "adscan":
+      return { appId: "adscan", event: "adscan_alert", checkFrequency: "daily" }
     default:
       return { appId, event: "performance_monitoring", checkFrequency: "daily" }
   }

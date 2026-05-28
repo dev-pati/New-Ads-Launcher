@@ -1,6 +1,6 @@
 // ─── Workflow types ───────────────────────────────────────────────────────────
 
-export type AppId = "meta" | "notification" | "google_drive" | "tiktok" | "snapchat" | "pinterest" | "slack" | "sheets" | "schedule" | "manual"
+export type AppId = "meta" | "notification" | "google_drive" | "tiktok" | "snapchat" | "pinterest" | "slack" | "sheets" | "schedule" | "manual" | "media_library" | "dropbox" | "sharepoint" | "air" | "frameio" | "adscan"
 
 export type TriggerEvent =
   | "performance_monitoring"
@@ -11,6 +11,12 @@ export type TriggerEvent =
   | "new_drive_folder"
   | "schedule"
   | "manual"
+  | "media_uploaded"
+  | "new_dropbox_file"
+  | "new_sharepoint_file"
+  | "new_air_asset"
+  | "new_frameio_file"
+  | "adscan_alert"
 
 export type ActionEvent =
   | "send_notification"
@@ -130,6 +136,12 @@ export const APP_REGISTRY: Record<AppId, { name: string; color: string; bgColor:
   sheets:       { name: "Google Sheets", color: "#34a853", bgColor: "#f0fdf4" },
   schedule:     { name: "Schedule",      color: "#6366f1", bgColor: "#eef2ff" },
   manual:       { name: "Manual Trigger",color: "#2563eb", bgColor: "#eff6ff" },
+  media_library:{ name: "Media Library", color: "#FF7043", bgColor: "#FFF3F0" },
+  dropbox:      { name: "Dropbox",       color: "#0061FF", bgColor: "#EFF6FF" },
+  sharepoint:   { name: "SharePoint",    color: "#038387", bgColor: "#F0FDFA" },
+  air:          { name: "AIR",           color: "#1A1A1A", bgColor: "#F4F4F5" },
+  frameio:      { name: "Frame.io",      color: "#4353FF", bgColor: "#EEF2FF" },
+  adscan:       { name: "Adscan",        color: "#7C3AED", bgColor: "#F5F3FF" },
 }
 
 // ─── Trigger event registry ───────────────────────────────────────────────────
@@ -144,7 +156,13 @@ export const TRIGGER_EVENT_REGISTRY: Record<TriggerEvent, {
   cpa_spike:              { label: "CPA Spike",              appId: "meta",     description: "Fires when cost per action spikes beyond threshold." },
   new_drive_folder:       { label: "New Drive Folder",       appId: "google_drive", description: "Fires when a new folder is created in Google Drive." },
   schedule:               { label: "Schedule",               appId: "schedule", description: "Fires on a recurring schedule (daily, weekly, etc.)." },
-  manual:                 { label: "Manual Trigger",         appId: "manual",   description: "Run this automation manually on demand." },
+  manual:                 { label: "Manual Trigger",         appId: "manual",        description: "Run this automation manually on demand." },
+  media_uploaded:         { label: "Media Uploaded",          appId: "media_library", description: "Fires when new media is uploaded to your library." },
+  new_dropbox_file:       { label: "New Dropbox File",        appId: "dropbox",       description: "Fires when a new file is added to Dropbox." },
+  new_sharepoint_file:    { label: "New SharePoint File",     appId: "sharepoint",    description: "Fires when a new file is added to SharePoint." },
+  new_air_asset:          { label: "New AIR Asset",           appId: "air",           description: "Trigger automations from a publicly shared AIR board." },
+  new_frameio_file:       { label: "New Frame.io File",       appId: "frameio",       description: "Fires when new files are added in Frame.io." },
+  adscan_alert:           { label: "Competitor Ad Alert",     appId: "adscan",        description: "Trigger automations when competitor ad activity is detected." },
 }
 
 export const ACTION_EVENT_REGISTRY: Record<ActionEvent, {
