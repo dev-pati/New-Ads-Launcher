@@ -11,6 +11,7 @@ import "@xyflow/react/dist/style.css"
 import { IconPlus, IconBolt } from "@tabler/icons-react"
 import { WorkflowNodeComponent, type WorkflowNodeData } from "./WorkflowNode"
 import type { WorkflowStep } from "@/lib/workflow-types"
+import { APP_REGISTRY, TRIGGER_EVENT_REGISTRY, ACTION_EVENT_REGISTRY } from "@/lib/workflow-types"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -102,23 +103,31 @@ export function stepsToFlow(
     let tags: string[] = []
 
     if (isT && tc) {
-      const freqLabel = tc.checkFrequency === "daily" ? "Daily 9am"
-        : tc.checkFrequency === "hourly" ? "Hourly"
-        : "Every 6h"
-      const levelLabel = tc.monitoringLevel === "campaign" ? "Campaign level"
-        : tc.monitoringLevel === "adset" ? "Ad set level" : "Ad level"
-      subtitle = `${freqLabel} · ${levelLabel}`
-      tags = (tc.metricConditions ?? []).map(c => {
-        const op = c.operator === "decreases_by" ? "drops >"
-          : c.operator === "increases_by" ? "spikes >"
-          : c.operator === "is_above" ? ">" : "<"
-        return `${c.metric === "spend" ? "Spend" : c.metric.toUpperCase()} ${op}${c.value}${c.unit}`
-      })
-      if (tc.campaignFilter === "all") tags.push("All campaigns")
-      const wLabel = tc.comparisonWindow === "day_over_day" ? "Day over Day"
-        : tc.comparisonWindow === "week_over_week" ? "Week over Week" : "Month over Month"
-      tags.push(wLabel)
-      tags.push(freqLabel)
+      if (tc.appId === "meta") {
+        const freqLabel = tc.checkFrequency === "daily" ? "Daily 9am"
+          : tc.checkFrequency === "hourly" ? "Hourly"
+          : "Every 6h"
+        const levelLabel = tc.monitoringLevel === "campaign" ? "Campaign level"
+          : tc.monitoringLevel === "adset" ? "Ad set level" : "Ad level"
+        subtitle = `${freqLabel} · ${levelLabel}`
+        tags = (tc.metricConditions ?? []).map(c => {
+          const op = c.operator === "decreases_by" ? "drops >"
+            : c.operator === "increases_by" ? "spikes >"
+            : c.operator === "is_above" ? ">" : "<"
+          return `${c.metric === "spend" ? "Spend" : c.metric.toUpperCase()} ${op}${c.value}${c.unit}`
+        })
+        if (tc.campaignFilter === "all") tags.push("All campaigns")
+        const wLabel = tc.comparisonWindow === "day_over_day" ? "Day over Day"
+          : tc.comparisonWindow === "week_over_week" ? "Week over Week" : "Month over Month"
+        tags.push(wLabel)
+        tags.push(freqLabel)
+      } else if (tc.appId === "schedule") {
+        const freqLabel = tc.checkFrequency === "daily" ? "Daily" : tc.checkFrequency === "hourly" ? "Hourly" : "Every 6h"
+        subtitle = tc.scheduleTime ? `${freqLabel} · ${tc.scheduleTime}` : freqLabel
+        tags = tc.scheduleDays && tc.scheduleDays.length > 0 ? [tc.scheduleDays.join(", ")] : []
+      } else if (tc.appId === "manual") {
+        subtitle = "Run on demand"
+      }
     }
 
     if (!isT && ac && ac.appId === "notification") {
@@ -130,8 +139,10 @@ export function stepsToFlow(
     }
 
     const eventLabel = isT
-      ? (tc?.event?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? "")
-      : (ac?.event?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? "")
+      ? (tc?.event ? (TRIGGER_EVENT_REGISTRY[tc.event]?.label ?? tc.event.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())) : "")
+      : (ac?.event ? (ACTION_EVENT_REGISTRY[ac.event]?.label  ?? ac.event.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()))  : "")
+
+    const appName = appId ? (APP_REGISTRY[appId]?.name ?? appId.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())) : undefined
 
     return {
       id: step.id,
@@ -142,7 +153,7 @@ export function stepsToFlow(
         kind: step.kind,
         status: step.status,
         appId,
-        appName: appId ? appId.charAt(0).toUpperCase() + appId.slice(1).replace(/_/g, " ") : undefined,
+        appName,
         eventLabel: eventLabel || undefined,
         subtitle,
         tags,
