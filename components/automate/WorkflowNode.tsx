@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 import {
   IconBrandMeta, IconBell, IconBrandGoogleDrive, IconBrandTiktok,
   IconBrandSnapchat, IconBrandPinterest, IconCalendar,
-  IconBrandSlack, IconTable, IconBolt, IconPlayerPlay,
+  IconBrandSlack, IconTable, IconBolt, IconPlayerPlay, IconTrash,
 } from "@tabler/icons-react"
 import type { AppId, NodeKind, NodeStatus } from "@/lib/workflow-types"
 
@@ -55,6 +55,7 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   tags: string[]
   isSelected?: boolean
   onSelect?: (id: string) => void
+  onDelete?: (id: string) => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -68,70 +69,87 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
   const appCls  = data.appId ? (APP_COLORS[data.appId] ?? "bg-muted text-muted-foreground") : "bg-muted/60 text-muted-foreground/50"
 
   return (
-    <div
-      onClick={() => data.onSelect?.(id)}
-      className={cn(
-        "w-[360px] bg-white dark:bg-card rounded-2xl border transition-all duration-150 cursor-pointer select-none",
-        selected
-          ? "border-primary shadow-[0_0_0_3px_rgba(99,102,241,0.15)] shadow-lg"
-          : "border-[#E5E7EB] dark:border-border hover:border-[#C7D2DA] hover:shadow-md shadow-sm"
-      )}
-    >
-      <Handle type="target" position={Position.Top}    className="!border-0 !bg-transparent !size-0" />
-      <Handle type="source" position={Position.Bottom} className="!border-0 !bg-transparent !size-0" />
-
-      <div className="p-4">
-        {/* Header row: step + badge + status */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="size-5 rounded-full bg-[#F3F4F6] dark:bg-muted flex items-center justify-center text-[10px] font-bold text-[#6B7280] dark:text-muted-foreground shrink-0">
-              {data.stepIndex}
-            </span>
-            <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", badge.color)}>
-              {badge.label}
-            </span>
-          </div>
-          <span className={cn(
-            "size-2.5 rounded-full shrink-0",
-            data.status === "configured" ? "bg-emerald-500" :
-            data.status === "error"      ? "bg-red-500"     : "bg-amber-400"
-          )} />
-        </div>
-
-        {/* App identity */}
-        <div className="flex items-center gap-3">
-          <div className={cn("size-10 rounded-xl flex items-center justify-center shrink-0", appCls)}>
-            <AppIcon className={cn("size-5", isEmpty && "opacity-40")} />
-          </div>
-          <div className="flex-1 min-w-0">
-            {isEmpty ? (
-              <p className="text-[14px] font-semibold text-[#9CA3AF] dark:text-muted-foreground leading-tight">
-                Choose an app
-              </p>
-            ) : (
-              <>
-                <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
-                  {data.appName} · {data.eventLabel}
-                </p>
-                {data.subtitle && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{data.subtitle}</p>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Tags (only when configured) */}
-        {!isEmpty && data.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-3">
-            {data.tags.map((tag, i) => (
-              <span key={i} className="px-2.5 py-0.5 rounded-full bg-[#F3F4F6] dark:bg-muted text-[11px] font-medium text-[#6B7280] dark:text-muted-foreground">
-                {tag}
-              </span>
-            ))}
-          </div>
+    <div className="relative group">
+      <div
+        onClick={() => data.onSelect?.(id)}
+        className={cn(
+          "w-[360px] bg-white dark:bg-card rounded-2xl border transition-all duration-150 cursor-pointer select-none",
+          selected
+            ? "border-primary shadow-[0_0_0_3px_rgba(99,102,241,0.15)] shadow-lg"
+            : "border-[#E5E7EB] dark:border-border hover:border-[#C7D2DA] hover:shadow-md shadow-sm"
         )}
+      >
+        <Handle type="target" position={Position.Top}    className="!border-0 !bg-transparent !size-0" />
+        <Handle type="source" position={Position.Bottom} className="!border-0 !bg-transparent !size-0" />
+
+        <div className="p-4">
+          {/* Header row: step + badge + status */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="size-5 rounded-full bg-[#F3F4F6] dark:bg-muted flex items-center justify-center text-[10px] font-bold text-[#6B7280] dark:text-muted-foreground shrink-0">
+                {data.stepIndex}
+              </span>
+              <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", badge.color)}>
+                {badge.label}
+              </span>
+            </div>
+            <span className={cn(
+              "size-2.5 rounded-full shrink-0",
+              data.status === "configured" ? "bg-emerald-500" :
+              data.status === "error"      ? "bg-red-500"     : "bg-amber-400"
+            )} />
+          </div>
+
+          {/* App identity */}
+          <div className="flex items-center gap-3">
+            <div className={cn("size-10 rounded-xl flex items-center justify-center shrink-0", appCls)}>
+              <AppIcon className={cn("size-5", isEmpty && "opacity-40")} />
+            </div>
+            <div className="flex-1 min-w-0">
+              {isEmpty ? (
+                <p className="text-[14px] font-semibold text-[#9CA3AF] dark:text-muted-foreground leading-tight">
+                  Choose an app
+                </p>
+              ) : (
+                <>
+                  <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
+                    {data.appName} · {data.eventLabel}
+                  </p>
+                  {data.subtitle && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{data.subtitle}</p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Tags (only when configured) */}
+          {!isEmpty && data.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {data.tags.map((tag, i) => (
+                <span key={i} className="px-2.5 py-0.5 rounded-full bg-[#F3F4F6] dark:bg-muted text-[11px] font-medium text-[#6B7280] dark:text-muted-foreground">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Delete button — appears on hover, floats to the right */}
+      {data.onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); data.onDelete!(id) }}
+          className="nodrag nopan absolute top-1/2 -translate-y-1/2 left-[calc(100%+10px)]
+                     hidden group-hover:flex items-center gap-2 px-3 py-2
+                     bg-white dark:bg-card border border-border rounded-xl shadow-md
+                     text-red-500 text-[13px] font-medium hover:bg-red-50 dark:hover:bg-red-950/20
+                     transition-colors whitespace-nowrap z-10"
+        >
+          <IconTrash className="size-4" />
+          Delete
+        </button>
+      )}
     </div>
   )
 })

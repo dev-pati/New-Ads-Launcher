@@ -317,6 +317,11 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
     setAddingAt(null)
   }, [addingAt])
 
+  const handleDeleteStep = useCallback((stepId: string) => {
+    setSteps(prev => prev.filter(s => s.id !== stepId))
+    setSelectedId(prev => prev === stepId ? null : prev)
+  }, [])
+
   const handleUpdateTrigger = useCallback((stepId: string, config: TriggerConfig) => {
     setSteps(prev => prev.map(s => s.id === stepId
       ? { ...s, triggerConfig: config, status: "configured" }
@@ -383,6 +388,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
             onSelectStep={handleSelectStep}
             onAddStep={handleAddStep}
             onAddFirst={handleAddFirst}
+            onDeleteStep={handleDeleteStep}
           />
         </div>
 

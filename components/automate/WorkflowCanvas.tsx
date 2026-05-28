@@ -86,6 +86,7 @@ export function stepsToFlow(
   selectedId: string | null,
   onSelect: (id: string) => void,
   onAddBetween: (afterIndex: number, pos: ClickPos) => void,
+  onDelete: (id: string) => void,
 ): { nodes: Node[]; edges: Edge[] } {
   const stepNodes: Node<WorkflowNodeData>[] = steps.map((step, i) => {
     const isT = step.kind === "trigger"
@@ -147,6 +148,7 @@ export function stepsToFlow(
         tags,
         isSelected: selectedId === step.id,
         onSelect,
+        onDelete,
       },
       selected: selectedId === step.id,
     }
@@ -186,19 +188,20 @@ interface Props {
   onSelectStep: (id: string) => void
   onAddStep: (afterIndex: number, pos: ClickPos) => void
   onAddFirst: () => void
+  onDeleteStep: (id: string) => void
 }
 
-export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep, onAddFirst }: Props) {
+export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep, onAddFirst, onDeleteStep }: Props) {
   const { nodes: initNodes, edges: initEdges } = useMemo(
-    () => stepsToFlow(steps, selectedStepId, onSelectStep, onAddStep),
-    [steps, selectedStepId, onSelectStep, onAddStep],
+    () => stepsToFlow(steps, selectedStepId, onSelectStep, onAddStep, onDeleteStep),
+    [steps, selectedStepId, onSelectStep, onAddStep, onDeleteStep],
   )
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initEdges)
 
   useMemo(() => {
-    const { nodes: n, edges: e } = stepsToFlow(steps, selectedStepId, onSelectStep, onAddStep)
+    const { nodes: n, edges: e } = stepsToFlow(steps, selectedStepId, onSelectStep, onAddStep, onDeleteStep)
     setNodes(n)
     setEdges(e)
   }, [steps, selectedStepId])
