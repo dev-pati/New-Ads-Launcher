@@ -1,6 +1,6 @@
 // ─── Workflow types ───────────────────────────────────────────────────────────
 
-export type AppId = "meta" | "notification" | "google_drive" | "tiktok" | "snapchat" | "pinterest" | "slack" | "sheets" | "schedule"
+export type AppId = "meta" | "notification" | "google_drive" | "tiktok" | "snapchat" | "pinterest" | "slack" | "sheets" | "schedule" | "manual"
 
 export type TriggerEvent =
   | "performance_monitoring"
@@ -10,6 +10,7 @@ export type TriggerEvent =
   | "cpa_spike"
   | "new_drive_folder"
   | "schedule"
+  | "manual"
 
 export type ActionEvent =
   | "send_notification"
@@ -128,6 +129,7 @@ export const APP_REGISTRY: Record<AppId, { name: string; color: string; bgColor:
   slack:        { name: "Slack",         color: "#4a154b", bgColor: "#fdf4ff" },
   sheets:       { name: "Google Sheets", color: "#34a853", bgColor: "#f0fdf4" },
   schedule:     { name: "Schedule",      color: "#6366f1", bgColor: "#eef2ff" },
+  manual:       { name: "Manual Trigger",color: "#2563eb", bgColor: "#eff6ff" },
 }
 
 // ─── Trigger event registry ───────────────────────────────────────────────────
@@ -142,6 +144,7 @@ export const TRIGGER_EVENT_REGISTRY: Record<TriggerEvent, {
   cpa_spike:              { label: "CPA Spike",              appId: "meta",     description: "Fires when cost per action spikes beyond threshold." },
   new_drive_folder:       { label: "New Drive Folder",       appId: "google_drive", description: "Fires when a new folder is created in Google Drive." },
   schedule:               { label: "Schedule",               appId: "schedule", description: "Fires on a recurring schedule (daily, weekly, etc.)." },
+  manual:                 { label: "Manual Trigger",         appId: "manual",   description: "Run this automation manually on demand." },
 }
 
 export const ACTION_EVENT_REGISTRY: Record<ActionEvent, {

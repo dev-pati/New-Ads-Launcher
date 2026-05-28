@@ -7,7 +7,7 @@ import {
   IconBrandMeta, IconBell, IconBrandGoogleDrive, IconBrandTiktok,
   IconBrandSnapchat, IconBrandPinterest, IconCalendar,
   IconBrandSlack, IconTable, IconBolt, IconPlayerPlay,
-  IconDots, IconTrash,
+  IconDots, IconTrash, IconHandClick,
 } from "@tabler/icons-react"
 import type { AppId, NodeKind, NodeStatus } from "@/lib/workflow-types"
 
@@ -23,6 +23,7 @@ const APP_ICONS: Record<AppId, React.ElementType> = {
   slack:        IconBrandSlack,
   sheets:       IconTable,
   schedule:     IconCalendar,
+  manual:       IconHandClick,
 }
 
 const APP_COLORS: Record<AppId, string> = {
@@ -35,6 +36,7 @@ const APP_COLORS: Record<AppId, string> = {
   slack:        "bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400",
   sheets:       "bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400",
   schedule:     "bg-indigo-100 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400",
+  manual:       "bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400",
 }
 
 const KIND_BADGE: Record<NodeKind, { label: string; color: string }> = {

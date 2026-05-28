@@ -10,7 +10,7 @@ import {
   IconClock, IconShieldCheck, IconSearch,
   IconBrandMeta, IconBrandTiktok, IconBrandSnapchat,
   IconBrandPinterest, IconBrandSlack, IconBrandGoogleDrive,
-  IconTable, IconCalendar,
+  IconTable, IconCalendar, IconHandClick,
 } from "@tabler/icons-react"
 import { WorkflowCanvas, type ClickPos } from "./WorkflowCanvas"
 import { TriggerConfigPanel } from "./TriggerConfigPanel"
@@ -37,6 +37,7 @@ const TRIGGER_APPS: {
   { appId: "slack",        name: "Slack",         desc: "Connect Slack to trigger automations from messages",      Icon: IconBrandSlack,       iconBg: "#4A154B", iconFg: "#fff" },
   { appId: "snapchat",     name: "Snapchat",      desc: "Monitor Snapchat ad performance and automations",         Icon: IconBrandSnapchat,    iconBg: "#FFFC00", iconFg: "#000" },
   { appId: "pinterest",    name: "Pinterest",     desc: "Monitor Pinterest ad performance and automations",        Icon: IconBrandPinterest,   iconBg: "#E60023", iconFg: "#fff" },
+  { appId: "manual",       name: "Manual Trigger",desc: "Run this automation manually on demand",                 Icon: IconHandClick,        iconBg: "#2563EB", iconFg: "#fff" },
 ]
 
 function defaultTriggerForApp(appId: AppId): TriggerConfig {
@@ -55,6 +56,8 @@ function defaultTriggerForApp(appId: AppId): TriggerConfig {
       return { appId: "schedule", event: "schedule", checkFrequency: "daily", scheduleTime: "09:00" }
     case "google_drive":
       return { appId: "google_drive", event: "new_drive_folder", checkFrequency: "daily" }
+    case "manual":
+      return { appId: "manual", event: "manual", checkFrequency: "daily" }
     default:
       return { appId, event: "performance_monitoring", checkFrequency: "daily" }
   }

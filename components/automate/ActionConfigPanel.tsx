@@ -28,6 +28,7 @@ const APP_META: Record<string, {
   slack:        { label: "Slack",         icon: IconBrandSlack,     iconBg: "bg-purple-100 dark:bg-purple-950/40", iconColor: "text-purple-600" },
   sheets:       { label: "Sheets",        icon: IconTable,          iconBg: "bg-green-100 dark:bg-green-950/40", iconColor: "text-green-700 dark:text-green-400" },
   schedule:     { label: "Schedule",      icon: IconCalendar,       iconBg: "bg-indigo-100 dark:bg-indigo-950/40", iconColor: "text-indigo-600" },
+  manual:       { label: "Manual Trigger",icon: IconCalendar,       iconBg: "bg-blue-100 dark:bg-blue-950/40",    iconColor: "text-blue-600" },
 }
 
 const EVENT_LABELS: Partial<Record<string, string>> = {
