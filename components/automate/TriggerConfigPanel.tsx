@@ -6,7 +6,7 @@ import {
   IconBrandMeta, IconChartBar, IconPlus, IconX, IconChevronDown,
   IconBell, IconBrandGoogleDrive, IconBrandTiktok, IconBrandSnapchat,
   IconBrandPinterest, IconBrandSlack, IconTable, IconCalendar,
-  IconHandClick, IconPlayerPlay,
+  IconHandClick, IconPlayerPlay, IconLoader2, IconRefresh, IconFile,
   IconPhoto, IconBrandDropbox, IconApps, IconWind, IconBrandFramer, IconScan,
 } from "@tabler/icons-react"
 import type { TriggerConfig, MetricCondition, AppId } from "@/lib/workflow-types"
@@ -504,9 +504,41 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
   )
 }
 
+// ─── Chip helper ─────────────────────────────────────────────────────────────
+
+function Chip({ label }: { label: string }) {
+  return (
+    <span className="px-2 py-0.5 rounded-full bg-muted border border-border/60 text-[10px] font-medium text-foreground/80">
+      {label}
+    </span>
+  )
+}
+
 // ─── Preview tab ──────────────────────────────────────────────────────────────
 
+const MEDIA_BOARD_LABELS: Record<string, string> = {
+  all: "All Boards", name_contains: "Board name contains", name_equals: "Board name equals",
+  name_does_not_contain: "Board name does not contain", name_starts_with: "Board name starts with",
+  name_ends_with: "Board name ends with", specific: "Specific board",
+}
+const MEDIA_TYPE_LABELS: Record<string, string> = { all: "All Media", images: "Images Only", videos: "Videos Only" }
+const TRIGGER_TIMING_LABELS: Record<string, string> = { immediately: "Immediately on Upload", on_approved: "When Media is Approved" }
+const ASSET_STATUS_LABELS: Record<string, string> = { all: "All Status", approved: "Approved", in_progress: "In Progress", archived: "Archived" }
+
+// ─── Mock media matches ───────────────────────────────────────────────────────
+
+const MOCK_MEDIA_MATCHES = [
+  { id: "1", name: "11643-Swap~product-V1-FusiForce-M....", type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#6B7280" },
+  { id: "2", name: "11634-NET~NEW-V1-FusiForce-M.Gy....",  type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#1F2937" },
+  { id: "3", name: "11653-Swap product-V1-FusiForce-Per...",type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#374151" },
+  { id: "4", name: "11653-Swap~product-V1-FusiForce-Pe...", type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#4B5563" },
+  { id: "5", name: "11657-Swap~product-V1-FusiForce-Per...",type: "Video", status: "raw", date: "5/22/2026", thumbBg: "#374151" },
+]
+
 function PreviewTab({ config }: { config: TriggerConfig }) {
+  const [finding, setFinding] = useState(false)
+  const [matches, setMatches] = useState<typeof MOCK_MEDIA_MATCHES | null>(null)
+
   const appMeta    = APP_META[config.appId] ?? APP_META["meta"]
   const eventLabel = EVENT_LABELS[config.event] ?? config.event?.replace(/_/g, " ")
   const conditions = config.metricConditions ?? []
@@ -516,7 +548,49 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
   const yesterday = new Date(today.getTime() - 86_400_000)
   const fmt = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 
-  const hasConditions = conditions.length > 0
+  // Compute "fires when" chips per app type
+  const firesWhenChips: string[] = (() => {
+    if (config.appId === "meta" && conditions.length > 0) {
+      const metricChips = conditions.map(c => {
+        const metric = METRICS.find(m => m.value === c.metric)?.label ?? c.metric
+        const op = c.operator === "decreases_by" ? "drops" : c.operator === "increases_by" ? "spikes" : c.operator === "is_above" ? ">" : "<"
+        return `${metric} ${op} ${c.value}${c.unit}`
+      })
+      return [
+        ...metricChips,
+        windowLabel,
+        FREQUENCIES.find(f => f.value === (config.checkFrequency ?? "daily"))?.label ?? "Daily 9am",
+      ]
+    }
+    if (config.appId === "media_library") {
+      return [
+        MEDIA_BOARD_LABELS[config.mediaBoard ?? "all"],
+        config.mediaType && config.mediaType !== "all" ? MEDIA_TYPE_LABELS[config.mediaType] : null,
+        TRIGGER_TIMING_LABELS[config.triggerTiming ?? "immediately"],
+        config.assetStatus && config.assetStatus !== "all" ? ASSET_STATUS_LABELS[config.assetStatus] : null,
+        config.assetGrouping ? "Asset Grouping on" : null,
+      ].filter(Boolean) as string[]
+    }
+    if (config.appId === "schedule") {
+      return [
+        config.checkFrequency === "hourly" ? "Hourly" : config.checkFrequency === "every_6h" ? "Every 6h" : "Daily",
+        config.scheduleTime ?? "09:00",
+      ]
+    }
+    if (config.appId === "manual") return ["Run on demand"]
+    return []
+  })()
+
+  const hasChips = firesWhenChips.length > 0
+
+  function handleFindRecords() {
+    setFinding(true)
+    setMatches(null)
+    setTimeout(() => {
+      setFinding(false)
+      setMatches(MOCK_MEDIA_MATCHES)
+    }, 1200)
+  }
 
   return (
     <div className="p-5 space-y-5">
@@ -528,27 +602,13 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
         <p className="text-[12px] font-medium text-foreground">
           {appMeta.label} · {eventLabel}
         </p>
-        {!hasConditions ? (
+        {!hasChips ? (
           <p className="text-[12px] text-muted-foreground italic">
             Configure this step in Setup to see what it&apos;ll do.
           </p>
         ) : (
           <div className="flex flex-wrap gap-1.5 mt-1">
-            {conditions.map((c, i) => {
-              const metric = METRICS.find(m => m.value === c.metric)?.label ?? c.metric
-              const op = c.operator === "decreases_by" ? "drops" : c.operator === "increases_by" ? "spikes" : c.operator === "is_above" ? ">" : "<"
-              return (
-                <span key={i} className="px-2 py-0.5 rounded-full bg-muted border border-border/60 text-[10px] font-medium text-foreground/80">
-                  {metric} {op} {c.value}{c.unit}
-                </span>
-              )
-            })}
-            <span className="px-2 py-0.5 rounded-full bg-muted border border-border/60 text-[10px] font-medium text-foreground/80">
-              {windowLabel}
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-muted border border-border/60 text-[10px] font-medium text-foreground/80">
-              {FREQUENCIES.find(f => f.value === (config.checkFrequency ?? "daily"))?.label}
-            </span>
+            {firesWhenChips.map((chip, i) => <Chip key={i} label={chip} />)}
           </div>
         )}
       </div>
@@ -559,13 +619,64 @@ function PreviewTab({ config }: { config: TriggerConfig }) {
           Test with live data
         </p>
         <p className="text-[12px] text-muted-foreground leading-relaxed">
-          Preview which records match your trigger configuration. Use the{" "}
+          Preview which {config.appId === "media_library" ? "assets" : "records"} match your trigger configuration. Use the{" "}
           <span className="font-medium text-foreground">Run</span> button in the header to execute with the latest match.
         </p>
-        <button className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-[13px] font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
-          <IconPlayerPlay className="size-3.5 fill-primary-foreground" />
-          Find Matching Records
-        </button>
+
+        {/* Results */}
+        {matches && (
+          <div className="space-y-2 pt-1">
+            <p className="text-[12px] font-semibold text-foreground">
+              Recent matches ({matches.length}):
+            </p>
+            {config.appId === "media_library" && (
+              <p className="text-[11px] text-primary/80">Files from your media library</p>
+            )}
+            <div className="space-y-1.5">
+              {matches.map(m => (
+                <div key={m.id} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-border bg-background hover:bg-muted/40 transition-colors cursor-pointer">
+                  <div
+                    className="size-10 rounded-lg shrink-0 flex items-center justify-center overflow-hidden"
+                    style={{ backgroundColor: m.thumbBg }}
+                  >
+                    <IconFile className="size-4 text-white/60" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] font-medium text-foreground truncate">{m.name}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {m.type} • {m.status} • {m.date}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Action button */}
+        {matches ? (
+          <button
+            onClick={handleFindRecords}
+            disabled={finding}
+            className="w-full h-9 bg-background border border-border text-foreground rounded-xl text-[13px] font-semibold hover:bg-muted/60 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+          >
+            {finding
+              ? <><IconLoader2 className="size-3.5 animate-spin" /> Refreshing…</>
+              : <><IconRefresh className="size-3.5" /> Refresh</>
+            }
+          </button>
+        ) : (
+          <button
+            onClick={handleFindRecords}
+            disabled={finding}
+            className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-[13px] font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+          >
+            {finding
+              ? <><IconLoader2 className="size-3.5 animate-spin" /> Searching…</>
+              : <><IconPlayerPlay className="size-3.5 fill-primary-foreground" /> Find Matching Records</>
+            }
+          </button>
+        )}
       </div>
 
       {/* Comparing window (only for Meta) */}
