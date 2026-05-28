@@ -9,6 +9,7 @@ import {
   IconBrandSlack, IconTable, IconBolt, IconPlayerPlay,
   IconDots, IconTrash, IconHandClick,
   IconPhoto, IconBrandDropbox, IconApps, IconWind, IconBrandFramer, IconScan,
+  IconHourglass, IconShieldCheck,
 } from "@tabler/icons-react"
 import type { AppId, NodeKind, NodeStatus } from "@/lib/workflow-types"
 
@@ -56,6 +57,8 @@ const KIND_BADGE: Record<NodeKind, { label: string; color: string }> = {
   trigger:   { label: "TRIGGER",   color: "bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300" },
   action:    { label: "ACTION",    color: "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300" },
   condition: { label: "CONDITION", color: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" },
+  delay:     { label: "DELAY",     color: "bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300" },
+  approval:  { label: "APPROVAL",  color: "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300" },
 }
 
 // ─── Node data shape ──────────────────────────────────────────────────────────
@@ -79,10 +82,19 @@ export interface WorkflowNodeData extends Record<string, unknown> {
 export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
   id, data, selected,
 }: NodeProps<Node<WorkflowNodeData>>) {
-  const isEmpty = !data.appId
-  const AppIcon = data.appId ? (APP_ICONS[data.appId] ?? IconBolt) : (data.kind === "trigger" ? IconBolt : IconPlayerPlay)
+  const isEmpty = !data.appId && data.kind !== "delay" && data.kind !== "approval"
+  const AppIcon = data.appId
+    ? (APP_ICONS[data.appId] ?? IconBolt)
+    : data.kind === "trigger"  ? IconBolt
+    : data.kind === "delay"    ? IconHourglass
+    : data.kind === "approval" ? IconShieldCheck
+    : IconPlayerPlay
   const badge   = KIND_BADGE[data.kind]
-  const appCls  = data.appId ? (APP_COLORS[data.appId] ?? "bg-muted text-muted-foreground") : "bg-muted/60 text-muted-foreground/50"
+  const appCls  = data.appId
+    ? (APP_COLORS[data.appId] ?? "bg-muted text-muted-foreground")
+    : data.kind === "delay"    ? "bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400"
+    : data.kind === "approval" ? "bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400"
+    : "bg-muted/60 text-muted-foreground/50"
 
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)

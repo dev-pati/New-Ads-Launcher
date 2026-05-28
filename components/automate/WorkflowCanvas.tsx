@@ -94,15 +94,28 @@ export function stepsToFlow(
     const tc  = step.triggerConfig
     const ac  = step.actionConfig
 
-    const hasConfig = isT ? !!tc : !!ac
-    const appId = hasConfig
-      ? (isT ? tc!.appId : ac!.appId) ?? undefined
+    const hasConfig = step.kind === "trigger" ? !!tc
+      : step.kind === "delay"    ? !!step.delayConfig
+      : step.kind === "approval" ? !!step.approvalConfig
+      : !!ac
+    const appId = (step.kind === "trigger" && tc) ? tc.appId ?? undefined
+      : (step.kind === "action"  && ac) ? ac.appId  ?? undefined
       : undefined
 
     let subtitle = ""
     let tags: string[] = []
 
-    if (isT && tc) {
+    if (step.kind === "delay") {
+      const dc = step.delayConfig
+      subtitle = dc ? `${dc.value} ${dc.unit}` : ""
+      tags = []
+    } else if (step.kind === "approval") {
+      const apc = step.approvalConfig
+      subtitle = apc && apc.approvers.length > 0
+        ? `${apc.approvers.length} approver${apc.approvers.length > 1 ? "s" : ""}`
+        : "No approvers set"
+      tags = []
+    } else if (isT && tc) {
       if (tc.appId === "meta") {
         const freqLabel = tc.checkFrequency === "daily" ? "Daily 9am"
           : tc.checkFrequency === "hourly" ? "Hourly"
@@ -138,11 +151,17 @@ export function stepsToFlow(
       }
     }
 
-    const eventLabel = isT
-      ? (tc?.event ? (TRIGGER_EVENT_REGISTRY[tc.event]?.label ?? tc.event.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())) : "")
-      : (ac?.event ? (ACTION_EVENT_REGISTRY[ac.event]?.label  ?? ac.event.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()))  : "")
+    const eventLabel = step.kind === "delay"
+      ? `Wait for Duration`
+      : step.kind === "approval"
+      ? "Approval Required"
+      : isT
+        ? (tc?.event ? (TRIGGER_EVENT_REGISTRY[tc.event]?.label ?? tc.event.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())) : "")
+        : (ac?.event ? (ACTION_EVENT_REGISTRY[ac.event]?.label  ?? ac.event.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()))  : "")
 
-    const appName = appId ? (APP_REGISTRY[appId]?.name ?? appId.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())) : undefined
+    const appName = step.kind === "delay"    ? "Delay"
+      : step.kind === "approval" ? "Approval"
+      : appId ? (APP_REGISTRY[appId]?.name ?? appId.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())) : undefined
 
     return {
       id: step.id,
