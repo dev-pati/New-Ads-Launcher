@@ -5,8 +5,8 @@ import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { cn } from "@/lib/utils"
 import {
   IconBrandMeta, IconBell, IconBrandGoogleDrive, IconBrandTiktok,
-  IconBrandSnapchat, IconBrandPinterest, IconHash, IconCalendar,
-  IconBrandSlack, IconTable, IconBolt,
+  IconBrandSnapchat, IconBrandPinterest, IconCalendar,
+  IconBrandSlack, IconTable, IconBolt, IconPlayerPlay,
 } from "@tabler/icons-react"
 import type { AppId, NodeKind, NodeStatus } from "@/lib/workflow-types"
 
@@ -48,9 +48,9 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   stepIndex: number
   kind: NodeKind
   status: NodeStatus
-  appId: AppId
-  appName: string
-  eventLabel: string
+  appId?: AppId
+  appName?: string
+  eventLabel?: string
   subtitle?: string
   tags: string[]
   isSelected?: boolean
@@ -62,21 +62,21 @@ export interface WorkflowNodeData extends Record<string, unknown> {
 export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
   id, data, selected,
 }: NodeProps<Node<WorkflowNodeData>>) {
-  const AppIcon = APP_ICONS[data.appId] ?? IconBolt
+  const isEmpty = !data.appId
+  const AppIcon = data.appId ? (APP_ICONS[data.appId] ?? IconBolt) : (data.kind === "trigger" ? IconBolt : IconPlayerPlay)
   const badge   = KIND_BADGE[data.kind]
-  const appCls  = APP_COLORS[data.appId] ?? "bg-muted text-muted-foreground"
+  const appCls  = data.appId ? (APP_COLORS[data.appId] ?? "bg-muted text-muted-foreground") : "bg-muted/60 text-muted-foreground/50"
 
   return (
     <div
       onClick={() => data.onSelect?.(id)}
       className={cn(
-        "w-[360px] bg-card rounded-2xl border-2 transition-all duration-150 cursor-pointer select-none shadow-sm",
+        "w-[360px] bg-white dark:bg-card rounded-2xl border transition-all duration-150 cursor-pointer select-none",
         selected
-          ? "border-primary shadow-primary/15 shadow-lg"
-          : "border-border hover:border-border/80 hover:shadow-md"
+          ? "border-primary shadow-[0_0_0_3px_rgba(99,102,241,0.15)] shadow-lg"
+          : "border-[#E5E7EB] dark:border-border hover:border-[#C7D2DA] hover:shadow-md shadow-sm"
       )}
     >
-      {/* Handles (invisible, used by React Flow for edges) */}
       <Handle type="target" position={Position.Top}    className="!border-0 !bg-transparent !size-0" />
       <Handle type="source" position={Position.Bottom} className="!border-0 !bg-transparent !size-0" />
 
@@ -84,42 +84,48 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
         {/* Header row: step + badge + status */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="size-6 rounded-full bg-muted flex items-center justify-center text-[11px] font-bold text-muted-foreground shrink-0">
+            <span className="size-5 rounded-full bg-[#F3F4F6] dark:bg-muted flex items-center justify-center text-[10px] font-bold text-[#6B7280] dark:text-muted-foreground shrink-0">
               {data.stepIndex}
             </span>
             <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", badge.color)}>
               {badge.label}
             </span>
           </div>
-          {/* Status dot */}
           <span className={cn(
             "size-2.5 rounded-full shrink-0",
             data.status === "configured" ? "bg-emerald-500" :
-            data.status === "error"      ? "bg-red-500" :
-                                           "bg-amber-400"
+            data.status === "error"      ? "bg-red-500"     : "bg-amber-400"
           )} />
         </div>
 
         {/* App identity */}
         <div className="flex items-center gap-3">
           <div className={cn("size-10 rounded-xl flex items-center justify-center shrink-0", appCls)}>
-            <AppIcon className="size-5" />
+            <AppIcon className={cn("size-5", isEmpty && "opacity-40")} />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
-              {data.appName} · {data.eventLabel}
-            </p>
-            {data.subtitle && (
-              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{data.subtitle}</p>
+            {isEmpty ? (
+              <p className="text-[14px] font-semibold text-[#9CA3AF] dark:text-muted-foreground leading-tight">
+                Choose an app
+              </p>
+            ) : (
+              <>
+                <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
+                  {data.appName} · {data.eventLabel}
+                </p>
+                {data.subtitle && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{data.subtitle}</p>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {/* Tags */}
-        {data.tags.length > 0 && (
+        {/* Tags (only when configured) */}
+        {!isEmpty && data.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-3">
             {data.tags.map((tag, i) => (
-              <span key={i} className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-medium text-muted-foreground/80">
+              <span key={i} className="px-2.5 py-0.5 rounded-full bg-[#F3F4F6] dark:bg-muted text-[11px] font-medium text-[#6B7280] dark:text-muted-foreground">
                 {tag}
               </span>
             ))}

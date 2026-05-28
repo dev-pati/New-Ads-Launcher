@@ -73,9 +73,12 @@ export function stepsToFlow(
     const tc  = step.triggerConfig
     const ac  = step.actionConfig
 
-    const appId = isT ? (tc?.appId ?? "meta") : (ac?.appId ?? "notification")
+    // Empty (unconfigured) step
+    const hasConfig = isT ? !!tc : !!ac
+    const appId = hasConfig
+      ? (isT ? tc!.appId : ac!.appId) ?? undefined
+      : undefined
 
-    // Build subtitle and tags from config
     let subtitle = ""
     let tags: string[] = []
 
@@ -85,16 +88,15 @@ export function stepsToFlow(
         : "Every 6h"
       const levelLabel = tc.monitoringLevel === "campaign" ? "Campaign level"
         : tc.monitoringLevel === "adset" ? "Ad set level" : "Ad level"
-      subtitle = `${freqLabel} · ${levelLabel}`
+      subtitle = levelLabel
       tags = (tc.metricConditions ?? []).map(c => {
-        const op = c.operator === "decreases_by" ? "drops" : c.operator === "increases_by" ? "spikes" : c.operator === "is_above" ? ">" : "<"
-        return `${c.metric} ${op} >${c.value}${c.unit}`
+        const op = c.operator === "decreases_by" ? "drops >" : c.operator === "increases_by" ? "spikes >" : c.operator === "is_above" ? ">" : "<"
+        return `${c.metric === "spend" ? "Spend" : c.metric.toUpperCase()} ${op}${c.value}${c.unit}`
       })
       if (tc.campaignFilter === "all") tags.push("All campaigns")
       const wLabel = tc.comparisonWindow === "day_over_day" ? "Day over Day"
         : tc.comparisonWindow === "week_over_week" ? "Week over Week" : "Month over Month"
       tags.push(wLabel)
-      tags.push(freqLabel)
     }
 
     if (!isT && ac) {
@@ -106,8 +108,8 @@ export function stepsToFlow(
     }
 
     const eventLabel = isT
-      ? (tc?.event?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? "Trigger")
-      : (ac?.event?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? "Action")
+      ? (tc?.event?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? "")
+      : (ac?.event?.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()) ?? "")
 
     return {
       id: step.id,
@@ -118,8 +120,8 @@ export function stepsToFlow(
         kind: step.kind,
         status: step.status,
         appId,
-        appName: appId.charAt(0).toUpperCase() + appId.slice(1).replace(/_/g, " "),
-        eventLabel,
+        appName: appId ? appId.charAt(0).toUpperCase() + appId.slice(1).replace(/_/g, " ") : undefined,
+        eventLabel: eventLabel || undefined,
         subtitle,
         tags,
         isSelected: selectedId === step.id,

@@ -104,77 +104,86 @@ function TopBar({
   const [editingName, setEditingName] = useState(false)
 
   return (
-    <div className="h-12 flex items-center gap-3 px-4 border-b border-border bg-background shrink-0 z-10">
-      {/* Back */}
-      <button
-        onClick={() => router.push("/automate")}
-        className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0"
-      >
-        <IconArrowLeft className="size-4" />
-      </button>
-
-      {/* Name */}
-      {editingName ? (
-        <input
-          autoFocus
-          value={name}
-          onChange={e => onNameChange(e.target.value)}
-          onBlur={() => setEditingName(false)}
-          onKeyDown={e => e.key === "Enter" && setEditingName(false)}
-          className="text-[15px] font-semibold bg-transparent border-b border-primary outline-none min-w-0 flex-1 max-w-xs"
-        />
-      ) : (
+    <div className="border-b border-border bg-background shrink-0 z-10">
+      {/* Row 1: back + bolt icon + name + action buttons */}
+      <div className="h-14 flex items-center gap-3 px-4">
         <button
-          onClick={() => setEditingName(true)}
-          className="text-[15px] font-semibold text-foreground hover:text-primary transition-colors truncate"
+          onClick={() => router.push("/automate")}
+          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground shrink-0"
         >
-          {name}
+          <IconArrowLeft className="size-4" />
         </button>
-      )}
 
-      {/* Account selector */}
-      <div className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg border border-border/60 bg-muted/40 ml-2 shrink-0">
-        <div className="size-3.5 rounded-full bg-blue-500 flex items-center justify-center">
-          <span className="text-[7px] font-bold text-white">M</span>
+        {/* Blue bolt badge */}
+        <div className="size-9 rounded-xl bg-[#2563EB] flex items-center justify-center shrink-0 shadow-sm">
+          <IconBolt className="size-5 text-white" />
         </div>
-        <span className="text-[12px] font-medium text-foreground/80">{adAccountName ?? "Select account"}</span>
-        <IconChevronDown className="size-3 text-muted-foreground" />
+
+        {/* Editable name */}
+        {editingName ? (
+          <input
+            autoFocus
+            value={name}
+            onChange={e => onNameChange(e.target.value)}
+            onBlur={() => setEditingName(false)}
+            onKeyDown={e => e.key === "Enter" && setEditingName(false)}
+            className="text-[17px] font-semibold bg-transparent border-b-2 border-[#2563EB] outline-none min-w-0 flex-1 max-w-sm"
+          />
+        ) : (
+          <button
+            onClick={() => setEditingName(true)}
+            className="text-[17px] font-semibold text-foreground hover:text-[#2563EB] transition-colors truncate"
+          >
+            {name}
+          </button>
+        )}
+
+        <div className="flex-1" />
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-[13px] font-medium text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {saving ? <IconLoader2 className="size-3.5 animate-spin" /> :
+             saved  ? <IconCheck className="size-3.5 text-emerald-500" /> :
+                      <IconDeviceFloppy className="size-3.5" />}
+            Save
+          </button>
+          <button
+            onClick={onRun}
+            className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-[#2563EB] text-white text-[13px] font-semibold hover:bg-[#1D4ED8] transition-colors shadow-sm"
+          >
+            <IconPlayerPlay className="size-3.5 fill-white" />
+            Run
+          </button>
+          <button onClick={onPreview} className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-[13px] font-medium text-foreground/80 hover:bg-muted transition-colors">
+            <IconEye className="size-3.5" />
+            Full preview
+          </button>
+          <button disabled className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-[13px] font-medium text-muted-foreground/50 cursor-not-allowed">
+            <IconHistory className="size-3.5" />
+            History
+          </button>
+          <button onClick={onHistory} className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <IconBell className="size-4" />
+          </button>
+          <button className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <IconDots className="size-4" />
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1" />
-
-      {/* Actions */}
-      <div className="flex items-center gap-1.5">
-        <button
-          onClick={onSave}
-          disabled={saving}
-          className="flex items-center gap-1.5 h-7 px-3 rounded-lg border border-border/60 bg-muted/40 text-[12px] font-medium text-foreground/80 hover:bg-muted transition-colors"
-        >
-          {saving ? <IconLoader2 className="size-3.5 animate-spin" /> :
-           saved  ? <IconCheck className="size-3.5 text-emerald-500" /> :
-                    <IconDeviceFloppy className="size-3.5" />}
-          Save
-        </button>
-        <button
-          onClick={onRun}
-          className="flex items-center gap-1.5 h-7 px-3 rounded-lg bg-primary text-primary-foreground text-[12px] font-medium hover:bg-primary/90 transition-colors"
-        >
-          <IconPlayerPlay className="size-3.5" />
-          Run
-        </button>
-        <button onClick={onPreview} className="flex items-center gap-1.5 h-7 px-3 rounded-lg border border-border/60 bg-muted/40 text-[12px] font-medium text-foreground/80 hover:bg-muted transition-colors">
-          <IconEye className="size-3.5" />
-          Full preview
-        </button>
-        <button onClick={onHistory} className="flex items-center gap-1.5 h-7 px-3 rounded-lg border border-border/60 bg-muted/40 text-[12px] font-medium text-foreground/80 hover:bg-muted transition-colors">
-          <IconHistory className="size-3.5" />
-          History
-        </button>
-        <button className="size-7 rounded-lg border border-border/60 bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-          <IconBell className="size-3.5" />
-        </button>
-        <button className="size-7 rounded-lg border border-border/60 bg-muted/40 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-          <IconDots className="size-3.5" />
+      {/* Row 2: Account selector */}
+      <div className="px-4 pb-3">
+        <button className="flex items-center gap-2 h-9 px-3 rounded-lg border border-border/70 bg-[#F9FAFB] dark:bg-muted/40 text-[13px] font-medium text-foreground/80 hover:bg-muted transition-colors">
+          <div className="size-5 rounded-full bg-[#1877F2] flex items-center justify-center shrink-0">
+            <span className="text-[9px] font-black text-white">∞</span>
+          </div>
+          <span className="max-w-[220px] truncate">{adAccountName ?? "Select ad account"}</span>
+          <IconChevronDown className="size-3.5 text-muted-foreground ml-1" />
         </button>
       </div>
     </div>
@@ -189,21 +198,11 @@ interface Props {
 }
 
 export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
-  const [name, setName] = useState(initialWorkflow?.name ?? "New Automation")
+  const [name, setName] = useState(initialWorkflow?.name ?? "Untitled Zap")
   const [steps, setSteps] = useState<WorkflowStep[]>(
     initialWorkflow?.steps ?? [
-      {
-        id: "step-1",
-        kind: "trigger",
-        status: "incomplete",
-        triggerConfig: defaultTrigger(),
-      },
-      {
-        id: "step-2",
-        kind: "action",
-        status: "incomplete",
-        actionConfig: defaultAction(),
-      },
+      { id: "step-1", kind: "trigger", status: "incomplete" },
+      { id: "step-2", kind: "action",  status: "incomplete" },
     ]
   )
   const [selectedId, setSelectedId] = useState<string | null>("step-1")
