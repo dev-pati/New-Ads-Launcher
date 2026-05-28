@@ -54,6 +54,29 @@ function AddEdge({
   )
 }
 
+// ─── Custom "Add step" bottom node ────────────────────────────────────────────
+
+type AddNodeData = { onAdd: (pos: ClickPos) => void }
+
+function AddNodeComponent({ data }: { data: AddNodeData }) {
+  return (
+    <div className="flex flex-col items-center gap-0 nodrag">
+      {/* connector line from last node */}
+      <div className="w-px h-8 bg-border" />
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+          data.onAdd({ x: rect.left + rect.width / 2, y: rect.bottom + 8 })
+        }}
+        className="size-7 rounded-full border-2 border-dashed border-muted-foreground/30 text-muted-foreground/40 flex items-center justify-center hover:border-primary/50 hover:text-primary/50 transition-colors"
+      >
+        <IconPlus className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
 const edgeTypes = { add: AddEdge }
 
 // ─── Steps → nodes+edges converter ───────────────────────────────────────────
@@ -63,8 +86,8 @@ export function stepsToFlow(
   selectedId: string | null,
   onSelect: (id: string) => void,
   onAddBetween: (afterIndex: number, pos: ClickPos) => void,
-): { nodes: Node<WorkflowNodeData>[]; edges: Edge[] } {
-  const nodes: Node<WorkflowNodeData>[] = steps.map((step, i) => {
+): { nodes: Node[]; edges: Edge[] } {
+  const stepNodes: Node<WorkflowNodeData>[] = steps.map((step, i) => {
     const isT = step.kind === "trigger"
     const tc  = step.triggerConfig
     const ac  = step.actionConfig
@@ -129,6 +152,16 @@ export function stepsToFlow(
     }
   })
 
+  // "Add step" button node below the last real node
+  const addButtonNode: Node<AddNodeData> = {
+    id: "__add_step__",
+    type: "addNode",
+    position: { x: CENTER_X - 14, y: steps.length * (NODE_HEIGHT + NODE_GAP) },
+    data: { onAdd: (pos: ClickPos) => onAddBetween(steps.length, pos) },
+    selectable: false,
+    draggable: false,
+  }
+
   const edges: Edge[] = steps.slice(0, -1).map((step, i) => ({
     id:     `e-${step.id}-${steps[i + 1].id}`,
     source: step.id,
@@ -137,12 +170,15 @@ export function stepsToFlow(
     data:   { onAdd: (pos: ClickPos) => onAddBetween(i + 1, pos) },
   }))
 
-  return { nodes, edges }
+  return { nodes: [...stepNodes, addButtonNode], edges }
 }
 
 // ─── Canvas component ─────────────────────────────────────────────────────────
 
-const nodeTypes: NodeTypes = { workflowNode: WorkflowNodeComponent as any }
+const nodeTypes: NodeTypes = {
+  workflowNode: WorkflowNodeComponent as any,
+  addNode: AddNodeComponent as any,
+}
 
 interface Props {
   steps: WorkflowStep[]
@@ -187,7 +223,9 @@ export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep,
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={true}
-        onNodeClick={(_e, node) => onSelectStep(node.id)}
+        onNodeClick={(_e, node) => {
+          if (node.id !== "__add_step__") onSelectStep(node.id)
+        }}
       >
         <Background
           variant={BackgroundVariant.Dots}
@@ -210,27 +248,6 @@ export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep,
           >
             <IconPlus className="size-4" />
             Add Trigger
-          </button>
-        </div>
-      )}
-
-      {/* "Add step" button below last node */}
-      {steps.length > 0 && (
-        <div
-          className="absolute flex justify-center"
-          style={{
-            left: 0, right: 0,
-            top: `calc(50% + ${steps.length * (NODE_HEIGHT + NODE_GAP) / 2}px + 30px)`,
-          }}
-        >
-          <button
-            onClick={(e) => {
-              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
-              onAddStep(steps.length, { x: rect.left + rect.width / 2, y: rect.bottom + 8 })
-            }}
-            className="size-7 rounded-full border-2 border-dashed border-muted-foreground/30 text-muted-foreground/40 flex items-center justify-center hover:border-primary/50 hover:text-primary/50 transition-colors"
-          >
-            <IconPlus className="size-3.5" />
           </button>
         </div>
       )}
