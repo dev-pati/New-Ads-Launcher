@@ -15,15 +15,19 @@ import type { WorkflowStep } from "@/lib/workflow-types"
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const NODE_WIDTH  = 360
-const NODE_HEIGHT = 130  // approximate
-const NODE_GAP    = 100  // vertical gap between nodes
+const NODE_HEIGHT = 130
+const NODE_GAP    = 100
 const CENTER_X    = 400
+
+// ─── Position type ────────────────────────────────────────────────────────────
+
+export interface ClickPos { x: number; y: number }
 
 // ─── Custom "Add" edge ────────────────────────────────────────────────────────
 
 function AddEdge({
   id, sourceX, sourceY, targetX, targetY, data,
-}: EdgeProps & { data?: { onAdd?: () => void } }) {
+}: EdgeProps & { data?: { onAdd?: (pos: ClickPos) => void } }) {
   const [edgePath, labelX, labelY] = getStraightPath({ sourceX, sourceY, targetX, targetY })
 
   return (
@@ -35,7 +39,11 @@ function AddEdge({
           className="nodrag nopan"
         >
           <button
-            onClick={data?.onAdd}
+            onClick={(e) => {
+              e.stopPropagation()
+              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+              data?.onAdd?.({ x: rect.left + rect.width / 2, y: rect.bottom + 8 })
+            }}
             className="size-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
           >
             <IconPlus className="size-4" />
@@ -48,32 +56,19 @@ function AddEdge({
 
 const edgeTypes = { add: AddEdge }
 
-// ─── Node picker overlay ──────────────────────────────────────────────────────
-
-const ACTION_CHOICES = [
-  { id: "send_notification", label: "Send Notification", appId: "notification" as const, icon: "🔔" },
-  { id: "duplicate_ad",      label: "Duplicate Ad",      appId: "meta"         as const, icon: "📋" },
-  { id: "increase_budget",   label: "Increase Budget",   appId: "meta"         as const, icon: "📈" },
-  { id: "pause_adset",       label: "Pause Ad Set",      appId: "meta"         as const, icon: "⏸️" },
-  { id: "launch_tiktok",     label: "Launch on TikTok",  appId: "tiktok"       as const, icon: "🎵" },
-  { id: "send_slack",        label: "Send Slack",        appId: "slack"        as const, icon: "💬" },
-  { id: "add_sheet_row",     label: "Log to Sheets",     appId: "sheets"       as const, icon: "📊" },
-]
-
 // ─── Steps → nodes+edges converter ───────────────────────────────────────────
 
 export function stepsToFlow(
   steps: WorkflowStep[],
   selectedId: string | null,
   onSelect: (id: string) => void,
-  onAddBetween: (afterIndex: number) => void,
+  onAddBetween: (afterIndex: number, pos: ClickPos) => void,
 ): { nodes: Node<WorkflowNodeData>[]; edges: Edge[] } {
   const nodes: Node<WorkflowNodeData>[] = steps.map((step, i) => {
     const isT = step.kind === "trigger"
     const tc  = step.triggerConfig
     const ac  = step.actionConfig
 
-    // Empty (unconfigured) step
     const hasConfig = isT ? !!tc : !!ac
     const appId = hasConfig
       ? (isT ? tc!.appId : ac!.appId) ?? undefined
@@ -90,7 +85,9 @@ export function stepsToFlow(
         : tc.monitoringLevel === "adset" ? "Ad set level" : "Ad level"
       subtitle = `${freqLabel} · ${levelLabel}`
       tags = (tc.metricConditions ?? []).map(c => {
-        const op = c.operator === "decreases_by" ? "drops >" : c.operator === "increases_by" ? "spikes >" : c.operator === "is_above" ? ">" : "<"
+        const op = c.operator === "decreases_by" ? "drops >"
+          : c.operator === "increases_by" ? "spikes >"
+          : c.operator === "is_above" ? ">" : "<"
         return `${c.metric === "spend" ? "Spend" : c.metric.toUpperCase()} ${op}${c.value}${c.unit}`
       })
       if (tc.campaignFilter === "all") tags.push("All campaigns")
@@ -137,7 +134,7 @@ export function stepsToFlow(
     source: step.id,
     target: steps[i + 1].id,
     type:   "add",
-    data:   { onAdd: () => onAddBetween(i + 1) },
+    data:   { onAdd: (pos: ClickPos) => onAddBetween(i + 1, pos) },
   }))
 
   return { nodes, edges }
@@ -151,7 +148,7 @@ interface Props {
   steps: WorkflowStep[]
   selectedStepId: string | null
   onSelectStep: (id: string) => void
-  onAddStep: (afterIndex: number) => void
+  onAddStep: (afterIndex: number, pos: ClickPos) => void
   onAddFirst: () => void
 }
 
@@ -164,7 +161,6 @@ export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep,
   const [nodes, setNodes, onNodesChange] = useNodesState(initNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initEdges)
 
-  // Keep nodes in sync when steps change
   useMemo(() => {
     const { nodes: n, edges: e } = stepsToFlow(steps, selectedStepId, onSelectStep, onAddStep)
     setNodes(n)
@@ -184,7 +180,7 @@ export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep,
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        fitViewOptions={{ padding: 0.3, maxZoom: 1 }}
+        fitViewOptions={{ padding: 0.35, maxZoom: 1 }}
         minZoom={0.3}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
@@ -228,10 +224,13 @@ export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep,
           }}
         >
           <button
-            onClick={() => onAddStep(steps.length)}
-            className="size-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect()
+              onAddStep(steps.length, { x: rect.left + rect.width / 2, y: rect.bottom + 8 })
+            }}
+            className="size-7 rounded-full border-2 border-dashed border-muted-foreground/30 text-muted-foreground/40 flex items-center justify-center hover:border-primary/50 hover:text-primary/50 transition-colors"
           >
-            <IconPlus className="size-4" />
+            <IconPlus className="size-3.5" />
           </button>
         </div>
       )}
