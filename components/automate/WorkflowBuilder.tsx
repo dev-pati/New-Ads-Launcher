@@ -17,7 +17,7 @@ import { WorkflowCanvas, type ClickPos } from "./WorkflowCanvas"
 import { TriggerConfigPanel } from "./TriggerConfigPanel"
 import { ActionConfigPanel } from "./ActionConfigPanel"
 import type {
-  WorkflowStep, TriggerConfig, ActionConfig, Workflow, AppId,
+  WorkflowStep, TriggerConfig, ActionConfig, DelayConfig, ApprovalConfig, Workflow, AppId,
 } from "@/lib/workflow-types"
 
 // ─── Trigger app picker data ──────────────────────────────────────────────────
@@ -62,7 +62,7 @@ function defaultTriggerForApp(appId: AppId): TriggerConfig {
     case "schedule":
       return { appId: "schedule", event: "schedule", checkFrequency: "daily", scheduleTime: "09:00" }
     case "google_drive":
-      return { appId: "google_drive", event: "new_drive_folder", checkFrequency: "daily" }
+      return { appId: "google_drive", event: "drive_new_file_in_folder", checkFrequency: "daily", driveBatchStrategy: "one_per_file", driveFileType: "all", driveUploadAllOnFirstRun: false }
     case "manual":
       return { appId: "manual", event: "manual", checkFrequency: "daily" }
     case "media_library":
@@ -75,6 +75,16 @@ function defaultTriggerForApp(appId: AppId): TriggerConfig {
         triggerTiming: "immediately",
         assetStatus: "all",
         assetGrouping: false,
+      }
+    case "sheets":
+      return {
+        appId: "sheets",
+        event: "sheets_cell_changed",
+        sheetsSheetName: "Sheet1",
+        sheetsWatchMode: "single_cell",
+        sheetsCondition: "equals",
+        sheetsConditionValue: "TRUE",
+        sheetsTriggerCell: "C5",
       }
     case "dropbox":
       return { appId: "dropbox", event: "new_dropbox_file", checkFrequency: "daily" }
@@ -214,17 +224,294 @@ function defaultAction(): ActionConfig {
   }
 }
 
-// ─── Add-action contextual popup ──────────────────────────────────────────────
+function defaultDelay(): DelayConfig {
+  return { unit: "hours", value: 1 }
+}
 
-const ACTION_CHOICES = [
-  { id: "send_notification", label: "Send Notification", icon: "🔔", appId: "notification" as const },
-  { id: "duplicate_ad",      label: "Duplicate Ad",      icon: "📋", appId: "meta"         as const },
-  { id: "increase_budget",   label: "Increase Budget",   icon: "📈", appId: "meta"         as const },
-  { id: "pause_adset",       label: "Pause Ad Set",      icon: "⏸️", appId: "meta"         as const },
-  { id: "launch_tiktok",     label: "Launch on TikTok",  icon: "🎵", appId: "tiktok"       as const },
-  { id: "send_slack",        label: "Send Slack",        icon: "💬", appId: "slack"        as const },
-  { id: "add_sheet_row",     label: "Log to Sheets",     icon: "📊", appId: "sheets"       as const },
+function defaultApproval(): ApprovalConfig {
+  return { approvers: [], message: "", timeoutHours: 24 }
+}
+
+// ─── Delay config panel ───────────────────────────────────────────────────────
+
+function DelayConfigPanel({ stepIndex, config, onChange, onClose }: {
+  stepIndex: number
+  config: DelayConfig
+  onChange: (c: DelayConfig) => void
+  onClose: () => void
+}) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="size-8 rounded-lg bg-purple-100 dark:bg-purple-950/40 flex items-center justify-center">
+            <IconClock className="size-4 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div>
+            <p className="text-[13px] font-semibold">Delay</p>
+            <p className="text-[11px] text-muted-foreground">Step {stepIndex}</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
+          <IconX className="size-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-5">
+        <p className="text-[13px] font-semibold text-foreground mb-4">Wait duration</p>
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            min={1}
+            value={config.value}
+            onChange={e => onChange({ ...config, value: Math.max(1, Number(e.target.value)) })}
+            className="w-24 h-10 px-3 border border-border rounded-xl text-[13px] font-medium bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <select
+            value={config.unit}
+            onChange={e => onChange({ ...config, unit: e.target.value as DelayConfig["unit"] })}
+            className="flex-1 h-10 px-3 border border-border rounded-xl text-[13px] bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            <option value="minutes">Minutes</option>
+            <option value="hours">Hours</option>
+            <option value="days">Days</option>
+          </select>
+        </div>
+        <p className="text-[12px] text-muted-foreground mt-3">
+          The automation will wait {config.value} {config.unit} before proceeding to the next step.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ─── Approval config panel ────────────────────────────────────────────────────
+
+function ApprovalConfigPanel({ stepIndex, config, onChange, onClose }: {
+  stepIndex: number
+  config: ApprovalConfig
+  onChange: (c: ApprovalConfig) => void
+  onClose: () => void
+}) {
+  const [emailInput, setEmailInput] = useState("")
+
+  const addApprover = () => {
+    const email = emailInput.trim()
+    if (!email || config.approvers.includes(email)) return
+    onChange({ ...config, approvers: [...config.approvers, email] })
+    setEmailInput("")
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="size-8 rounded-lg bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center">
+            <IconShieldCheck className="size-4 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div>
+            <p className="text-[13px] font-semibold">Approval</p>
+            <p className="text-[11px] text-muted-foreground">Step {stepIndex}</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
+          <IconX className="size-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div>
+          <p className="text-[13px] font-semibold text-foreground mb-2">Approvers</p>
+          <div className="flex gap-2 mb-2">
+            <input
+              type="email"
+              placeholder="name@company.com"
+              value={emailInput}
+              onChange={e => setEmailInput(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && addApprover()}
+              className="flex-1 h-9 px-3 border border-border rounded-xl text-[13px] bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <button
+              onClick={addApprover}
+              className="h-9 px-3 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors"
+            >
+              Add
+            </button>
+          </div>
+          {config.approvers.length === 0 ? (
+            <p className="text-[12px] text-muted-foreground">No approvers added yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {config.approvers.map(email => (
+                <div key={email} className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-xl">
+                  <span className="text-[13px]">{email}</span>
+                  <button
+                    onClick={() => onChange({ ...config, approvers: config.approvers.filter(e => e !== email) })}
+                    className="text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <IconX className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <p className="text-[13px] font-semibold text-foreground mb-2">Message (optional)</p>
+          <textarea
+            rows={3}
+            placeholder="Describe what needs to be approved..."
+            value={config.message ?? ""}
+            onChange={e => onChange({ ...config, message: e.target.value })}
+            className="w-full px-3 py-2.5 border border-border rounded-xl text-[13px] bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+          />
+        </div>
+        <div>
+          <p className="text-[13px] font-semibold text-foreground mb-2">Auto-reject after</p>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min={0}
+              value={config.timeoutHours ?? 24}
+              onChange={e => onChange({ ...config, timeoutHours: Number(e.target.value) })}
+              className="w-24 h-10 px-3 border border-border rounded-xl text-[13px] font-medium bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <span className="text-[13px] text-muted-foreground">hours (0 = never)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Action app list ──────────────────────────────────────────────────────────
+
+const ACTION_APPS: {
+  appId: AppId
+  name: string
+  desc: string
+  Icon: React.ElementType
+  iconBg: string
+  iconFg: string
+}[] = [
+  { appId: "media_library", name: "Media Library",  desc: "Upload media to your library or trigger from assets",      Icon: IconPhoto,          iconBg: "#FF7043", iconFg: "#fff" },
+  { appId: "sheets",        name: "Google Sheets",  desc: "Share your Google Sheet with our services",                Icon: IconTable,          iconBg: "#0F9D58", iconFg: "#fff" },
+  { appId: "google_drive",  name: "Google Drive",   desc: "Google Drive is a secure partner with AdLauncher",         Icon: IconBrandGoogleDrive,iconBg:"#34A853", iconFg: "#fff" },
+  { appId: "meta",          name: "Meta",           desc: "Meta Ads is a secure partner with AdLauncher",             Icon: IconBrandMeta,      iconBg: "#1877F2", iconFg: "#fff" },
+  { appId: "tiktok",        name: "TikTok Ads",     desc: "Monitor TikTok ad performance and launch automations",     Icon: IconBrandTiktok,    iconBg: "#010101", iconFg: "#fff" },
+  { appId: "snapchat",      name: "Snapchat Ads",   desc: "Launch ads on Snapchat from your workflow",                Icon: IconBrandSnapchat,  iconBg: "#FFFC00", iconFg: "#000" },
+  { appId: "pinterest",     name: "Pinterest Ads",  desc: "Launch ads on Pinterest from your workflow",               Icon: IconBrandPinterest, iconBg: "#E60023", iconFg: "#fff" },
+  { appId: "notification",  name: "Notification",   desc: "Send a Slack message or email notification",               Icon: IconBell,           iconBg: "#F59E0B", iconFg: "#fff" },
+  { appId: "slack",         name: "Slack",          desc: "Send a Slack notification when this step runs",            Icon: IconBrandSlack,     iconBg: "#4A154B", iconFg: "#fff" },
+  { appId: "dropbox",       name: "Dropbox",        desc: "Save or manage files in Dropbox",                          Icon: IconBrandDropbox,   iconBg: "#0061FF", iconFg: "#fff" },
+  { appId: "sharepoint",    name: "SharePoint",     desc: "Save or manage files in SharePoint",                       Icon: IconApps,           iconBg: "#038387", iconFg: "#fff" },
+  { appId: "air",           name: "AIR",            desc: "Upload assets to AIR board",                               Icon: IconWind,           iconBg: "#1A1A1A", iconFg: "#fff" },
+  { appId: "frameio",       name: "Frame.io",       desc: "Upload files to Frame.io",                                 Icon: IconBrandFramer,    iconBg: "#4353FF", iconFg: "#fff" },
 ]
+
+function defaultActionForApp(appId: AppId): ActionConfig {
+  switch (appId) {
+    case "meta":
+      return { appId: "meta", event: "increase_budget", budgetChange: { type: "increase", amount: 20, unit: "%" } }
+    case "notification":
+      return {
+        appId: "notification", event: "send_notification",
+        notification: { via: "both", emailRecipients: [], customMessage: "{{trigger.summary}}\n{{trigger.entityName}}" },
+      }
+    case "tiktok":    return { appId: "tiktok",    event: "launch_tiktok" }
+    case "snapchat":  return { appId: "snapchat",  event: "launch_snapchat" }
+    case "pinterest": return { appId: "pinterest", event: "launch_pinterest" }
+    case "slack":     return { appId: "slack",     event: "send_slack" }
+    case "sheets":    return { appId: "sheets",    event: "add_sheet_row" }
+    default:          return { appId, event: "send_notification" }
+  }
+}
+
+// ─── Action picker modal ──────────────────────────────────────────────────────
+
+function ActionPickerModal({ onPick, onClose }: {
+  onPick: (appId: AppId) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  const filtered = ACTION_APPS.filter(a =>
+    a.name.toLowerCase().includes(query.toLowerCase()) ||
+    a.desc.toLowerCase().includes(query.toLowerCase())
+  )
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-card border border-border rounded-2xl shadow-2xl w-[620px] max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between p-6 pb-4 shrink-0">
+          <div>
+            <h2 className="text-[17px] font-bold text-foreground">Choose an app</h2>
+            <p className="text-[13px] text-muted-foreground mt-0.5">Select the app you want to use for this action</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="size-8 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <IconX className="size-4" />
+          </button>
+        </div>
+        <div className="px-6 pb-4 shrink-0">
+          <div className="flex items-center gap-2.5 h-10 px-3.5 bg-muted/50 border border-border/60 rounded-xl">
+            <IconSearch className="size-4 text-muted-foreground shrink-0" />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search apps..."
+              className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/50"
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          {filtered.length === 0 ? (
+            <p className="text-center text-[13px] text-muted-foreground py-8">No apps found.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {filtered.map(app => {
+                const AppIcon = app.Icon
+                return (
+                  <button
+                    key={app.appId}
+                    onClick={() => { onPick(app.appId); onClose() }}
+                    className="flex items-center gap-3.5 p-3.5 border border-border/60 rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-colors text-left group"
+                  >
+                    <div
+                      className="size-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
+                      style={{ backgroundColor: app.iconBg }}
+                    >
+                      <AppIcon className="size-6" style={{ color: app.iconFg }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
+                        {app.name}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                        {app.desc}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Add-step contextual popup ────────────────────────────────────────────────
 
 const STEP_TYPES = [
   {
@@ -259,17 +546,15 @@ const STEP_TYPES = [
 
 const POPUP_WIDTH = 280
 
-function AddStepPopup({ x, y, onAdd, onClose }: {
+function AddStepPopup({ x, y, onAddKind, onClose }: {
   x: number
   y: number
-  onAdd: (choice: typeof ACTION_CHOICES[0]) => void
+  onAddKind: (kind: "trigger" | "action" | "delay" | "approval") => void
   onClose: () => void
 }) {
-  const [view, setView] = useState<"type" | "action">("type")
   const ref = useRef<HTMLDivElement>(null)
-
   const left = Math.min(Math.max(x - POPUP_WIDTH / 2, 8), window.innerWidth - POPUP_WIDTH - 8)
-  const top  = Math.min(y, window.innerHeight - 320)
+  const top  = Math.min(y, window.innerHeight - 300)
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -286,50 +571,27 @@ function AddStepPopup({ x, y, onAdd, onClose }: {
       className="bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        {view === "action" ? (
-          <div className="flex items-center gap-2">
-            <button onClick={() => setView("type")} className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
-              <IconArrowLeft className="size-3.5" />
-            </button>
-            <p className="text-sm font-semibold">Choose an action</p>
-          </div>
-        ) : (
-          <p className="text-sm font-semibold">Add a step</p>
-        )}
+        <p className="text-sm font-semibold">Add a step</p>
         <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted transition-colors">
           <IconX className="size-4 text-muted-foreground" />
         </button>
       </div>
-
       <div className="p-2">
-        {view === "type" ? (
-          STEP_TYPES.map(t => (
-            <button
-              key={t.id}
-              onClick={() => t.id === "action" ? setView("action") : onClose()}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors text-left"
-            >
-              <div className={cn("size-8 rounded-lg flex items-center justify-center shrink-0", t.iconBg)}>
-                {t.iconEl}
-              </div>
-              <div>
-                <p className="text-[13px] font-medium leading-tight">{t.label}</p>
-                <p className="text-[11px] text-muted-foreground">{t.desc}</p>
-              </div>
-            </button>
-          ))
-        ) : (
-          ACTION_CHOICES.map(c => (
-            <button
-              key={c.id}
-              onClick={() => { onAdd(c); onClose() }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors text-left"
-            >
-              <span className="text-xl leading-none">{c.icon}</span>
-              <span className="text-[13px] font-medium">{c.label}</span>
-            </button>
-          ))
-        )}
+        {STEP_TYPES.map(t => (
+          <button
+            key={t.id}
+            onClick={() => { onAddKind(t.id as "trigger" | "action" | "delay" | "approval"); onClose() }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors text-left"
+          >
+            <div className={cn("size-8 rounded-lg flex items-center justify-center shrink-0", t.iconBg)}>
+              {t.iconEl}
+            </div>
+            <div>
+              <p className="text-[13px] font-medium leading-tight">{t.label}</p>
+              <p className="text-[11px] text-muted-foreground">{t.desc}</p>
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -435,27 +697,33 @@ interface Props {
 type AddingAt = { index: number; x: number; y: number } | null
 
 export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
+  const automationId = initialWorkflow?.id
   const [name, setName] = useState(initialWorkflow?.name ?? "Untitled Zap")
   const [steps, setSteps] = useState<WorkflowStep[]>(
     // New workflows start empty; templates/saved workflows start with their steps
     initialWorkflow?.steps ?? []
   )
-  const [selectedId,         setSelectedId]         = useState<string | null>(null)
-  const [addingAt,           setAddingAt]           = useState<AddingAt>(null)
-  const [choosingAppForStep, setChoosingAppForStep] = useState<string | null>(null)
-  const [saving,             setSaving]             = useState(false)
-  const [saved,              setSaved]              = useState(false)
+  const [selectedId,            setSelectedId]            = useState<string | null>(null)
+  const [addingAt,              setAddingAt]              = useState<AddingAt>(null)
+  const [choosingAppForStep,    setChoosingAppForStep]    = useState<string | null>(null)
+  const [choosingActionForStep, setChoosingActionForStep] = useState<string | null>(null)
+  const [saving,                setSaving]                = useState(false)
+  const [saved,                 setSaved]                 = useState(false)
 
   const selectedStep = steps.find(s => s.id === selectedId) ?? null
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  // Clicking a node: empty trigger → open app picker; configured → open panel
+  // Clicking a node: empty trigger → app picker; empty action → action picker; configured → panel
   const handleSelectStep = useCallback((id: string) => {
     const step = steps.find(s => s.id === id)
     if (!step) return
     if (step.kind === "trigger" && !step.triggerConfig?.appId) {
       setChoosingAppForStep(id)
+      return
+    }
+    if (step.kind === "action" && !step.actionConfig) {
+      setChoosingActionForStep(id)
       return
     }
     setSelectedId(id)
@@ -488,29 +756,53 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
     setSelectedId(prev => prev === stepId ? null : prev)
   }, [])
 
-  const handleAddChoice = useCallback((choice: typeof ACTION_CHOICES[0]) => {
+  // User picked an app from the ActionPickerModal
+  const handleActionChosen = useCallback((stepId: string, appId: AppId) => {
+    const config = defaultActionForApp(appId)
+    setSteps(prev => prev.map(s => s.id === stepId
+      ? { ...s, actionConfig: config, status: "incomplete" }
+      : s
+    ))
+    setChoosingActionForStep(null)
+    setSelectedId(stepId)
+  }, [])
+
+  const handleAddKind = useCallback((kind: "trigger" | "action" | "delay" | "approval") => {
+    const newId = `step-${Date.now()}`
     const newStep: WorkflowStep = {
-      id: `step-${Date.now()}`,
-      kind: "action",
-      status: "incomplete",
-      actionConfig: {
-        appId: choice.appId,
-        event: choice.id as ActionConfig["event"],
-        notification: choice.id === "send_notification" ? {
-          via: "both",
-          emailRecipients: [],
-          customMessage: "{{trigger.summary}}\n{{trigger.entityName}}",
-        } : undefined,
-      },
+      id: newId,
+      kind,
+      status: kind === "delay" || kind === "approval" ? "configured" : "incomplete",
+      ...(kind === "delay"    ? { delayConfig:    defaultDelay()    } : {}),
+      ...(kind === "approval" ? { approvalConfig: defaultApproval() } : {}),
     }
     setSteps(prev => {
       const next = [...prev]
       next.splice(addingAt?.index ?? next.length, 0, newStep)
       return next
     })
-    setSelectedId(newStep.id)
+    // For action: open action picker immediately after adding
+    if (kind === "action") {
+      setChoosingActionForStep(newId)
+    } else {
+      setSelectedId(newId)
+    }
     setAddingAt(null)
   }, [addingAt])
+
+  const handleUpdateDelay = useCallback((stepId: string, config: DelayConfig) => {
+    setSteps(prev => prev.map(s => s.id === stepId
+      ? { ...s, delayConfig: config, status: "configured" }
+      : s
+    ))
+  }, [])
+
+  const handleUpdateApproval = useCallback((stepId: string, config: ApprovalConfig) => {
+    setSteps(prev => prev.map(s => s.id === stepId
+      ? { ...s, approvalConfig: config, status: config.approvers.length > 0 ? "configured" : "incomplete" }
+      : s
+    ))
+  }, [])
 
   const handleUpdateTrigger = useCallback((stepId: string, config: TriggerConfig) => {
     setSteps(prev => prev.map(s => s.id === stepId
@@ -563,15 +855,6 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas */}
         <div className="flex-1 overflow-hidden relative">
-          {!adAccountName && steps.length > 0 && (
-            <div className="absolute top-4 left-4 z-10 bg-white dark:bg-card border border-border rounded-xl px-4 py-3 shadow-md max-w-[230px]">
-              <p className="text-[12px] text-muted-foreground leading-5">
-                No Meta ad accounts connected.<br />
-                Please connect an account in{" "}
-                <a href="/settings" className="text-primary hover:underline font-medium">Settings</a>.
-              </p>
-            </div>
-          )}
           <WorkflowCanvas
             steps={steps}
             selectedStepId={selectedId}
@@ -591,8 +874,23 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
                 config={selectedStep.triggerConfig ?? defaultTrigger()}
                 onChange={c => handleUpdateTrigger(selectedStep.id, c)}
                 adAccountName={adAccountName}
+                automationId={automationId}
                 onClose={() => setSelectedId(null)}
                 onChangeApp={() => setChoosingAppForStep(selectedStep.id)}
+              />
+            ) : selectedStep.kind === "delay" ? (
+              <DelayConfigPanel
+                stepIndex={steps.indexOf(selectedStep) + 1}
+                config={selectedStep.delayConfig ?? defaultDelay()}
+                onChange={c => handleUpdateDelay(selectedStep.id, c)}
+                onClose={() => setSelectedId(null)}
+              />
+            ) : selectedStep.kind === "approval" ? (
+              <ApprovalConfigPanel
+                stepIndex={steps.indexOf(selectedStep) + 1}
+                config={selectedStep.approvalConfig ?? defaultApproval()}
+                onChange={c => handleUpdateApproval(selectedStep.id, c)}
+                onClose={() => setSelectedId(null)}
               />
             ) : (
               <ActionConfigPanel
@@ -611,7 +909,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
         <AddStepPopup
           x={addingAt.x}
           y={addingAt.y}
-          onAdd={handleAddChoice}
+          onAddKind={handleAddKind}
           onClose={() => setAddingAt(null)}
         />
       )}
@@ -621,6 +919,14 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
         <AppPickerModal
           onPick={appId => handleAppChosen(choosingAppForStep, appId)}
           onClose={() => setChoosingAppForStep(null)}
+        />
+      )}
+
+      {/* Action picker modal */}
+      {choosingActionForStep !== null && (
+        <ActionPickerModal
+          onPick={appId => handleActionChosen(choosingActionForStep, appId)}
+          onClose={() => setChoosingActionForStep(null)}
         />
       )}
     </div>

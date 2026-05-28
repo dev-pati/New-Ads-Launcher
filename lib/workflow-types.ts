@@ -4,11 +4,14 @@ export type AppId = "meta" | "notification" | "google_drive" | "tiktok" | "snapc
 
 export type TriggerEvent =
   | "performance_monitoring"
+  | "campaign_status_change"
+  | "best_performing_organic_post"
   | "ad_approved"
   | "spend_threshold"
   | "roas_threshold"
   | "cpa_spike"
-  | "new_drive_folder"
+  | "drive_new_file_in_folder"
+  | "drive_new_folder_in_folder"
   | "schedule"
   | "manual"
   | "media_uploaded"
@@ -17,6 +20,9 @@ export type TriggerEvent =
   | "new_air_asset"
   | "new_frameio_file"
   | "adscan_alert"
+  | "sheets_cell_changed"
+  | "sheets_new_row_launch"
+  | "sheets_new_row_catalog"
 
 export type ActionEvent =
   | "send_notification"
@@ -32,7 +38,7 @@ export type ActionEvent =
   | "send_email"
   | "add_sheet_row"
 
-export type NodeKind = "trigger" | "action" | "condition"
+export type NodeKind = "trigger" | "action" | "condition" | "delay" | "approval"
 
 export type NodeStatus = "configured" | "incomplete" | "error"
 
@@ -47,12 +53,16 @@ export interface TriggerConfig {
   appId: AppId
   event: TriggerEvent
   adAccountIds?: string[]
-  monitoringLevel?: "campaign" | "adset" | "ad"
-  campaignFilter?: "all" | "specific"
+  monitoringLevel?: "account" | "campaign" | "adset" | "ad"
+  campaignFilter?: "all" | "specific" | "name_contains" | "name_equals"
+  campaignNameFilterValue?: string
+  specificCampaignId?: string
+  specificCampaignName?: string
+  campaignStatusTarget?: "active" | "paused" | "with_issues" | "pending_review" | "archived"
   specificCampaignIds?: string[]
   metricConditions?: MetricCondition[]
   comparisonWindow?: "day_over_day" | "week_over_week" | "month_over_month"
-  checkFrequency?: "hourly" | "every_6h" | "daily"
+  checkFrequency?: "hourly" | "every_6h" | "daily" | "weekly"
   scheduleTime?: string   // "09:00"
   scheduleDays?: string[] // ["mon","tue","wed"]
   // Media Library (Google Drive backed)
@@ -66,6 +76,26 @@ export interface TriggerConfig {
   triggerTiming?: "immediately" | "on_approved"
   assetStatus?: "all" | "approved" | "in_progress" | "archived"
   assetGrouping?: boolean
+  // Google Drive trigger
+  driveFolderId?: string
+  driveFolderName?: string
+  driveFolderUrl?: string
+  driveBatchStrategy?: "all_as_one" | "one_per_file" | "group_by_type"
+  driveFileType?: "all" | "images" | "videos"
+  driveUploadAllOnFirstRun?: boolean
+  // New Folder in Folder extra fields
+  driveFolderNameFilter?: "all" | "name_contains" | "name_does_not_contain" | "name_starts_with" | "name_ends_with" | "name_equals"
+  driveFolderNameFilterValue?: string
+  driveRecursiveSearch?: boolean
+  driveMinFilesRequired?: number
+  // Google Sheets
+  sheetsSpreadsheetId?: string
+  sheetsSheetName?: string
+  sheetsWatchMode?: "single_cell" | "entire_column"
+  sheetsTriggerCell?: string
+  sheetsCondition?: "equals" | "not_equals" | "not_empty" | "is_empty" | "contains" | "starts_with" | "ends_with" | "greater_than" | "less_than" | "gte" | "lte"
+  sheetsConditionValue?: string
+  sheetsDataMappings?: { label: string; cell: string }[]
 }
 
 export interface NotificationConfig {
@@ -83,12 +113,25 @@ export interface ActionConfig {
   requireApproval?: boolean
 }
 
+export interface DelayConfig {
+  unit: "minutes" | "hours" | "days"
+  value: number
+}
+
+export interface ApprovalConfig {
+  approvers: string[]  // email addresses
+  message?: string
+  timeoutHours?: number  // auto-reject after N hours, 0 = never
+}
+
 export interface WorkflowStep {
   id: string
   kind: NodeKind
   status: NodeStatus
   triggerConfig?: TriggerConfig
   actionConfig?: ActionConfig
+  delayConfig?: DelayConfig
+  approvalConfig?: ApprovalConfig
 }
 
 export interface Workflow {
@@ -160,20 +203,26 @@ export const APP_REGISTRY: Record<AppId, { name: string; color: string; bgColor:
 export const TRIGGER_EVENT_REGISTRY: Record<TriggerEvent, {
   label: string; appId: AppId; description: string
 }> = {
-  performance_monitoring: { label: "Performance Monitoring", appId: "meta",     description: "Detect when metrics change by a percentage between consecutive time periods." },
-  ad_approved:            { label: "Ad Approved",            appId: "meta",     description: "Fires when a Meta ad is approved and moves to active status." },
-  spend_threshold:        { label: "Spend Threshold",        appId: "meta",     description: "Fires when spend crosses a defined threshold." },
-  roas_threshold:         { label: "ROAS Threshold",         appId: "meta",     description: "Fires when ROAS moves above or below a target." },
-  cpa_spike:              { label: "CPA Spike",              appId: "meta",     description: "Fires when cost per action spikes beyond threshold." },
-  new_drive_folder:       { label: "New Drive Folder",       appId: "google_drive", description: "Fires when a new folder is created in Google Drive." },
+  performance_monitoring:       { label: "Performance Monitoring",       appId: "meta", description: "Detect when metrics change by a percentage between consecutive time periods. For example: \"Spend increased by 20% AND CPA increased by 15% day over day.\"" },
+  campaign_status_change:       { label: "Campaign Status Change",       appId: "meta", description: "Triggers when campaigns match a specific status. Use this to detect when campaigns become active, get paused, or encounter issues." },
+  best_performing_organic_post: { label: "Best Performing Organic Post", appId: "meta", description: "Fires when an organic post outperforms your ads — use it to automatically boost top content." },
+  ad_approved:                  { label: "Ad Approved",                  appId: "meta", description: "Fires when a Meta ad is approved and moves to active status." },
+  spend_threshold:              { label: "Performance Threshold",        appId: "meta", description: "Fires when spend crosses a defined threshold." },
+  roas_threshold:               { label: "ROAS Threshold",               appId: "meta", description: "Fires when ROAS moves above or below a target." },
+  cpa_spike:                    { label: "CPA Spike",                    appId: "meta", description: "Fires when cost per action spikes beyond threshold." },
+  drive_new_file_in_folder:   { label: "New File in Folder",   appId: "google_drive", description: "Fires when a new file is added to a specific Google Drive folder." },
+  drive_new_folder_in_folder: { label: "New Folder in Folder", appId: "google_drive", description: "Fires when a new subfolder is created inside a specific Google Drive folder." },
   schedule:               { label: "Schedule",               appId: "schedule", description: "Fires on a recurring schedule (daily, weekly, etc.)." },
   manual:                 { label: "Manual Trigger",         appId: "manual",        description: "Run this automation manually on demand." },
   media_uploaded:         { label: "Media Uploaded",          appId: "media_library", description: "Fires when new media is uploaded to your library." },
   new_dropbox_file:       { label: "New Dropbox File",        appId: "dropbox",       description: "Fires when a new file is added to Dropbox." },
   new_sharepoint_file:    { label: "New SharePoint File",     appId: "sharepoint",    description: "Fires when a new file is added to SharePoint." },
   new_air_asset:          { label: "New AIR Asset",           appId: "air",           description: "Trigger automations from a publicly shared AIR board." },
-  new_frameio_file:       { label: "New Frame.io File",       appId: "frameio",       description: "Fires when new files are added in Frame.io." },
-  adscan_alert:           { label: "Competitor Ad Alert",     appId: "adscan",        description: "Trigger automations when competitor ad activity is detected." },
+  new_frameio_file:        { label: "New Frame.io File",       appId: "frameio",       description: "Fires when new files are added in Frame.io." },
+  adscan_alert:            { label: "Competitor Ad Alert",     appId: "adscan",        description: "Trigger automations when competitor ad activity is detected." },
+  sheets_cell_changed:     { label: "Cell Value Changed",     appId: "sheets",        description: "Fires when a specific cell matches a condition." },
+  sheets_new_row_launch:   { label: "New Rows to Launch",     appId: "sheets",        description: "Fires when new rows are added to launch campaigns." },
+  sheets_new_row_catalog:  { label: "New Rows to Catalog",    appId: "sheets",        description: "Fires when new rows are added to the catalog sheet." },
 }
 
 export const ACTION_EVENT_REGISTRY: Record<ActionEvent, {

@@ -370,6 +370,7 @@ export interface AdSet {
   status: string
   effective_status: string
   campaign_id: string
+  campaign_name?: string
   daily_budget?: string
   lifetime_budget?: string
   budget_remaining?: string
@@ -396,7 +397,7 @@ export async function getAdSets(
   datePreset: string = "last_7d"
 ): Promise<AdSet[]> {
   const fields = [
-    "id", "name", "status", "effective_status", "campaign_id",
+    "id", "name", "status", "effective_status", "campaign_id", "campaign{name}",
     "daily_budget", "lifetime_budget", "budget_remaining",
     "optimization_goal", "billing_event", "bid_strategy", "bid_amount",
     "start_time", "end_time", "created_time",
@@ -411,7 +412,12 @@ export async function getAdSets(
   const res  = await fetch(url)
   const data = await res.json()
   if (data?.error || !res.ok) throwMetaError(data, "Failed to get ad sets")
-  return data.data || []
+
+  // Flatten campaign.name → campaign_name for convenience
+  return (data.data || []).map((a: any) => ({
+    ...a,
+    campaign_name: a.campaign?.name ?? a.campaign_name ?? null,
+  }))
 }
 
 // Ad interfaces and functions

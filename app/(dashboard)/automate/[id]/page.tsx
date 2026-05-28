@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { use } from "react"
+import { use, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { IconLoader2 } from "@tabler/icons-react"
 import type { WorkflowStep } from "@/lib/workflow-types"
@@ -279,12 +279,7 @@ const TEMPLATE_WORKFLOWS: Record<string, { name: string; steps: WorkflowStep[] }
   },
 }
 
-export default function AutomationBuilderPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id }   = use(params)
+function BuilderInner({ id }: { id: string }) {
   const search   = useSearchParams()
   const template = search.get("template")
   const isNew    = id === "new"
@@ -299,5 +294,23 @@ export default function AutomationBuilderPage({
     <div className="h-full overflow-hidden">
       <WorkflowBuilder initialWorkflow={initialWorkflow} />
     </div>
+  )
+}
+
+export default function AutomationBuilderPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = use(params)
+
+  return (
+    <Suspense fallback={
+      <div className="flex h-full items-center justify-center">
+        <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <BuilderInner id={id} />
+    </Suspense>
   )
 }
