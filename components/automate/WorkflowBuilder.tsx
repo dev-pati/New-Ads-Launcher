@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils"
 import {
   IconArrowLeft, IconDeviceFloppy, IconPlayerPlay,
   IconEye, IconHistory, IconBell, IconDots, IconChevronDown,
-  IconLoader2, IconCheck, IconX, IconCirclePlus,
+  IconLoader2, IconCheck, IconX, IconCirclePlus, IconBolt,
+  IconClock, IconShieldCheck,
 } from "@tabler/icons-react"
 import { WorkflowCanvas } from "./WorkflowCanvas"
 import { TriggerConfigPanel } from "./TriggerConfigPanel"
@@ -53,31 +54,93 @@ const ACTION_CHOICES = [
   { id: "add_sheet_row",     label: "Log to Sheets",     icon: "📊", appId: "sheets"       as const },
 ]
 
+const STEP_TYPES = [
+  {
+    id: "trigger",
+    label: "Trigger",
+    desc: "Add another trigger",
+    iconEl: <IconBolt className="size-4 text-red-500" />,
+    iconBg: "bg-red-50 dark:bg-red-950/20",
+  },
+  {
+    id: "action",
+    label: "Action",
+    desc: "Do something",
+    iconEl: <IconPlayerPlay className="size-4 text-[#2563EB] fill-[#2563EB]" />,
+    iconBg: "bg-blue-50 dark:bg-blue-950/20",
+  },
+  {
+    id: "delay",
+    label: "Delay",
+    desc: "Wait before next step",
+    iconEl: <IconClock className="size-4 text-violet-500" />,
+    iconBg: "bg-violet-50 dark:bg-violet-950/20",
+  },
+  {
+    id: "approval",
+    label: "Approval",
+    desc: "Require manual approval",
+    iconEl: <IconShieldCheck className="size-4 text-amber-600" />,
+    iconBg: "bg-amber-50 dark:bg-amber-950/20",
+  },
+]
+
 function AddStepModal({ onAdd, onClose }: {
   onAdd: (choice: typeof ACTION_CHOICES[0]) => void
   onClose: () => void
 }) {
+  const [view, setView] = useState<"type" | "action">("type")
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card border border-border rounded-2xl shadow-2xl w-[340px] overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="bg-card border border-border rounded-2xl shadow-2xl w-[320px] overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <p className="text-sm font-semibold">Add a step</p>
+          {view === "action" ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setView("type")}
+                className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+              >
+                <IconArrowLeft className="size-3.5" />
+              </button>
+              <p className="text-sm font-semibold">Choose an action</p>
+            </div>
+          ) : (
+            <p className="text-sm font-semibold">Add a step</p>
+          )}
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted transition-colors">
             <IconX className="size-4 text-muted-foreground" />
           </button>
         </div>
-        <div className="p-3">
-          <p className="text-[11px] text-muted-foreground uppercase font-semibold tracking-wide mb-2 px-1">Actions</p>
-          {ACTION_CHOICES.map(c => (
-            <button
-              key={c.id}
-              onClick={() => { onAdd(c); onClose() }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors text-left"
-            >
-              <span className="text-xl leading-none">{c.icon}</span>
-              <span className="text-[13px] font-medium">{c.label}</span>
-            </button>
-          ))}
+        <div className="p-2">
+          {view === "type" ? (
+            STEP_TYPES.map(t => (
+              <button
+                key={t.id}
+                onClick={() => t.id === "action" ? setView("action") : onClose()}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors text-left"
+              >
+                <div className={cn("size-8 rounded-lg flex items-center justify-center shrink-0", t.iconBg)}>
+                  {t.iconEl}
+                </div>
+                <div>
+                  <p className="text-[13px] font-medium leading-tight">{t.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{t.desc}</p>
+                </div>
+              </button>
+            ))
+          ) : (
+            ACTION_CHOICES.map(c => (
+              <button
+                key={c.id}
+                onClick={() => { onAdd(c); onClose() }}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-muted transition-colors text-left"
+              >
+                <span className="text-xl leading-none">{c.icon}</span>
+                <span className="text-[13px] font-medium">{c.label}</span>
+              </button>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -295,7 +358,17 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
       {/* Canvas + right panel */}
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden relative">
+          {/* No-account warning */}
+          {!adAccountName && (
+            <div className="absolute top-4 left-4 z-10 bg-white dark:bg-card border border-border rounded-xl px-4 py-3 shadow-md max-w-[230px]">
+              <p className="text-[12px] text-muted-foreground leading-5">
+                No Meta ad accounts connected.<br />
+                Please connect an account in{" "}
+                <a href="/settings" className="text-primary hover:underline font-medium">Settings</a>.
+              </p>
+            </div>
+          )}
           <WorkflowCanvas
             steps={steps}
             selectedStepId={selectedId}
@@ -307,19 +380,21 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
 
         {/* Right config panel */}
         {selectedStep && (
-          <div className="w-[340px] shrink-0 border-l border-border bg-background overflow-hidden flex flex-col">
+          <div className="w-[380px] shrink-0 border-l border-border bg-background overflow-hidden flex flex-col">
             {selectedStep.kind === "trigger" ? (
               <TriggerConfigPanel
                 stepIndex={steps.indexOf(selectedStep) + 1}
                 config={selectedStep.triggerConfig ?? defaultTrigger()}
                 onChange={c => handleUpdateTrigger(selectedStep.id, c)}
                 adAccountName={adAccountName}
+                onClose={() => setSelectedId(null)}
               />
             ) : (
               <ActionConfigPanel
                 stepIndex={steps.indexOf(selectedStep) + 1}
                 config={selectedStep.actionConfig ?? defaultAction()}
                 onChange={c => handleUpdateAction(selectedStep.id, c)}
+                onClose={() => setSelectedId(null)}
               />
             )}
           </div>

@@ -1,14 +1,26 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { forwardRef, useImperativeHandle, useState, useRef } from "react"
 import { cn } from "@/lib/utils"
-import { IconMail, IconBrandSlack, IconPlus, IconX } from "@tabler/icons-react"
+import {
+  IconBell,
+  IconMail,
+  IconBrandSlack,
+  IconPlus,
+  IconX,
+} from "@tabler/icons-react"
 import type { ActionConfig, NotificationConfig } from "@/lib/workflow-types"
 import { TRIGGER_VARIABLES, SYSTEM_VARIABLES } from "@/lib/workflow-types"
 
 // ─── Variable chip ────────────────────────────────────────────────────────────
 
-function VarChip({ token, onInsert }: { token: { key: string; label: string }; onInsert: (key: string) => void }) {
+function VarChip({
+  token,
+  onInsert,
+}: {
+  token: { key: string; label: string }
+  onInsert: (key: string) => void
+}) {
   return (
     <button
       onClick={() => onInsert(`{{${token.key}}}`)}
@@ -20,64 +32,99 @@ function VarChip({ token, onInsert }: { token: { key: string; label: string }; o
   )
 }
 
-// ─── Email tag input ──────────────────────────────────────────────────────────
+// ─── Email tag input (forwardRef) ─────────────────────────────────────────────
 
-function EmailTagInput({ recipients, onChange }: {
+export interface EmailTagInputHandle {
+  commit: () => void
+}
+
+interface EmailTagInputProps {
   recipients: string[]
   onChange: (r: string[]) => void
-}) {
-  const [draft, setDraft] = useState("")
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  function commit() {
-    const email = draft.trim()
-    if (!email || !email.includes("@")) return
-    onChange([...recipients, email])
-    setDraft("")
-  }
-
-  function remove(i: number) {
-    onChange(recipients.filter((_, j) => j !== i))
-  }
-
-  return (
-    <div
-      onClick={() => inputRef.current?.focus()}
-      className="min-h-9 w-full flex flex-wrap gap-1.5 px-3 py-2 bg-muted/40 border border-border/60 rounded-lg cursor-text"
-    >
-      {recipients.map((r, i) => (
-        <span key={i} className="flex items-center gap-1 h-5 px-2 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
-          {r}
-          <button onClick={e => { e.stopPropagation(); remove(i) }} className="hover:text-destructive transition-colors">
-            <IconX className="size-2.5" />
-          </button>
-        </span>
-      ))}
-      <input
-        ref={inputRef}
-        type="email"
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commit() }
-          if (e.key === "Backspace" && !draft && recipients.length) remove(recipients.length - 1)
-        }}
-        onBlur={commit}
-        placeholder={recipients.length === 0 ? "Enter email and press Enter or click Add" : ""}
-        className="flex-1 min-w-[140px] bg-transparent outline-none text-[12px] placeholder:text-muted-foreground/50"
-      />
-    </div>
-  )
 }
+
+const EmailTagInput = forwardRef<EmailTagInputHandle, EmailTagInputProps>(
+  function EmailTagInput({ recipients, onChange }, ref) {
+    const [draft, setDraft] = useState("")
+    const inputRef = useRef<HTMLInputElement>(null)
+
+    function commit() {
+      const email = draft.trim()
+      if (!email || !email.includes("@")) return
+      onChange([...recipients, email])
+      setDraft("")
+    }
+
+    function remove(i: number) {
+      onChange(recipients.filter((_, j) => j !== i))
+    }
+
+    useImperativeHandle(ref, () => ({ commit }))
+
+    return (
+      <div className="flex items-start gap-2">
+        {/* Input wrapper — chips + native input */}
+        <div
+          onClick={() => inputRef.current?.focus()}
+          className="flex-1 min-h-9 flex flex-wrap gap-1.5 px-3 py-2 bg-muted/40 border border-border/60 rounded-lg cursor-text"
+        >
+          {recipients.map((r, i) => (
+            <span
+              key={i}
+              className="flex items-center gap-1 h-5 px-2 rounded-full bg-primary/10 text-primary text-[11px] font-medium"
+            >
+              {r}
+              <button
+                onClick={e => { e.stopPropagation(); remove(i) }}
+                className="hover:text-destructive transition-colors"
+              >
+                <IconX className="size-2.5" />
+              </button>
+            </span>
+          ))}
+          <input
+            ref={inputRef}
+            type="email"
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" || e.key === ",") { e.preventDefault(); commit() }
+              if (e.key === "Backspace" && !draft && recipients.length) remove(recipients.length - 1)
+            }}
+            onBlur={commit}
+            placeholder={recipients.length === 0 ? "Enter email and press Enter or click Add" : ""}
+            className="flex-1 min-w-[140px] bg-transparent outline-none text-[12px] placeholder:text-muted-foreground/50"
+          />
+        </div>
+
+        {/* Add button beside input */}
+        <button
+          onClick={commit}
+          className="h-9 px-3 rounded-lg border border-border/60 bg-muted/40 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+        >
+          + Add
+        </button>
+      </div>
+    )
+  }
+)
 
 // ─── Setup tab ────────────────────────────────────────────────────────────────
 
-function SetupTab({ config, onChange }: {
+function SetupTab({
+  config,
+  onChange,
+}: {
   config: ActionConfig
   onChange: (c: ActionConfig) => void
 }) {
-  const notif = config.notification ?? { via: "both", emailRecipients: [], customMessage: "{{trigger.summary}}\n{{trigger.entityName}}" }
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const notif: NotificationConfig = config.notification ?? {
+    via: "both",
+    emailRecipients: [],
+    customMessage: "{{trigger.summary}}\n{{trigger.entityName}}",
+  }
+  const textareaRef     = useRef<HTMLTextAreaElement>(null)
+  const emailInputRef   = useRef<EmailTagInputHandle>(null)
 
   function updateNotif(n: Partial<NotificationConfig>) {
     onChange({ ...config, notification: { ...notif, ...n } })
@@ -100,26 +147,33 @@ function SetupTab({ config, onChange }: {
     }, 0)
   }
 
+  const showEmail = notif.via === "email" || notif.via === "both"
+  const showSlack = notif.via === "slack" || notif.via === "both"
+
   return (
     <div className="space-y-5 p-5">
-      {/* App */}
+      {/* APP */}
       <div className="space-y-1.5">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">App</label>
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          App
+        </label>
         <div className="flex items-center justify-between h-9 px-3 bg-muted/40 border border-border/60 rounded-lg">
           <div className="flex items-center gap-2">
-            <div className="size-5 rounded bg-amber-400 flex items-center justify-center">
-              <span className="text-[10px]">🔔</span>
+            <div className="size-5 rounded bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
+              <IconBell className="size-3 text-amber-500" />
             </div>
             <span className="text-sm font-medium">Notification</span>
           </div>
-          <button className="text-[11px] text-primary hover:underline">Change</button>
+          <button className="text-[11px] text-primary hover:underline font-medium">Change</button>
         </div>
       </div>
 
-      {/* Send via */}
+      {/* SEND VIA */}
       <div className="space-y-2">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Send Via</label>
-        <div className="flex items-center gap-2 p-1 bg-muted/40 border border-border/60 rounded-xl">
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          Send Via
+        </label>
+        <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border/60 rounded-xl">
           {(["email", "slack", "both"] as const).map(v => (
             <button
               key={v}
@@ -127,46 +181,61 @@ function SetupTab({ config, onChange }: {
               className={cn(
                 "flex-1 flex items-center justify-center gap-1.5 h-7 rounded-lg text-[12px] font-medium transition-colors capitalize",
                 notif.via === v
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground shadow-sm border border-border/40"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               {v === "email" && <IconMail className="size-3.5" />}
               {v === "slack" && <IconBrandSlack className="size-3.5" />}
-              {v === "both"  && <><IconMail className="size-3" /><span>+</span><IconBrandSlack className="size-3" /></>}
+              {v === "both" && (
+                <>
+                  <IconMail className="size-3" />
+                  <span className="text-[10px]">+</span>
+                  <IconBrandSlack className="size-3" />
+                </>
+              )}
               {v === "email" ? "Email" : v === "slack" ? "Slack" : "Both"}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Email recipients */}
-      {(notif.via === "email" || notif.via === "both") && (
+      {/* EMAIL RECIPIENTS */}
+      {showEmail && (
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Email Recipients</label>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Email Recipients
+          </label>
           <EmailTagInput
+            ref={emailInputRef}
             recipients={notif.emailRecipients ?? []}
             onChange={r => updateNotif({ emailRecipients: r })}
           />
           {(notif.emailRecipients ?? []).length === 0 && (
-            <p className="text-[11px] text-muted-foreground/60">No recipients added yet. Type an email address and press Enter or click Add.</p>
+            <p className="text-[11px] text-muted-foreground/60">
+              No recipients added yet. Type an email address and press Enter or click Add.
+            </p>
           )}
         </div>
       )}
 
-      {/* Slack channel */}
-      {(notif.via === "slack" || notif.via === "both") && (
+      {/* SLACK CHANNEL */}
+      {showSlack && (
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Slack Channel</label>
-          <div className="flex items-center justify-between h-9 px-3 bg-muted/40 border border-border/60 rounded-lg">
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            Slack Channel
+          </label>
+          <div className="flex items-center h-9 px-3 bg-muted/40 border border-border/60 rounded-lg">
             <span className="text-[12px] text-muted-foreground"># your org default</span>
           </div>
         </div>
       )}
 
-      {/* Custom message */}
+      {/* CUSTOM MESSAGE */}
       <div className="space-y-1.5">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Custom Message (Optional)</label>
+        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          Custom Message (Optional)
+        </label>
         <textarea
           ref={textareaRef}
           value={notif.customMessage ?? ""}
@@ -176,21 +245,34 @@ function SetupTab({ config, onChange }: {
         />
       </div>
 
-      {/* Variables */}
+      {/* AVAILABLE VARIABLES */}
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Available variables (click to insert)</p>
-        <div className="space-y-2">
-          <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide">Trigger</p>
-          <div className="flex flex-wrap gap-1.5">
-            {TRIGGER_VARIABLES.map(v => (
-              <VarChip key={v.key} token={v} onInsert={insertVariable} />
-            ))}
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          Available variables <span className="normal-case font-normal text-muted-foreground/50">(click to insert)</span>
+        </p>
+        <div className="space-y-3">
+          {/* TRIGGER group */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide">
+              Trigger
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {TRIGGER_VARIABLES.map(v => (
+                <VarChip key={v.key} token={v} onInsert={insertVariable} />
+              ))}
+            </div>
           </div>
-          <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide mt-2">System</p>
-          <div className="flex flex-wrap gap-1.5">
-            {SYSTEM_VARIABLES.map(v => (
-              <VarChip key={v.key} token={v} onInsert={insertVariable} />
-            ))}
+
+          {/* SYSTEM group */}
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide">
+              System
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {SYSTEM_VARIABLES.map(v => (
+                <VarChip key={v.key} token={v} onInsert={insertVariable} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -202,46 +284,66 @@ function SetupTab({ config, onChange }: {
 
 function PreviewTab({ config }: { config: ActionConfig }) {
   const notif = config.notification
-  const msg = notif?.customMessage ?? "{{trigger.summary}}\n{{trigger.entityName}}: {{trigger.previousValue}} → {{trigger.currentValue}} ({{trigger.actualChange}}% change)"
+  const msg   = notif?.customMessage ??
+    "{{trigger.summary}}\n{{trigger.entityName}}: {{trigger.previousValue}} → {{trigger.currentValue}} ({{trigger.actualChange}}% change)"
+
+  const recipientCount = notif?.emailRecipients?.length ?? 0
 
   return (
     <div className="p-5 space-y-4">
+      {/* 2. Sends */}
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">2. Sends</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">
+          2. Sends
+        </p>
         <p className="text-[12px] font-medium text-foreground">Notification · Send Notification</p>
         <div className="flex items-center gap-1.5 mt-1.5">
           <span className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
-            {notif?.via === "email" ? "Email only" : notif?.via === "slack" ? "Slack only" : "Email + Slack"} · {(notif?.emailRecipients ?? []).length === 0 ? "no recipients" : `${notif?.emailRecipients?.length} recipient(s)`}
+            {notif?.via === "email" ? "Email only" :
+             notif?.via === "slack" ? "Slack only" :
+             "Email + Slack"} &middot; {recipientCount === 0 ? "no recipients" : `${recipientCount} recipient(s)`}
           </span>
         </div>
       </div>
 
+      {/* Dry-run button */}
       <div className="space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">What will get sent</p>
-
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          What will get sent
+        </p>
         <button className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
-          🔄 Dry-run this notification
+          Dry-run this notification
         </button>
       </div>
 
-      {/* Email preview */}
-      {(notif?.via === "email" || notif?.via === "both" || !notif) && (
+      {/* EMAIL preview block */}
+      {(!notif || notif.via === "email" || notif.via === "both") && (
         <div className="border border-border/60 rounded-xl overflow-hidden">
           <div className="px-3 py-2 bg-muted/30 border-b border-border/40 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
               <IconMail className="size-3.5" />
               EMAIL
             </div>
-            <span className="text-[10px] text-muted-foreground/60">No recipients</span>
+            <span className="text-[10px] text-muted-foreground/60">
+              {recipientCount === 0 ? "No recipients" : `${recipientCount} recipient(s)`}
+            </span>
           </div>
-          <div className="p-3 space-y-2">
+          <div className="p-3">
             <div className="flex items-start gap-2">
-              <div className="size-6 rounded-full bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground shrink-0">AM</div>
-              <div>
+              {/* AM avatar */}
+              <div className="size-6 rounded-full bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground shrink-0">
+                AM
+              </div>
+              <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium">Notification: Performance Monitoring</p>
-                <p className="text-[10px] text-muted-foreground">to you@example.com</p>
+                <p className="text-[10px] text-muted-foreground">
+                  to {recipientCount > 0 ? notif?.emailRecipients?.[0] : "you@example.com"}
+                  {recipientCount > 1 && ` +${recipientCount - 1} more`}
+                </p>
                 <div className="mt-2 bg-muted/40 rounded-lg p-2">
-                  <p className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{msg}</p>
+                  <p className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed break-all">
+                    {msg}
+                  </p>
                 </div>
               </div>
             </div>
@@ -249,24 +351,33 @@ function PreviewTab({ config }: { config: ActionConfig }) {
         </div>
       )}
 
-      {/* Slack preview */}
-      {(notif?.via === "slack" || notif?.via === "both" || !notif) && (
+      {/* SLACK preview block */}
+      {(!notif || notif.via === "slack" || notif.via === "both") && (
         <div className="border border-border/60 rounded-xl overflow-hidden">
           <div className="px-3 py-2 bg-muted/30 border-b border-border/40 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
               <IconBrandSlack className="size-3.5" />
               SLACK
             </div>
-            <span className="text-[10px] text-muted-foreground/60"># your org default</span>
+            <span className="text-[10px] text-muted-foreground/60">
+              {notif?.slackChannel ?? "# your org default"}
+            </span>
           </div>
-          <div className="p-3 space-y-2">
+          <div className="p-3">
             <div className="flex items-start gap-2">
-              <div className="size-6 rounded bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground shrink-0">AM</div>
-              <div>
-                <span className="text-[11px] font-semibold">AdLauncher</span>
-                <span className="text-[10px] text-muted-foreground ml-1">APP</span>
+              {/* AM avatar (square for Slack app style) */}
+              <div className="size-6 rounded bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground shrink-0">
+                AM
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold">AdLauncher</span>
+                  <span className="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-medium">APP</span>
+                </div>
                 <div className="mt-1.5 bg-muted/40 rounded-lg p-2">
-                  <p className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed">{msg}</p>
+                  <p className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed break-all">
+                    {msg}
+                  </p>
                 </div>
               </div>
             </div>
@@ -283,31 +394,58 @@ interface Props {
   stepIndex: number
   config: ActionConfig
   onChange: (c: ActionConfig) => void
+  onClose?: () => void
 }
 
-export function ActionConfigPanel({ stepIndex, config, onChange }: Props) {
+export function ActionConfigPanel({
+  stepIndex,
+  config,
+  onChange,
+  onClose,
+}: Props) {
   const [activeTab, setActiveTab] = useState<"setup" | "preview">("setup")
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Panel header */}
-      <div className="px-5 py-4 border-b border-border shrink-0">
-        <p className="text-[11px] text-muted-foreground font-medium mb-0.5">
-          {stepIndex}. Send Notification
-        </p>
-        <p className="text-[12px] text-muted-foreground/60">What happens when it fires?</p>
+      <div className="px-4 py-3 border-b border-border shrink-0 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Bell icon with amber bg */}
+          <div className="size-9 rounded-xl bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
+            <IconBell className="size-5 text-amber-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
+              {stepIndex}. Send Notification
+            </p>
+            <p className="text-[11px] text-muted-foreground/70 leading-tight mt-0.5">
+              What happens when it fires?
+            </p>
+          </div>
+        </div>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="size-7 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors shrink-0 mt-0.5"
+          >
+            <IconX className="size-4" />
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-border shrink-0">
         {(["setup", "preview"] as const).map(t => (
-          <button key={t} onClick={() => setActiveTab(t)}
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
             className={cn(
               "flex-1 py-2.5 text-[13px] font-medium transition-colors capitalize",
               activeTab === t
                 ? "text-primary border-b-2 border-primary"
                 : "text-muted-foreground hover:text-foreground"
-            )}>
+            )}
+          >
             {t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
@@ -315,15 +453,16 @@ export function ActionConfigPanel({ stepIndex, config, onChange }: Props) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === "setup"
-          ? <SetupTab config={config} onChange={onChange} />
-          : <PreviewTab config={config} />
-        }
+        {activeTab === "setup" ? (
+          <SetupTab config={config} onChange={onChange} />
+        ) : (
+          <PreviewTab config={config} />
+        )}
       </div>
 
-      {/* Footer */}
+      {/* Footer — setup tab only */}
       {activeTab === "setup" && (
-        <div className="p-5 border-t border-border shrink-0">
+        <div className="p-4 border-t border-border shrink-0">
           <button
             onClick={() => setActiveTab("preview")}
             className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors"

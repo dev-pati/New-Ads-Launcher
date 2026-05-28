@@ -88,7 +88,7 @@ export function stepsToFlow(
         : "Every 6h"
       const levelLabel = tc.monitoringLevel === "campaign" ? "Campaign level"
         : tc.monitoringLevel === "adset" ? "Ad set level" : "Ad level"
-      subtitle = levelLabel
+      subtitle = `${freqLabel} · ${levelLabel}`
       tags = (tc.metricConditions ?? []).map(c => {
         const op = c.operator === "decreases_by" ? "drops >" : c.operator === "increases_by" ? "spikes >" : c.operator === "is_above" ? ">" : "<"
         return `${c.metric === "spend" ? "Spend" : c.metric.toUpperCase()} ${op}${c.value}${c.unit}`
@@ -97,6 +97,7 @@ export function stepsToFlow(
       const wLabel = tc.comparisonWindow === "day_over_day" ? "Day over Day"
         : tc.comparisonWindow === "week_over_week" ? "Week over Week" : "Month over Month"
       tags.push(wLabel)
+      tags.push(freqLabel)
     }
 
     if (!isT && ac) {

@@ -13,6 +13,8 @@ import {
   IconMoneybag, IconCalendar, IconBrandTiktok, IconBrandSnapchat,
   IconBrandPinterest, IconFileSpreadsheet, IconChartBar, IconToggleLeft,
   IconStar, IconCircleCheck, IconClockHour4, IconMinus,
+  IconBrandMeta, IconBrandSlack, IconBrandGoogleDrive, IconTable,
+  IconArrowRight,
 } from "@tabler/icons-react"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -61,6 +63,9 @@ interface AutomationApproval {
 
 // ─── Templates ─────────────────────────────────────────────────────────────────
 
+// App chain icon type
+type ChainAppId = "meta" | "notification" | "tiktok" | "snapchat" | "pinterest" | "slack" | "sheets" | "schedule" | "google_drive"
+
 const TEMPLATES = [
   {
     id: "performance_monitoring",
@@ -75,6 +80,7 @@ const TEMPLATES = [
     iconBg: "bg-violet-50 dark:bg-violet-950/30",
     description: "Track key metric changes across your ad accounts. Get alerted when spend, CPA, or ROAS shifts significantly day-over-day or week-over-week so you can act fast.",
     steps: 2,
+    appChain: ["meta", "notification"] as ChainAppId[],
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "LESS_THAN", value: 1.5 } },
     actions: [{ type: "SEND_NOTIFICATION", config: {} }],
   },
@@ -88,6 +94,7 @@ const TEMPLATES = [
     iconBg: "bg-pink-50 dark:bg-pink-950/30",
     description: "Automatically duplicate ads that exceed a ROAS threshold so you can scale winners quickly.",
     steps: 2,
+    appChain: ["meta", "meta"] as ChainAppId[],
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "GREATER_THAN", value: 2 } },
     actions: [{ type: "duplicate_ad", config: {} }],
   },
@@ -103,6 +110,7 @@ const TEMPLATES = [
     iconBg: "bg-amber-50 dark:bg-amber-950/30",
     description: "Increase budget by 20% for ad sets with ROAS above 2 to capitalize on high-performing spend.",
     steps: 2,
+    appChain: ["meta", "meta"] as ChainAppId[],
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "GREATER_THAN", value: 2 } },
     actions: [{ type: "INCREASE_DAILY_BUDGET", config: { percentage: 20 } }],
   },
@@ -116,6 +124,7 @@ const TEMPLATES = [
     iconBg: "bg-green-50 dark:bg-green-950/30",
     description: "Once an ad is approved by Meta, automatically duplicate it into additional ad sets for broader reach.",
     steps: 2,
+    appChain: ["meta", "meta"] as ChainAppId[],
     trigger: { type: "status_change", config: { from: "IN_PROCESS", to: "ACTIVE" } },
     actions: [{ type: "duplicate_ad", config: { into_adsets: true } }],
   },
@@ -129,6 +138,7 @@ const TEMPLATES = [
     iconBg: "bg-slate-100 dark:bg-slate-800/50",
     description: "Find Facebook ads with ROAS above 2 and automatically launch them on TikTok to expand reach.",
     steps: 2,
+    appChain: ["meta", "tiktok"] as ChainAppId[],
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "GREATER_THAN", value: 2 } },
     actions: [{ type: "cross_launch", config: { platform: "tiktok" } }],
   },
@@ -142,6 +152,7 @@ const TEMPLATES = [
     iconBg: "bg-yellow-50 dark:bg-yellow-950/30",
     description: "Find Facebook ads with ROAS above 2 and automatically launch them on Snapchat.",
     steps: 2,
+    appChain: ["meta", "snapchat"] as ChainAppId[],
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "GREATER_THAN", value: 2 } },
     actions: [{ type: "cross_launch", config: { platform: "snapchat" } }],
   },
@@ -155,6 +166,7 @@ const TEMPLATES = [
     iconBg: "bg-red-50 dark:bg-red-950/30",
     description: "Find Facebook ads with ROAS above 2 and automatically launch them on Pinterest.",
     steps: 2,
+    appChain: ["meta", "pinterest"] as ChainAppId[],
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "GREATER_THAN", value: 2 } },
     actions: [{ type: "cross_launch", config: { platform: "pinterest" } }],
   },
@@ -170,6 +182,7 @@ const TEMPLATES = [
     iconBg: "bg-blue-50 dark:bg-blue-950/30",
     description: "Automatically pause ad sets with ROAS below 1 to stop wasting budget on low-performing creatives.",
     steps: 2,
+    appChain: ["meta", "meta"] as ChainAppId[],
     trigger: { type: "metric_threshold", config: { metric: "roas", operator: "LESS_THAN", value: 1 } },
     actions: [{ type: "PAUSE_ADSET", config: {} }],
   },
@@ -183,6 +196,7 @@ const TEMPLATES = [
     iconBg: "bg-indigo-50 dark:bg-indigo-950/30",
     description: "Run a scheduled check every day and toggle an existing automation rule on or off based on the day.",
     steps: 2,
+    appChain: ["schedule", "meta"] as ChainAppId[],
     trigger: { type: "schedule", config: { frequency: "daily", time: "09:00" } },
     actions: [{ type: "toggle_rule", config: {} }],
   },
@@ -196,10 +210,44 @@ const TEMPLATES = [
     iconBg: "bg-green-50 dark:bg-green-950/30",
     description: "Every time an ad is launched via AdLauncher, automatically log the details to a Google Sheet for tracking.",
     steps: 2,
+    appChain: ["meta", "sheets"] as ChainAppId[],
     trigger: { type: "event", config: { event: "ad_launched" } },
     actions: [{ type: "log_to_sheets", config: {} }],
   },
 ]
+
+// ─── App chain icon renderer ──────────────────────────────────────────────────
+
+const CHAIN_ICON_MAP: Record<ChainAppId, { icon: React.ElementType; color: string; bg: string }> = {
+  meta:         { icon: IconBrandMeta,        color: "text-[#1877F2]",    bg: "bg-[#EFF6FF]" },
+  notification: { icon: IconBell,             color: "text-amber-500",    bg: "bg-amber-50 dark:bg-amber-950/30" },
+  tiktok:       { icon: IconBrandTiktok,      color: "text-zinc-800 dark:text-zinc-200", bg: "bg-zinc-100 dark:bg-zinc-800" },
+  snapchat:     { icon: IconBrandSnapchat,    color: "text-yellow-500",   bg: "bg-yellow-50 dark:bg-yellow-950/20" },
+  pinterest:    { icon: IconBrandPinterest,   color: "text-red-500",      bg: "bg-red-50 dark:bg-red-950/20" },
+  slack:        { icon: IconBrandSlack,       color: "text-purple-600",   bg: "bg-purple-50 dark:bg-purple-950/20" },
+  sheets:       { icon: IconTable,            color: "text-green-600",    bg: "bg-green-50 dark:bg-green-950/20" },
+  schedule:     { icon: IconCalendar,         color: "text-indigo-500",   bg: "bg-indigo-50 dark:bg-indigo-950/20" },
+  google_drive: { icon: IconBrandGoogleDrive, color: "text-green-500",    bg: "bg-green-50 dark:bg-green-950/20" },
+}
+
+function AppChain({ chain, steps }: { chain: ChainAppId[]; steps: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {chain.map((appId, i) => {
+        const { icon: Icon, color, bg } = CHAIN_ICON_MAP[appId]
+        return (
+          <div key={i} className="flex items-center gap-1.5">
+            {i > 0 && <IconArrowRight className="size-3 text-muted-foreground/50" />}
+            <div className={cn("size-6 rounded-lg flex items-center justify-center", bg)}>
+              <Icon className={cn("size-3.5", color)} />
+            </div>
+          </div>
+        )
+      })}
+      <span className="text-xs text-muted-foreground ml-1">{steps} steps</span>
+    </div>
+  )
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -1075,12 +1123,7 @@ export default function AutomatePage() {
                       </div>
                       <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{featured.description}</p>
                       <div className="flex items-center gap-3 mt-3">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <IconBolt className="size-3.5 text-violet-500" />
-                          <span>→</span>
-                          <IconBell className="size-3.5 text-amber-500" />
-                          <span>{featured.steps} steps</span>
-                        </div>
+                        <AppChain chain={(featured as any).appChain ?? ["meta", "notification"]} steps={featured.steps} />
                         {(featured as any).fbLive && (
                           <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400 font-medium">
                             <span className="size-1.5 rounded-full bg-green-500 inline-block" />Live on Meta
@@ -1133,10 +1176,7 @@ export default function AutomatePage() {
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed mb-3">{t.description}</p>
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <IconBolt className="size-3.5" />→<IconBolt className="size-3.5" />
-                        <span>{t.steps} steps</span>
-                      </div>
+                      <AppChain chain={(t as any).appChain ?? ["meta", "meta"]} steps={t.steps} />
                       {isSoon ? (
                         <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
                           Use
