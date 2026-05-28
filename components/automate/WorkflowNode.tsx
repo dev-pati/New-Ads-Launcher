@@ -1,12 +1,13 @@
 "use client"
 
-import { memo } from "react"
+import { memo, useState, useEffect, useRef } from "react"
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react"
 import { cn } from "@/lib/utils"
 import {
   IconBrandMeta, IconBell, IconBrandGoogleDrive, IconBrandTiktok,
   IconBrandSnapchat, IconBrandPinterest, IconCalendar,
-  IconBrandSlack, IconTable, IconBolt, IconPlayerPlay, IconTrash,
+  IconBrandSlack, IconTable, IconBolt, IconPlayerPlay,
+  IconDots, IconTrash,
 } from "@tabler/icons-react"
 import type { AppId, NodeKind, NodeStatus } from "@/lib/workflow-types"
 
@@ -68,6 +69,20 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
   const badge   = KIND_BADGE[data.kind]
   const appCls  = data.appId ? (APP_COLORS[data.appId] ?? "bg-muted text-muted-foreground") : "bg-muted/60 text-muted-foreground/50"
 
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    function onDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Element)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", onDown)
+    return () => document.removeEventListener("mousedown", onDown)
+  }, [menuOpen])
+
   return (
     <div className="relative group">
       <div
@@ -83,7 +98,7 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
         <Handle type="source" position={Position.Bottom} className="!border-0 !bg-transparent !size-0" />
 
         <div className="p-4">
-          {/* Header row: step + badge + status */}
+          {/* Header row: step + badge + status dot + dots menu */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="size-5 rounded-full bg-[#F3F4F6] dark:bg-muted flex items-center justify-center text-[10px] font-bold text-[#6B7280] dark:text-muted-foreground shrink-0">
@@ -93,11 +108,43 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
                 {badge.label}
               </span>
             </div>
-            <span className={cn(
-              "size-2.5 rounded-full shrink-0",
-              data.status === "configured" ? "bg-emerald-500" :
-              data.status === "error"      ? "bg-red-500"     : "bg-amber-400"
-            )} />
+
+            <div className="flex items-center gap-1.5">
+              {/* 3-dot menu — visible on hover */}
+              {data.onDelete && (
+                <div className="relative" ref={menuRef}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
+                    className={cn(
+                      "nodrag nopan size-6 rounded-md flex items-center justify-center transition-colors",
+                      menuOpen
+                        ? "bg-muted text-foreground"
+                        : "opacity-0 group-hover:opacity-100 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    <IconDots className="size-3.5" />
+                  </button>
+
+                  {menuOpen && (
+                    <div className="nodrag nopan absolute right-0 top-full mt-1 z-50 bg-white dark:bg-card border border-border rounded-xl shadow-lg overflow-hidden min-w-[130px]">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen(false); data.onDelete!(id) }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                      >
+                        <IconTrash className="size-4" />
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <span className={cn(
+                "size-2.5 rounded-full shrink-0",
+                data.status === "configured" ? "bg-emerald-500" :
+                data.status === "error"      ? "bg-red-500"     : "bg-amber-400"
+              )} />
+            </div>
           </div>
 
           {/* App identity */}
@@ -123,7 +170,7 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
             </div>
           </div>
 
-          {/* Tags (only when configured) */}
+          {/* Tags */}
           {!isEmpty && data.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
               {data.tags.map((tag, i) => (
@@ -135,21 +182,6 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
           )}
         </div>
       </div>
-
-      {/* Delete button — appears on hover, floats to the right */}
-      {data.onDelete && (
-        <button
-          onClick={(e) => { e.stopPropagation(); data.onDelete!(id) }}
-          className="nodrag nopan absolute top-1/2 -translate-y-1/2 left-[calc(100%+10px)]
-                     hidden group-hover:flex items-center gap-2 px-3 py-2
-                     bg-white dark:bg-card border border-border rounded-xl shadow-md
-                     text-red-500 text-[13px] font-medium hover:bg-red-50 dark:hover:bg-red-950/20
-                     transition-colors whitespace-nowrap z-10"
-        >
-          <IconTrash className="size-4" />
-          Delete
-        </button>
-      )}
     </div>
   )
 })
