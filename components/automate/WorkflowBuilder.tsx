@@ -1,20 +1,161 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   IconArrowLeft, IconDeviceFloppy, IconPlayerPlay,
   IconEye, IconHistory, IconBell, IconDots,
   IconLoader2, IconCheck, IconX, IconBolt,
-  IconClock, IconShieldCheck,
+  IconClock, IconShieldCheck, IconSearch,
+  IconBrandMeta, IconBrandTiktok, IconBrandSnapchat,
+  IconBrandPinterest, IconBrandSlack, IconBrandGoogleDrive,
+  IconTable, IconCalendar,
 } from "@tabler/icons-react"
 import { WorkflowCanvas, type ClickPos } from "./WorkflowCanvas"
 import { TriggerConfigPanel } from "./TriggerConfigPanel"
 import { ActionConfigPanel } from "./ActionConfigPanel"
 import type {
-  WorkflowStep, TriggerConfig, ActionConfig, Workflow,
+  WorkflowStep, TriggerConfig, ActionConfig, Workflow, AppId,
 } from "@/lib/workflow-types"
+
+// ─── Trigger app picker data ──────────────────────────────────────────────────
+
+const TRIGGER_APPS: {
+  appId: AppId
+  name: string
+  desc: string
+  Icon: React.ElementType
+  iconBg: string
+  iconFg: string
+}[] = [
+  { appId: "meta",         name: "Meta",          desc: "Meta Ads is a secure partner with AdLauncher",            Icon: IconBrandMeta,        iconBg: "#1877F2", iconFg: "#fff" },
+  { appId: "tiktok",       name: "TikTok Ads",    desc: "Monitor TikTok ad performance and launch automations",    Icon: IconBrandTiktok,      iconBg: "#010101", iconFg: "#fff" },
+  { appId: "schedule",     name: "Scheduled",     desc: "Run your automation on a recurring schedule",             Icon: IconCalendar,         iconBg: "#6366F1", iconFg: "#fff" },
+  { appId: "google_drive", name: "Google Drive",  desc: "Google Drive is a secure partner with AdLauncher",        Icon: IconBrandGoogleDrive, iconBg: "#34A853", iconFg: "#fff" },
+  { appId: "sheets",       name: "Google Sheets", desc: "Share your Google Sheet with our services",               Icon: IconTable,            iconBg: "#0F9D58", iconFg: "#fff" },
+  { appId: "slack",        name: "Slack",         desc: "Connect Slack to trigger automations from messages",      Icon: IconBrandSlack,       iconBg: "#4A154B", iconFg: "#fff" },
+  { appId: "snapchat",     name: "Snapchat",      desc: "Monitor Snapchat ad performance and automations",         Icon: IconBrandSnapchat,    iconBg: "#FFFC00", iconFg: "#000" },
+  { appId: "pinterest",    name: "Pinterest",     desc: "Monitor Pinterest ad performance and automations",        Icon: IconBrandPinterest,   iconBg: "#E60023", iconFg: "#fff" },
+]
+
+function defaultTriggerForApp(appId: AppId): TriggerConfig {
+  switch (appId) {
+    case "meta":
+      return {
+        appId: "meta",
+        event: "performance_monitoring",
+        monitoringLevel: "campaign",
+        campaignFilter: "all",
+        metricConditions: [{ metric: "spend", operator: "decreases_by", value: 20, unit: "%" }],
+        comparisonWindow: "day_over_day",
+        checkFrequency: "daily",
+      }
+    case "schedule":
+      return { appId: "schedule", event: "schedule", checkFrequency: "daily", scheduleTime: "09:00" }
+    case "google_drive":
+      return { appId: "google_drive", event: "new_drive_folder", checkFrequency: "daily" }
+    default:
+      return { appId, event: "performance_monitoring", checkFrequency: "daily" }
+  }
+}
+
+// ─── App Picker Modal ─────────────────────────────────────────────────────────
+
+function AppPickerModal({
+  onPick,
+  onClose,
+}: {
+  onPick: (appId: AppId) => void
+  onClose: () => void
+}) {
+  const [query, setQuery] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  const filtered = TRIGGER_APPS.filter(a =>
+    a.name.toLowerCase().includes(query.toLowerCase()) ||
+    a.desc.toLowerCase().includes(query.toLowerCase())
+  )
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-card border border-border rounded-2xl shadow-2xl w-[620px] max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between p-6 pb-4 shrink-0">
+          <div>
+            <h2 className="text-[17px] font-bold text-foreground">Choose an app</h2>
+            <p className="text-[13px] text-muted-foreground mt-0.5">
+              Select the app you want to use for this trigger
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="size-8 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <IconX className="size-4" />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-6 pb-4 shrink-0">
+          <div className="flex items-center gap-2.5 h-10 px-3.5 bg-muted/50 border border-border/60 rounded-xl">
+            <IconSearch className="size-4 text-muted-foreground shrink-0" />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search apps..."
+              className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/50"
+            />
+          </div>
+        </div>
+
+        {/* Grid */}
+        <div className="flex-1 overflow-y-auto px-6 pb-6">
+          {filtered.length === 0 ? (
+            <p className="text-center text-[13px] text-muted-foreground py-8">No apps found.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {filtered.map(app => {
+                const AppIcon = app.Icon
+                return (
+                  <button
+                    key={app.appId}
+                    onClick={() => { onPick(app.appId); onClose() }}
+                    className="flex items-center gap-3.5 p-3.5 border border-border/60 rounded-xl hover:border-primary/40 hover:bg-primary/5 transition-colors text-left group"
+                  >
+                    <div
+                      className="size-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm"
+                      style={{ backgroundColor: app.iconBg }}
+                    >
+                      <AppIcon className="size-6" style={{ color: app.iconFg }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
+                        {app.name}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                        {app.desc}
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── Default configs ──────────────────────────────────────────────────────────
 
@@ -42,7 +183,7 @@ function defaultAction(): ActionConfig {
   }
 }
 
-// ─── Add-step contextual popup ────────────────────────────────────────────────
+// ─── Add-action contextual popup ──────────────────────────────────────────────
 
 const ACTION_CHOICES = [
   { id: "send_notification", label: "Send Notification", icon: "🔔", appId: "notification" as const },
@@ -96,13 +237,12 @@ function AddStepPopup({ x, y, onAdd, onClose }: {
   const [view, setView] = useState<"type" | "action">("type")
   const ref = useRef<HTMLDivElement>(null)
 
-  // Clamp so popup stays within viewport
   const left = Math.min(Math.max(x - POPUP_WIDTH / 2, 8), window.innerWidth - POPUP_WIDTH - 8)
   const top  = Math.min(y, window.innerHeight - 320)
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+      if (ref.current && !ref.current.contains(e.target as Element)) onClose()
     }
     document.addEventListener("mousedown", onDown)
     return () => document.removeEventListener("mousedown", onDown)
@@ -117,10 +257,7 @@ function AddStepPopup({ x, y, onAdd, onClose }: {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         {view === "action" ? (
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setView("type")}
-              className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
-            >
+            <button onClick={() => setView("type")} className="p-1 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
               <IconArrowLeft className="size-3.5" />
             </button>
             <p className="text-sm font-semibold">Choose an action</p>
@@ -269,28 +406,55 @@ type AddingAt = { index: number; x: number; y: number } | null
 export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
   const [name, setName] = useState(initialWorkflow?.name ?? "Untitled Zap")
   const [steps, setSteps] = useState<WorkflowStep[]>(
-    initialWorkflow?.steps ?? [
-      { id: "step-1", kind: "trigger", status: "incomplete" },
-      { id: "step-2", kind: "action",  status: "incomplete" },
-    ]
+    // New workflows start empty; templates/saved workflows start with their steps
+    initialWorkflow?.steps ?? []
   )
-  const [selectedId, setSelectedId] = useState<string | null>("step-1")
-  const [addingAt,   setAddingAt]   = useState<AddingAt>(null)
-  const [saving,     setSaving]     = useState(false)
-  const [saved,      setSaved]      = useState(false)
+  const [selectedId,         setSelectedId]         = useState<string | null>(null)
+  const [addingAt,           setAddingAt]           = useState<AddingAt>(null)
+  const [choosingAppForStep, setChoosingAppForStep] = useState<string | null>(null)
+  const [saving,             setSaving]             = useState(false)
+  const [saved,              setSaved]              = useState(false)
 
   const selectedStep = steps.find(s => s.id === selectedId) ?? null
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  const handleSelectStep = useCallback((id: string) => setSelectedId(id), [])
+  // Clicking a node: empty trigger → open app picker; configured → open panel
+  const handleSelectStep = useCallback((id: string) => {
+    const step = steps.find(s => s.id === id)
+    if (!step) return
+    if (step.kind === "trigger" && !step.triggerConfig?.appId) {
+      setChoosingAppForStep(id)
+      return
+    }
+    setSelectedId(id)
+  }, [steps])
 
+  // Empty canvas "Add Trigger" button → add 1 trigger node (user clicks node to pick app)
+  const handleAddFirst = useCallback(() => {
+    const newId = `step-${Date.now()}`
+    setSteps([{ id: newId, kind: "trigger", status: "incomplete" }])
+    setSelectedId(null)
+  }, [])
+
+  // + buttons between/below nodes → open AddStepPopup
   const handleAddStep = useCallback((afterIndex: number, pos: ClickPos) => {
     setAddingAt({ index: afterIndex, x: pos.x, y: pos.y })
   }, [])
 
-  const handleAddFirst = useCallback(() => {
-    setAddingAt({ index: 0, x: window.innerWidth / 2, y: window.innerHeight / 2 - 60 })
+  // User chose an app from the app picker
+  const handleAppChosen = useCallback((stepId: string, appId: AppId) => {
+    const config = defaultTriggerForApp(appId)
+    setSteps(prev => prev.map(s =>
+      s.id === stepId ? { ...s, triggerConfig: config, status: "configured" } : s
+    ))
+    setChoosingAppForStep(null)
+    setSelectedId(stepId)
+  }, [])
+
+  const handleDeleteStep = useCallback((stepId: string) => {
+    setSteps(prev => prev.filter(s => s.id !== stepId))
+    setSelectedId(prev => prev === stepId ? null : prev)
   }, [])
 
   const handleAddChoice = useCallback((choice: typeof ACTION_CHOICES[0]) => {
@@ -316,11 +480,6 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
     setSelectedId(newStep.id)
     setAddingAt(null)
   }, [addingAt])
-
-  const handleDeleteStep = useCallback((stepId: string) => {
-    setSteps(prev => prev.filter(s => s.id !== stepId))
-    setSelectedId(prev => prev === stepId ? null : prev)
-  }, [])
 
   const handleUpdateTrigger = useCallback((stepId: string, config: TriggerConfig) => {
     setSteps(prev => prev.map(s => s.id === stepId
@@ -373,7 +532,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas */}
         <div className="flex-1 overflow-hidden relative">
-          {!adAccountName && (
+          {!adAccountName && steps.length > 0 && (
             <div className="absolute top-4 left-4 z-10 bg-white dark:bg-card border border-border rounded-xl px-4 py-3 shadow-md max-w-[230px]">
               <p className="text-[12px] text-muted-foreground leading-5">
                 No Meta ad accounts connected.<br />
@@ -422,6 +581,14 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
           y={addingAt.y}
           onAdd={handleAddChoice}
           onClose={() => setAddingAt(null)}
+        />
+      )}
+
+      {/* App picker modal (trigger app selection) */}
+      {choosingAppForStep !== null && (
+        <AppPickerModal
+          onPick={appId => handleAppChosen(choosingAppForStep, appId)}
+          onClose={() => setChoosingAppForStep(null)}
         />
       )}
     </div>

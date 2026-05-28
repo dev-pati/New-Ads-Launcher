@@ -8,7 +8,7 @@ import {
   BaseEdge, EdgeLabelRenderer, getStraightPath, type EdgeProps,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { IconPlus } from "@tabler/icons-react"
+import { IconPlus, IconBolt } from "@tabler/icons-react"
 import { WorkflowNodeComponent, type WorkflowNodeData } from "./WorkflowNode"
 import type { WorkflowStep } from "@/lib/workflow-types"
 
@@ -242,16 +242,31 @@ export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep,
         />
       </ReactFlow>
 
-      {/* "Add first step" CTA when canvas is empty */}
+      {/* "Build your automation" empty state */}
       {steps.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <button
-            onClick={onAddFirst}
-            className="pointer-events-auto flex items-center gap-2 h-10 px-5 rounded-2xl bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 transition-colors shadow-lg"
-          >
-            <IconPlus className="size-4" />
-            Add Trigger
-          </button>
+          <div className="flex flex-col items-center gap-5 text-center max-w-[340px] pointer-events-auto">
+            <div className="relative">
+              <div className="size-24 rounded-3xl bg-[#2563EB]/10 flex items-center justify-center">
+                <div className="size-16 rounded-2xl bg-[#2563EB] flex items-center justify-center shadow-lg">
+                  <IconBolt className="size-8 text-white" />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <h2 className="text-[20px] font-bold text-foreground">Build your automation</h2>
+              <p className="text-[13px] text-muted-foreground leading-relaxed">
+                Start by adding a trigger — the event that kicks off your automation workflow.
+              </p>
+            </div>
+            <button
+              onClick={onAddFirst}
+              className="flex items-center gap-2 h-10 px-6 rounded-2xl bg-[#2563EB] text-white font-semibold text-sm hover:bg-[#1D4ED8] transition-colors shadow-md"
+            >
+              <IconPlus className="size-4" />
+              Add Trigger
+            </button>
+          </div>
         </div>
       )}
     </div>
