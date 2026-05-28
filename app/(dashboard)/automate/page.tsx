@@ -938,12 +938,6 @@ export default function AutomatePage() {
   }
 
   const useTemplate = (tpl: typeof TEMPLATES[0]) => {
-    if ((tpl as any).comingSoon) return
-    if ((tpl as any).fbLive) {
-      setFbRuleTemplate(tpl)
-      setFbRuleOpen(true)
-      return
-    }
     router.push(`/automate/new?template=${tpl.id}`)
   }
 
@@ -1146,20 +1140,7 @@ export default function AutomatePage() {
                 const isLive = !!(t as any).fbLive
                 const isSoon = !!(t as any).comingSoon
                 return (
-                  <div key={t.id} className={cn(
-                    "border rounded-xl p-4 bg-card transition-shadow relative",
-                    isLive ? "hover:shadow-sm" : isSoon ? "opacity-70" : "hover:shadow-sm"
-                  )}>
-                    {isLive && (
-                      <span className="absolute top-3 right-3 flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400 font-medium">
-                        <span className="size-1.5 rounded-full bg-green-500 inline-block animate-pulse" />Live on Meta
-                      </span>
-                    )}
-                    {isSoon && (
-                      <span className="absolute top-3 right-3 text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
-                        Coming Soon
-                      </span>
-                    )}
+                  <div key={t.id} className="border rounded-xl p-4 bg-card hover:shadow-sm transition-shadow relative cursor-pointer" onClick={() => useTemplate(t)}>
                     <div className="flex items-start gap-3 mb-3">
                       <div className={cn("size-9 rounded-lg flex items-center justify-center shrink-0", t.iconBg)}>
                         <Icon className={cn("size-4.5", t.iconColor)} />
@@ -1177,20 +1158,9 @@ export default function AutomatePage() {
                     <p className="text-xs text-muted-foreground leading-relaxed mb-3">{t.description}</p>
                     <div className="flex items-center justify-between">
                       <AppChain chain={(t as any).appChain ?? ["meta", "meta"]} steps={t.steps} />
-                      {isSoon ? (
-                        <Button variant="outline" size="sm" className="h-7 text-xs" disabled>
-                          Use
-                        </Button>
-                      ) : (
-                        <Button
-                          variant={isLive ? "default" : "outline"}
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => useTemplate(t)}
-                        >
-                          {isLive ? "Use →" : "Use"}
-                        </Button>
-                      )}
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={e => { e.stopPropagation(); useTemplate(t) }}>
+                        Use
+                      </Button>
                     </div>
                   </div>
                 )

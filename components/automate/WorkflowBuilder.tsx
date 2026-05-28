@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   IconArrowLeft, IconDeviceFloppy, IconPlayerPlay,
-  IconEye, IconHistory, IconBell, IconDots, IconChevronDown,
-  IconLoader2, IconCheck, IconX, IconCirclePlus, IconBolt,
+  IconEye, IconHistory, IconBell, IconDots,
+  IconLoader2, IconCheck, IconX, IconBolt,
   IconClock, IconShieldCheck,
 } from "@tabler/icons-react"
 import { WorkflowCanvas } from "./WorkflowCanvas"
@@ -150,12 +150,11 @@ function AddStepModal({ onAdd, onClose }: {
 // ─── Top bar ──────────────────────────────────────────────────────────────────
 
 function TopBar({
-  name, onNameChange, adAccountName, saving, saved,
+  name, onNameChange, saving, saved,
   onSave, onRun, onPreview, onHistory,
 }: {
   name: string
   onNameChange: (v: string) => void
-  adAccountName?: string
   saving: boolean
   saved: boolean
   onSave: () => void
@@ -239,16 +238,6 @@ function TopBar({
         </div>
       </div>
 
-      {/* Row 2: Account selector */}
-      <div className="px-4 pb-3">
-        <button className="flex items-center gap-2 h-9 px-3 rounded-lg border border-border/70 bg-[#F9FAFB] dark:bg-muted/40 text-[13px] font-medium text-foreground/80 hover:bg-muted transition-colors">
-          <div className="size-5 rounded-full bg-[#1877F2] flex items-center justify-center shrink-0">
-            <span className="text-[9px] font-black text-white">∞</span>
-          </div>
-          <span className="max-w-[220px] truncate">{adAccountName ?? "Select ad account"}</span>
-          <IconChevronDown className="size-3.5 text-muted-foreground ml-1" />
-        </button>
-      </div>
     </div>
   )
 }
@@ -346,7 +335,6 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
       <TopBar
         name={name}
         onNameChange={setName}
-        adAccountName={adAccountName}
         saving={saving}
         saved={saved}
         onSave={handleSave}
