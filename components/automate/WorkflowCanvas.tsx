@@ -121,7 +121,7 @@ export function stepsToFlow(
       tags.push(freqLabel)
     }
 
-    if (!isT && ac) {
+    if (!isT && ac && ac.appId === "notification") {
       const n = ac.notification
       if (n) {
         subtitle = `${n.via === "email" ? "Email" : n.via === "slack" ? "Slack" : "Email + Slack"} · ${n.emailRecipients.length === 0 ? "no recipients" : n.emailRecipients.length + " recipient(s)"}`
