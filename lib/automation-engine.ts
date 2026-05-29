@@ -48,11 +48,23 @@ async function execMetaAction(
   const ev = action.event
 
   switch (ev) {
+    // ── Resolve target IDs from template expression or static config ─────────
+    // Supports {{trigger.qualifyingAdIds}}, {{trigger.qualifyingCampaignIds}}, etc.
+    function resolveTargetIds(a: ActionConfig & Record<string, any>, p: TriggerPayload): string[] {
+      const expr = a.actionTargetExpression ?? ""
+      if (expr && expr.includes("{{trigger.qualifying")) return p.entityIds ?? []
+      if (expr && !expr.startsWith("{{")) {
+        // Raw comma-separated IDs
+        return expr.split(",").map((s: string) => s.trim()).filter(Boolean)
+      }
+      return a.targetIds?.length ? a.targetIds : p.entityIds?.length ? p.entityIds : (a.targetId ? [a.targetId] : [])
+    }
+
     // ── Pause ────────────────────────────────────────────────────────────────
     case "pause_ad":
     case "pause_campaign":
     case "pause_adset": {
-      const ids = action.targetIds?.length ? action.targetIds : payload.entityIds?.length ? payload.entityIds : (action.targetId ? [action.targetId] : [])
+      const ids = resolveTargetIds(action, payload)
       if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
       const results = await Promise.all(ids.map(async id => {
         const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
@@ -71,7 +83,7 @@ async function execMetaAction(
     case "enable_ad":
     case "enable_campaign":
     case "enable_adset": {
-      const ids = action.targetIds?.length ? action.targetIds : payload.entityIds?.length ? payload.entityIds : (action.targetId ? [action.targetId] : [])
+      const ids = resolveTargetIds(action, payload)
       if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
       const results = await Promise.all(ids.map(async id => {
         const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
@@ -90,7 +102,7 @@ async function execMetaAction(
     case "increase_budget":
     case "decrease_budget":
     case "change_budget": {
-      const ids = action.targetIds?.length ? action.targetIds : payload.entityIds?.length ? payload.entityIds : (action.targetId ? [action.targetId] : [])
+      const ids = resolveTargetIds(action, payload)
       if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
 
       const budgetField = action.budgetType === "lifetime" ? "lifetime_budget" : "daily_budget"
@@ -136,7 +148,9 @@ async function execMetaAction(
     case "duplicate_ad":
     case "duplicate_adset":
     case "duplicate_campaign": {
-      const ids = action.targetIds?.length ? action.targetIds : payload.entityIds?.length ? payload.entityIds : (action.targetId ?? action.templateAdSetId ? [action.targetId ?? action.templateAdSetId!] : [])
+      const ids = resolveTargetIds(action, payload).length
+        ? resolveTargetIds(action, payload)
+        : (action.targetId ?? action.templateAdSetId ? [action.targetId ?? action.templateAdSetId!] : [])
       if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
 
       const copies     = action.duplicateCopies ?? 1

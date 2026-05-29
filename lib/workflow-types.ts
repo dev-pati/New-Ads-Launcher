@@ -158,9 +158,17 @@ export interface ActionConfig {
   budgetAmount?: number
   budgetAmountType?: "percentage" | "absolute"
   budgetType?: "daily" | "lifetime"
+  // Meta — target expression (template variable from trigger, e.g. {{trigger.qualifyingAdIds}})
+  actionTargetExpression?: string
   // Meta — duplicate
   duplicateCopies?: number
   duplicateStatus?: "PAUSED" | "ACTIVE" | "INHERITED_FROM_SOURCE"
+  duplicatePauseOriginal?: boolean
+  duplicateCooldownEnabled?: boolean
+  duplicateAutoSplit?: boolean
+  duplicateNameTemplate?: string
+  duplicateTargetAdsets?: string[]
+  duplicateTargetCampaignId?: string
   // Meta — launch ad
   launchAdAccountId?: string
   launchCampaignFilter?: string

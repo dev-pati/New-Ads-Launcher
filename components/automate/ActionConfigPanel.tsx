@@ -297,13 +297,74 @@ const META_DUPLICATE_EVENTS    = ["duplicate_ad","duplicate_adset","duplicate_ca
 const META_BUDGET_EVENTS       = ["increase_budget","decrease_budget","change_budget"]
 const ALL_META_EVENTS          = [...META_PAUSE_ENABLE_EVENTS, ...META_DUPLICATE_EVENTS, ...META_BUDGET_EVENTS, "launch_ad"]
 
+// Helper: trigger variable chips
+const TRIGGER_VARS = [
+  { key: "{{trigger.qualifyingAdIds}}",       label: "Ad IDs from trigger" },
+  { key: "{{trigger.qualifyingAdSetIds}}",    label: "Ad Set IDs from trigger" },
+  { key: "{{trigger.qualifyingCampaignIds}}", label: "Campaign IDs from trigger" },
+]
+const NAME_TEMPLATE_VARS = ["{{original_name}}", "{{date}}", "{{adset_name}}", "{{campaign_name}}"]
+
+function TriggerVarInput({ label, value, onChange, placeholder, description, vars = TRIGGER_VARS }: {
+  label: string; value: string; onChange: (v: string) => void
+  placeholder?: string; description?: string
+  vars?: { key: string; label: string }[]
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[12px] font-semibold text-foreground/80">{label} <span className="text-red-500">*</span></label>
+      <input type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder ?? "Use data pill from trigger..."}
+        className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+      />
+      <div className="flex flex-wrap gap-1">
+        {vars.map(v => (
+          <button key={v.key} type="button"
+            onClick={() => onChange(v.key)}
+            className="h-5 px-2 rounded-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[10px] font-medium transition-colors">
+            {v.key}
+          </button>
+        ))}
+      </div>
+      {description && <p className="text-[11px] text-muted-foreground">{description}</p>}
+    </div>
+  )
+}
+
+function Toggle({ checked, onChange, label, description }: { checked: boolean; onChange: (v: boolean) => void; label: string; description?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-[12px] font-semibold text-foreground/80">{label}</p>
+        {description && <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>}
+      </div>
+      <button type="button" onClick={() => onChange(!checked)}
+        className={cn("relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+          checked ? "bg-primary" : "bg-muted-foreground/30")}>
+        <span className={cn("pointer-events-none inline-block size-4 rounded-full bg-white shadow transform transition-transform duration-200",
+          checked ? "translate-x-4" : "translate-x-0")} />
+      </button>
+    </div>
+  )
+}
+
 function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange: (c: ActionConfig) => void }) {
   const ev = config.event
   const isPauseEnable = META_PAUSE_ENABLE_EVENTS.includes(ev)
   const isDuplicate   = META_DUPLICATE_EVENTS.includes(ev)
   const isBudget      = META_BUDGET_EVENTS.includes(ev)
 
-  const levelLabel = ev.includes("campaign") ? "Campaign" : ev.includes("adset") || ev.includes("ad_set") ? "Ad Set" : "Ad"
+  // Which trigger variable to suggest based on action level
+  const triggerVar =
+    ev.includes("campaign") ? "{{trigger.qualifyingCampaignIds}}" :
+    ev.includes("adset")    ? "{{trigger.qualifyingAdSetIds}}" :
+                              "{{trigger.qualifyingAdIds}}"
+
+  const targetLabel =
+    ev.includes("campaign") ? "Campaigns" :
+    ev.includes("adset")    ? "Ad Sets" : "Ads"
 
   return (
     <div className="p-5 space-y-4">
@@ -324,124 +385,258 @@ function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange:
           { value: "decrease_budget",    label: "Decrease Budget" },
           { value: "change_budget",      label: "Change Budget" },
         ]}
-        onChange={v => onChange({ ...config, event: v as ActionConfig["event"] })}
+        onChange={v => onChange({ ...config, event: v as ActionConfig["event"], actionTargetExpression: undefined })}
       />
 
-      {/* Target filter */}
-      {(isPauseEnable || isDuplicate || isBudget) && (
-        <div className="space-y-3 pt-1 border-t border-border/60">
-          <p className="text-[12px] font-semibold text-foreground/80">Target {levelLabel}(s)</p>
+      <div className="pt-1 border-t border-border/60 space-y-4">
 
-          <SelectField
-            label="Target Filter" value={config.targetFilter ?? "all"}
-            options={[
-              { value: "all",           label: `All active ${levelLabel.toLowerCase()}s` },
-              { value: "name_contains", label: "Name contains..." },
-              { value: "specific",      label: "Specific IDs" },
-            ]}
-            onChange={v => onChange({ ...config, targetFilter: v as any })}
+        {/* ── Pause / Enable ─────────────────────────────────────────── */}
+        {isPauseEnable && (
+          <TriggerVarInput
+            label={`${targetLabel} to ${ev.startsWith("pause") ? "Pause" : "Enable"}`}
+            value={config.actionTargetExpression ?? triggerVar}
+            onChange={v => onChange({ ...config, actionTargetExpression: v })}
+            vars={[{ key: triggerVar, label: `IDs from trigger` }]}
+            description={`Use ${triggerVar} to pass entities from the trigger. Or enter specific comma-separated IDs.`}
           />
+        )}
 
-          {config.targetFilter === "name_contains" && (
-            <input type="text" placeholder={`e.g., LAB, Scaling`}
-              value={config.targetFilterValue ?? ""}
-              onChange={e => onChange({ ...config, targetFilterValue: e.target.value })}
-              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+        {/* ── Duplicate Ad ─────────────────────────────────────────── */}
+        {ev === "duplicate_ad" && (
+          <>
+            <TriggerVarInput
+              label="Source Ads"
+              value={config.actionTargetExpression ?? "{{trigger.qualifyingAdIds}}"}
+              onChange={v => onChange({ ...config, actionTargetExpression: v })}
+              vars={[{ key: "{{trigger.qualifyingAdIds}}", label: "Ads from trigger" }]}
+              description="Use {{trigger.qualifyingAdIds}} to duplicate ads from the Performance Threshold trigger"
             />
-          )}
 
-          {config.targetFilter === "specific" && (
-            <textarea placeholder="One ID per line"
-              value={(config.targetIds ?? []).join("\n")}
-              onChange={e => onChange({ ...config, targetIds: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })}
-              rows={3}
-              className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono resize-none placeholder:text-muted-foreground/60"
+            <SelectField
+              label="Target Ad Sets" value={config.targetFilter ?? "all"}
+              options={[
+                { value: "all",           label: "Same ad set as original" },
+                { value: "name_contains", label: "Ad set name contains..." },
+                { value: "specific",      label: "Specific ad set IDs" },
+              ]}
+              onChange={v => onChange({ ...config, targetFilter: v as any })}
+              description="Where to place the duplicated ads"
             />
-          )}
-        </div>
-      )}
 
-      {/* Budget specific */}
-      {isBudget && (
-        <div className="space-y-3">
-          <SelectField
-            label="Operation" value={config.budgetOperation ?? (ev === "increase_budget" ? "increase" : ev === "decrease_budget" ? "decrease" : "increase")}
-            options={[
-              { value: "increase", label: "↑ Increase" },
-              { value: "decrease", label: "↓ Decrease" },
-              { value: "set",      label: "= Set to" },
-            ]}
-            onChange={v => onChange({ ...config, budgetOperation: v as any })}
-            required
-          />
-          <div className="flex gap-3">
-            <div className="flex-1 space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Amount <span className="text-red-500">*</span></label>
-              <input type="number" min={0}
-                value={config.budgetAmount ?? ""}
-                onChange={e => onChange({ ...config, budgetAmount: parseFloat(e.target.value) || 0 })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            {config.targetFilter === "name_contains" && (
+              <input type="text" placeholder="e.g., US || Broad"
+                value={config.targetFilterValue ?? ""}
+                onChange={e => onChange({ ...config, targetFilterValue: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
               />
-            </div>
-            <div className="w-32 space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Type</label>
-              <div className="relative">
-                <select value={config.budgetAmountType ?? "percentage"}
-                  onChange={e => onChange({ ...config, budgetAmountType: e.target.value as any })}
-                  className="w-full h-9 pl-2 pr-6 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none">
-                  <option value="percentage">%</option>
-                  <option value="absolute">$</option>
-                </select>
-                <IconChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
+            )}
+            {config.targetFilter === "specific" && (
+              <textarea placeholder="One ad set ID per line"
+                value={(config.duplicateTargetAdsets ?? []).join("\n")}
+                onChange={e => onChange({ ...config, duplicateTargetAdsets: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })}
+                rows={2}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono resize-none"
+              />
+            )}
+
+            <SelectField
+              label="Duplicated Ad Status" value={config.duplicateStatus ?? "ACTIVE"}
+              options={[
+                { value: "ACTIVE", label: "Active" },
+                { value: "PAUSED", label: "Paused" },
+              ]}
+              onChange={v => onChange({ ...config, duplicateStatus: v as any })}
+              description="Status of the newly created duplicate ads"
+            />
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">New Name (optional)</label>
+              <input type="text" placeholder="e.g. {{original_name}}_{{date}}"
+                value={config.duplicateNameTemplate ?? ""}
+                onChange={e => onChange({ ...config, duplicateNameTemplate: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              />
+              <div className="flex flex-wrap gap-1">
+                {NAME_TEMPLATE_VARS.map(v => (
+                  <button key={v} type="button"
+                    onClick={() => onChange({ ...config, duplicateNameTemplate: (config.duplicateNameTemplate ?? "") + v })}
+                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+                    {v}
+                  </button>
+                ))}
               </div>
             </div>
-          </div>
-          <SelectField
-            label="Budget Type" value={config.budgetType ?? "daily"}
-            options={[{ value: "daily", label: "Daily Budget" }, { value: "lifetime", label: "Lifetime Budget" }]}
-            onChange={v => onChange({ ...config, budgetType: v as any })}
-          />
-        </div>
-      )}
 
-      {/* Duplicate specific */}
-      {isDuplicate && (
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Number of Copies</label>
-            <input type="number" min={1} max={10}
-              value={config.duplicateCopies ?? 1}
-              onChange={e => onChange({ ...config, duplicateCopies: parseInt(e.target.value) || 1 })}
-              className="w-20 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+            <div className="space-y-3 pt-1">
+              <Toggle
+                checked={config.duplicatePauseOriginal ?? false}
+                onChange={v => onChange({ ...config, duplicatePauseOriginal: v })}
+                label="Pause original ads after duplication"
+              />
+              <Toggle
+                checked={config.duplicateCooldownEnabled ?? false}
+                onChange={v => onChange({ ...config, duplicateCooldownEnabled: v })}
+                label="Enable Cooldown Period"
+                description="Prevent duplicating the same ad more than once in a period"
+              />
+              <Toggle
+                checked={config.duplicateAutoSplit ?? false}
+                onChange={v => onChange({ ...config, duplicateAutoSplit: v })}
+                label="Auto-split ad set when limit reached"
+              />
+            </div>
+          </>
+        )}
+
+        {/* ── Duplicate Ad Set ─────────────────────────────────────── */}
+        {ev === "duplicate_adset" && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Select Ad Set to Duplicate <span className="text-red-500">*</span></label>
+              <input type="text" placeholder="Ad Set ID"
+                value={config.actionTargetExpression ?? ""}
+                onChange={e => onChange({ ...config, actionTargetExpression: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Target Campaign (optional)</label>
+              <input type="text" placeholder="Same campaign (default)"
+                value={config.duplicateTargetCampaignId ?? ""}
+                onChange={e => onChange({ ...config, duplicateTargetCampaignId: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              />
+              <p className="text-[11px] text-muted-foreground">Leave empty to keep the ad set in the same campaign.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">New Name (optional)</label>
+              <input type="text" placeholder="e.g. {{original_name}}_copy"
+                value={config.duplicateNameTemplate ?? ""}
+                onChange={e => onChange({ ...config, duplicateNameTemplate: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              />
+              <div className="flex flex-wrap gap-1">
+                {NAME_TEMPLATE_VARS.map(v => (
+                  <button key={v} type="button"
+                    onClick={() => onChange({ ...config, duplicateNameTemplate: (config.duplicateNameTemplate ?? "") + v })}
+                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* ── Duplicate Campaign ───────────────────────────────────── */}
+        {ev === "duplicate_campaign" && (
+          <>
+            <TriggerVarInput
+              label="Source Campaigns"
+              value={config.actionTargetExpression ?? "{{trigger.qualifyingCampaignIds}}"}
+              onChange={v => onChange({ ...config, actionTargetExpression: v })}
+              vars={[{ key: "{{trigger.qualifyingCampaignIds}}", label: "Campaigns from trigger" }]}
             />
-          </div>
-          <SelectField
-            label="Initial Status" value={config.duplicateStatus ?? "PAUSED"}
-            options={[
-              { value: "PAUSED",                   label: "Paused" },
-              { value: "ACTIVE",                    label: "Active" },
-              { value: "INHERITED_FROM_SOURCE",     label: "Same as original" },
-            ]}
-            onChange={v => onChange({ ...config, duplicateStatus: v as any })}
-          />
-        </div>
-      )}
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">New Name (optional)</label>
+              <input type="text" placeholder="e.g. {{original_name}}_copy"
+                value={config.duplicateNameTemplate ?? ""}
+                onChange={e => onChange({ ...config, duplicateNameTemplate: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              />
+            </div>
+            <SelectField
+              label="Initial Status" value={config.duplicateStatus ?? "PAUSED"}
+              options={[
+                { value: "PAUSED", label: "Paused" },
+                { value: "ACTIVE", label: "Active" },
+                { value: "INHERITED_FROM_SOURCE", label: "Same as original" },
+              ]}
+              onChange={v => onChange({ ...config, duplicateStatus: v as any })}
+            />
+          </>
+        )}
+
+        {/* ── Budget ───────────────────────────────────────────────── */}
+        {isBudget && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Budget Level</label>
+              <div className="relative">
+                <select value={config.targetLevel ?? "adset"}
+                  onChange={e => onChange({ ...config, targetLevel: e.target.value as any })}
+                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none">
+                  <option value="adset">Ad Sets</option>
+                  <option value="campaign">Campaigns</option>
+                </select>
+                <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Modify budgets at the {config.targetLevel === "campaign" ? "campaign" : "ad set"} level</p>
+            </div>
+
+            <TriggerVarInput
+              label={`Target ${config.targetLevel === "campaign" ? "Campaigns" : "Ad Sets"}`}
+              value={config.actionTargetExpression ?? (config.targetLevel === "campaign" ? "{{trigger.qualifyingCampaignIds}}" : "{{trigger.qualifyingAdSetIds}}")}
+              onChange={v => onChange({ ...config, actionTargetExpression: v })}
+              vars={config.targetLevel === "campaign"
+                ? [{ key: "{{trigger.qualifyingCampaignIds}}", label: "Campaigns from trigger" }]
+                : [{ key: "{{trigger.qualifyingAdSetIds}}", label: "Ad Sets from trigger" }]}
+              description="Paste comma-separated IDs or use a trigger variable"
+            />
+
+            <SelectField
+              label="Operation" value={config.budgetOperation ?? (ev === "increase_budget" ? "increase" : ev === "decrease_budget" ? "decrease" : "increase")}
+              options={[
+                { value: "increase", label: "↑ Increase" },
+                { value: "decrease", label: "↓ Decrease" },
+                { value: "set",      label: "= Set to" },
+              ]}
+              onChange={v => onChange({ ...config, budgetOperation: v as any })}
+              required
+            />
+
+            <div className="flex gap-3">
+              <div className="flex-1 space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Amount <span className="text-red-500">*</span></label>
+                <input type="number" min={0}
+                  value={config.budgetAmount ?? ""}
+                  onChange={e => onChange({ ...config, budgetAmount: parseFloat(e.target.value) || 0 })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <div className="w-32 space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Amount Type</label>
+                <div className="relative">
+                  <select value={config.budgetAmountType ?? "percentage"}
+                    onChange={e => onChange({ ...config, budgetAmountType: e.target.value as any })}
+                    className="w-full h-9 pl-2 pr-6 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none">
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="absolute">Dollar ($)</option>
+                  </select>
+                  <IconChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+            </div>
+
+            <SelectField
+              label="Budget Type" value={config.budgetType ?? "daily"}
+              options={[{ value: "daily", label: "Daily Budget" }, { value: "lifetime", label: "Lifetime Budget" }]}
+              onChange={v => onChange({ ...config, budgetType: v as any })}
+              description={`Choose which budget type to modify on the target ${config.targetLevel === "campaign" ? "campaigns" : "ad sets"}`}
+            />
+          </>
+        )}
+
+      </div>
 
       {/* Require approval toggle */}
-      <div className="flex items-center justify-between pt-2 border-t border-border/40">
-        <div>
-          <p className="text-[12px] font-semibold text-foreground/80">Require Approval</p>
-          <p className="text-[11px] text-muted-foreground">Pause before executing this action</p>
-        </div>
-        <button type="button"
-          onClick={() => onChange({ ...config, requireApproval: !config.requireApproval })}
-          className={cn("relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
-            config.requireApproval ? "bg-primary" : "bg-muted-foreground/30"
-          )}>
-          <span className={cn("pointer-events-none inline-block size-4 rounded-full bg-white shadow transform transition-transform duration-200",
-            config.requireApproval ? "translate-x-4" : "translate-x-0"
-          )} />
-        </button>
+      <div className="pt-3 border-t border-border/40">
+        <Toggle
+          checked={config.requireApproval ?? false}
+          onChange={v => onChange({ ...config, requireApproval: v })}
+          label="Require Approval"
+          description="Pause before executing this action"
+        />
       </div>
     </div>
   )
