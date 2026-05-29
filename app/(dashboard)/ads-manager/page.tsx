@@ -1435,8 +1435,26 @@ export default function AdsManagerPage() {
             <tbody>
               {pagedData.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="text-center py-16 text-muted-foreground text-sm">
-                    {search ? "No results match your search" : `No ${tab} found`}
+                  <td colSpan={12} className="py-16">
+                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                      <span className="text-sm">
+                        {search ? `No ${tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"} match "${search}"` : `No ${tab} found`}
+                      </span>
+                      {/* Suggest switching to another tab if it has matching results */}
+                      {search && (
+                        <div className="flex items-center gap-2 flex-wrap justify-center">
+                          {(["campaigns", "adsets", "ads"] as Tab[]).filter(t => t !== tab && (tabMatchCounts[t] ?? 0) > 0).map(t => (
+                            <button
+                              key={t}
+                              onClick={() => switchTab(t)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors font-medium"
+                            >
+                              Found {tabMatchCounts[t]} in {t === "campaigns" ? "Campaigns" : t === "adsets" ? "Ad sets" : "Ads"} →
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : tab === "campaigns" ? (
