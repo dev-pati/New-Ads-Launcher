@@ -345,13 +345,17 @@ export interface Campaign {
 export async function getCampaigns(
   adAccountId: string,
   accessToken: string,
-  datePreset: string = "last_7d"
+  datePreset: string = "last_7d",
+  timeRange?: string
 ): Promise<Campaign[]> {
+  const insightsParam = timeRange
+    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
+    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
   const fields = [
     "id", "name", "status", "effective_status", "objective",
     "daily_budget", "lifetime_budget", "budget_remaining", "spend_cap", "bid_strategy",
     "start_time", "stop_time", "created_time", "updated_time",
-    `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`,
+    insightsParam,
     "adsets.limit(0).summary(true)",
   ].join(",")
 
@@ -394,14 +398,18 @@ export async function getAdSets(
   adAccountId: string,
   accessToken: string,
   campaignId?: string,
-  datePreset: string = "last_7d"
+  datePreset: string = "last_7d",
+  timeRange?: string
 ): Promise<AdSet[]> {
+  const insightsParam = timeRange
+    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
+    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
   const fields = [
     "id", "name", "status", "effective_status", "campaign_id", "campaign{name}",
     "daily_budget", "lifetime_budget", "budget_remaining",
     "optimization_goal", "billing_event", "bid_strategy", "bid_amount",
     "start_time", "end_time", "created_time",
-    `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`,
+    insightsParam,
   ].join(",")
 
   let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
@@ -443,13 +451,17 @@ export async function getAds(
   adAccountId: string,
   accessToken: string,
   adSetId?: string,
-  datePreset: string = "last_7d"
+  datePreset: string = "last_7d",
+  timeRange?: string
 ): Promise<Ad[]> {
+  const insightsParam = timeRange
+    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
+    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
   const fields = [
     "id", "name", "status", "effective_status", "adset_id", "campaign_id",
     "creative{id,name,title,body,image_url,thumbnail_url}",
     "created_time",
-    `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`,
+    insightsParam,
   ].join(",")
 
   let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`

@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const ads = await getCachedFacebookMetadata(
       cacheKey,
       CACHE_TTL,
-      () => getAds(adAccountId, connection.access_token, adSetId || undefined, datePreset)
+      () => getAds(adAccountId, connection.access_token, adSetId || undefined, datePreset, timeRange || undefined)
     )
 
     return NextResponse.json({ ads })
