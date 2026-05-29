@@ -654,7 +654,7 @@ export default function AdsManagerPage() {
   const campaignNameById = useMemo(() => new Map(campaigns.map(c => [c.id, c.name])), [campaigns])
   const adSetNameById    = useMemo(() => new Map(adSets.map(a => [a.id, a.name])), [adSets])
 
-  // Per-tab match counts (used for tab badges when search/filter is active)
+  // Per-tab match counts — only computed for tabs that have loaded data
   const tabMatchCounts = useMemo(() => {
     const q = search.toLowerCase().trim()
     const matchStatus = (item: { effective_status: string }) =>
@@ -662,17 +662,20 @@ export default function AdsManagerPage() {
     const matchText = (item: { name: string; id: string }, extra = "") =>
       !q || item.name.toLowerCase().includes(q) || item.id.includes(q) || extra.toLowerCase().includes(q)
     return {
-      campaigns: campaigns.filter(c => matchStatus(c) && matchText(c)).length,
-      adsets: adSets.filter(a =>
-        matchStatus(a) && matchText(a, campaignNameById.get(a.campaign_id) ?? "")
-      ).length,
-      ads: ads.filter(ad =>
-        matchStatus(ad) && matchText(ad,
-          [campaignNameById.get(ad.campaign_id) ?? "", adSetNameById.get(ad.adset_id) ?? ""].join(" ")
-        )
-      ).length,
+      // null = data not loaded yet (tab never visited) → don't show badge
+      campaigns: campaigns.length > 0 || tab === "campaigns"
+        ? campaigns.filter(c => matchStatus(c) && matchText(c)).length
+        : null,
+      adsets: adSets.length > 0 || tab === "adsets"
+        ? adSets.filter(a => matchStatus(a) && matchText(a, campaignNameById.get(a.campaign_id) ?? "")).length
+        : null,
+      ads: ads.length > 0 || tab === "ads"
+        ? ads.filter(ad => matchStatus(ad) && matchText(ad,
+            [campaignNameById.get(ad.campaign_id) ?? "", adSetNameById.get(ad.adset_id) ?? ""].join(" ")
+          )).length
+        : null,
     }
-  }, [campaigns, adSets, ads, search, statusFilter, campaignNameById, adSetNameById])
+  }, [campaigns, adSets, ads, tab, search, statusFilter, campaignNameById, adSetNameById])
 
   const currentData: (Campaign | AdSet | Ad)[] = useMemo(() => {
     let list: (Campaign | AdSet | Ad)[] = tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads
@@ -792,7 +795,14 @@ export default function AdsManagerPage() {
 
       case "delivery": {
         let budgetRemaining: string | undefined = (row as any).budget_remaining
-        if (tab === "ads") {
+        if (tab === "adsets") {
+          const adset = row as AdSet
+          // CBO adsets have no budget of their own — inherit from parent campaign
+          if (!adset.daily_budget && !adset.lifetime_budget) {
+            const parentCampaign = campaigns.find(c => c.id === adset.campaign_id)
+            budgetRemaining = parentCampaign?.budget_remaining
+          }
+        } else if (tab === "ads") {
           const ad = row as Ad
           const parentAdSet = adSets.find(s => s.id === ad.adset_id)
           const parentCampaign = campaigns.find(c => c.id === ad.campaign_id)
@@ -1128,8 +1138,8 @@ export default function AdsManagerPage() {
                 }
                 <span className="truncate max-w-[110px]">{tabLabel(t)}</span>
 
-                {/* Search/filter match count badge */}
-                {(search || statusFilter !== "all") && (
+                {/* Search/filter match count badge — only when tab has loaded data */}
+                {(search || statusFilter !== "all") && tabMatchCounts[t] !== null && (
                   <span className={cn(
                     "px-1.5 py-0.5 text-[10px] rounded-full font-bold leading-none",
                     tab === t
