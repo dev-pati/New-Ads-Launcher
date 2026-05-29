@@ -305,6 +305,7 @@ export default function InsightsPage() {
   const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
   const [section, setSection] = useState<Section>("top-creatives")
   const [statTab, setStatTab] = useState<StatTab>("all-accounts")
+  const [visitedStatTabs, setVisitedStatTabs] = useState<Set<StatTab>>(() => new Set<StatTab>(["all-accounts"]))
 
   // ── Top Creatives state ───────────────────────────────────────────────
   const [topAds, setTopAds]         = useState<TopAd[]>([])
@@ -595,7 +596,7 @@ export default function InsightsPage() {
                   { id: "reach"          as StatTab, label: "Reach" },
                   { id: "device"         as StatTab, label: "Device" },
                 ]).map(sub => (
-                  <button key={sub.id} onClick={() => setStatTab(sub.id)}
+                  <button key={sub.id} onClick={() => { setStatTab(sub.id); setVisitedStatTabs(prev => new Set([...prev, sub.id])) }}
                     className={cn("flex items-center h-7 px-2.5 rounded-md text-xs w-full transition-colors",
                       statTab === sub.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                     )}>
@@ -1185,30 +1186,43 @@ export default function InsightsPage() {
 
         {section === "statistics" && (
           <div className="flex-1 overflow-auto px-6 py-4">
-            {statTab === "all-accounts" ? (
+            {/* Tabs that don't need an account — always keep mounted */}
+            <div className={statTab !== "all-accounts" ? "hidden" : ""}>
               <AllAccountsView adAccounts={adAccounts || []} />
-            ) : statTab === "upload-stats" ? (
+            </div>
+            <div className={statTab !== "upload-stats" ? "hidden" : ""}>
               <UploadStatsView />
-            ) : !selectedAccountId ? (
+            </div>
+
+            {/* No account guard for account-dependent tabs */}
+            {!selectedAccountId && statTab !== "all-accounts" && statTab !== "upload-stats" && (
               <EmptyState icon={IconAlertCircle} title="No ad account selected" desc="Select an ad account from the sidebar." />
-            ) : statTab === "spend" ? (
-              <SpendView />
-            ) : statTab === "demographic" ? (
-              <DemographicView />
-            ) : statTab === "country" ? (
-              <CountryView />
-            ) : statTab === "ad-history" ? (
-              <AdHistoryView />
-            ) : statTab === "placements" ? (
-              <PlacementsView />
-            ) : statTab === "device" ? (
-              <DeviceView />
-            ) : statTab === "reach" ? (
-              <ReachView />
-            ) : statTab === "creative-audit" ? (
-              <CreativeAuditView />
-            ) : (
-              <PlacementsView />
+            )}
+
+            {/* Account-required tabs: mount once on first visit, stay alive via CSS */}
+            {visitedStatTabs.has("spend") && selectedAccountId && (
+              <div className={statTab !== "spend" ? "hidden" : ""}><SpendView /></div>
+            )}
+            {visitedStatTabs.has("demographic") && selectedAccountId && (
+              <div className={statTab !== "demographic" ? "hidden" : ""}><DemographicView /></div>
+            )}
+            {visitedStatTabs.has("country") && selectedAccountId && (
+              <div className={statTab !== "country" ? "hidden" : ""}><CountryView /></div>
+            )}
+            {visitedStatTabs.has("ad-history") && selectedAccountId && (
+              <div className={statTab !== "ad-history" ? "hidden" : ""}><AdHistoryView /></div>
+            )}
+            {visitedStatTabs.has("placements") && selectedAccountId && (
+              <div className={statTab !== "placements" ? "hidden" : ""}><PlacementsView /></div>
+            )}
+            {visitedStatTabs.has("device") && selectedAccountId && (
+              <div className={statTab !== "device" ? "hidden" : ""}><DeviceView /></div>
+            )}
+            {visitedStatTabs.has("reach") && selectedAccountId && (
+              <div className={statTab !== "reach" ? "hidden" : ""}><ReachView /></div>
+            )}
+            {visitedStatTabs.has("creative-audit") && selectedAccountId && (
+              <div className={statTab !== "creative-audit" ? "hidden" : ""}><CreativeAuditView /></div>
             )}
           </div>
         )}
