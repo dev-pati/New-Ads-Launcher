@@ -39,6 +39,17 @@ function addLog(logs: StepLog[], msg: string, level: StepLog["level"] = "info") 
   logs.push({ ts: new Date().toISOString(), msg, level })
 }
 
+// Resolve target IDs from template expression or static config.
+// Supports {{trigger.qualifyingAdIds}}, {{trigger.qualifyingCampaignIds}}, etc.
+function resolveTargetIds(a: ActionConfig & Record<string, any>, p: TriggerPayload): string[] {
+  const expr = a.actionTargetExpression ?? ""
+  if (expr && expr.includes("{{trigger.qualifying")) return p.entityIds ?? []
+  if (expr && !expr.startsWith("{{")) {
+    return expr.split(",").map((s: string) => s.trim()).filter(Boolean)
+  }
+  return a.targetIds?.length ? a.targetIds : p.entityIds?.length ? p.entityIds : (a.targetId ? [a.targetId] : [])
+}
+
 async function execMetaAction(
   action: ActionConfig & Record<string, any>,
   payload: TriggerPayload,
@@ -48,18 +59,6 @@ async function execMetaAction(
   const ev = action.event
 
   switch (ev) {
-    // ── Resolve target IDs from template expression or static config ─────────
-    // Supports {{trigger.qualifyingAdIds}}, {{trigger.qualifyingCampaignIds}}, etc.
-    function resolveTargetIds(a: ActionConfig & Record<string, any>, p: TriggerPayload): string[] {
-      const expr = a.actionTargetExpression ?? ""
-      if (expr && expr.includes("{{trigger.qualifying")) return p.entityIds ?? []
-      if (expr && !expr.startsWith("{{")) {
-        // Raw comma-separated IDs
-        return expr.split(",").map((s: string) => s.trim()).filter(Boolean)
-      }
-      return a.targetIds?.length ? a.targetIds : p.entityIds?.length ? p.entityIds : (a.targetId ? [a.targetId] : [])
-    }
-
     // ── Pause ────────────────────────────────────────────────────────────────
     case "pause_ad":
     case "pause_campaign":
