@@ -50,6 +50,13 @@ const EVENT_LABELS: Partial<Record<string, string>> = {
   increase_budget:          "Increase Budget",
   decrease_budget:          "Decrease Budget",
   change_budget:            "Change Budget",
+  // Meta rules & creative
+  swap_creative:            "Swap Creative from Shortlist",
+  create_rule:              "Create Rule",
+  toggle_rule:              "Toggle Rule",
+  update_rule:              "Update Rule",
+  apply_existing_rule:      "Apply Existing Rule",
+  set_minimum_spend:        "Set Minimum Spend",
   // Meta launch
   launch_ad:                "Launch Ad",
   // Social
@@ -295,7 +302,8 @@ function SelectField({ label, value, options, onChange, required, description }:
 const META_PAUSE_ENABLE_EVENTS = ["pause_ad","pause_campaign","pause_adset","enable_ad","enable_campaign","enable_adset"]
 const META_DUPLICATE_EVENTS    = ["duplicate_ad","duplicate_adset","duplicate_campaign"]
 const META_BUDGET_EVENTS       = ["increase_budget","decrease_budget","change_budget"]
-const ALL_META_EVENTS          = [...META_PAUSE_ENABLE_EVENTS, ...META_DUPLICATE_EVENTS, ...META_BUDGET_EVENTS, "launch_ad"]
+const META_TARGET_EVENTS       = ["swap_creative","create_rule","toggle_rule","update_rule","apply_existing_rule","set_minimum_spend"]
+const ALL_META_EVENTS          = [...META_PAUSE_ENABLE_EVENTS, ...META_DUPLICATE_EVENTS, ...META_BUDGET_EVENTS, ...META_TARGET_EVENTS, "launch_ad"]
 
 // Helper: trigger variable chips
 const TRIGGER_VARS = [
@@ -384,6 +392,12 @@ function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange:
           { value: "increase_budget",    label: "Increase Budget" },
           { value: "decrease_budget",    label: "Decrease Budget" },
           { value: "change_budget",      label: "Change Budget" },
+          { value: "swap_creative",      label: "Swap Creative from Shortlist" },
+          { value: "create_rule",        label: "Create Rule" },
+          { value: "toggle_rule",        label: "Toggle Rule" },
+          { value: "update_rule",        label: "Update Rule" },
+          { value: "apply_existing_rule",label: "Apply Existing Rule" },
+          { value: "set_minimum_spend",  label: "Set Minimum Spend" },
         ]}
         onChange={v => onChange({ ...config, event: v as ActionConfig["event"], actionTargetExpression: undefined })}
       />
@@ -531,29 +545,96 @@ function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange:
         {/* ── Duplicate Campaign ───────────────────────────────────── */}
         {ev === "duplicate_campaign" && (
           <>
-            <TriggerVarInput
-              label="Source Campaigns"
-              value={config.actionTargetExpression ?? "{{trigger.qualifyingCampaignIds}}"}
-              onChange={v => onChange({ ...config, actionTargetExpression: v })}
-              vars={[{ key: "{{trigger.qualifyingCampaignIds}}", label: "Campaigns from trigger" }]}
-            />
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Select Campaign to Duplicate <span className="text-red-500">*</span></label>
+              <input type="text" placeholder="Campaign ID"
+                value={config.actionTargetExpression ?? ""}
+                onChange={e => onChange({ ...config, actionTargetExpression: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              />
+            </div>
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-foreground/80">New Name (optional)</label>
-              <input type="text" placeholder="e.g. {{original_name}}_copy"
+              <input type="text" placeholder="e.g. {{original_name}}_{{date}}"
                 value={config.duplicateNameTemplate ?? ""}
                 onChange={e => onChange({ ...config, duplicateNameTemplate: e.target.value })}
                 className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
               />
+              <div className="flex flex-wrap gap-1">
+                {NAME_TEMPLATE_VARS.map(v => (
+                  <button key={v} type="button"
+                    onClick={() => onChange({ ...config, duplicateNameTemplate: (config.duplicateNameTemplate ?? "") + v })}
+                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+                    {v}
+                  </button>
+                ))}
+              </div>
             </div>
-            <SelectField
-              label="Initial Status" value={config.duplicateStatus ?? "PAUSED"}
-              options={[
-                { value: "PAUSED", label: "Paused" },
-                { value: "ACTIVE", label: "Active" },
-                { value: "INHERITED_FROM_SOURCE", label: "Same as original" },
-              ]}
-              onChange={v => onChange({ ...config, duplicateStatus: v as any })}
+          </>
+        )}
+
+        {/* ── Swap Creative / Create/Toggle/Update Rule / Apply Rule ─ */}
+        {(ev === "swap_creative" || ev === "create_rule" || ev === "toggle_rule" || ev === "update_rule" || ev === "apply_existing_rule") && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Select Target <span className="text-red-500">*</span></label>
+              <input type="text" placeholder="Ad Set ID"
+                value={config.actionTargetAdsetId ?? ""}
+                onChange={e => onChange({ ...config, actionTargetAdsetId: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              />
+              <p className="text-[11px] text-muted-foreground">Enter the Ad Set ID to target</p>
+            </div>
+
+            {ev === "apply_existing_rule" && (
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Select Rule <span className="text-red-500">*</span></label>
+                <input type="text" placeholder="Rule ID"
+                  value={config.actionRuleId ?? ""}
+                  onChange={e => onChange({ ...config, actionRuleId: e.target.value })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Enter your existing Facebook Ad Rule ID. Applies to ads created in this automation.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── Set Minimum Spend ─────────────────────────────────────── */}
+        {ev === "set_minimum_spend" && (
+          <>
+            <TriggerVarInput
+              label="Ad Set IDs"
+              value={config.actionTargetExpression ?? "{{trigger.qualifyingAdSetIds}}"}
+              onChange={v => onChange({ ...config, actionTargetExpression: v })}
+              vars={[{ key: "{{trigger.qualifyingAdSetIds}}", label: "Ad Sets from trigger" }]}
+              description="Comma-separated ad set IDs or use a trigger variable"
             />
+            <SelectField
+              label="Minimum Spend Type" value={config.minSpendType ?? "fixed"}
+              options={[
+                { value: "fixed",      label: "Fixed Amount ($)" },
+                { value: "percentage", label: "Percentage (%) of budget" },
+              ]}
+              onChange={v => onChange({ ...config, minSpendType: v as any })}
+              required
+            />
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">
+                Minimum Spend Amount <span className="text-red-500">*</span>
+              </label>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] text-muted-foreground">{config.minSpendType === "percentage" ? "%" : "$"}</span>
+                <input type="number" min={0}
+                  value={config.minSpendAmount ?? ""}
+                  onChange={e => onChange({ ...config, minSpendAmount: parseFloat(e.target.value) || 0 })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Each ad set will have this minimum daily spend target</p>
+            </div>
           </>
         )}
 
@@ -860,6 +941,7 @@ function MetaActionPreview({ config }: { config: ActionConfig }) {
   const isEnable  = ev.startsWith("enable_")
   const isDupe    = ev.startsWith("duplicate_")
   const isBudget  = META_BUDGET_EVENTS.includes(ev)
+  const isTarget  = META_TARGET_EVENTS.includes(ev)
 
   const targetDesc =
     config.targetFilter === "specific"   ? `${(config.targetIds ?? []).length} specific ID(s)`
@@ -896,6 +978,9 @@ function MetaActionPreview({ config }: { config: ActionConfig }) {
           {isDupe    && <PreviewRow label="Duplicate" value={dupeDesc!} />}
           {isPause   && <PreviewRow label="Result" value="Status → PAUSED" />}
           {isEnable  && <PreviewRow label="Result" value="Status → ACTIVE" />}
+          {isTarget  && <PreviewRow label="Target Ad Set" value={config.actionTargetAdsetId || "Not set"} />}
+          {ev === "apply_existing_rule" && <PreviewRow label="Rule ID" value={config.actionRuleId || "Not set"} />}
+          {ev === "set_minimum_spend" && <PreviewRow label="Min Spend" value={`${config.minSpendType === "percentage" ? "" : "$"}${config.minSpendAmount ?? 0}${config.minSpendType === "percentage" ? "%" : ""} (${config.minSpendType === "percentage" ? "Percentage" : "Fixed Amount"})`} accent />}
           <PreviewRow label="Approval" value={config.requireApproval ? "Required before executing" : "Not required"} />
         </div>
       </div>

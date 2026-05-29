@@ -34,6 +34,10 @@ export type ActionEvent =
   | "duplicate_ad" | "duplicate_adset" | "duplicate_campaign"
   // Meta — budget
   | "increase_budget" | "decrease_budget" | "change_budget"
+  // Meta — rules & creative
+  | "swap_creative" | "create_rule" | "toggle_rule" | "update_rule" | "apply_existing_rule"
+  // Meta — spend
+  | "set_minimum_spend"
   // Meta — launch
   | "launch_ad"
   // Social
@@ -169,6 +173,13 @@ export interface ActionConfig {
   duplicateNameTemplate?: string
   duplicateTargetAdsets?: string[]
   duplicateTargetCampaignId?: string
+  // Meta — rules
+  actionRuleId?: string
+  actionRuleName?: string
+  actionTargetAdsetId?: string
+  // Meta — set minimum spend
+  minSpendType?: "fixed" | "percentage"
+  minSpendAmount?: number
   // Meta — launch ad
   launchAdAccountId?: string
   launchCampaignFilter?: string
