@@ -1,9 +1,9 @@
 name: Check All Triggers
 
 on:
-  schedule:
-    # Runs daily at 9:00 AM UTC
-    - cron: '0 9 * * *'
+  # schedule:
+  #   # Runs daily at 9:00 AM UTC — DISABLED until System User token is configured
+  #   - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
