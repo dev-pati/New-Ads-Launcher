@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { useOrg } from "@/lib/org-context"
-import { cn } from "@/lib/utils"
+import { cn, proxyFbImage } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -2522,7 +2522,7 @@ function CarouselAdsModal({
   }
 
   const creativeById = (id: string) => availableCreatives.find(c => c.id === id)
-  const thumbOf = (c?: Creative) => c ? (c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url)) : ""
+  const thumbOf = (c?: Creative) => proxyFbImage(c ? (c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url)) : "")
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -2869,7 +2869,7 @@ function FlexibleAdsModal({
   }
 
   const creativeById = (id: string) => availableCreatives.find(c => c.id === id)
-  const thumbOf = (c?: Creative) => c ? (c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url)) : ""
+  const thumbOf = (c?: Creative) => proxyFbImage(c ? (c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url)) : "")
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -3191,7 +3191,7 @@ function MultiPlacementAdsModal({
   }
 
   const creativeById = (id: string) => availableCreatives.find(c => c.id === id)
-  const thumbOf = (c?: Creative) => c ? (c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url)) : ""
+  const thumbOf = (c?: Creative) => proxyFbImage(c ? (c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url)) : "")
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -3937,7 +3937,7 @@ function PreviewModal({
   const customName = adNameOverrides[creative.id]
   const adName = customName ?? creative.file_name.replace(/\.[^/.]+$/, "")
   const isVideo = creative.media_type === "video"
-  const thumb = creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url
+  const thumb = proxyFbImage(creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url)
   // Fallback to creative's saved metadata if main form fields are empty
   const effectivePrimaryText = primaryText
   const effectiveHeadline = headline
@@ -10778,7 +10778,7 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
         style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 160px))" }}
       >
         {selectedCreatives.map(c => {
-          const thumb = c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url)
+          const thumb = proxyFbImage(c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url))
           const isReady = !!(c.fb_image_hash || c.fb_video_id)
           const isVideo = c.media_type === "video"
           const customName = adNameOverrides[c.id]
@@ -12224,11 +12224,11 @@ function TableMode({
               const ptVars = row.primaryTextVariations || []
               const hlVars = row.headlineVariations || []
               const descVars = row.descriptionVariations || []
-              const mediaSrc = row.creative
+              const mediaSrc = proxyFbImage(row.creative
                 ? (row.creative.media_type === "video"
                     ? row.creative.fb_thumbnail_url
                     : (row.creative.fb_image_url || row.creative.file_url))
-                : null
+                : null)
 
               return (
                 <tr

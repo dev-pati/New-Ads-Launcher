@@ -49,11 +49,18 @@ export async function GET(request: NextRequest) {
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to fetch ad accounts"
-    const isRateLimit = msg.includes("too many calls") || msg.includes("Rate limited")
-    console.error("Failed to fetch ad accounts:", msg)
+    const lower = msg.toLowerCase()
+    const isRateLimit   = lower.includes("too many calls") || lower.includes("rate limit") || lower.includes("#4 ")
+    const isTokenExpiry = lower.includes("expired") || lower.includes("invalid") || lower.includes("oauth") || lower.includes("session")
+    console.error("[ad-accounts]", msg)
     return NextResponse.json(
-      { error: msg, rateLimited: isRateLimit },
-      { status: isRateLimit ? 429 : 500 }
+      {
+        error: msg,
+        rateLimited: isRateLimit,
+        needsReconnect: isTokenExpiry,
+        adAccounts: [],
+      },
+      { status: isRateLimit ? 429 : isTokenExpiry ? 401 : 500 }
     )
   }
 }
