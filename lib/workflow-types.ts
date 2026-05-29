@@ -59,6 +59,10 @@ export interface TriggerConfig {
   specificCampaignId?: string
   specificCampaignName?: string
   campaignStatusTarget?: "active" | "paused" | "with_issues" | "pending_review" | "archived"
+  // Ad Approved trigger
+  adSetFilter?: "all" | "name_contains" | "name_equals"
+  adSetNameFilterValue?: string
+  lookbackWindow?: "1h" | "6h" | "12h" | "24h" | "48h"
   specificCampaignIds?: string[]
   metricConditions?: MetricCondition[]
   comparisonWindow?: "day_over_day" | "week_over_week" | "month_over_month"

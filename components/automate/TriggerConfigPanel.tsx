@@ -1323,6 +1323,96 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
         </>
       )}
 
+      {/* ═══ Ad Approved ═══ */}
+      {event === "ad_approved" && (
+        <div className="pt-1 border-t border-border/60 space-y-4">
+          <div>
+            <p className="text-[13px] font-semibold text-foreground">Ad Approved Trigger</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+              Triggers when ads transition from review to active (approved). Checks for recently approved ads based on the lookback window.
+            </p>
+          </div>
+
+          {/* Campaign Filter */}
+          <div className="space-y-2">
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Campaign Filter</label>
+              <div className="relative">
+                <select
+                  value={config.campaignFilter ?? "all"}
+                  onChange={e => onChange({ ...config, campaignFilter: e.target.value as TriggerConfig["campaignFilter"], campaignNameFilterValue: undefined })}
+                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                >
+                  <option value="all">All Campaigns</option>
+                  <option value="name_contains">Name Contains</option>
+                  <option value="name_equals">Name Equals</option>
+                </select>
+                <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+            {(config.campaignFilter === "name_contains" || config.campaignFilter === "name_equals") && (
+              <input
+                type="text"
+                placeholder="e.g., Scaling, Prospecting"
+                value={config.campaignNameFilterValue ?? ""}
+                onChange={e => onChange({ ...config, campaignNameFilterValue: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              />
+            )}
+          </div>
+
+          {/* Ad Set Filter */}
+          <div className="space-y-2">
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Ad Set Filter</label>
+              <div className="relative">
+                <select
+                  value={config.adSetFilter ?? "all"}
+                  onChange={e => onChange({ ...config, adSetFilter: e.target.value as TriggerConfig["adSetFilter"], adSetNameFilterValue: undefined })}
+                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                >
+                  <option value="all">All Ad Sets</option>
+                  <option value="name_contains">Name Contains</option>
+                  <option value="name_equals">Name Equals</option>
+                </select>
+                <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+            {(config.adSetFilter === "name_contains" || config.adSetFilter === "name_equals") && (
+              <input
+                type="text"
+                placeholder="e.g., US || Broad, Retargeting"
+                value={config.adSetNameFilterValue ?? ""}
+                onChange={e => onChange({ ...config, adSetNameFilterValue: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              />
+            )}
+          </div>
+
+          {/* Lookback Window */}
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">
+              Lookback Window <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <select
+                value={config.lookbackWindow ?? "24h"}
+                onChange={e => onChange({ ...config, lookbackWindow: e.target.value as TriggerConfig["lookbackWindow"] })}
+                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+              >
+                <option value="1h">Last 1 hour</option>
+                <option value="6h">Last 6 hours</option>
+                <option value="12h">Last 12 hours</option>
+                <option value="24h">Last 24 hours</option>
+                <option value="48h">Last 48 hours</option>
+              </select>
+              <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">How far back to look for recently approved ads</p>
+          </div>
+        </div>
+      )}
+
       {/* ═══ Campaign Status Change ═══ */}
       {event === "campaign_status_change" && (
         <div className="pt-1 border-t border-border/60 space-y-4">
