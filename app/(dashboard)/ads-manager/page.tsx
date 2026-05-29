@@ -770,7 +770,7 @@ export default function AdsManagerPage() {
 
     switch (colId) {
       case "spend":
-        return <span className="text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</span>
+        return <span className="text-[13px] tabular-nums">${spend.toFixed(2)}</span>
 
       case "results": {
         const { count, type } = getResults(row, objective)
