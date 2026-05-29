@@ -10,7 +10,7 @@ import {
   IconTrash, IconSettings, IconCalendar, IconArrowsUpDown,
   IconArrowUp, IconArrowDown, IconHistory, IconTable, IconCheck,
   IconChevronRight as IconDrillRight,
-  IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard,
+  IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
 } from "@tabler/icons-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
@@ -245,6 +245,7 @@ export default function AdsManagerPage() {
 
   // Filters & search
   const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "PAUSED">("all")
   const [datePreset,     setDatePreset]     = useState("last_7d")
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | null>(null)
 
@@ -481,7 +482,7 @@ export default function AdsManagerPage() {
   }, [breakdowns, fetchBreakdownData])
 
   // Reset page & row selection when tab/search/date/breakdown changes
-  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, datePreset, customDateRange, breakdowns])
+  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, statusFilter, datePreset, customDateRange, breakdowns])
 
   // ─── Tab switch: if items checked, capture as filter for the next level ─────
   // Badge appears only on the NEXT tab, not on all 3 at once
@@ -649,6 +650,30 @@ export default function AdsManagerPage() {
 
   // ─── Filtered + sorted data ──────────────────────────────────────────────────
 
+  // Lookup maps for cross-level name search
+  const campaignNameById = useMemo(() => new Map(campaigns.map(c => [c.id, c.name])), [campaigns])
+  const adSetNameById    = useMemo(() => new Map(adSets.map(a => [a.id, a.name])), [adSets])
+
+  // Per-tab match counts (used for tab badges when search/filter is active)
+  const tabMatchCounts = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    const matchStatus = (item: { effective_status: string }) =>
+      statusFilter === "all" || item.effective_status === statusFilter
+    const matchText = (item: { name: string; id: string }, extra = "") =>
+      !q || item.name.toLowerCase().includes(q) || item.id.includes(q) || extra.toLowerCase().includes(q)
+    return {
+      campaigns: campaigns.filter(c => matchStatus(c) && matchText(c)).length,
+      adsets: adSets.filter(a =>
+        matchStatus(a) && matchText(a, campaignNameById.get(a.campaign_id) ?? "")
+      ).length,
+      ads: ads.filter(ad =>
+        matchStatus(ad) && matchText(ad,
+          [campaignNameById.get(ad.campaign_id) ?? "", adSetNameById.get(ad.adset_id) ?? ""].join(" ")
+        )
+      ).length,
+    }
+  }, [campaigns, adSets, ads, search, statusFilter, campaignNameById, adSetNameById])
+
   const currentData: (Campaign | AdSet | Ad)[] = useMemo(() => {
     let list: (Campaign | AdSet | Ad)[] = tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads
 
@@ -660,9 +685,27 @@ export default function AdsManagerPage() {
       list = (list as Ad[]).filter(a => adSetFilter.has(a.adset_id))
     }
 
+    // Status filter
+    if (statusFilter !== "all") {
+      list = list.filter(item => item.effective_status === statusFilter)
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase()
-      list = list.filter(item => item.name.toLowerCase().includes(q) || item.id.includes(q))
+      if (tab === "adsets") {
+        list = list.filter(item =>
+          item.name.toLowerCase().includes(q) || item.id.includes(q) ||
+          (campaignNameById.get((item as AdSet).campaign_id) ?? "").toLowerCase().includes(q)
+        )
+      } else if (tab === "ads") {
+        list = list.filter(item =>
+          item.name.toLowerCase().includes(q) || item.id.includes(q) ||
+          (campaignNameById.get((item as Ad).campaign_id) ?? "").toLowerCase().includes(q) ||
+          (adSetNameById.get((item as Ad).adset_id) ?? "").toLowerCase().includes(q)
+        )
+      } else {
+        list = list.filter(item => item.name.toLowerCase().includes(q) || item.id.includes(q))
+      }
     }
     if (sortField) {
       list = [...list].sort((a, b) => {
@@ -677,7 +720,7 @@ export default function AdsManagerPage() {
       })
     }
     return list
-  }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, sortField, sortDir])
+  }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, statusFilter, sortField, sortDir, campaignNameById, adSetNameById])
 
   const totalPages = Math.max(1, Math.ceil(currentData.length / pageSize))
   const pagedData = currentData.slice((page - 1) * pageSize, page * pageSize)
@@ -1010,17 +1053,56 @@ export default function AdsManagerPage() {
         </div>
       </div>
 
-      {/* ── Search bar ── */}
-      <div className="px-4 py-2 border-b shrink-0">
-        <div className="relative max-w-lg">
+      {/* ── Search + Status filter bar ── */}
+      <div className="px-4 py-2 border-b shrink-0 flex items-center gap-3 flex-wrap">
+        {/* Search input */}
+        <div className="relative flex-1 min-w-[220px] max-w-lg">
           <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search to filter by: name, ID or metrics..."
-            className="w-full pl-9 pr-3 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+            onKeyDown={e => e.key === "Escape" && setSearch("")}
+            placeholder="Search by name, ID, campaign or ad set..."
+            className="w-full pl-9 pr-8 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
           />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground"
+            >
+              <IconX className="size-3.5" />
+            </button>
+          )}
         </div>
+
+        {/* Status filter chips */}
+        <div className="flex items-center gap-1 shrink-0">
+          {(["all", "ACTIVE", "PAUSED"] as const).map(s => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={cn(
+                "px-2.5 py-1 text-xs rounded-full border font-medium transition-colors",
+                statusFilter === s
+                  ? s === "ACTIVE"
+                    ? "bg-emerald-100 border-emerald-300 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400"
+                    : s === "PAUSED"
+                    ? "bg-gray-100 border-gray-300 text-gray-600 dark:bg-gray-800/60 dark:border-gray-700 dark:text-gray-300"
+                    : "bg-primary/10 border-primary/30 text-primary"
+                  : "border-border text-muted-foreground hover:bg-muted/50"
+              )}
+            >
+              {s === "all" ? "All" : s === "ACTIVE" ? "Active" : "Paused"}
+            </button>
+          ))}
+        </div>
+
+        {/* Result count */}
+        {(search || statusFilter !== "all") && (
+          <span className="text-xs text-muted-foreground shrink-0">
+            {currentData.length} result{currentData.length !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
 
       {/* ── Tabs + Pagination + Date range ── */}
@@ -1046,8 +1128,20 @@ export default function AdsManagerPage() {
                 }
                 <span className="truncate max-w-[110px]">{tabLabel(t)}</span>
 
-                {/* Filter badge — shows on all 3 tabs when filter is active */}
-                {badge && (
+                {/* Search/filter match count badge */}
+                {(search || statusFilter !== "all") && (
+                  <span className={cn(
+                    "px-1.5 py-0.5 text-[10px] rounded-full font-bold leading-none",
+                    tab === t
+                      ? "bg-blue-600 text-white"
+                      : "bg-muted text-muted-foreground"
+                  )}>
+                    {tabMatchCounts[t]}
+                  </span>
+                )}
+
+                {/* Hierarchical filter badge */}
+                {!search && statusFilter === "all" && badge && (
                   <span className="flex items-center gap-px px-1.5 py-0.5 bg-blue-600 text-white text-[10px] rounded-full font-bold leading-none">
                     {badge.count}
                     <span
