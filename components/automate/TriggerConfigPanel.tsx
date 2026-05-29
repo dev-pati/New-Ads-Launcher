@@ -87,15 +87,85 @@ const MONITORING_LEVEL_DESC: Record<string, string> = {
 }
 
 const METRICS = [
-  { value: "spend",           label: "Spend" },
-  { value: "roas",            label: "ROAS" },
-  { value: "cpa",             label: "CPA" },
-  { value: "ctr",             label: "CTR" },
-  { value: "cpc",             label: "CPC" },
-  { value: "impressions",     label: "Impressions" },
-  { value: "reach",           label: "Reach" },
-  { value: "frequency",       label: "Frequency" },
-  { value: "cost_per_result", label: "Cost per Result" },
+  { value: "spend",               label: "Spend" },
+  { value: "cpa",                 label: "CPA" },
+  { value: "purchase_roas",       label: "Purchase ROAS" },
+  { value: "cpm",                 label: "CPM" },
+  { value: "cpc",                 label: "CPC" },
+  { value: "ctr",                 label: "CTR" },
+  { value: "impressions",         label: "Impressions" },
+  { value: "conversions",         label: "Conversions" },
+  { value: "cost_per_subscriber", label: "Cost per Subscriber" },
+]
+
+const THRESHOLD_METRICS: { group: string; value: string; label: string }[] = [
+  // Performance
+  { group: "Performance", value: "spend",              label: "Spend" },
+  { group: "Performance", value: "cost_per_result",    label: "Cost per Result" },
+  { group: "Performance", value: "purchase_roas",      label: "Purchase ROAS" },
+  { group: "Performance", value: "cpa",                label: "CPA" },
+  { group: "Performance", value: "cpm",                label: "CPM" },
+  { group: "Performance", value: "cpc",                label: "CPC" },
+  { group: "Performance", value: "ctr_all",            label: "CTR (All)" },
+  { group: "Performance", value: "link_ctr",           label: "Link CTR" },
+  { group: "Performance", value: "frequency",          label: "Frequency" },
+  { group: "Performance", value: "impressions",        label: "Impressions" },
+  { group: "Performance", value: "reach",              label: "Reach" },
+  { group: "Performance", value: "clicks",             label: "Clicks" },
+  // Conversion
+  { group: "Conversion", value: "conversions",         label: "Conversions" },
+  { group: "Conversion", value: "purchases",           label: "Purchases" },
+  { group: "Conversion", value: "purchase_value",      label: "Purchase Value" },
+  { group: "Conversion", value: "cost_per_purchase",   label: "Cost per Purchase" },
+  { group: "Conversion", value: "leads",               label: "Leads" },
+  { group: "Conversion", value: "cost_per_lead",       label: "Cost per Lead" },
+  { group: "Conversion", value: "add_to_cart",         label: "Add to Cart" },
+  { group: "Conversion", value: "cost_per_atc",        label: "Cost per Add to Cart" },
+  // Video
+  { group: "Video", value: "hook_rate",                label: "Hook Rate" },
+  { group: "Video", value: "hold_rate",                label: "Hold Rate" },
+  { group: "Video", value: "thruplay_rate",            label: "ThruPlay Rate" },
+  { group: "Video", value: "video_views",              label: "Video Views" },
+  { group: "Video", value: "thruplays",                label: "ThruPlays" },
+  { group: "Video", value: "cost_per_thruplay",        label: "Cost per ThruPlay" },
+  // Engagement
+  { group: "Engagement", value: "link_clicks",         label: "Link Clicks" },
+  { group: "Engagement", value: "cost_per_link_click", label: "Cost per Link Click" },
+  { group: "Engagement", value: "landing_page_views",  label: "Landing Page Views" },
+  { group: "Engagement", value: "cost_per_lpv",        label: "Cost per LPV" },
+]
+
+const THRESHOLD_OPERATORS = [
+  { value: ">",  label: ">" },
+  { value: "<",  label: "<" },
+  { value: ">=", label: ">=" },
+  { value: "<=", label: "<=" },
+  { value: "=",  label: "=" },
+]
+
+const PERFORMANCE_PERIODS = [
+  { value: "lifetime", label: "Lifetime (all time)" },
+  { value: "1d",       label: "Last 1 day" },
+  { value: "3d",       label: "Last 3 days" },
+  { value: "7d",       label: "Last 7 days" },
+  { value: "14d",      label: "Last 14 days" },
+  { value: "30d",      label: "Last 30 days" },
+]
+
+const LOOKBACK_PERIODS = [
+  { value: "all", label: "All ads (no limit)" },
+  { value: "7d",  label: "Last 7 days" },
+  { value: "14d", label: "Last 14 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "60d", label: "Last 60 days" },
+  { value: "90d", label: "Last 90 days" },
+]
+
+const CONDITION_LEVELS = [
+  { value: "per_ad",    label: "Per Ad" },
+  { value: "average",   label: "Average" },
+  { value: "mixed",     label: "Mixed" },
+  { value: "adset_avg", label: "Ad Set Avg" },
 ]
 
 const OPERATORS = [
@@ -1472,6 +1542,339 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
         </div>
       )}
 
+      {/* ═══ Performance Threshold ═══ */}
+      {event === "spend_threshold" && (
+        <div className="pt-1 border-t border-border/60 space-y-4">
+          <div>
+            <p className="text-[13px] font-semibold text-foreground">Performance Threshold</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+              Finds ads matching performance criteria and triggers an action. Define conditions like ROAS &gt; 2 AND Spend &gt; $200.
+            </p>
+          </div>
+
+          {/* Check Frequency */}
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Check Frequency <span className="text-red-500">*</span></label>
+            <div className="h-9 px-3 flex items-center border border-border rounded-lg bg-muted/30 text-[13px] text-muted-foreground">Daily</div>
+            <p className="text-[11px] text-muted-foreground">This automation will automatically run once per day.</p>
+          </div>
+
+          {/* Campaign Filter */}
+          <div className="space-y-2">
+            <label className="text-[12px] font-semibold text-foreground/80">Campaign Filter</label>
+            <p className="text-[11px] text-muted-foreground -mt-1">Optionally filter by campaign name</p>
+            <div className="relative">
+              <select
+                value={config.campaignFilter ?? "all"}
+                onChange={e => onChange({ ...config, campaignFilter: e.target.value as any, campaignNameFilterValue: undefined })}
+                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+              >
+                <option value="all">All Campaigns</option>
+                <option value="name_contains">Name Contains</option>
+              </select>
+              <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+            {config.campaignFilter === "name_contains" && (
+              <input type="text" placeholder="e.g., Scaling, LAB" value={config.campaignNameFilterValue ?? ""}
+                onChange={e => onChange({ ...config, campaignNameFilterValue: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60" />
+            )}
+          </div>
+
+          {/* Ad Set Filter */}
+          <div className="space-y-2">
+            <label className="text-[12px] font-semibold text-foreground/80">Ad Set Filter</label>
+            <p className="text-[11px] text-muted-foreground -mt-1">Find ads in ad sets matching your filter</p>
+            <div className="relative">
+              <select
+                value={config.thresholdAdSetFilter ?? "all"}
+                onChange={e => onChange({ ...config, thresholdAdSetFilter: e.target.value as any, thresholdAdSetFilterValue: undefined })}
+                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+              >
+                <option value="all">All Ad Sets</option>
+                <option value="name_contains">Ad set name contains...</option>
+              </select>
+              <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+            {config.thresholdAdSetFilter === "name_contains" && (
+              <input type="text" placeholder="e.g., US || Broad" value={config.thresholdAdSetFilterValue ?? ""}
+                onChange={e => onChange({ ...config, thresholdAdSetFilterValue: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60" />
+            )}
+          </div>
+
+          {/* Ad Status */}
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Ad Status</label>
+            <div className="relative">
+              <select
+                value={config.thresholdAdStatus ?? "all"}
+                onChange={e => onChange({ ...config, thresholdAdStatus: e.target.value as any })}
+                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+              >
+                <option value="all">All (with spend)</option>
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+              </select>
+              <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+          </div>
+
+          {/* Performance Criteria */}
+          <div className="pt-2 border-t border-border/40 space-y-4">
+            <div>
+              <p className="text-[13px] font-semibold text-foreground">Performance Criteria</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Define conditions that must be met (e.g., ROAS &gt; 2 AND Spend &gt; $200)</p>
+            </div>
+
+            {/* Performance Period */}
+            <SelectField
+              label="Performance Period"
+              value={config.thresholdPerformancePeriod ?? "7d"}
+              options={PERFORMANCE_PERIODS}
+              onChange={v => onChange({ ...config, thresholdPerformancePeriod: v as any })}
+              description="Time window used to evaluate ad performance metrics"
+              required
+            />
+
+            {/* Include today + Exclude Recent Days */}
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.thresholdIncludeToday ?? false}
+                  onChange={e => onChange({ ...config, thresholdIncludeToday: e.target.checked })}
+                  className="size-3.5 rounded accent-primary"
+                />
+                <span className="text-[12px] font-medium text-foreground">Include today&apos;s partial data</span>
+              </label>
+              <p className="text-[11px] text-muted-foreground pl-5">Use live Meta insights through today, even though conversions and CPA may still change.</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Exclude Recent Days</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min={0} max={30}
+                  value={config.thresholdExcludeRecentDays ?? 0}
+                  onChange={e => onChange({ ...config, thresholdExcludeRecentDays: parseInt(e.target.value) || 0 })}
+                  className="w-20 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                />
+                <span className="text-[13px] text-muted-foreground">days</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Skip the most recent days from performance data</p>
+            </div>
+
+            {/* Lookback Period */}
+            <SelectField
+              label="Lookback Period"
+              value={config.thresholdLookbackPeriod ?? "all"}
+              options={LOOKBACK_PERIODS}
+              onChange={v => onChange({ ...config, thresholdLookbackPeriod: v as any })}
+              description="Only check ads created within this time window"
+            />
+
+            {/* Conditions */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[12px] font-semibold text-foreground/80">Conditions <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <select
+                    value={config.thresholdConditionLevel ?? "per_ad"}
+                    onChange={e => onChange({ ...config, thresholdConditionLevel: e.target.value as any })}
+                    className="h-7 pl-2 pr-6 text-[11px] bg-background border border-border rounded-md appearance-none focus:outline-none text-foreground"
+                  >
+                    {CONDITION_LEVELS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <IconChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+
+              {(config.thresholdConditions ?? [{ metric: "spend", operator: ">", value: 0 }]).map((cond, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <select
+                      value={cond.metric}
+                      onChange={e => {
+                        const updated = [...(config.thresholdConditions ?? [{ metric: "spend", operator: ">", value: 0 }])]
+                        updated[i] = { ...cond, metric: e.target.value }
+                        onChange({ ...config, thresholdConditions: updated })
+                      }}
+                      className="w-full h-8 pl-2 pr-6 text-[12px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                    >
+                      {(() => {
+                        const groups = [...new Set(THRESHOLD_METRICS.map(m => m.group))]
+                        return groups.map(g => (
+                          <optgroup key={g} label={g}>
+                            {THRESHOLD_METRICS.filter(m => m.group === g).map(m => (
+                              <option key={m.value} value={m.value}>{m.label}</option>
+                            ))}
+                          </optgroup>
+                        ))
+                      })()}
+                    </select>
+                    <IconChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
+                  </div>
+                  <div className="relative w-14">
+                    <select
+                      value={cond.operator}
+                      onChange={e => {
+                        const updated = [...(config.thresholdConditions ?? [{ metric: "spend", operator: ">", value: 0 }])]
+                        updated[i] = { ...cond, operator: e.target.value }
+                        onChange({ ...config, thresholdConditions: updated })
+                      }}
+                      className="w-full h-8 pl-2 pr-5 text-[12px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground font-mono text-center"
+                    >
+                      {THRESHOLD_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    <IconChevronDown className="absolute right-1 top-1/2 -translate-y-1/2 size-2.5 text-muted-foreground pointer-events-none" />
+                  </div>
+                  <input
+                    type="number" min={0}
+                    value={cond.value}
+                    onChange={e => {
+                      const updated = [...(config.thresholdConditions ?? [{ metric: "spend", operator: ">", value: 0 }])]
+                      updated[i] = { ...cond, value: parseFloat(e.target.value) || 0 }
+                      onChange({ ...config, thresholdConditions: updated })
+                    }}
+                    className="w-20 h-8 px-2 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                  />
+                  {(config.thresholdConditions ?? []).length > 1 && (
+                    <button onClick={() => {
+                      const updated = (config.thresholdConditions ?? []).filter((_, idx) => idx !== i)
+                      onChange({ ...config, thresholdConditions: updated })
+                    }} className="text-muted-foreground hover:text-destructive shrink-0">
+                      <IconX className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              {(config.thresholdConditions ?? []).length > 1 && (
+                <div className="flex items-center gap-2 my-1">
+                  <div className="h-px flex-1 bg-border/60" />
+                  <span className="text-[10px] font-semibold text-muted-foreground border border-border px-2 py-0.5 rounded">AND</span>
+                  <div className="h-px flex-1 bg-border/60" />
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  const existing = config.thresholdConditions ?? [{ metric: "spend", operator: ">", value: 0 }]
+                  onChange({ ...config, thresholdConditions: [...existing, { metric: "spend", operator: ">", value: 0 }] })
+                }}
+                className="flex items-center gap-1.5 text-[12px] text-primary hover:underline font-medium"
+              >
+                <IconPlus className="size-3.5" />
+                Add Condition
+              </button>
+            </div>
+
+            {/* Rule summary */}
+            <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 text-[11px] text-muted-foreground">
+              Rule: Find ads where{" "}
+              {(config.thresholdConditions ?? [{ metric: "spend", operator: ">", value: 0 }]).map((c, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="font-semibold text-foreground"> AND </span>}
+                  <span className="font-medium text-foreground">{THRESHOLD_METRICS.find(m => m.value === c.metric)?.label ?? c.metric} {c.operator} {c.value}</span>
+                </span>
+              ))}{" "}
+              over {PERFORMANCE_PERIODS.find(p => p.value === (config.thresholdPerformancePeriod ?? "7d"))?.label ?? "last 7 days"}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Best Performing Organic Post ═══ */}
+      {event === "best_performing_organic_post" && (
+        <div className="pt-1 border-t border-border/60 space-y-4">
+          <div>
+            <p className="text-[13px] font-semibold text-foreground">Best Performing Organic Post Trigger</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+              Picks the best-performing organic post from a Facebook Page on each run, then emits it as the trigger output. Pair with a Launch Ad action to auto-promote the winner.
+            </p>
+          </div>
+
+          {/* Facebook Page */}
+          <OrganicPagePicker
+            adAccountId={selectedAccountId}
+            config={config}
+            onChange={onChange}
+          />
+
+          {/* Ranking Metric */}
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Ranking Metric <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <select
+                value={config.organicRankingMetric ?? "engagement"}
+                onChange={e => onChange({ ...config, organicRankingMetric: e.target.value as any })}
+                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+              >
+                <option value="engagement">Engagement (reactions + comments + shares)</option>
+                <option value="reach">Reach</option>
+                <option value="impressions">Impressions</option>
+                <option value="video_views">Video Views</option>
+              </select>
+              <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">Engagement works for FB and IG. Reach, impressions, and video views are FB-only.</p>
+          </div>
+
+          {/* Lookback Window (days) */}
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Lookback Window (days)</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={1} max={90}
+                value={config.organicLookbackDays ?? 7}
+                onChange={e => onChange({ ...config, organicLookbackDays: parseInt(e.target.value) || 7 })}
+                className="w-20 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+              />
+              <span className="text-[13px] text-muted-foreground">days</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Only consider posts from the last N days. Default: 7.</p>
+          </div>
+
+          {/* Minimum Metric Value */}
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Minimum Metric Value</label>
+            <input
+              type="number" min={0}
+              value={config.organicMinMetricValue ?? 0}
+              onChange={e => onChange({ ...config, organicMinMetricValue: parseInt(e.target.value) || 0 })}
+              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+            <p className="text-[11px] text-muted-foreground">Skip promotion when the top post falls below this. 0 disables the floor.</p>
+          </div>
+
+          {/* Number of Top Posts */}
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Number of Top Posts to Promote</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={1} max={10}
+                value={config.organicTopPostsCount ?? 1}
+                onChange={e => onChange({ ...config, organicTopPostsCount: parseInt(e.target.value) || 1 })}
+                className="w-20 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+              />
+              <span className="text-[13px] text-muted-foreground">posts</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Each run, promote up to N highest-ranking posts.</p>
+          </div>
+
+          {/* Check Frequency */}
+          <SelectField
+            label="Check Frequency"
+            value={config.checkFrequency ?? "daily"}
+            options={META_FREQUENCIES}
+            onChange={v => onChange({ ...config, checkFrequency: v as any })}
+            description="How often the system checks for new top-performing posts."
+            required
+          />
+        </div>
+      )}
+
       {/* Campaign Picker Modal */}
       {showCampaignPicker && (
         <CampaignPickerModal
@@ -1481,6 +1884,83 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
         />
       )}
     </>
+  )
+}
+
+// ─── Organic Page Picker ──────────────────────────────────────────────────────
+
+function OrganicPagePicker({ adAccountId, config, onChange }: {
+  adAccountId: string
+  config: TriggerConfig
+  onChange: (c: TriggerConfig) => void
+}) {
+  const [pages, setPages]       = useState<{ id: string; name: string; picture_url?: string }[]>([])
+  const [loading, setLoading]   = useState(false)
+  const [open, setOpen]         = useState(false)
+
+  useEffect(() => {
+    if (!adAccountId) return
+    setLoading(true)
+    fetch(`/api/facebook/pages?ad_account_id=${encodeURIComponent(adAccountId)}`)
+      .then(r => r.json())
+      .then(d => setPages(d.pages || []))
+      .catch(() => setPages([]))
+      .finally(() => setLoading(false))
+  }, [adAccountId])
+
+  const selected = pages.find(p => p.id === config.organicPageId)
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[12px] font-semibold text-foreground/80">Facebook Page <span className="text-red-500">*</span></label>
+      {!adAccountId ? (
+        <p className="text-[11px] text-amber-600 dark:text-amber-400">Select an ad account above first.</p>
+      ) : loading ? (
+        <div className="flex items-center gap-2 h-9 px-3 border border-border rounded-lg text-[13px] text-muted-foreground">
+          <IconLoader2 className="size-3.5 animate-spin shrink-0" /> Loading pages…
+        </div>
+      ) : (
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setOpen(v => !v)}
+            className="w-full flex items-center gap-2 h-9 px-3 border border-border rounded-lg bg-background text-[13px] text-left hover:border-primary/50 transition-colors"
+          >
+            {selected ? (
+              <>
+                {selected.picture_url && <img src={selected.picture_url} className="size-5 rounded-full shrink-0 object-cover" alt="" />}
+                <span className="flex-1 truncate">{selected.name}</span>
+              </>
+            ) : (
+              <span className="flex-1 text-muted-foreground/60">Select a Facebook page…</span>
+            )}
+            <IconChevronDown className="size-3.5 text-muted-foreground shrink-0" />
+          </button>
+          {open && pages.length > 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl py-1 max-h-56 overflow-y-auto">
+              {pages.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => { onChange({ ...config, organicPageId: p.id, organicPageName: p.name }); setOpen(false) }}
+                  className={cn("w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-muted/50 transition-colors",
+                    p.id === config.organicPageId && "text-primary font-medium")}
+                >
+                  {p.picture_url && <img src={p.picture_url} className="size-5 rounded-full shrink-0 object-cover" alt="" />}
+                  <span className="flex-1 truncate text-left">{p.name}</span>
+                  {p.id === config.organicPageId && <IconCheck className="size-3.5 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          )}
+          {open && pages.length === 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl p-3 text-[12px] text-muted-foreground text-center">
+              No pages found for this ad account.
+            </div>
+          )}
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground">Determines which page's organic posts will be ranked.</p>
+    </div>
   )
 }
 

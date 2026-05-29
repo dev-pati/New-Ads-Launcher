@@ -63,6 +63,23 @@ export interface TriggerConfig {
   adSetFilter?: "all" | "name_contains" | "name_equals"
   adSetNameFilterValue?: string
   lookbackWindow?: "1h" | "6h" | "12h" | "24h" | "48h"
+  // Performance Threshold
+  thresholdAdStatus?: "all" | "active" | "paused"
+  thresholdPerformancePeriod?: "lifetime" | "1d" | "3d" | "7d" | "14d" | "30d"
+  thresholdIncludeToday?: boolean
+  thresholdExcludeRecentDays?: number
+  thresholdLookbackPeriod?: "all" | "7d" | "14d" | "30d" | "60d" | "90d"
+  thresholdConditionLevel?: "per_ad" | "average" | "mixed" | "adset_avg"
+  thresholdConditions?: { metric: string; operator: string; value: number }[]
+  thresholdAdSetFilter?: "all" | "name_contains"
+  thresholdAdSetFilterValue?: string
+  // Best Performing Organic Post
+  organicPageId?: string
+  organicPageName?: string
+  organicRankingMetric?: "engagement" | "reach" | "impressions" | "video_views"
+  organicLookbackDays?: number
+  organicMinMetricValue?: number
+  organicTopPostsCount?: number
   specificCampaignIds?: string[]
   metricConditions?: MetricCondition[]
   comparisonWindow?: "day_over_day" | "week_over_week" | "month_over_month"
