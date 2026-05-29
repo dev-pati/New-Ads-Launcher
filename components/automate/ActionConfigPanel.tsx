@@ -647,6 +647,154 @@ function SetupTab({ config, onChange }: { config: ActionConfig; onChange: (c: Ac
   )
 }
 
+// ─── Preview helpers ──────────────────────────────────────────────────────────
+
+function PreviewRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="flex items-start gap-3 py-2 border-b border-border/40 last:border-0">
+      <span className="text-[11px] text-muted-foreground w-28 shrink-0 pt-0.5">{label}</span>
+      <span className={cn("text-[12px] font-medium flex-1", accent ? "text-primary" : "text-foreground")}>{value}</span>
+    </div>
+  )
+}
+
+function MetaActionPreview({ config }: { config: ActionConfig }) {
+  const ev = config.event
+  const label = EVENT_LABELS[ev] ?? ev.replace(/_/g, " ")
+  const isPause   = ev.startsWith("pause_")
+  const isEnable  = ev.startsWith("enable_")
+  const isDupe    = ev.startsWith("duplicate_")
+  const isBudget  = META_BUDGET_EVENTS.includes(ev)
+
+  const targetDesc =
+    config.targetFilter === "specific"   ? `${(config.targetIds ?? []).length} specific ID(s)`
+    : config.targetFilter === "name_contains" ? `Name contains "${config.targetFilterValue ?? "..."}"`
+    : "All active items"
+
+  const budgetDesc = isBudget ? (() => {
+    const op  = config.budgetOperation ?? "increase"
+    const amt = config.budgetAmount ?? 0
+    const typ = config.budgetAmountType === "absolute" ? `$${amt}` : `${amt}%`
+    const bt  = config.budgetType === "lifetime" ? "lifetime" : "daily"
+    if (op === "set")      return `Set ${bt} budget to ${typ}`
+    if (op === "decrease") return `Decrease ${bt} budget by ${typ}`
+    return `Increase ${bt} budget by ${typ}`
+  })() : null
+
+  const dupeDesc = isDupe
+    ? `${config.duplicateCopies ?? 1} copy(ies) — initial status: ${config.duplicateStatus ?? "PAUSED"}`
+    : null
+
+  return (
+    <div className="p-5 space-y-4">
+      <div className="rounded-xl border border-border overflow-hidden">
+        <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40">
+          <div className="flex items-center gap-2">
+            <IconBrandMeta className="size-4 text-[#1877F2]" />
+            <span className="text-[12px] font-semibold text-foreground">Meta · {label}</span>
+          </div>
+        </div>
+        <div className="px-4 py-1">
+          <PreviewRow label="Action" value={label} accent />
+          <PreviewRow label="Target" value={targetDesc} />
+          {isBudget  && <PreviewRow label="Budget change" value={budgetDesc!} accent />}
+          {isDupe    && <PreviewRow label="Duplicate" value={dupeDesc!} />}
+          {isPause   && <PreviewRow label="Result" value="Status → PAUSED" />}
+          {isEnable  && <PreviewRow label="Result" value="Status → ACTIVE" />}
+          <PreviewRow label="Approval" value={config.requireApproval ? "Required before executing" : "Not required"} />
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 px-4 py-3">
+        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+          <span className="font-semibold">Note:</span> This action calls the Meta Ads API and will affect real ads when the automation fires.
+          {config.requireApproval && " Approval is required before executing."}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function SheetsActionPreview({ config }: { config: ActionConfig }) {
+  const ev    = config.event
+  const label = EVENT_LABELS[ev] ?? ev.replace(/_/g, " ")
+  const spreadsheetId = config.actionSheetsSpreadsheetId
+  const sheetName     = config.actionSheetsSheetName ?? "Sheet1"
+
+  return (
+    <div className="p-5 space-y-4">
+      <div className="rounded-xl border border-border overflow-hidden">
+        <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40">
+          <div className="flex items-center gap-2">
+            <IconTable className="size-4 text-green-600" />
+            <span className="text-[12px] font-semibold text-foreground">Google Sheets · {label}</span>
+          </div>
+        </div>
+        <div className="px-4 py-1">
+          <PreviewRow label="Action" value={label} accent />
+          <PreviewRow label="Spreadsheet" value={spreadsheetId ? `ID: ${spreadsheetId.slice(0, 20)}…` : "Not configured"} />
+          <PreviewRow label="Sheet" value={sheetName} />
+          {ev === "update_sheet_cell" && (
+            <PreviewRow label="Cell" value={`${config.actionSheetsCellRef ?? "?"} = "${config.actionSheetsCellValue ?? ""}"`} />
+          )}
+          {(ev === "add_sheet_row" || ev === "update_sheet_row") && (
+            <PreviewRow
+              label="Columns"
+              value={(config.actionSheetsColumnMappings ?? []).length > 0
+                ? (config.actionSheetsColumnMappings ?? []).map(m => `${m.column}=${m.value}`).join(", ")
+                : "No columns mapped"}
+            />
+          )}
+        </div>
+      </div>
+
+      {!spreadsheetId && (
+        <div className="rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 px-4 py-3">
+          <p className="text-[11px] text-red-600 dark:text-red-400">
+            <span className="font-semibold">Missing:</span> Spreadsheet ID or URL is required.
+          </p>
+        </div>
+      )}
+
+      <div className="rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 px-4 py-3">
+        <p className="text-[11px] text-blue-700 dark:text-blue-400">
+          <span className="font-semibold">Tip:</span> Make sure the service account has <strong>Editor</strong> access to the spreadsheet.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function MediaLibraryActionPreview({ config }: { config: ActionConfig }) {
+  const boardName = config.actionMediaBoardName
+  const template  = config.actionMediaNamingTemplate
+
+  return (
+    <div className="p-5 space-y-4">
+      <div className="rounded-xl border border-border overflow-hidden">
+        <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40">
+          <div className="flex items-center gap-2">
+            <IconPhoto className="size-4 text-orange-500" />
+            <span className="text-[12px] font-semibold text-foreground">Media Library · Upload</span>
+          </div>
+        </div>
+        <div className="px-4 py-1">
+          <PreviewRow label="Action" value="Upload to Media Library" accent />
+          <PreviewRow label="Target board" value={boardName ?? "Library root (no board)"} />
+          <PreviewRow label="File name" value={template ? `Template: ${template}` : "Keep original file name"} />
+        </div>
+      </div>
+
+      <div className="rounded-xl bg-muted/30 border border-border px-4 py-3">
+        <p className="text-[11px] text-muted-foreground">
+          When this action runs, the file from the trigger will be uploaded to your Media Library
+          {boardName ? ` and added to the board "<strong>${boardName}</strong>"` : ""}.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Preview tab ──────────────────────────────────────────────────────────────
 
 function PreviewTab({ config }: { config: ActionConfig }) {
@@ -655,6 +803,11 @@ function PreviewTab({ config }: { config: ActionConfig }) {
     "{{trigger.summary}}\n{{trigger.entityName}}: {{trigger.previousValue}} → {{trigger.currentValue}} ({{trigger.actualChange}}% change)"
   const recipientCount = notif?.emailRecipients?.length ?? 0
   const meta = getActionMeta(config)
+
+  // Dispatch to specific previews
+  if (ALL_META_EVENTS.includes(config.event)) return <MetaActionPreview config={config} />
+  if (["add_sheet_row","update_sheet_cell","update_sheet_row"].includes(config.event)) return <SheetsActionPreview config={config} />
+  if (config.event === "upload_to_media_library") return <MediaLibraryActionPreview config={config} />
 
   if (config.appId !== "notification") {
     return (
