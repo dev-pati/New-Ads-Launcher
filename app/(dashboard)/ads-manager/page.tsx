@@ -805,13 +805,8 @@ export default function AdsManagerPage() {
             budgetRemaining = parentCampaign?.budget_remaining
           }
         } else if (tab === "ads") {
-          const ad = row as Ad
-          const parentAdSet = adSets.find(s => s.id === ad.adset_id)
-          const parentCampaign = campaigns.find(c => c.id === ad.campaign_id)
-          // Use adset budget if it has its own; otherwise fall back to campaign budget
-          budgetRemaining = (parentAdSet?.daily_budget || parentAdSet?.lifetime_budget)
-            ? parentAdSet?.budget_remaining
-            : parentCampaign?.budget_remaining
+          // Ads don't show budget status — delivery is based solely on their own effective_status
+          budgetRemaining = undefined
         }
         return <DeliveryBadge effective_status={row.effective_status} budget_remaining={budgetRemaining} />
       }
