@@ -1,0 +1,34 @@
+name: Check Meta Triggers
+
+on:
+  schedule:
+    # Runs daily at 9:00 AM UTC
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    # Allow manual trigger from GitHub Actions UI
+
+jobs:
+  check-meta-triggers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Call check-meta-triggers endpoint
+        run: |
+          response=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/check-meta-triggers")
+
+          echo "HTTP Status: $response"
+          echo "Response:"
+          cat /tmp/response.json | python3 -m json.tool 2>/dev/null || cat /tmp/response.json
+
+          if [ "$response" != "200" ]; then
+            echo "❌ Cron job failed with status $response"
+            exit 1
+          fi
+
+          fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired', 0))" 2>/dev/null || echo "?")
+          checked=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('checked', 0))" 2>/dev/null || echo "?")
+          echo "✅ Done — checked: $checked automations, fired: $fired"
