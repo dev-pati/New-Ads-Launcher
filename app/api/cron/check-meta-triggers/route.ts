@@ -43,6 +43,9 @@ export async function GET(request: NextRequest) {
     reason: string
     executionId?: string
     error?: string
+    entityIds?: string[]
+    entityNames?: string[]
+    metaData?: Record<string, any>
   }[] = []
 
   // ── Fetch all active Meta automations ────────────────────────────────────
