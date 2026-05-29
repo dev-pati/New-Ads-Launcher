@@ -1,11 +1,12 @@
 "use client"
 
-import { forwardRef, useImperativeHandle, useState, useRef } from "react"
+import { forwardRef, useImperativeHandle, useState, useRef, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import {
   IconBell, IconMail, IconBrandSlack, IconPlus, IconX,
   IconBrandMeta, IconBrandTiktok, IconBrandSnapchat,
-  IconBrandPinterest, IconTable, IconCalendar,
+  IconBrandPinterest, IconTable, IconCalendar, IconChevronDown,
+  IconLoader2, IconPhoto,
 } from "@tabler/icons-react"
 import type { ActionConfig, NotificationConfig } from "@/lib/workflow-types"
 import { TRIGGER_VARIABLES, SYSTEM_VARIABLES } from "@/lib/workflow-types"
@@ -32,16 +33,37 @@ const APP_META: Record<string, {
 }
 
 const EVENT_LABELS: Partial<Record<string, string>> = {
-  send_notification: "Send Notification",
-  duplicate_ad:      "Duplicate Ad",
-  increase_budget:   "Increase Budget",
-  pause_adset:       "Pause Ad Set",
-  launch_tiktok:     "Launch on TikTok",
-  launch_snapchat:   "Launch on Snapchat",
-  launch_pinterest:  "Launch on Pinterest",
-  send_slack:        "Send Slack",
-  add_sheet_row:     "Log to Sheets",
-  schedule:          "Schedule",
+  send_notification:        "Send Notification",
+  // Meta pause
+  pause_ad:                 "Pause Ad",
+  pause_campaign:           "Pause Campaign",
+  pause_adset:              "Pause Ad Set",
+  // Meta enable
+  enable_ad:                "Enable Ad",
+  enable_campaign:          "Enable Campaign",
+  enable_adset:             "Enable Ad Set",
+  // Meta duplicate
+  duplicate_ad:             "Duplicate Ad",
+  duplicate_adset:          "Duplicate Ad Set",
+  duplicate_campaign:       "Duplicate Campaign",
+  // Meta budget
+  increase_budget:          "Increase Budget",
+  decrease_budget:          "Decrease Budget",
+  change_budget:            "Change Budget",
+  // Meta launch
+  launch_ad:                "Launch Ad",
+  // Social
+  launch_tiktok:            "Launch on TikTok",
+  launch_snapchat:          "Launch on Snapchat",
+  launch_pinterest:         "Launch on Pinterest",
+  send_slack:               "Send Slack",
+  // Sheets
+  add_sheet_row:            "Add Row",
+  update_sheet_cell:        "Update Cell",
+  update_sheet_row:         "Update Row",
+  // Media
+  upload_to_media_library:  "Upload to Media Library",
+  schedule:                 "Schedule",
 }
 
 function getActionMeta(config: ActionConfig) {
@@ -245,37 +267,355 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
   )
 }
 
-// ─── Generic action setup (non-notification) ──────────────────────────────────
+// ─── SelectField helper ───────────────────────────────────────────────────────
 
-function GenericSetup({ config }: { config: ActionConfig }) {
-  const meta = getActionMeta(config)
-  const AppIcon = meta.icon
+function SelectField({ label, value, options, onChange, required, description }: {
+  label: string; value: string; options: { value: string; label: string }[]
+  onChange: (v: string) => void; required?: boolean; description?: string
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-[12px] font-semibold text-foreground/80">
+        {label}{required && <span className="text-red-500 ml-0.5">*</span>}
+      </label>
+      <div className="relative">
+        <select value={value} onChange={e => onChange(e.target.value)}
+          className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground">
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+      </div>
+      {description && <p className="text-[11px] text-muted-foreground">{description}</p>}
+    </div>
+  )
+}
+
+// ─── Meta Action Setup ────────────────────────────────────────────────────────
+
+const META_PAUSE_ENABLE_EVENTS = ["pause_ad","pause_campaign","pause_adset","enable_ad","enable_campaign","enable_adset"]
+const META_DUPLICATE_EVENTS    = ["duplicate_ad","duplicate_adset","duplicate_campaign"]
+const META_BUDGET_EVENTS       = ["increase_budget","decrease_budget","change_budget"]
+const ALL_META_EVENTS          = [...META_PAUSE_ENABLE_EVENTS, ...META_DUPLICATE_EVENTS, ...META_BUDGET_EVENTS, "launch_ad"]
+
+function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange: (c: ActionConfig) => void }) {
+  const ev = config.event
+  const isPauseEnable = META_PAUSE_ENABLE_EVENTS.includes(ev)
+  const isDuplicate   = META_DUPLICATE_EVENTS.includes(ev)
+  const isBudget      = META_BUDGET_EVENTS.includes(ev)
+
+  const levelLabel = ev.includes("campaign") ? "Campaign" : ev.includes("adset") || ev.includes("ad_set") ? "Ad Set" : "Ad"
 
   return (
-    <div className="p-5 space-y-5">
-      {/* APP */}
-      <div className="space-y-1.5">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">App</label>
-        <div className="flex items-center justify-between h-9 px-3 bg-muted/40 border border-border/60 rounded-lg">
-          <div className="flex items-center gap-2">
-            <div className={cn("size-5 rounded flex items-center justify-center shrink-0", meta.iconBg)}>
-              <AppIcon className={cn("size-3", meta.iconColor)} />
-            </div>
-            <span className="text-sm font-medium">{meta.label}</span>
-          </div>
-          <button className="text-[11px] text-primary hover:underline font-medium">Change</button>
+    <div className="p-5 space-y-4">
+      {/* Action Event selector */}
+      <SelectField
+        label="Action Event" value={ev} required
+        options={[
+          { value: "pause_ad",           label: "Pause Ad" },
+          { value: "pause_campaign",     label: "Pause Campaign" },
+          { value: "pause_adset",        label: "Pause Ad Set" },
+          { value: "enable_ad",          label: "Enable Ad" },
+          { value: "enable_campaign",    label: "Enable Campaign" },
+          { value: "enable_adset",       label: "Enable Ad Set" },
+          { value: "duplicate_ad",       label: "Duplicate Ad" },
+          { value: "duplicate_adset",    label: "Duplicate Ad Set" },
+          { value: "duplicate_campaign", label: "Duplicate Campaign" },
+          { value: "increase_budget",    label: "Increase Budget" },
+          { value: "decrease_budget",    label: "Decrease Budget" },
+          { value: "change_budget",      label: "Change Budget" },
+        ]}
+        onChange={v => onChange({ ...config, event: v as ActionConfig["event"] })}
+      />
+
+      {/* Target filter */}
+      {(isPauseEnable || isDuplicate || isBudget) && (
+        <div className="space-y-3 pt-1 border-t border-border/60">
+          <p className="text-[12px] font-semibold text-foreground/80">Target {levelLabel}(s)</p>
+
+          <SelectField
+            label="Target Filter" value={config.targetFilter ?? "all"}
+            options={[
+              { value: "all",           label: `All active ${levelLabel.toLowerCase()}s` },
+              { value: "name_contains", label: "Name contains..." },
+              { value: "specific",      label: "Specific IDs" },
+            ]}
+            onChange={v => onChange({ ...config, targetFilter: v as any })}
+          />
+
+          {config.targetFilter === "name_contains" && (
+            <input type="text" placeholder={`e.g., LAB, Scaling`}
+              value={config.targetFilterValue ?? ""}
+              onChange={e => onChange({ ...config, targetFilterValue: e.target.value })}
+              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+            />
+          )}
+
+          {config.targetFilter === "specific" && (
+            <textarea placeholder="One ID per line"
+              value={(config.targetIds ?? []).join("\n")}
+              onChange={e => onChange({ ...config, targetIds: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })}
+              rows={3}
+              className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono resize-none placeholder:text-muted-foreground/60"
+            />
+          )}
         </div>
+      )}
+
+      {/* Budget specific */}
+      {isBudget && (
+        <div className="space-y-3">
+          <SelectField
+            label="Operation" value={config.budgetOperation ?? (ev === "increase_budget" ? "increase" : ev === "decrease_budget" ? "decrease" : "increase")}
+            options={[
+              { value: "increase", label: "↑ Increase" },
+              { value: "decrease", label: "↓ Decrease" },
+              { value: "set",      label: "= Set to" },
+            ]}
+            onChange={v => onChange({ ...config, budgetOperation: v as any })}
+            required
+          />
+          <div className="flex gap-3">
+            <div className="flex-1 space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Amount <span className="text-red-500">*</span></label>
+              <input type="number" min={0}
+                value={config.budgetAmount ?? ""}
+                onChange={e => onChange({ ...config, budgetAmount: parseFloat(e.target.value) || 0 })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="w-32 space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Type</label>
+              <div className="relative">
+                <select value={config.budgetAmountType ?? "percentage"}
+                  onChange={e => onChange({ ...config, budgetAmountType: e.target.value as any })}
+                  className="w-full h-9 pl-2 pr-6 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none">
+                  <option value="percentage">%</option>
+                  <option value="absolute">$</option>
+                </select>
+                <IconChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
+              </div>
+            </div>
+          </div>
+          <SelectField
+            label="Budget Type" value={config.budgetType ?? "daily"}
+            options={[{ value: "daily", label: "Daily Budget" }, { value: "lifetime", label: "Lifetime Budget" }]}
+            onChange={v => onChange({ ...config, budgetType: v as any })}
+          />
+        </div>
+      )}
+
+      {/* Duplicate specific */}
+      {isDuplicate && (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Number of Copies</label>
+            <input type="number" min={1} max={10}
+              value={config.duplicateCopies ?? 1}
+              onChange={e => onChange({ ...config, duplicateCopies: parseInt(e.target.value) || 1 })}
+              className="w-20 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+            />
+          </div>
+          <SelectField
+            label="Initial Status" value={config.duplicateStatus ?? "PAUSED"}
+            options={[
+              { value: "PAUSED",                   label: "Paused" },
+              { value: "ACTIVE",                    label: "Active" },
+              { value: "INHERITED_FROM_SOURCE",     label: "Same as original" },
+            ]}
+            onChange={v => onChange({ ...config, duplicateStatus: v as any })}
+          />
+        </div>
+      )}
+
+      {/* Require approval toggle */}
+      <div className="flex items-center justify-between pt-2 border-t border-border/40">
+        <div>
+          <p className="text-[12px] font-semibold text-foreground/80">Require Approval</p>
+          <p className="text-[11px] text-muted-foreground">Pause before executing this action</p>
+        </div>
+        <button type="button"
+          onClick={() => onChange({ ...config, requireApproval: !config.requireApproval })}
+          className={cn("relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
+            config.requireApproval ? "bg-primary" : "bg-muted-foreground/30"
+          )}>
+          <span className={cn("pointer-events-none inline-block size-4 rounded-full bg-white shadow transform transition-transform duration-200",
+            config.requireApproval ? "translate-x-4" : "translate-x-0"
+          )} />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Google Sheets Action Setup ───────────────────────────────────────────────
+
+function SheetsActionSetup({ config, onChange }: { config: ActionConfig; onChange: (c: ActionConfig) => void }) {
+  const ev = config.event
+
+  const handleSpreadsheetInput = (raw: string) => {
+    const match = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
+    onChange({ ...config, actionSheetsSpreadsheetId: match ? match[1] : raw })
+  }
+
+  return (
+    <div className="p-5 space-y-4">
+      <SelectField
+        label="Action Event" value={ev} required
+        options={[
+          { value: "add_sheet_row",    label: "Add Row" },
+          { value: "update_sheet_cell",label: "Update Cell" },
+          { value: "update_sheet_row", label: "Update Row" },
+        ]}
+        onChange={v => onChange({ ...config, event: v as any })}
+      />
+
+      {/* Service Account note */}
+      <div className="rounded-lg bg-muted/30 border border-border px-3 py-2.5 space-y-1">
+        <p className="text-[11px] font-semibold text-foreground/70">Service Account Access</p>
+        <p className="text-[11px] text-muted-foreground">
+          Share your sheet with <span className="font-mono text-[10px] bg-muted px-1 rounded">{process.env.NEXT_PUBLIC_SHEETS_SERVICE_ACCOUNT ?? "adlauncher-sheets@..."}</span> and grant <strong>Editor</strong> access.
+        </p>
       </div>
 
-      {/* Configured notice */}
-      <div className="flex items-center gap-3 p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-xl">
-        <div className="size-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center shrink-0">
-          <AppIcon className={cn("size-4", meta.iconColor)} />
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Spreadsheet ID or URL <span className="text-red-500">*</span></label>
+        <input type="text" placeholder="Paste spreadsheet URL or ID"
+          value={config.actionSheetsSpreadsheetId ?? ""}
+          onChange={e => handleSpreadsheetInput(e.target.value)}
+          className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Sheet Name</label>
+        <input type="text" placeholder="Sheet1"
+          value={config.actionSheetsSheetName ?? "Sheet1"}
+          onChange={e => onChange({ ...config, actionSheetsSheetName: e.target.value })}
+          className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+        />
+      </div>
+
+      {ev === "update_sheet_cell" && (
+        <>
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Cell Reference <span className="text-red-500">*</span></label>
+            <input type="text" placeholder="e.g., B2, C5"
+              value={config.actionSheetsCellRef ?? ""}
+              onChange={e => onChange({ ...config, actionSheetsCellRef: e.target.value })}
+              className="w-28 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Value</label>
+            <input type="text" placeholder="Value to write"
+              value={config.actionSheetsCellValue ?? ""}
+              onChange={e => onChange({ ...config, actionSheetsCellValue: e.target.value })}
+              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+            />
+          </div>
+        </>
+      )}
+
+      {(ev === "add_sheet_row" || ev === "update_sheet_row") && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-[12px] font-semibold text-foreground/80">Column Mapping</label>
+          </div>
+          <p className="text-[11px] text-muted-foreground -mt-1">Map columns to data. Use {"{{filename}}"}, {"{{date}}"}, {"{{fileUrl}}"} as variables.</p>
+          {(config.actionSheetsColumnMappings ?? []).map((m, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input placeholder="Column" value={m.column}
+                onChange={e => {
+                  const next = [...(config.actionSheetsColumnMappings ?? [])]
+                  next[i] = { ...m, column: e.target.value }
+                  onChange({ ...config, actionSheetsColumnMappings: next })
+                }}
+                className="w-24 h-8 px-2.5 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
+              />
+              <input placeholder="Value or {{variable}}" value={m.value}
+                onChange={e => {
+                  const next = [...(config.actionSheetsColumnMappings ?? [])]
+                  next[i] = { ...m, value: e.target.value }
+                  onChange({ ...config, actionSheetsColumnMappings: next })
+                }}
+                className="flex-1 h-8 px-2.5 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
+              />
+              <button onClick={() => onChange({ ...config, actionSheetsColumnMappings: (config.actionSheetsColumnMappings ?? []).filter((_, j) => j !== i) })}
+                className="text-muted-foreground hover:text-destructive">
+                <IconX className="size-3.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            onClick={() => onChange({ ...config, actionSheetsColumnMappings: [...(config.actionSheetsColumnMappings ?? []), { column: "", value: "" }] })}
+            className="flex items-center gap-1.5 text-[12px] text-primary hover:underline font-medium">
+            <IconPlus className="size-3.5" /> Add Column
+          </button>
         </div>
-        <div>
-          <p className="text-[13px] font-semibold text-foreground">{meta.label}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Action is configured and ready to run.</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Media Library Action Setup ───────────────────────────────────────────────
+
+function MediaLibraryActionSetup({ config, onChange }: { config: ActionConfig; onChange: (c: ActionConfig) => void }) {
+  const [boards, setBoards] = useState<{ id: string; name: string }[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setLoading(true)
+    fetch("/api/asset-boards")
+      .then(r => r.json())
+      .then(d => setBoards(d.boards ?? []))
+      .catch(() => setBoards([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const NAMING_VARS = ["{originalName}", "{date}", "{boardName}", "{counter}", "{ratio}"]
+
+  return (
+    <div className="p-5 space-y-4">
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Target Board</label>
+        {loading ? (
+          <div className="flex items-center gap-2 h-9 px-3 border border-border rounded-lg text-[13px] text-muted-foreground">
+            <IconLoader2 className="size-3.5 animate-spin" /> Loading boards…
+          </div>
+        ) : (
+          <div className="relative">
+            <select value={config.actionMediaBoardId ?? ""}
+              onChange={e => {
+                const board = boards.find(b => b.id === e.target.value)
+                onChange({ ...config, actionMediaBoardId: e.target.value || undefined, actionMediaBoardName: board?.name })
+              }}
+              className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground">
+              <option value="">No board (upload to library root)</option>
+              {boards.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+            <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+          </div>
+        )}
+        <p className="text-[11px] text-muted-foreground">Optionally organize uploaded media into a board.</p>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="text-[12px] font-semibold text-foreground/80">Naming Template (optional)</label>
+        <input type="text" placeholder="{originalName}"
+          value={config.actionMediaNamingTemplate ?? ""}
+          onChange={e => onChange({ ...config, actionMediaNamingTemplate: e.target.value })}
+          className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+        />
+        <div className="flex flex-wrap gap-1 mt-1">
+          {NAMING_VARS.map(v => (
+            <button key={v} type="button"
+              onClick={() => onChange({ ...config, actionMediaNamingTemplate: (config.actionMediaNamingTemplate ?? "") + v })}
+              className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+              {v}
+            </button>
+          ))}
         </div>
+        <p className="text-[11px] text-muted-foreground">Leave empty to keep the original file name.</p>
       </div>
     </div>
   )
@@ -284,10 +624,27 @@ function GenericSetup({ config }: { config: ActionConfig }) {
 // ─── Setup tab dispatcher ─────────────────────────────────────────────────────
 
 function SetupTab({ config, onChange }: { config: ActionConfig; onChange: (c: ActionConfig) => void }) {
-  if (config.appId === "notification") {
-    return <NotificationSetup config={config} onChange={onChange} />
-  }
-  return <GenericSetup config={config} />
+  if (config.appId === "notification") return <NotificationSetup config={config} onChange={onChange} />
+  if (config.appId === "meta" || ALL_META_EVENTS.includes(config.event)) return <MetaActionSetup config={config} onChange={onChange} />
+  if (config.appId === "sheets" || ["add_sheet_row","update_sheet_cell","update_sheet_row"].includes(config.event)) return <SheetsActionSetup config={config} onChange={onChange} />
+  if (config.appId === "media_library" || config.event === "upload_to_media_library") return <MediaLibraryActionSetup config={config} onChange={onChange} />
+
+  // Fallback for other apps
+  const meta = getActionMeta(config)
+  const AppIcon = meta.icon
+  return (
+    <div className="p-5 space-y-4">
+      <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 rounded-xl">
+        <div className={cn("size-8 rounded-lg flex items-center justify-center shrink-0", meta.iconBg)}>
+          <AppIcon className={cn("size-4", meta.iconColor)} />
+        </div>
+        <div>
+          <p className="text-[13px] font-semibold text-foreground">{meta.label}</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Action configured — {config.event?.replace(/_/g, " ")}</p>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── Preview tab ──────────────────────────────────────────────────────────────

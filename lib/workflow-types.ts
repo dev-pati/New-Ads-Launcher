@@ -26,17 +26,24 @@ export type TriggerEvent =
 
 export type ActionEvent =
   | "send_notification"
-  | "duplicate_ad"
-  | "increase_budget"
-  | "decrease_budget"
-  | "pause_campaign"
-  | "pause_adset"
-  | "launch_tiktok"
-  | "launch_snapchat"
-  | "launch_pinterest"
-  | "send_slack"
-  | "send_email"
-  | "add_sheet_row"
+  // Meta — pause
+  | "pause_ad" | "pause_campaign" | "pause_adset"
+  // Meta — enable
+  | "enable_ad" | "enable_campaign" | "enable_adset"
+  // Meta — duplicate
+  | "duplicate_ad" | "duplicate_adset" | "duplicate_campaign"
+  // Meta — budget
+  | "increase_budget" | "decrease_budget" | "change_budget"
+  // Meta — launch
+  | "launch_ad"
+  // Social
+  | "launch_tiktok" | "launch_snapchat" | "launch_pinterest"
+  // Comms
+  | "send_slack" | "send_email"
+  // Sheets
+  | "add_sheet_row" | "update_sheet_cell" | "update_sheet_row"
+  // Media Library
+  | "upload_to_media_library"
 
 export type NodeKind = "trigger" | "action" | "condition" | "delay" | "approval"
 
@@ -137,8 +144,47 @@ export interface ActionConfig {
   appId: AppId
   event: ActionEvent
   notification?: NotificationConfig
-  budgetChange?: { type: "increase" | "decrease"; amount: number; unit: "%" | "$" }
   requireApproval?: boolean
+  // Meta — shared
+  actionAdAccountId?: string
+  // Meta — target filter for pause/enable/duplicate/budget
+  targetLevel?: "ad" | "adset" | "campaign"
+  targetFilter?: "specific" | "all" | "name_contains"
+  targetFilterValue?: string
+  targetIds?: string[]        // specific IDs when targetFilter = "specific"
+  // Meta — budget
+  budgetChange?: { type: "increase" | "decrease"; amount: number; unit: "%" | "$" }
+  budgetOperation?: "increase" | "decrease" | "set"
+  budgetAmount?: number
+  budgetAmountType?: "percentage" | "absolute"
+  budgetType?: "daily" | "lifetime"
+  // Meta — duplicate
+  duplicateCopies?: number
+  duplicateStatus?: "PAUSED" | "ACTIVE" | "INHERITED_FROM_SOURCE"
+  // Meta — launch ad
+  launchAdAccountId?: string
+  launchCampaignFilter?: string
+  launchTargetAdsets?: string[]
+  launchMode?: "immediately" | "draft"
+  launchAdCopyTemplateId?: string
+  launchAdNameTemplate?: string
+  launchHeadline?: string
+  launchPrimaryText?: string
+  launchDescription?: string
+  launchLinkUrl?: string
+  launchCta?: string
+  launchInitialStatus?: "PAUSED" | "ACTIVE"
+  launchCooldownEnabled?: boolean
+  // Google Sheets action
+  actionSheetsSpreadsheetId?: string
+  actionSheetsSheetName?: string
+  actionSheetsColumnMappings?: { column: string; value: string }[]
+  actionSheetsCellRef?: string
+  actionSheetsCellValue?: string
+  // Media Library action
+  actionMediaBoardId?: string
+  actionMediaBoardName?: string
+  actionMediaNamingTemplate?: string
 }
 
 export interface DelayConfig {

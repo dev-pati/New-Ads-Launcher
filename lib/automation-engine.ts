@@ -48,81 +48,115 @@ async function execMetaAction(
   const ev = action.event
 
   switch (ev) {
+    // ── Pause ────────────────────────────────────────────────────────────────
+    case "pause_ad":
     case "pause_campaign":
     case "pause_adset": {
-      const id = action.targetId ?? payload.entityIds?.[0]
-      if (!id) {
-        addLog(logs, `${ev}: no target ID configured`, "warn")
-        return { event: ev, status: "skipped", message: "No target ID configured" }
-      }
-      const body = new URLSearchParams({ status: "PAUSED" })
-      const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body.toString(),
-      })
-      const data = await res.json()
-      if (data.error) {
-        addLog(logs, `${ev} error: ${data.error.message}`, "error")
-        return { event: ev, status: "failed", message: data.error.message }
-      }
-      addLog(logs, `${ev}: ID ${id} paused`)
-      return { event: ev, status: "success", message: `Paused ${id}`, data }
+      const ids = action.targetIds?.length ? action.targetIds : payload.entityIds?.length ? payload.entityIds : (action.targetId ? [action.targetId] : [])
+      if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
+      const results = await Promise.all(ids.map(async id => {
+        const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ status: "PAUSED" }).toString(),
+        })
+        return res.json()
+      }))
+      const failed = results.filter(r => r.error)
+      if (failed.length) return { event: ev, status: "failed", message: failed[0].error.message }
+      addLog(logs, `${ev}: paused ${ids.length} item(s)`)
+      return { event: ev, status: "success", message: `Paused ${ids.length} item(s)`, data: { ids } }
     }
 
+    // ── Enable ────────────────────────────────────────────────────────────────
+    case "enable_ad":
+    case "enable_campaign":
+    case "enable_adset": {
+      const ids = action.targetIds?.length ? action.targetIds : payload.entityIds?.length ? payload.entityIds : (action.targetId ? [action.targetId] : [])
+      if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
+      const results = await Promise.all(ids.map(async id => {
+        const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ status: "ACTIVE" }).toString(),
+        })
+        return res.json()
+      }))
+      const failed = results.filter(r => r.error)
+      if (failed.length) return { event: ev, status: "failed", message: failed[0].error.message }
+      addLog(logs, `${ev}: enabled ${ids.length} item(s)`)
+      return { event: ev, status: "success", message: `Enabled ${ids.length} item(s)`, data: { ids } }
+    }
+
+    // ── Budget ────────────────────────────────────────────────────────────────
     case "increase_budget":
-    case "decrease_budget": {
-      const id = action.targetId ?? payload.entityIds?.[0]
-      if (!id) {
-        addLog(logs, `${ev}: no target ID`, "warn")
-        return { event: ev, status: "skipped", message: "No target ad set ID configured" }
-      }
-      const change = action.budgetChange
-      if (!change) {
-        addLog(logs, `${ev}: no budget change config`, "warn")
-        return { event: ev, status: "skipped", message: "No budget change configured" }
-      }
+    case "decrease_budget":
+    case "change_budget": {
+      const ids = action.targetIds?.length ? action.targetIds : payload.entityIds?.length ? payload.entityIds : (action.targetId ? [action.targetId] : [])
+      if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
 
-      const fetchRes = await fetch(`${GRAPH}/${id}?fields=daily_budget&access_token=${token}`)
-      const fetchData = await fetchRes.json()
-      if (fetchData.error) return { event: ev, status: "failed", message: fetchData.error.message }
+      const budgetField = action.budgetType === "lifetime" ? "lifetime_budget" : "daily_budget"
+      const change      = action.budgetChange
+      const operation   = action.budgetOperation ?? (ev === "increase_budget" ? "increase" : ev === "decrease_budget" ? "decrease" : "increase")
+      const amount      = action.budgetAmount ?? change?.amount ?? 0
+      const isPercent   = (action.budgetAmountType ?? change?.unit ?? "%") === "percentage" || (change?.unit === "%")
 
-      const current = parseInt(fetchData.daily_budget ?? "0")
-      let next: number
-      if (change.unit === "%") {
-        const factor = ev === "increase_budget" ? (1 + change.amount / 100) : (1 - change.amount / 100)
-        next = Math.round(current * factor)
-      } else {
-        const delta = Math.round(change.amount * 100)
-        next = ev === "increase_budget" ? current + delta : current - delta
-      }
-      next = Math.max(next, 100)
+      const updates = await Promise.all(ids.map(async id => {
+        const fetchRes = await fetch(`${GRAPH}/${id}?fields=${budgetField}&access_token=${token}`)
+        const fetchData = await fetchRes.json()
+        if (fetchData.error) return { id, error: fetchData.error.message }
 
-      const patchBody = new URLSearchParams({ daily_budget: String(next) })
-      const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: patchBody.toString(),
-      })
-      const data = await res.json()
-      if (data.error) return { event: ev, status: "failed", message: data.error.message }
-      addLog(logs, `${ev}: $${(current / 100).toFixed(2)} → $${(next / 100).toFixed(2)}`)
-      return { event: ev, status: "success", message: `Budget $${(current / 100).toFixed(2)} → $${(next / 100).toFixed(2)}`, data: { prev: current, next } }
+        const current = parseInt(fetchData[budgetField] ?? "0")
+        let next: number
+        if (operation === "set") {
+          next = Math.round(amount * 100)
+        } else if (isPercent) {
+          const factor = operation === "increase" ? (1 + amount / 100) : (1 - amount / 100)
+          next = Math.round(current * factor)
+        } else {
+          const delta = Math.round(amount * 100)
+          next = operation === "increase" ? current + delta : current - delta
+        }
+        next = Math.max(next, 100)
+
+        const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ [budgetField]: String(next) }).toString(),
+        })
+        const data = await res.json()
+        if (data.error) return { id, error: data.error.message }
+        return { id, prev: current, next }
+      }))
+
+      const failed = updates.filter(r => r.error)
+      if (failed.length) return { event: ev, status: "failed", message: (failed[0] as any).error }
+      addLog(logs, `${ev}: updated budget for ${ids.length} item(s)`)
+      return { event: ev, status: "success", message: `Budget updated for ${ids.length} item(s)`, data: { updates } }
     }
 
-    case "duplicate_ad": {
-      const id = action.templateAdSetId ?? action.targetId ?? payload.entityIds?.[0]
-      if (!id) {
-        addLog(logs, "duplicate_ad: no template ad set ID", "warn")
-        return { event: ev, status: "skipped", message: "No template ad set ID configured" }
-      }
-      const qs = new URLSearchParams({ access_token: token, deep_copy: "true", status_option: "PAUSED" })
-      const res = await fetch(`${GRAPH}/${id}/copies?${qs}`, { method: "POST" })
-      const data = await res.json()
-      if (data.error) return { event: ev, status: "failed", message: data.error.message }
-      const newId = data.copied_adset_id ?? data.id
-      addLog(logs, `duplicate_ad: ${id} → ${newId}`)
-      return { event: ev, status: "success", message: `Ad set duplicated: ${id} → ${newId}`, data: { newAdSetId: newId } }
+    // ── Duplicate ─────────────────────────────────────────────────────────────
+    case "duplicate_ad":
+    case "duplicate_adset":
+    case "duplicate_campaign": {
+      const ids = action.targetIds?.length ? action.targetIds : payload.entityIds?.length ? payload.entityIds : (action.targetId ?? action.templateAdSetId ? [action.targetId ?? action.templateAdSetId!] : [])
+      if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
+
+      const copies     = action.duplicateCopies ?? 1
+      const statusOpt  = action.duplicateStatus ?? "PAUSED"
+      const deepCopy   = ev !== "duplicate_ad"
+
+      const results = await Promise.all(ids.map(async id => {
+        const qs = new URLSearchParams({ access_token: token, status_option: statusOpt, deep_copy: String(deepCopy) })
+        if (copies > 1) qs.set("count", String(copies))
+        const res = await fetch(`${GRAPH}/${id}/copies?${qs}`, { method: "POST" })
+        const data = await res.json()
+        if (data.error) return { id, error: data.error.message }
+        const newId = data.copied_adset_id ?? data.copied_campaign_id ?? data.id
+        return { id, newId }
+      }))
+
+      const failed = results.filter(r => (r as any).error)
+      if (failed.length) return { event: ev, status: "failed", message: (failed[0] as any).error }
+      addLog(logs, `${ev}: duplicated ${ids.length} item(s)`)
+      return { event: ev, status: "success", message: `Duplicated ${ids.length} item(s)`, data: { results } }
     }
 
     default:
@@ -159,6 +193,135 @@ async function execNotification(
   if (!res.ok) return { event: "send_notification", status: "failed", message: data.message ?? "Email failed" }
   addLog(logs, `Email sent to ${recipients.join(", ")}`)
   return { event: "send_notification", status: "success", message: `Email sent to ${recipients.join(", ")}` }
+}
+
+// ─── Google Sheets action executor ───────────────────────────────────────────
+
+async function execSheetsAction(
+  action: ActionConfig,
+  payload: TriggerPayload,
+  logs: StepLog[]
+): Promise<ActionResult> {
+  const ev = action.event
+  const spreadsheetId = action.actionSheetsSpreadsheetId
+  const sheetName     = action.actionSheetsSheetName ?? "Sheet1"
+
+  if (!spreadsheetId) {
+    addLog(logs, `${ev}: no spreadsheet configured`, "warn")
+    return { event: ev, status: "skipped", message: "No spreadsheet configured" }
+  }
+
+  try {
+    const { saReadRange } = await import("@/lib/google-sheets-sa")
+    const { google }      = await import("googleapis")
+
+    const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON
+    if (!raw) return { event: ev, status: "failed", message: "GOOGLE_SERVICE_ACCOUNT_JSON not configured" }
+
+    const auth = new (await import("googleapis")).google.auth.GoogleAuth({
+      credentials: JSON.parse(raw),
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+    })
+    const sheets = google.sheets({ version: "v4", auth })
+
+    if (ev === "add_sheet_row" || ev === "update_sheet_row") {
+      const mappings: { column: string; value: string }[] = action.actionSheetsColumnMappings ?? []
+
+      // Build row values by resolving template variables
+      const resolveValue = (template: string) => {
+        return template
+          .replace("{{filename}}", payload.fileName ?? "")
+          .replace("{{fileUrl}}", payload.fileUrl ?? "")
+          .replace("{{date}}", new Date().toISOString().split("T")[0])
+          .replace("{{mimeType}}", payload.mimeType ?? "")
+      }
+
+      const values = mappings.map(m => resolveValue(m.value))
+
+      await sheets.spreadsheets.values.append({
+        spreadsheetId,
+        range: sheetName,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [values] },
+      })
+
+      addLog(logs, `${ev}: appended row to ${sheetName}`)
+      return { event: ev, status: "success", message: `Row appended to ${sheetName}` }
+    }
+
+    if (ev === "update_sheet_cell") {
+      const cellRef  = action.actionSheetsCellRef ?? "A1"
+      const value    = action.actionSheetsCellValue ?? ""
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: `${sheetName}!${cellRef}`,
+        valueInputOption: "USER_ENTERED",
+        requestBody: { values: [[value]] },
+      })
+      addLog(logs, `${ev}: updated ${sheetName}!${cellRef} = "${value}"`)
+      return { event: ev, status: "success", message: `Cell ${cellRef} updated` }
+    }
+
+    return { event: ev, status: "skipped", message: `Unsupported sheets action: ${ev}` }
+  } catch (err: any) {
+    addLog(logs, `${ev} error: ${err.message}`, "error")
+    return { event: ev, status: "failed", message: err.message }
+  }
+}
+
+// ─── Media Library action executor ───────────────────────────────────────────
+
+async function execMediaLibraryAction(
+  action: ActionConfig,
+  payload: TriggerPayload,
+  orgId: string,
+  logs: StepLog[]
+): Promise<ActionResult> {
+  const ev = action.event
+  if (!payload.fileUrl) return { event: ev, status: "skipped", message: "No file URL in trigger payload" }
+
+  try {
+    const db       = createAdminClient()
+    const boardId  = action.actionMediaBoardId
+
+    // Build file name from naming template
+    const template = action.actionMediaNamingTemplate ?? "{originalName}"
+    const ext      = payload.fileName?.match(/\.[^.]+$/)?.[0] ?? ""
+    const baseName = payload.fileName?.replace(/\.[^.]+$/, "") ?? "file"
+    const fileName = template
+      .replace("{originalName}", baseName)
+      .replace("{date}", new Date().toISOString().split("T")[0])
+      .replace("{boardName}", action.actionMediaBoardName ?? "")
+      .replace("{counter}", "1") + ext
+
+    // Insert creative record
+    const { data: creative, error } = await db
+      .from("creatives")
+      .insert({
+        org_id:     orgId,
+        user_id:    "00000000-0000-0000-0000-000000000000", // system
+        file_name:  fileName,
+        file_url:   payload.fileUrl,
+        media_type: (payload.mimeType ?? "").startsWith("video") ? "video" : "image",
+        status:     "ready",
+        tags:       [],
+      })
+      .select("id")
+      .single()
+
+    if (error) return { event: ev, status: "failed", message: error.message }
+
+    // Associate with board if specified
+    if (boardId && creative?.id) {
+      await db.from("board_assets").insert({ board_id: boardId, creative_id: creative.id })
+    }
+
+    addLog(logs, `${ev}: uploaded "${fileName}" to media library`)
+    return { event: ev, status: "success", message: `Uploaded "${fileName}" to media library`, data: { creativeId: creative?.id } }
+  } catch (err: any) {
+    addLog(logs, `${ev} error: ${err.message}`, "error")
+    return { event: ev, status: "failed", message: err.message }
+  }
 }
 
 export async function executeAutomation(
@@ -217,7 +380,12 @@ export async function executeAutomation(
 
     // Fetch Meta token if needed
     let fbToken: string | null = null
-    const META_ACTIONS = new Set(["pause_campaign", "pause_adset", "increase_budget", "decrease_budget", "duplicate_ad"])
+    const META_ACTIONS = new Set([
+      "pause_ad", "pause_campaign", "pause_adset",
+      "enable_ad", "enable_campaign", "enable_adset",
+      "duplicate_ad", "duplicate_adset", "duplicate_campaign",
+      "increase_budget", "decrease_budget", "change_budget",
+    ])
     if (actions.some(a => META_ACTIONS.has(a.event))) {
       addLog(logs, "Fetching Meta connection...")
       const conn = await getFacebookConnection(orgId)
@@ -239,6 +407,10 @@ export async function executeAutomation(
         } else {
           result = await execMetaAction(action, triggerPayload, fbToken, logs)
         }
+      } else if (["add_sheet_row", "update_sheet_cell", "update_sheet_row"].includes(action.event)) {
+        result = await execSheetsAction(action, triggerPayload, logs)
+      } else if (action.event === "upload_to_media_library") {
+        result = await execMediaLibraryAction(action, triggerPayload, orgId, logs)
       } else {
         addLog(logs, `WARNING: Unsupported action type: ${action.event} — skipping`, "warn")
         result = { event: action.event, status: "skipped", message: `Action "${action.event}" not yet implemented` }
