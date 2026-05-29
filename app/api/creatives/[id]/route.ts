@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { createClient } from "@/lib/supabase/server"
+import { fireMediaUploadedTriggers } from "@/lib/media-trigger-checker"
 
 export async function GET(
   _request: NextRequest,
@@ -56,6 +57,20 @@ export async function PATCH(
       .single()
 
     if (error) return NextResponse.json({ error: "Failed to update creative" }, { status: 500 })
+
+    // Fire on_approved trigger when status changes to "approved"
+    if (updates.status === "approved" && data) {
+      fireMediaUploadedTriggers(ctx.orgId, {
+        id:       data.id,
+        fileName: data.file_name,
+        fileUrl:  data.file_url,
+        mimeType: data.media_type === "video" ? "video/mp4" : "image/jpeg",
+        thumbnailUrl: data.fb_thumbnail_url ?? undefined,
+        status:   "approved",
+        tags:     data.tags ?? [],
+      }, "on_approved").catch(err => console.error("[creative update] on_approved trigger error:", err))
+    }
+
     return NextResponse.json({ creative: mapCreativeForClient(data) })
   } catch (err) {
     console.error("Failed to update creative:", err)

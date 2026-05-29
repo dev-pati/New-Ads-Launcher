@@ -7,6 +7,7 @@ import { mapCreativeForClient } from "@/lib/creative-media"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
 import { checkCreativeDup, getActorName } from "@/lib/upload-utils"
+import { fireMediaUploadedTriggers }      from "@/lib/media-trigger-checker"
 
 // Lightweight finalize endpoint — file is already in Supabase Storage (uploaded directly by client).
 // Videos: dedup check → DB insert (status=pending) → background cron uploads to Meta later.
@@ -165,6 +166,17 @@ export async function POST(request: NextRequest) {
         }).catch(() => {})
       }
     }
+
+    // Fire media_uploaded automations (fire-and-forget, don't block response)
+    fireMediaUploadedTriggers(ctx.orgId, {
+      id:          creative.id,
+      fileName:    creative.file_name,
+      fileUrl:     creative.file_url,
+      mimeType:    fileType,
+      thumbnailUrl:creative.fb_thumbnail_url ?? undefined,
+      status:      creative.status,
+      tags:        creative.tags ?? [],
+    }, "immediately").catch(err => console.error("[finalize] media trigger error:", err))
 
     const actorName = getActorName(ctx.user)
     await notifyOrgMembers({
