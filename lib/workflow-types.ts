@@ -95,8 +95,15 @@ export interface TriggerConfig {
   metricConditions?: MetricCondition[]
   comparisonWindow?: "day_over_day" | "week_over_week" | "month_over_month"
   checkFrequency?: "hourly" | "every_6h" | "daily" | "weekly"
-  scheduleTime?: string   // "09:00"
-  scheduleDays?: string[] // ["mon","tue","wed"]
+  scheduleTime?: string      // "09:00"
+  scheduleDays?: string[]    // ["mon","tue","wed"] (legacy)
+  scheduleFrequency?: "one_time" | "daily" | "weekly" | "monthly"
+  scheduleDate?: string      // one-time: "2026-06-01"
+  scheduleDayOfWeek?: "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday"
+  scheduleDayOfMonth?: number // 1-31
+  scheduleStartDate?: string
+  scheduleEndDate?: string
+  scheduleTimezone?: string  // "UTC", "Asia/Ho_Chi_Minh", etc.
   // Media Library (Google Drive backed)
   mediaBoard?: "all" | "name_contains" | "name_equals" | "name_does_not_contain" | "name_starts_with" | "name_ends_with" | "specific"
   mediaBoardId?: string    // Google Drive folder ID when board = "specific"

@@ -1227,6 +1227,138 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
   )
 }
 
+// ─── Schedule Trigger Setup ───────────────────────────────────────────────────
+
+const DAYS_OF_WEEK = [
+  { value: "monday",    label: "Monday" },
+  { value: "tuesday",   label: "Tuesday" },
+  { value: "wednesday", label: "Wednesday" },
+  { value: "thursday",  label: "Thursday" },
+  { value: "friday",    label: "Friday" },
+  { value: "saturday",  label: "Saturday" },
+  { value: "sunday",    label: "Sunday" },
+]
+
+const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => ({
+  value: String(i + 1),
+  label: String(i + 1),
+}))
+
+function ScheduleTriggerSetup({ config, onChange }: {
+  config: TriggerConfig
+  onChange: (c: TriggerConfig) => void
+}) {
+  const freq = config.scheduleFrequency ?? "daily"
+
+  const timeDesc =
+    freq === "daily"   ? "Runs every day at this time." :
+    freq === "weekly"  ? "Runs every week at this time." :
+    freq === "monthly" ? "Runs on the selected day of each month." :
+    "The automation will run once at this time."
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-[13px] font-semibold text-foreground">Schedule Configuration</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">Set when and how often this automation should run.</p>
+      </div>
+
+      {/* Frequency */}
+      <SelectField
+        label="Frequency" value={freq} required
+        options={[
+          { value: "one_time", label: "One-time" },
+          { value: "daily",    label: "Daily"    },
+          { value: "weekly",   label: "Weekly"   },
+          { value: "monthly",  label: "Monthly"  },
+        ]}
+        onChange={v => onChange({ ...config, scheduleFrequency: v as TriggerConfig["scheduleFrequency"] })}
+      />
+
+      {/* One-time: Scheduled Date + Time */}
+      {freq === "one_time" && (
+        <>
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Scheduled Date <span className="text-red-500">*</span></label>
+            <input type="date"
+              value={config.scheduleDate ?? ""}
+              onChange={e => onChange({ ...config, scheduleDate: e.target.value })}
+              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Time <span className="text-red-500">*</span></label>
+            <input type="time"
+              value={config.scheduleTime ?? "09:00"}
+              onChange={e => onChange({ ...config, scheduleTime: e.target.value })}
+              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+        </>
+      )}
+
+      {/* Weekly: Day of Week */}
+      {freq === "weekly" && (
+        <SelectField
+          label="Day of Week" value={config.scheduleDayOfWeek ?? ""}
+          options={[{ value: "", label: "Select day" }, ...DAYS_OF_WEEK]}
+          onChange={v => onChange({ ...config, scheduleDayOfWeek: v as TriggerConfig["scheduleDayOfWeek"] })}
+          required
+        />
+      )}
+
+      {/* Monthly: Day of Month */}
+      {freq === "monthly" && (
+        <SelectField
+          label="Day of Month" value={config.scheduleDayOfMonth ? String(config.scheduleDayOfMonth) : ""}
+          options={[{ value: "", label: "Select day" }, ...DAYS_OF_MONTH]}
+          onChange={v => onChange({ ...config, scheduleDayOfMonth: v ? parseInt(v) : undefined })}
+          required
+        />
+      )}
+
+      {/* Time — for daily/weekly/monthly */}
+      {freq !== "one_time" && (
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-semibold text-foreground/80">Time <span className="text-red-500">*</span></label>
+          <input type="time"
+            value={config.scheduleTime ?? "09:00"}
+            onChange={e => onChange({ ...config, scheduleTime: e.target.value })}
+            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-[11px] text-muted-foreground">{timeDesc}</p>
+        </div>
+      )}
+
+      {/* Start Date — for daily/weekly/monthly */}
+      {freq !== "one_time" && (
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-semibold text-foreground/80">Start Date <span className="text-red-500">*</span></label>
+          <input type="date"
+            value={config.scheduleStartDate ?? ""}
+            onChange={e => onChange({ ...config, scheduleStartDate: e.target.value })}
+            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-[11px] text-muted-foreground">The automation will start running from this date.</p>
+        </div>
+      )}
+
+      {/* End Date — optional for daily/weekly/monthly */}
+      {freq !== "one_time" && (
+        <div className="space-y-1.5">
+          <label className="text-[12px] font-semibold text-foreground/80">End Date <span className="text-muted-foreground font-normal">(optional)</span></label>
+          <input type="date"
+            value={config.scheduleEndDate ?? ""}
+            onChange={e => onChange({ ...config, scheduleEndDate: e.target.value || undefined })}
+            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-[11px] text-muted-foreground">Leave empty to run indefinitely.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Meta Trigger Setup ───────────────────────────────────────────────────────
 
 interface MetaAdAccount {
@@ -2329,26 +2461,7 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
 
         {/* SCHEDULE: specific fields */}
         {isSchedule && (
-          <>
-            <SelectField
-              label="Frequency"
-              value={config.checkFrequency ?? "daily"}
-              options={FREQUENCIES}
-              onChange={v => onChange({ ...config, checkFrequency: v as TriggerConfig["checkFrequency"] })}
-              description="How often this automation runs."
-              required
-            />
-            <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Time</label>
-              <input
-                type="time"
-                value={config.scheduleTime ?? "09:00"}
-                onChange={e => onChange({ ...config, scheduleTime: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
-              />
-              <p className="text-[11px] text-muted-foreground">Time the automation runs each day.</p>
-            </div>
-          </>
+          <ScheduleTriggerSetup config={config} onChange={onChange} />
         )}
 
         {/* MANUAL: no config */}
@@ -2469,10 +2582,21 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
       ].filter(Boolean) as string[]
     }
     if (config.appId === "schedule") {
-      return [
-        config.checkFrequency === "hourly" ? "Hourly" : config.checkFrequency === "every_6h" ? "Every 6h" : "Daily",
-        config.scheduleTime ?? "09:00",
-      ]
+      const freq = config.scheduleFrequency ?? "daily"
+      const time = config.scheduleTime ?? "09:00"
+      const parts: string[] = []
+      if (freq === "one_time")  parts.push("One-time", config.scheduleDate ?? "No date set", time)
+      if (freq === "daily")     parts.push("Daily", time)
+      if (freq === "weekly") {
+        const day = config.scheduleDayOfWeek
+          ? config.scheduleDayOfWeek.charAt(0).toUpperCase() + config.scheduleDayOfWeek.slice(1, 3)
+          : "?"
+        parts.push(`Weekly ${day}`, time)
+      }
+      if (freq === "monthly")   parts.push(`Monthly day ${config.scheduleDayOfMonth ?? "?"}`, time)
+      if (config.scheduleStartDate) parts.push(`From ${config.scheduleStartDate}`)
+      if (config.scheduleEndDate)   parts.push(`Until ${config.scheduleEndDate}`)
+      return parts
     }
     if (config.appId === "manual") return ["Run on demand"]
     if (config.appId === "google_drive") {
