@@ -1,4 +1,4 @@
-name: Check Meta Triggers
+name: Check All Triggers
 
 on:
   schedule:
@@ -19,28 +19,48 @@ jobs:
   check-meta-triggers:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-
     steps:
       - name: Call check-meta-triggers endpoint
         run: |
-          # Scheduled runs: always real. Manual runs: use dry_run input (default: true)
           DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
           echo "Dry run: $DRY_RUN"
-
-          response=$(curl -s -L -o /tmp/response.json -w "%{http_code}" \
-            -X GET \
+          response=$(curl -s -L -o /tmp/response.json -w "%{http_code}" -X GET \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             "${{ secrets.APP_URL }}/api/cron/check-meta-triggers?dry_run=${DRY_RUN}")
-
           echo "HTTP Status: $response"
-          echo "Response:"
           cat /tmp/response.json | python3 -m json.tool 2>/dev/null || cat /tmp/response.json
+          if [ "$response" != "200" ]; then echo "❌ Failed with status $response"; exit 1; fi
+          fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired',0))" 2>/dev/null || echo "?")
+          echo "✅ Meta triggers — fired: $fired"
 
-          if [ "$response" != "200" ]; then
-            echo "❌ Cron job failed with status $response"
-            exit 1
-          fi
+  check-sheets-triggers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call check-sheets-triggers endpoint
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          response=$(curl -s -L -o /tmp/response.json -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/check-sheets-triggers?dry_run=${DRY_RUN}")
+          echo "HTTP Status: $response"
+          cat /tmp/response.json | python3 -m json.tool 2>/dev/null || cat /tmp/response.json
+          if [ "$response" != "200" ]; then echo "❌ Failed with status $response"; exit 1; fi
+          fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired',0))" 2>/dev/null || echo "?")
+          echo "✅ Sheets triggers — fired: $fired"
 
-          fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired', 0))" 2>/dev/null || echo "?")
-          checked=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('checked', 0))" 2>/dev/null || echo "?")
-          echo "✅ Done — checked: $checked automations, fired: $fired"
+  check-drive-triggers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call check-drive-triggers endpoint
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          response=$(curl -s -L -o /tmp/response.json -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/check-drive-triggers?dry_run=${DRY_RUN}")
+          echo "HTTP Status: $response"
+          cat /tmp/response.json | python3 -m json.tool 2>/dev/null || cat /tmp/response.json
+          if [ "$response" != "200" ]; then echo "❌ Failed with status $response"; exit 1; fi
+          fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired',0))" 2>/dev/null || echo "?")
+          echo "✅ Drive triggers — fired: $fired"
