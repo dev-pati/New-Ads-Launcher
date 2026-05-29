@@ -321,16 +321,43 @@ export const TRIGGER_EVENT_REGISTRY: Record<TriggerEvent, {
 export const ACTION_EVENT_REGISTRY: Record<ActionEvent, {
   label: string; appId: AppId; description: string
 }> = {
-  send_notification: { label: "Send Notification", appId: "notification", description: "Send an email and/or Slack message." },
-  duplicate_ad:      { label: "Duplicate Ad",      appId: "meta",        description: "Duplicate the qualifying ad." },
-  increase_budget:   { label: "Increase Budget",   appId: "meta",        description: "Increase daily budget by a percentage or fixed amount." },
-  decrease_budget:   { label: "Decrease Budget",   appId: "meta",        description: "Decrease daily budget." },
-  pause_campaign:    { label: "Pause Campaign",    appId: "meta",        description: "Pause the qualifying campaign." },
-  pause_adset:       { label: "Pause Ad Set",      appId: "meta",        description: "Pause the qualifying ad set." },
-  launch_tiktok:     { label: "Launch on TikTok",  appId: "tiktok",      description: "Launch the ad creative on TikTok." },
-  launch_snapchat:   { label: "Launch on Snapchat",appId: "snapchat",    description: "Launch the ad creative on Snapchat." },
-  launch_pinterest:  { label: "Launch on Pinterest",appId: "pinterest",  description: "Launch the ad creative on Pinterest." },
-  send_slack:        { label: "Send Slack",         appId: "slack",       description: "Send a Slack message." },
-  send_email:        { label: "Send Email",         appId: "notification", description: "Send an email." },
-  add_sheet_row:     { label: "Add Sheet Row",      appId: "sheets",      description: "Append a row to a Google Sheet." },
+  send_notification:   { label: "Send Notification",            appId: "notification", description: "Send an email and/or Slack message." },
+  // Meta — pause
+  pause_ad:            { label: "Pause Ad",                     appId: "meta",         description: "Pause the qualifying ads." },
+  pause_campaign:      { label: "Pause Campaign",               appId: "meta",         description: "Pause the qualifying campaigns." },
+  pause_adset:         { label: "Pause Ad Set",                 appId: "meta",         description: "Pause the qualifying ad sets." },
+  // Meta — enable
+  enable_ad:           { label: "Enable Ad",                    appId: "meta",         description: "Enable (activate) the qualifying ads." },
+  enable_campaign:     { label: "Enable Campaign",              appId: "meta",         description: "Enable the qualifying campaigns." },
+  enable_adset:        { label: "Enable Ad Set",                appId: "meta",         description: "Enable the qualifying ad sets." },
+  // Meta — duplicate
+  duplicate_ad:        { label: "Duplicate Ad",                 appId: "meta",         description: "Duplicate the qualifying ads into a target ad set." },
+  duplicate_adset:     { label: "Duplicate Ad Set",             appId: "meta",         description: "Duplicate a specific ad set." },
+  duplicate_campaign:  { label: "Duplicate Campaign",           appId: "meta",         description: "Duplicate a specific campaign." },
+  // Meta — budget
+  increase_budget:     { label: "Increase Budget",              appId: "meta",         description: "Increase daily budget by a percentage or fixed amount." },
+  decrease_budget:     { label: "Decrease Budget",              appId: "meta",         description: "Decrease daily budget." },
+  change_budget:       { label: "Change Budget",                appId: "meta",         description: "Increase, decrease, or set budget on ad sets or campaigns." },
+  // Meta — rules & creative
+  swap_creative:       { label: "Swap Creative from Shortlist", appId: "meta",         description: "Replace the ad creative with one from your shortlist." },
+  create_rule:         { label: "Create Rule",                  appId: "meta",         description: "Create a Meta automated rule for an ad set." },
+  toggle_rule:         { label: "Toggle Rule",                  appId: "meta",         description: "Enable or disable a Meta automated rule." },
+  update_rule:         { label: "Update Rule",                  appId: "meta",         description: "Update an existing Meta automated rule." },
+  apply_existing_rule: { label: "Apply Existing Rule",          appId: "meta",         description: "Apply a saved Meta rule to ads in this automation." },
+  set_minimum_spend:   { label: "Set Minimum Spend",            appId: "meta",         description: "Set minimum daily spend target for CBO ad sets." },
+  // Meta — launch
+  launch_ad:           { label: "Launch Ad",                    appId: "meta",         description: "Create and launch a new ad." },
+  // Social
+  launch_tiktok:       { label: "Launch on TikTok",             appId: "tiktok",       description: "Launch the ad creative on TikTok." },
+  launch_snapchat:     { label: "Launch on Snapchat",           appId: "snapchat",     description: "Launch the ad creative on Snapchat." },
+  launch_pinterest:    { label: "Launch on Pinterest",          appId: "pinterest",    description: "Launch the ad creative on Pinterest." },
+  // Comms
+  send_slack:          { label: "Send Slack",                   appId: "slack",        description: "Send a Slack message." },
+  send_email:          { label: "Send Email",                   appId: "notification", description: "Send an email." },
+  // Sheets
+  add_sheet_row:       { label: "Add Row",                      appId: "sheets",       description: "Append a row to a Google Sheet." },
+  update_sheet_cell:   { label: "Update Cell",                  appId: "sheets",       description: "Update a specific cell in a Google Sheet." },
+  update_sheet_row:    { label: "Update Row",                   appId: "sheets",       description: "Update a row in a Google Sheet." },
+  // Media Library
+  upload_to_media_library: { label: "Upload to Media Library", appId: "media_library", description: "Upload the trigger file to your Media Library." },
 }
