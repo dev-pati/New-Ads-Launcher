@@ -191,14 +191,16 @@ function StatusToggle({ id, status, onToggle }: { id: string; status: string; on
 function DeliveryBadge({ effective_status, budget_remaining }: { effective_status: string; budget_remaining?: string }) {
   const isActive = effective_status === "ACTIVE"
   const isOutOfBudget = isActive && budget_remaining !== undefined && budget_remaining === "0"
+  const remainingDollars = budget_remaining !== undefined ? (parseInt(budget_remaining) / 100).toFixed(2) : null
   return (
-    <span className="flex items-center gap-1.5 text-[13px] text-[#1c2b33] dark:text-gray-300">
-      <span className={cn("size-[7px] rounded-full", isOutOfBudget ? "bg-[#f0a500]" : isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]")} />
-      {isOutOfBudget
-        ? <span className="text-[#f0a500]">Budget depleted</span>
-        : isActive ? "Active"
-        : effective_status === "PAUSED" ? "Off"
-        : effective_status.charAt(0) + effective_status.slice(1).toLowerCase()}
+    <span className="flex flex-col gap-0.5">
+      <span className="flex items-center gap-1.5 text-[13px] text-[#1c2b33] dark:text-gray-300">
+        <span className={cn("size-[7px] rounded-full shrink-0", isOutOfBudget ? "bg-[#f0a500]" : isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]")} />
+        {isActive ? "Active" : effective_status === "PAUSED" ? "Off" : effective_status.charAt(0) + effective_status.slice(1).toLowerCase()}
+      </span>
+      {isOutOfBudget && remainingDollars !== null && (
+        <span className="text-[11px] text-[#f0a500] pl-3.5">${remainingDollars} remaining</span>
+      )}
     </span>
   )
 }
