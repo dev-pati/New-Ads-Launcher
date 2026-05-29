@@ -117,6 +117,13 @@ export interface TriggerConfig {
   sheetsCondition?: "equals" | "not_equals" | "not_empty" | "is_empty" | "contains" | "starts_with" | "ends_with" | "greater_than" | "less_than" | "gte" | "lte"
   sheetsConditionValue?: string
   sheetsDataMappings?: { label: string; cell: string }[]
+  sheetsHeaderRow?: number
+  sheetsDataStartRow?: number
+  sheetsCheckFrequency?: "daily" | "weekly"
+  sheetsProcessExistingRows?: boolean
+  sheetsCatalogSelectionMode?: "single" | "per_row"
+  sheetsCatalogId?: string
+  sheetsCatalogName?: string
 }
 
 export interface NotificationConfig {

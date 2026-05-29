@@ -1060,6 +1060,159 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
           </div>
         )}
 
+        {/* New Rows to Launch — extra fields */}
+        {event === "sheets_new_row_launch" && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Header Row</label>
+                <input
+                  type="number" min={1}
+                  value={config.sheetsHeaderRow ?? 1}
+                  onChange={e => onChange({ ...config, sheetsHeaderRow: parseInt(e.target.value) || 1 })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Data Start Row</label>
+                <input
+                  type="number" min={1}
+                  value={config.sheetsDataStartRow ?? 2}
+                  onChange={e => onChange({ ...config, sheetsDataStartRow: parseInt(e.target.value) || 2 })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                />
+              </div>
+            </div>
+
+            <SelectField
+              label="Check Frequency"
+              value={config.sheetsCheckFrequency ?? "daily"}
+              options={[{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }]}
+              onChange={v => onChange({ ...config, sheetsCheckFrequency: v as any })}
+              description="How often to check for new rows in the sheet"
+              required
+            />
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[12px] font-semibold text-foreground/80">Process existing rows on first run</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...config, sheetsProcessExistingRows: !(config.sheetsProcessExistingRows ?? false) })}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none",
+                    config.sheetsProcessExistingRows ? "bg-primary" : "bg-muted-foreground/30"
+                  )}
+                >
+                  <span className={cn(
+                    "pointer-events-none inline-block size-4 rounded-full bg-white shadow transform transition-transform duration-200",
+                    config.sheetsProcessExistingRows ? "translate-x-4" : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Existing rows will be recorded but not processed on the first run. Only new rows added after the first run will trigger actions.</p>
+            </div>
+          </>
+        )}
+
+        {/* New Rows to Catalog — extra fields */}
+        {event === "sheets_new_row_catalog" && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Header Row</label>
+                <input
+                  type="number" min={1}
+                  value={config.sheetsHeaderRow ?? 1}
+                  onChange={e => onChange({ ...config, sheetsHeaderRow: parseInt(e.target.value) || 1 })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Data Start Row</label>
+                <input
+                  type="number" min={1}
+                  value={config.sheetsDataStartRow ?? 2}
+                  onChange={e => onChange({ ...config, sheetsDataStartRow: parseInt(e.target.value) || 2 })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Catalog Selection Mode <span className="text-red-500">*</span></label>
+              <div className="relative">
+                <select
+                  value={config.sheetsCatalogSelectionMode ?? "single"}
+                  onChange={e => onChange({ ...config, sheetsCatalogSelectionMode: e.target.value as any })}
+                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                >
+                  <option value="single">Single Catalog (all products go to one catalog)</option>
+                  <option value="per_row">Per Row (catalog ID from a sheet column)</option>
+                </select>
+                <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+              </div>
+              <p className="text-[11px] text-muted-foreground">Select a catalog below — all products from the sheet will be added to this catalog.</p>
+            </div>
+
+            {config.sheetsCatalogSelectionMode !== "per_row" && (
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Catalog <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  placeholder="Catalog ID"
+                  value={config.sheetsCatalogId ?? ""}
+                  onChange={e => onChange({ ...config, sheetsCatalogId: e.target.value })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                />
+                <p className="text-[11px] text-muted-foreground">Enter your Meta Catalog ID</p>
+              </div>
+            )}
+
+            <SelectField
+              label="Check Frequency"
+              value={config.sheetsCheckFrequency ?? "daily"}
+              options={[{ value: "daily", label: "Daily" }, { value: "weekly", label: "Weekly" }]}
+              onChange={v => onChange({ ...config, sheetsCheckFrequency: v as any })}
+              description="How often to check for new rows in the sheet"
+              required
+            />
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <p className="text-[12px] font-semibold text-foreground/80">Process existing rows on first run</p>
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...config, sheetsProcessExistingRows: !(config.sheetsProcessExistingRows ?? false) })}
+                  className={cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none",
+                    config.sheetsProcessExistingRows ? "bg-primary" : "bg-muted-foreground/30"
+                  )}
+                >
+                  <span className={cn(
+                    "pointer-events-none inline-block size-4 rounded-full bg-white shadow transform transition-transform duration-200",
+                    config.sheetsProcessExistingRows ? "translate-x-4" : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Only new rows added after the first run will trigger product creation.</p>
+            </div>
+          </>
+        )}
+
+        {/* Load Columns (New Rows triggers) */}
+        {(event === "sheets_new_row_launch" || event === "sheets_new_row_catalog") && (
+          <button
+            disabled={!config.sheetsSpreadsheetId}
+            className="w-full h-9 flex items-center justify-center gap-2 text-[13px] border border-border rounded-lg text-muted-foreground hover:bg-muted/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <IconRefresh className="size-3.5" />
+            Load Columns
+          </button>
+        )}
+
         {/* Data Mapping */}
         {showDataMapping && <DataMappingSection config={config} onChange={onChange} />}
 
