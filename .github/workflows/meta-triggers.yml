@@ -5,7 +5,15 @@ on:
     # Runs daily at 9:00 AM UTC
     - cron: '0 9 * * *'
   workflow_dispatch:
-    # Allow manual trigger from GitHub Actions UI
+    inputs:
+      dry_run:
+        description: 'Dry run (check triggers only, do NOT execute actions on Meta)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   check-meta-triggers:
@@ -15,10 +23,14 @@ jobs:
     steps:
       - name: Call check-meta-triggers endpoint
         run: |
+          # Scheduled runs: always real. Manual runs: use dry_run input (default: true)
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          echo "Dry run: $DRY_RUN"
+
           response=$(curl -s -L -o /tmp/response.json -w "%{http_code}" \
             -X GET \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "${{ secrets.APP_URL }}/api/cron/check-meta-triggers")
+            "${{ secrets.APP_URL }}/api/cron/check-meta-triggers?dry_run=${DRY_RUN}")
 
           echo "HTTP Status: $response"
           echo "Response:"

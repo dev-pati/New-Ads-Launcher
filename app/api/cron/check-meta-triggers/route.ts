@@ -28,6 +28,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  // dry_run=true → only check triggers, never execute actions or update last_run_at
+  const dryRun = request.nextUrl.searchParams.get("dry_run") === "true"
+
   const db  = createAdminClient()
   const now = new Date()
 
@@ -117,28 +120,45 @@ export async function GET(request: NextRequest) {
           fired: false,
           reason: checkResult.reason,
         })
-        // Still update last_run_at so we don't re-check too soon
-        await db.from("automations")
-          .update({ last_run_at: now.toISOString() })
-          .eq("id", automation.id)
+        // Update last_run_at so we don't re-check too soon (skip in dry run)
+        if (!dryRun) {
+          await db.from("automations")
+            .update({ last_run_at: now.toISOString() })
+            .eq("id", automation.id)
+        }
         continue
       }
 
-      // ── Trigger fired — execute the automation ─────────────────────────
-      console.log(`[check-meta-triggers] FIRED: ${automation.name} (${triggerConfig.event}) — ${checkResult.reason}`)
+      // ── Trigger fired ─────────────────────────────────────────────────
+      console.log(`[check-meta-triggers] FIRED: ${automation.name} (${triggerConfig.event}) — ${checkResult.reason}${dryRun ? " [DRY RUN]" : ""}`)
+
+      if (dryRun) {
+        // Dry run: report what would fire, but don't execute or log
+        results.push({
+          automationId: automation.id,
+          name: automation.name,
+          orgId: automation.org_id,
+          event: triggerConfig.event,
+          fired: true,
+          reason: `[DRY RUN] ${checkResult.reason}`,
+          entityIds: checkResult.entityIds,
+          entityNames: checkResult.entityNames,
+          metaData: checkResult.metaData,
+        })
+        continue
+      }
 
       const execResult = await executeAutomation(
         automation.id,
         automation.org_id,
         {
           isTest: false,
-          // Pass matched entity info as file-like context for actions
           fileId:   checkResult.entityIds?.[0],
           fileName: checkResult.entityNames?.[0],
         }
       )
 
-      // Log the trigger fire separately with full meta data
+      // Log the trigger fire with full meta data
       await db.from("automation_executions").insert({
         org_id:         automation.org_id,
         automation_id:  automation.id,
@@ -191,11 +211,13 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     ok: true,
+    dryRun,
     checked: metaAutomations.length,
     fired,
     skipped,
     errored,
     results,
     ranAt: now.toISOString(),
+    note: dryRun ? "DRY RUN — no actions executed, no Meta ads affected" : undefined,
   })
 }
