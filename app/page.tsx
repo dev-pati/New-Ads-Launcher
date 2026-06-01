@@ -44,6 +44,7 @@ export default function LandingPage() {
             <a href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Features</a>
             <a href="#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">How it works</a>
             <a href="#pricing" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Pricing</a>
+            <Link href="/privacy-policy" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Privacy Policy</Link>
           </nav>
           <div>
             {isSignedIn === null ? (
