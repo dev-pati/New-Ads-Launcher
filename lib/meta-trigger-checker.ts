@@ -4,13 +4,15 @@
  * Called by the daily cron job /api/cron/check-meta-triggers.
  */
 
+import { buildMetaHeaders } from "@/lib/meta-secure-fetch"
+
 const GRAPH = "https://graph.facebook.com/v21.0"
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function metaGet(path: string, token: string) {
-  const sep = path.includes("?") ? "&" : "?"
-  const res = await fetch(`${GRAPH}${path}${sep}access_token=${token}`)
+  // Token in Authorization header + appsecret_proof + User-Agent (NOT in URL)
+  const res = await fetch(`${GRAPH}${path}`, { headers: buildMetaHeaders(token) })
   const data = await res.json()
   if (data.error) throw new Error(data.error.message ?? "Meta API error")
   return data

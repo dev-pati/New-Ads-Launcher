@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { secureMetaFetch, delay } from "@/lib/meta-secure-fetch"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -23,13 +24,16 @@ export async function GET(request: NextRequest) {
     const token        = connection.access_token
     const accountPaths = rawIds.map(id => (id.startsWith("act_") ? id : `act_${id}`))
 
-    // Fetch totals + daily + account name in parallel per account
-    const accountResults = await Promise.all(
-      accountPaths.map(async (accountPath, idx) => {
+    // Fetch accounts sequentially with delay to avoid Meta rate limit burst
+    const accountResults: any[] = []
+    for (let idx = 0; idx < accountPaths.length; idx++) {
+      const accountPath = accountPaths[idx]
+      if (idx > 0) await delay(200) // 200ms between accounts
+      const result = await (async () => {
         const [nameRes, totalsRes, dailyRes] = await Promise.all([
-          fetch(`${GRAPH}/${accountPath}?fields=name&access_token=${token}`),
-          fetch(`${GRAPH}/${accountPath}/insights?fields=spend,impressions,inline_link_clicks,inline_link_click_ctr,cpm&date_preset=${datePreset}&access_token=${token}`),
-          fetch(`${GRAPH}/${accountPath}/insights?fields=spend,impressions,inline_link_clicks&date_preset=${datePreset}&time_increment=1&limit=90&access_token=${token}`),
+          secureMetaFetch(`${GRAPH}/${accountPath}?fields=name&access_token=${token}`),
+          secureMetaFetch(`${GRAPH}/${accountPath}/insights?fields=spend,impressions,inline_link_clicks,inline_link_click_ctr,cpm&date_preset=${datePreset}&access_token=${token}`),
+          secureMetaFetch(`${GRAPH}/${accountPath}/insights?fields=spend,impressions,inline_link_clicks&date_preset=${datePreset}&time_increment=1&limit=90&access_token=${token}`),
         ])
         const [nameData, totalsData, dailyData]: any[] = await Promise.all([
           nameRes.json(), totalsRes.json(), dailyRes.json(),
@@ -56,8 +60,9 @@ export async function GET(request: NextRequest) {
           spend, impressions, linkClicks, ctr, cpm, daily,
           colorIdx:   idx,
         }
-      })
-    )
+      })()
+      accountResults.push(result)
+    }
 
     // Build stacked daily (one column per account)
     const allDates = [...new Set(accountResults.flatMap(a => a.daily.map((d: any) => d.date)))].sort()

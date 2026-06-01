@@ -1,3 +1,5 @@
+import { buildMetaHeaders, extractTokenFromUrl, secureMetaFetch } from "@/lib/meta-secure-fetch"
+
 const GRAPH_API_VERSION = "v25.0"
 export const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`
 
@@ -74,7 +76,7 @@ export async function exchangeCodeForToken(
     code,
   })
 
-  const res = await fetch(`${GRAPH_API_BASE}/oauth/access_token?${params}`)
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/oauth/access_token?${params}`)
   if (!res.ok) {
     const error = await res.json()
     throw new Error(error.error?.message || "Failed to exchange code for token")
@@ -92,7 +94,7 @@ export async function getLongLivedToken(
     fb_exchange_token: shortLivedToken,
   })
 
-  const res = await fetch(`${GRAPH_API_BASE}/oauth/access_token?${params}`)
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/oauth/access_token?${params}`)
   if (!res.ok) {
     const error = await res.json()
     throw new Error(error.error?.message || "Failed to get long-lived token")
@@ -109,7 +111,8 @@ export interface FacebookUser {
 
 export async function getFacebookUser(accessToken: string): Promise<FacebookUser> {
   const res = await fetch(
-    `${GRAPH_API_BASE}/me?fields=id,name,picture&access_token=${accessToken}`
+    `${GRAPH_API_BASE}/me?fields=id,name,picture`,
+    { headers: buildMetaHeaders(accessToken) }
   )
   if (!res.ok) {
     const error = await res.json()
@@ -226,7 +229,7 @@ export async function getBatchPageInstagramAccounts(
         access_token: userToken,
         batch: JSON.stringify(batch),
       })
-      const res = await fetch(`${GRAPH_API_BASE}/`, {
+      const res = await secureMetaFetch(`${GRAPH_API_BASE}/`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
@@ -593,7 +596,7 @@ export async function uploadVideoToMeta(
     file_size: fileSize.toString(),
   })
   
-  const startRes = await fetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
+  const startRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: startParams,
   })
@@ -632,7 +635,7 @@ export async function uploadVideoToMeta(
     formData.append("start_offset", String(startOffset))
     formData.append("video_file_chunk", new Blob([chunkBuffer]), fileName)
     
-    const transferRes = await fetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
+    const transferRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
       method: "POST",
       body: formData,
     })
@@ -658,7 +661,7 @@ export async function uploadVideoToMeta(
     title: fileName,
   })
   
-  const finishRes = await fetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
+  const finishRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: finishParams,
   })
@@ -713,7 +716,7 @@ export async function getAdDetails(adId: string, accessToken: string): Promise<A
     "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget,promoted_object,attribution_spec}",
     "campaign{id,name,objective,special_ad_categories,daily_budget,lifetime_budget,bid_strategy}",
   ].join(",")
-  const res = await fetch(`${GRAPH_API_BASE}/${adId}?fields=${fields}&access_token=${accessToken}`)
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adId}?fields=${fields}&access_token=${accessToken}`)
   if (!res.ok) {
     const error = await res.json()
     throw new Error(error.error?.message || "Failed to get ad details")
@@ -743,7 +746,7 @@ export async function createCampaign(
     body.set("is_adset_budget_sharing_enabled", "false")
   }
   if (params.promoted_object) body.set("promoted_object", JSON.stringify(params.promoted_object))
-  const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/campaigns`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adAccountId}/campaigns`, { method: "POST", body })
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error
@@ -792,7 +795,7 @@ export async function createAdSet(
   if (params.promoted_object) body.promoted_object = JSON.stringify(params.promoted_object)
   if (params.attribution_spec) body.attribution_spec = JSON.stringify(params.attribution_spec)
 
-  const res = await fetch(`${GRAPH_API_BASE}/${adAccountId}/adsets`, {
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adAccountId}/adsets`, {
     method: "POST",
     body: new URLSearchParams(body),
   })
@@ -818,7 +821,7 @@ export async function copyAdSet(
     name: params.name,
     access_token: accessToken,
   })
-  const res = await fetch(`${GRAPH_API_BASE}/${sourceAdsetId}/copies`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${sourceAdsetId}/copies`, { method: "POST", body })
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error
@@ -832,7 +835,7 @@ export async function copyAdSet(
   const patch = new URLSearchParams({ name: params.name, access_token: accessToken })
   if (params.daily_budget) patch.set("daily_budget", String(Math.round(params.daily_budget * 100)))
   if (params.start_time) patch.set("start_time", params.start_time)
-  await fetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch })
+  await secureMetaFetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch })
 
   return { id: newId }
 }
@@ -876,7 +879,7 @@ export async function uploadVideoUrlToMeta(
     name: fileName,
   })
 
-  const res = await fetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: params,
   })
@@ -1117,7 +1120,7 @@ export async function createAd(
       access_token: accessToken,
     })
     const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-    const r = await fetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b })
+    const r = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b })
     const rText = await r.text()
     let rData: any = {}
     try { rData = JSON.parse(rText) } catch {}
@@ -1142,7 +1145,7 @@ export async function createAd(
       access_token: accessToken,
     })
     const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-    const r = await fetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b })
+    const r = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b })
     const rText = await r.text()
     let rData: any = {}
     try { rData = JSON.parse(rText) } catch {}
@@ -1395,7 +1398,7 @@ export async function createAd(
   })
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   console.log(`[createAd] POST /${normId}/ads with creative spec:`, JSON.stringify(creativeJson, null, 2))
-  const res = await fetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body })
   const respText = await res.text()
   let respData: any = {}
   try { respData = JSON.parse(respText) } catch {}
@@ -1413,7 +1416,7 @@ export async function createAd(
   if (respData.id) {
     try {
       const verifyFields = "id,status,effective_status,issues_info,recommendations,creative{id,object_story_id,object_type,thumbnail_url,effective_object_story_id,status}"
-      const vRes = await fetch(`${GRAPH_API_BASE}/${respData.id}?fields=${verifyFields}&access_token=${accessToken}`)
+      const vRes = await secureMetaFetch(`${GRAPH_API_BASE}/${respData.id}?fields=${verifyFields}&access_token=${accessToken}`)
       const vData = await vRes.json()
       console.log(`[createAd] verify ${respData.id}:`, JSON.stringify(vData, null, 2))
       if (vData.issues_info && vData.issues_info.length > 0) {
@@ -1519,7 +1522,7 @@ export async function getExistingAds(
   if (pageIds.size > 0) {
     try {
       const idsParam = Array.from(pageIds).join(",")
-      const pageRes = await fetch(`${GRAPH_API_BASE}/?ids=${idsParam}&fields=id,name&access_token=${accessToken}`)
+      const pageRes = await secureMetaFetch(`${GRAPH_API_BASE}/?ids=${idsParam}&fields=id,name&access_token=${accessToken}`)
       if (pageRes.ok) {
         const pageData = await pageRes.json()
         for (const pid of pageIds) {
@@ -1649,7 +1652,7 @@ export async function getProductCatalogs(accessToken: string, adAccountId?: stri
 }
 
 export async function getProductSets(catalogId: string, accessToken: string): Promise<ProductSet[]> {
-  const res = await fetch(`${GRAPH_API_BASE}/${catalogId}/product_sets?fields=id,name,product_count&limit=100&access_token=${accessToken}`)
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${catalogId}/product_sets?fields=id,name,product_count&limit=100&access_token=${accessToken}`)
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error?.message || "Failed to fetch product sets")
@@ -1659,7 +1662,7 @@ export async function getProductSets(catalogId: string, accessToken: string): Pr
 }
 
 export async function getCatalogProducts(catalogId: string, accessToken: string, limit = 4): Promise<CatalogProduct[]> {
-  const res = await fetch(`${GRAPH_API_BASE}/${catalogId}/products?fields=id,name,image_url,price,brand&limit=${limit}&access_token=${accessToken}`)
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${catalogId}/products?fields=id,name,image_url,price,brand&limit=${limit}&access_token=${accessToken}`)
   if (!res.ok) return []
   const data = await res.json()
   return data.data || []
@@ -1667,7 +1670,7 @@ export async function getCatalogProducts(catalogId: string, accessToken: string,
 
 // Set a single ad's status (ACTIVE | PAUSED)
 export async function setAdStatus(adId: string, accessToken: string, status: "ACTIVE" | "PAUSED"): Promise<void> {
-  const res = await fetch(`${GRAPH_API_BASE}/${adId}`, {
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status, access_token: accessToken }),
@@ -1716,7 +1719,7 @@ export async function updateNode(
   if (params.start_time) body.set("start_time", params.start_time)
   if (params.end_time) body.set("end_time", params.end_time)
 
-  const res = await fetch(`${GRAPH_API_BASE}/${nodeId}`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${nodeId}`, { method: "POST", body })
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error
@@ -1741,7 +1744,7 @@ export async function duplicateNode(
   if (params.deep_copy !== undefined) body.set("deep_copy", String(params.deep_copy))
   if (params.status_option) body.set("status_option", params.status_option)
 
-  const res = await fetch(`${GRAPH_API_BASE}/${nodeId}/copies`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${nodeId}/copies`, { method: "POST", body })
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error

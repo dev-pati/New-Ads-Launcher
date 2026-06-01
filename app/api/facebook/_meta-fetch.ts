@@ -1,10 +1,13 @@
 /**
  * Shared Meta Graph API fetcher with:
+ * - Secure headers: Authorization Bearer, appsecret_proof, User-Agent
+ * - Token moved from URL query param to Authorization header
  * - Structured logging (endpoint, params, caller, cache hit/miss, timestamp)
  * - Rate-limit detection (error code 4, 17, 613)
- * - Exponential backoff on rate-limit: 1s → 2s → 4s (max 3 retries)
+ * - Exponential backoff on rate-limit: 2s → 4s → 8s (max 3 retries)
  * - Hard-stop after exhausting retries — no infinite loops
  */
+import { extractTokenFromUrl, buildMetaHeaders } from "@/lib/meta-secure-fetch"
 
 export interface MetaFetchOptions {
   caller?: string
@@ -55,7 +58,10 @@ export async function metaFetch(
     }
 
     try {
-      const res = await fetch(url)
+      // Move token from URL to Authorization header + add appsecret_proof + User-Agent
+      const { cleanUrl, token } = extractTokenFromUrl(url)
+      const headers = token ? buildMetaHeaders(token) : {}
+      const res = await fetch(cleanUrl, { headers })
       const data = await res.json()
 
       if (data?.error) {
