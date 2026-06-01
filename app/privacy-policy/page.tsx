@@ -10,7 +10,7 @@ export default function PrivacyPolicyPage() {
   const lastUpdated = "June 1, 2026"
   const appName    = "AdLauncher"
   const company    = "PATI Group"
-  const contactEmail = "ai052026@patigroup.com"
+  const contactEmail = "vanthuan@patigroup.com"
   const websiteUrl   = "https://ads.patigroup.com"
 
   return (
