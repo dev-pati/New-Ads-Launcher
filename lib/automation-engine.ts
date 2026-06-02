@@ -340,6 +340,122 @@ async function execMediaLibraryAction(
   }
 }
 
+// ─── Launch Ad action executor ────────────────────────────────────────────────
+
+async function execLaunchAdAction(
+  action: ActionConfig & Record<string, any>,
+  payload: TriggerPayload,
+  token: string,
+  orgId: string,
+  logs: StepLog[]
+): Promise<ActionResult> {
+  const ev = "launch_ad"
+
+  const adAccountId  = action.launchAdAccountId
+  const targetAdsets = action.launchTargetAdsets ?? []
+  const status       = action.launchInitialStatus ?? "PAUSED"
+  const headline     = action.launchHeadline ?? ""
+  const primaryText  = action.launchPrimaryText ?? ""
+  const description  = action.launchDescription ?? ""
+  const linkUrl      = action.launchLinkUrl ?? ""
+  const cta          = action.launchCta ?? "LEARN_MORE"
+  const nameTemplate = action.launchAdNameTemplate ?? "{{filename}} - {{date}}"
+
+  if (!adAccountId) return { event: ev, status: "skipped", message: "No ad account configured" }
+  if (targetAdsets.length === 0) return { event: ev, status: "skipped", message: "No target ad sets configured" }
+  if (!linkUrl) return { event: ev, status: "failed", message: "Link URL is required for Launch Ad" }
+
+  // Resolve name template
+  const date     = new Date().toISOString().split("T")[0]
+  const filename = payload.fileName?.replace(/\.[^/.]+$/, "") ?? ""
+  const adName   = nameTemplate
+    .replace(/\{\{filename\}\}/g, filename)
+    .replace(/\{\{date\}\}/g, date)
+    .replace(/\{\{aiName\}\}/g, filename)
+
+  // Get creative assets from DB if we have a fileId
+  let fbImageHash: string | undefined
+  let fbVideoId: string | undefined
+  let fbThumbnailUrl: string | undefined
+  let pageId: string | undefined
+
+  if (payload.fileId) {
+    const db = createAdminClient()
+    const { data: creative } = await db
+      .from("creatives")
+      .select("fb_image_hash, fb_video_id, fb_thumbnail_url, fb_image_url")
+      .eq("id", payload.fileId)
+      .single()
+
+    if (creative) {
+      fbImageHash   = creative.fb_image_hash ?? undefined
+      fbVideoId     = creative.fb_video_id   ?? undefined
+      fbThumbnailUrl= creative.fb_thumbnail_url ?? undefined
+    }
+
+    // Get page from ad account
+    const { data: page } = await db
+      .from("pages")
+      .select("fb_page_id")
+      .eq("org_id", orgId)
+      .limit(1)
+      .single()
+    pageId = page?.fb_page_id
+  }
+
+  if (!fbImageHash && !fbVideoId) {
+    return { event: ev, status: "failed", message: "Creative has no Facebook asset (image hash or video ID). Upload to Meta first." }
+  }
+
+  // Import createAd from lib/facebook
+  const { createAd, getVideoThumbnail } = await import("@/lib/facebook")
+
+  // Get thumbnail for video if missing
+  if (fbVideoId && !fbThumbnailUrl) {
+    fbThumbnailUrl = (await getVideoThumbnail(fbVideoId, token)) || undefined
+  }
+
+  // Launch into each target ad set
+  const launchResults: any[] = []
+  const launchErrors:  any[] = []
+
+  for (const adsetId of targetAdsets) {
+    try {
+      const ad = await createAd(adAccountId, token, {
+        name:          adName,
+        adset_id:      adsetId,
+        page_id:       pageId,
+        image_hash:    fbImageHash,
+        video_id:      fbVideoId,
+        thumbnail_url: fbThumbnailUrl,
+        title:         headline,
+        body:          primaryText,
+        description,
+        cta,
+        link_url:      linkUrl,
+        status,
+      })
+      addLog(logs, `launch_ad: created ad "${adName}" in adset ${adsetId} → ${ad.id}`)
+      launchResults.push({ adsetId, adId: ad.id, adName })
+    } catch (err: any) {
+      addLog(logs, `launch_ad: failed for adset ${adsetId}: ${err.message}`, "error")
+      launchErrors.push({ adsetId, error: err.message })
+    }
+  }
+
+  if (launchResults.length === 0) {
+    return { event: ev, status: "failed", message: launchErrors[0]?.error ?? "All ad launches failed", data: { launchErrors } }
+  }
+
+  const msg = `Launched ${launchResults.length} ad(s)${launchErrors.length ? `, ${launchErrors.length} failed` : ""}`
+  return {
+    event: ev,
+    status: launchErrors.length > 0 && launchResults.length === 0 ? "failed" : "success",
+    message: msg,
+    data: { launchResults, launchErrors },
+  }
+}
+
 export async function executeAutomation(
   automationId: string,
   orgId: string,
@@ -423,6 +539,7 @@ async function execSteps(
     "enable_ad", "enable_campaign", "enable_adset",
     "duplicate_ad", "duplicate_adset", "duplicate_campaign",
     "increase_budget", "decrease_budget", "change_budget",
+    "launch_ad",
   ])
 
   // Fetch Meta token if any action step needs it
@@ -581,6 +698,12 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
         result = await execSheetsAction(action, triggerPayload, logs)
       } else if (action.event === "upload_to_media_library") {
         result = await execMediaLibraryAction(action, triggerPayload, orgId, logs)
+      } else if (action.event === "launch_ad") {
+        if (!fbToken) {
+          result = { event: action.event, status: "skipped", message: "No Meta connection" }
+        } else {
+          result = await execLaunchAdAction(action, triggerPayload, fbToken, orgId, logs)
+        }
       } else {
         addLog(logs, `WARNING: Unsupported action: ${action.event} — skipping`, "warn")
         result = { event: action.event, status: "skipped", message: `Action "${action.event}" not yet implemented` }

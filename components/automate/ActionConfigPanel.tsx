@@ -398,6 +398,7 @@ function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange:
           { value: "update_rule",        label: "Update Rule" },
           { value: "apply_existing_rule",label: "Apply Existing Rule" },
           { value: "set_minimum_spend",  label: "Set Minimum Spend" },
+          { value: "launch_ad",          label: "Launch Ad" },
         ]}
         onChange={v => onChange({ ...config, event: v as ActionConfig["event"], actionTargetExpression: undefined })}
       />
@@ -599,6 +600,106 @@ function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange:
                 </p>
               </div>
             )}
+          </>
+        )}
+
+        {/* ── Launch Ad ────────────────────────────────────────────── */}
+        {ev === "launch_ad" && (
+          <>
+            <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 px-3 py-2.5">
+              <p className="text-[11px] text-blue-700 dark:text-blue-400">
+                <span className="font-semibold">Note:</span> The creative asset comes from the trigger (e.g., Media Library upload or Best Performing Post). Configure the target ad set and copy below.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Target Ad Sets <span className="text-red-500">*</span></label>
+              <textarea
+                placeholder="One Ad Set ID per line"
+                value={(config.launchTargetAdsets ?? []).join("\n")}
+                onChange={e => onChange({ ...config, launchTargetAdsets: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })}
+                rows={3}
+                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono resize-none placeholder:text-muted-foreground/60"
+              />
+              <p className="text-[11px] text-muted-foreground">Ad Set IDs where the ad will be created</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Ad Name Template</label>
+              <input type="text" placeholder="{{filename}} - {{date}}"
+                value={config.launchAdNameTemplate ?? ""}
+                onChange={e => onChange({ ...config, launchAdNameTemplate: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              />
+              <div className="flex flex-wrap gap-1">
+                {["{{filename}}", "{{date}}", "{{adSetName}}", "{{campaignName}}"].map(v => (
+                  <button key={v} type="button"
+                    onClick={() => onChange({ ...config, launchAdNameTemplate: (config.launchAdNameTemplate ?? "") + v })}
+                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Headline</label>
+              <input type="text" placeholder="Ad headline"
+                value={config.launchHeadline ?? ""}
+                onChange={e => onChange({ ...config, launchHeadline: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Primary Text</label>
+              <textarea placeholder="Ad primary text" rows={3}
+                value={config.launchPrimaryText ?? ""}
+                onChange={e => onChange({ ...config, launchPrimaryText: e.target.value })}
+                className="w-full px-3 py-2 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 resize-none"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Link URL <span className="text-red-500">*</span></label>
+              <input type="url" placeholder="https://example.com"
+                value={config.launchLinkUrl ?? ""}
+                onChange={e => onChange({ ...config, launchLinkUrl: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <SelectField label="Call to Action" value={config.launchCta ?? "LEARN_MORE"}
+                  options={[
+                    { value: "LEARN_MORE",    label: "Learn More" },
+                    { value: "SHOP_NOW",      label: "Shop Now" },
+                    { value: "SIGN_UP",       label: "Sign Up" },
+                    { value: "GET_QUOTE",     label: "Get Quote" },
+                    { value: "BOOK_NOW",      label: "Book Now" },
+                    { value: "CONTACT_US",    label: "Contact Us" },
+                    { value: "DOWNLOAD",      label: "Download" },
+                    { value: "ORDER_NOW",     label: "Order Now" },
+                    { value: "WATCH_MORE",    label: "Watch More" },
+                    { value: "APPLY_NOW",     label: "Apply Now" },
+                    { value: "GET_OFFER",     label: "Get Offer" },
+                    { value: "SUBSCRIBE",     label: "Subscribe" },
+                    { value: "MESSAGE_PAGE",  label: "Send Message" },
+                  ]}
+                  onChange={v => onChange({ ...config, launchCta: v })}
+                />
+              </div>
+              <div className="flex-1">
+                <SelectField label="Initial Status" value={config.launchInitialStatus ?? "PAUSED"}
+                  options={[
+                    { value: "PAUSED", label: "Paused" },
+                    { value: "ACTIVE", label: "Active" },
+                  ]}
+                  onChange={v => onChange({ ...config, launchInitialStatus: v as any })}
+                />
+              </div>
+            </div>
           </>
         )}
 
