@@ -704,7 +704,7 @@ interface Props {
 type AddingAt = { index: number; x: number; y: number } | null
 
 export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
-  const automationId = initialWorkflow?.id
+  const [automationId, setAutomationId] = useState<string | undefined>(initialWorkflow?.id)
   const [name, setName] = useState(initialWorkflow?.name ?? "Untitled Zap")
   const [steps, setSteps] = useState<WorkflowStep[]>(
     // New workflows start empty; templates/saved workflows start with their steps
@@ -875,15 +875,16 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
   const handleSave = useCallback(async () => {
     setSaving(true)
     try {
-      await fetch("/api/automations", {
-        method: "POST",
+      const method = automationId ? "PATCH" : "POST"
+      const url    = automationId ? `/api/automations/${automationId}` : "/api/automations"
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name,
           trigger_type: steps[0]?.triggerConfig?.event ?? "performance_monitoring",
           trigger_config: steps[0]?.triggerConfig ?? {},
           conditions: [],
-          // Save full step objects so delay + approval steps are preserved
           actions: steps.slice(1).map(s => ({
             kind:           s.kind,
             actionConfig:   s.actionConfig   ?? null,
@@ -893,6 +894,11 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
           ad_account_ids: [],
         }),
       })
+      const data = await res.json()
+      // Store the ID returned from the API so Run/Test/History work immediately
+      if (data?.automation?.id && !automationId) {
+        setAutomationId(data.automation.id)
+      }
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch { /* silent */ }
