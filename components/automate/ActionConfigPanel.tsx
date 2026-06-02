@@ -1178,7 +1178,40 @@ function MediaLibraryActionPreview({ config }: { config: ActionConfig }) {
 
 // ─── Preview tab ──────────────────────────────────────────────────────────────
 
-function PreviewTab({ config }: { config: ActionConfig }) {
+function PreviewTab({ config, automationId }: { config: ActionConfig; automationId?: string }) {
+  const [dryRunning, setDryRunning] = useState(false)
+  const [dryRunResult, setDryRunResult] = useState<string | null>(null)
+
+  const handleDryRun = async () => {
+    if (!automationId) {
+      setDryRunResult("❌ Save the automation first")
+      setTimeout(() => setDryRunResult(null), 3000)
+      return
+    }
+    setDryRunning(true)
+    setDryRunResult(null)
+    try {
+      const res  = await fetch(`/api/automations/${automationId}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_test: true }),
+      })
+      const data = await res.json()
+      const notifResult = data.actionResults?.find((r: any) => r.event === "send_notification")
+      if (notifResult?.status === "success") {
+        setDryRunResult("✅ Email sent successfully!")
+      } else if (notifResult?.status === "skipped") {
+        setDryRunResult(`⚠️ Skipped: ${notifResult.message}`)
+      } else {
+        setDryRunResult(`❌ Failed: ${notifResult?.message ?? data.error ?? "Unknown error"}`)
+      }
+    } catch (err: any) {
+      setDryRunResult(`❌ ${err.message}`)
+    } finally {
+      setDryRunning(false)
+      setTimeout(() => setDryRunResult(null), 5000)
+    }
+  }
   const notif = config.notification
   const msg   = notif?.customMessage ??
     "{{trigger.summary}}\n{{trigger.entityName}}: {{trigger.previousValue}} → {{trigger.currentValue}} ({{trigger.actualChange}}% change)"
@@ -1214,9 +1247,16 @@ function PreviewTab({ config }: { config: ActionConfig }) {
 
       <div className="space-y-1.5">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">What will get sent</p>
-        <button className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2">
-          Dry-run this notification
+        <button
+          onClick={handleDryRun}
+          disabled={dryRunning}
+          className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+        >
+          {dryRunning ? <><IconLoader2 className="size-3.5 animate-spin" /> Sending…</> : "Dry-run this notification"}
         </button>
+        {dryRunResult && (
+          <p className="text-[12px] text-center font-medium py-1">{dryRunResult}</p>
+        )}
       </div>
 
       {(!notif || notif.via === "email" || notif.via === "both") && (
@@ -1277,9 +1317,10 @@ interface Props {
   config: ActionConfig
   onChange: (c: ActionConfig) => void
   onClose?: () => void
+  automationId?: string
 }
 
-export function ActionConfigPanel({ stepIndex, config, onChange, onClose }: Props) {
+export function ActionConfigPanel({ stepIndex, config, onChange, onClose, automationId }: Props) {
   const [activeTab, setActiveTab] = useState<"setup" | "preview">("setup")
   const meta    = getActionMeta(config)
   const AppIcon = meta.icon
@@ -1331,7 +1372,7 @@ export function ActionConfigPanel({ stepIndex, config, onChange, onClose }: Prop
       <div className="flex-1 overflow-y-auto">
         {activeTab === "setup"
           ? <SetupTab config={config} onChange={onChange} />
-          : <PreviewTab config={config} />
+          : <PreviewTab config={config} automationId={automationId} />
         }
       </div>
 
