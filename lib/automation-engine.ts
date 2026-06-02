@@ -57,9 +57,18 @@ async function execMetaAction(
   action: ActionConfig & Record<string, any>,
   payload: TriggerPayload,
   token: string,
-  logs: StepLog[]
+  logs: StepLog[],
+  isTest = false
 ): Promise<ActionResult> {
   const ev = action.event
+
+  // ── TEST MODE: simulate without calling Meta API ──────────────────────────
+  if (isTest) {
+    const ids = resolveTargetIds(action, payload)
+    const targetDesc = ids.length ? `IDs: ${ids.slice(0, 3).join(", ")}${ids.length > 3 ? "…" : ""}` : "no targets"
+    addLog(logs, `[TEST MODE] Would execute ${ev} on ${targetDesc} — skipped to protect real ads`, "info")
+    return { event: ev, status: "skipped", message: `[TEST] Would execute ${ev} (${targetDesc})` }
+  }
 
   switch (ev) {
     // ── Pause ────────────────────────────────────────────────────────────────
@@ -347,7 +356,8 @@ async function execLaunchAdAction(
   payload: TriggerPayload,
   token: string,
   orgId: string,
-  logs: StepLog[]
+  logs: StepLog[],
+  isTest = false
 ): Promise<ActionResult> {
   const ev = "launch_ad"
 
@@ -364,6 +374,12 @@ async function execLaunchAdAction(
   if (!adAccountId) return { event: ev, status: "skipped", message: "No ad account configured" }
   if (targetAdsets.length === 0) return { event: ev, status: "skipped", message: "No target ad sets configured" }
   if (!linkUrl) return { event: ev, status: "failed", message: "Link URL is required for Launch Ad" }
+
+  // ── TEST MODE: simulate without creating real ads ─────────────────────────
+  if (isTest) {
+    addLog(logs, `[TEST MODE] Would launch ad into ${targetAdsets.length} ad set(s) — skipped to protect real ads`, "info")
+    return { event: ev, status: "skipped", message: `[TEST] Would launch ad into ${targetAdsets.length} ad set(s): ${targetAdsets.slice(0, 2).join(", ")}` }
+  }
 
   // Resolve name template
   const date     = new Date().toISOString().split("T")[0]
@@ -688,11 +704,14 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
       addLog(logs, `--- Step ${i + 1}: ${action.event} ---`)
       let result: ActionResult
 
+      const isTest = options.isTest ?? false
+
       if (action.event === "send_notification") {
         result = await execNotification(action, triggerPayload, automation.name, logs)
       } else if (META_ACTIONS.has(action.event)) {
+        // Pass isTest so Meta mutations are skipped in test mode
         result = fbToken
-          ? await execMetaAction(action, triggerPayload, fbToken, logs)
+          ? await execMetaAction(action, triggerPayload, fbToken, logs, isTest)
           : { event: action.event, status: "skipped", message: "No Meta connection" }
       } else if (["add_sheet_row", "update_sheet_cell", "update_sheet_row"].includes(action.event)) {
         result = await execSheetsAction(action, triggerPayload, logs)
@@ -702,7 +721,7 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
         if (!fbToken) {
           result = { event: action.event, status: "skipped", message: "No Meta connection" }
         } else {
-          result = await execLaunchAdAction(action, triggerPayload, fbToken, orgId, logs)
+          result = await execLaunchAdAction(action, triggerPayload, fbToken, orgId, logs, isTest)
         }
       } else {
         addLog(logs, `WARNING: Unsupported action: ${action.event} — skipping`, "warn")
