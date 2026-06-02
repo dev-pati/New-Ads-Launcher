@@ -803,3 +803,4 @@ export async function resumeAutomation(executionId: string): Promise<ExecutionRe
     .eq("id", executionId)
 
   return execSteps(steps, resumeFrom, triggerPayload, automation, exec.org_id, supabase, logs, actionResults, startMs, { isTest: details.isTest ?? false })
+}
