@@ -64,3 +64,19 @@ jobs:
           if [ "$response" != "200" ]; then echo "❌ Failed with status $response"; exit 1; fi
           fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired',0))" 2>/dev/null || echo "?")
           echo "✅ Drive triggers — fired: $fired"
+
+  check-scheduled-triggers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call check-scheduled-triggers endpoint
+        run: |
+          DRY_RUN="${{ github.event.inputs.dry_run || 'false' }}"
+          response=$(curl -s -L -o /tmp/response.json -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/check-scheduled-triggers?dry_run=${DRY_RUN}")
+          echo "HTTP Status: $response"
+          cat /tmp/response.json | python3 -m json.tool 2>/dev/null || cat /tmp/response.json
+          if [ "$response" != "200" ]; then echo "❌ Failed with status $response"; exit 1; fi
+          fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired',0))" 2>/dev/null || echo "?")
+          echo "✅ Scheduled triggers — fired: $fired"

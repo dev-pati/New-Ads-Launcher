@@ -510,6 +510,22 @@ export async function checkMetaTrigger(
       return checkPerformanceMonitoring(triggerConfig, token)
     case "best_performing_organic_post":
       return checkBestPerformingOrganicPost(triggerConfig, token)
+    // roas_threshold: fires when ROAS drops below a target value
+    case "roas_threshold":
+      return checkPerformanceThreshold({
+        ...triggerConfig,
+        thresholdConditions: [{ metric: "purchase_roas", operator: "<", value: triggerConfig.roasTarget ?? 1 }],
+        thresholdPerformancePeriod: triggerConfig.lookbackPeriod ?? "7d",
+        thresholdConditionLevel: "per_ad",
+      }, token)
+    // cpa_spike: fires when CPA rises above a target value
+    case "cpa_spike":
+      return checkPerformanceThreshold({
+        ...triggerConfig,
+        thresholdConditions: [{ metric: "cpa", operator: ">", value: triggerConfig.cpaTarget ?? 100 }],
+        thresholdPerformancePeriod: triggerConfig.lookbackPeriod ?? "7d",
+        thresholdConditionLevel: "per_ad",
+      }, token)
     default:
       return { fired: false, reason: `Unknown event type: ${event}` }
   }

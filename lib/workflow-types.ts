@@ -74,6 +74,11 @@ export interface TriggerConfig {
   adSetFilter?: "all" | "name_contains" | "name_equals"
   adSetNameFilterValue?: string
   lookbackWindow?: "1h" | "6h" | "12h" | "24h" | "48h"
+  // ROAS threshold trigger
+  roasTarget?: number       // fire when ROAS drops below this
+  // CPA spike trigger
+  cpaTarget?: number        // fire when CPA rises above this
+  lookbackPeriod?: "1d" | "3d" | "7d" | "14d" | "30d"
   // Performance Threshold
   thresholdAdStatus?: "all" | "active" | "paused"
   thresholdPerformancePeriod?: "lifetime" | "1d" | "3d" | "7d" | "14d" | "30d"
