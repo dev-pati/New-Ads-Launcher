@@ -600,17 +600,19 @@ function AddStepPopup({ x, y, onAddKind, onClose }: {
 // ─── Top bar ──────────────────────────────────────────────────────────────────
 
 function TopBar({
-  name, onNameChange, saving, saved,
-  onSave, onRun, onPreview, onHistory,
+  name, onNameChange, saving, saved, running,
+  onSave, onRun, onPreview, onHistory, historyOpen,
 }: {
   name: string
   onNameChange: (v: string) => void
   saving: boolean
   saved: boolean
+  running?: boolean
   onSave: () => void
   onRun: () => void
   onPreview: () => void
   onHistory: () => void
+  historyOpen?: boolean
 }) {
   const router = useRouter()
   const [editingName, setEditingName] = useState(false)
@@ -662,20 +664,25 @@ function TopBar({
           </button>
           <button
             onClick={onRun}
-            className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-[#2563EB] text-white text-[13px] font-semibold hover:bg-[#1D4ED8] transition-colors shadow-sm"
+            disabled={running}
+            className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-[#2563EB] text-white text-[13px] font-semibold hover:bg-[#1D4ED8] transition-colors shadow-sm disabled:opacity-60"
           >
-            <IconPlayerPlay className="size-3.5 fill-white" />
-            Run
+            {running
+              ? <IconLoader2 className="size-3.5 animate-spin" />
+              : <IconPlayerPlay className="size-3.5 fill-white" />}
+            {running ? "Running…" : "Run"}
           </button>
           <button onClick={onPreview} className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-[13px] font-medium text-foreground/80 hover:bg-muted transition-colors">
             <IconEye className="size-3.5" />
             Full preview
           </button>
-          <button disabled className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-[13px] font-medium text-muted-foreground/50 cursor-not-allowed">
+          <button onClick={onHistory} className={cn("flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border text-[13px] font-medium transition-colors",
+            historyOpen ? "bg-primary/10 text-primary border-primary/30" : "bg-background text-foreground/80 hover:bg-muted"
+          )}>
             <IconHistory className="size-3.5" />
             History
           </button>
-          <button onClick={onHistory} className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <button className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
             <IconBell className="size-4" />
           </button>
           <button className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
@@ -709,6 +716,11 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
   const [choosingActionForStep, setChoosingActionForStep] = useState<string | null>(null)
   const [saving,                setSaving]                = useState(false)
   const [saved,                 setSaved]                 = useState(false)
+  const [running,               setRunning]               = useState(false)
+  const [runResult,             setRunResult]             = useState<{ status: string; message: string } | null>(null)
+  const [showHistory,           setShowHistory]           = useState(false)
+  const [history,               setHistory]               = useState<any[]>([])
+  const [loadingHistory,        setLoadingHistory]        = useState(false)
 
   const selectedStep = steps.find(s => s.id === selectedId) ?? null
 
@@ -818,6 +830,48 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
     ))
   }, [])
 
+  const handleRun = useCallback(async () => {
+    if (!automationId) {
+      setRunResult({ status: "error", message: "Save the automation first before running." })
+      setTimeout(() => setRunResult(null), 4000)
+      return
+    }
+    setRunning(true)
+    setRunResult(null)
+    try {
+      const res = await fetch(`/api/automations/${automationId}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_test: true }),
+      })
+      const data = await res.json()
+      const status = data.status ?? (res.ok ? "success" : "error")
+      const msg    = data.error ?? `Run ${status} — ${data.actionResults?.length ?? 0} action(s) executed`
+      setRunResult({ status, message: msg })
+      setTimeout(() => setRunResult(null), 6000)
+    } catch (err: any) {
+      setRunResult({ status: "error", message: err.message })
+      setTimeout(() => setRunResult(null), 4000)
+    } finally {
+      setRunning(false)
+    }
+  }, [automationId])
+
+  const handleHistory = useCallback(async () => {
+    setShowHistory(v => !v)
+    if (!automationId || showHistory) return
+    setLoadingHistory(true)
+    try {
+      const res  = await fetch(`/api/automations/${automationId}/history`)
+      const data = await res.json()
+      setHistory(data.executions ?? [])
+    } catch {
+      setHistory([])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }, [automationId, showHistory])
+
   const handleSave = useCallback(async () => {
     setSaving(true)
     try {
@@ -852,13 +906,66 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
         onNameChange={setName}
         saving={saving}
         saved={saved}
+        running={running}
         onSave={handleSave}
-        onRun={() => {}}
+        onRun={handleRun}
         onPreview={() => {}}
-        onHistory={() => {}}
+        onHistory={handleHistory}
+        historyOpen={showHistory}
       />
 
+      {/* Run result toast */}
+      {runResult && (
+        <div className={cn(
+          "fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-[13px] font-medium border max-w-sm",
+          runResult.status === "success" ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
+          : runResult.status === "pending_delay" || runResult.status === "pending_approval" ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300"
+          : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300"
+        )}>
+          {runResult.status === "success" ? "✅" : runResult.status.startsWith("pending") ? "⏳" : "❌"}
+          <span>{runResult.message}</span>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
+        {/* History panel */}
+        {showHistory && (
+          <div className="w-[360px] shrink-0 border-r border-border bg-background flex flex-col overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <p className="text-[14px] font-semibold">Run History</p>
+              <button onClick={() => setShowHistory(false)} className="text-muted-foreground hover:text-foreground">
+                <IconX className="size-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y divide-border/60">
+              {loadingHistory ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <IconLoader2 className="size-4 animate-spin mr-2" /> Loading…
+                </div>
+              ) : history.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                  <IconHistory className="size-8 mb-2 opacity-30" />
+                  <p className="text-[13px]">No runs yet</p>
+                </div>
+              ) : history.map((exec: any) => (
+                <div key={exec.id} className="px-4 py-3 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                      exec.status === "success" ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
+                      : exec.status === "pending" ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
+                      : "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400"
+                    )}>
+                      {exec.status}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{new Date(exec.executed_at).toLocaleString()}</span>
+                  </div>
+                  <p className="text-[12px] text-muted-foreground">{exec.action_taken || "—"} · {exec.entities_affected ?? 0} affected</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Canvas */}
         <div className="flex-1 overflow-hidden relative">
           <WorkflowCanvas
