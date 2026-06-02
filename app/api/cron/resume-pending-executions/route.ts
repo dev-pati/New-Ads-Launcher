@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     .from("automation_executions")
     .select("id, details, automation_name")
     .eq("status", "pending")
-    .filter("details->action_taken", "eq", '"delay"')
+    .eq("action_taken", "delay")
 
   for (const exec of pendingDelay ?? []) {
     const details   = exec.details as any
