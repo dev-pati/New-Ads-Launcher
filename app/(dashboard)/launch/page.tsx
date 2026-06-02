@@ -57,6 +57,7 @@ import { SheetsImportDialog, type ImportedRow } from "@/components/sheets-import
 interface AdSet { id: string; name: string; status: string; effective_status: string; campaign_id: string; campaign_name?: string; daily_budget?: string }
 interface Creative { id: string; file_name: string; file_url: string; media_type: "image" | "video"; headline?: string; primary_text?: string; cta?: string; link_url?: string; fb_image_url?: string; fb_thumbnail_url?: string; fb_image_hash?: string; fb_video_id?: string; created_at?: string; transcript?: string; tags?: string[]; status?: "pending" | "processing" | "ready" | "error" }
 interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "image" | "video"; duration?: number | null; width?: number; height?: number; dimensions?: string | null; date_added?: string; status?: string | null; thumbnail_url?: string; fb_video_id?: string; fb_image_hash?: string; fb_image_url?: string }
+interface DriveFileItem { id: string; name: string; mimeType: string; thumbnailLink?: string; iconLink?: string; size?: string; modifiedTime?: string }
 interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
@@ -4307,99 +4308,74 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
     return null
   }
 
-  // List all media files in a folder, with pagination and optional recursion into subfolders
-  const listFilesInFolder = async (folderId: string, recursive: boolean, token: string): Promise<{ id: string; name: string; mimeType: string }[]> => {
-    const all: { id: string; name: string; mimeType: string }[] = []
-
-    // Fetch all media files (paginated)
-    let pageToken: string | undefined
-    do {
-      const q = encodeURIComponent(`'${folderId}' in parents and (mimeType contains 'image/' or mimeType contains 'video/') and trashed = false`)
-      const qs = `q=${q}&fields=nextPageToken,files(id,name,mimeType)&pageSize=1000${pageToken ? `&pageToken=${pageToken}` : ""}`
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files?${qs}`, { headers: { Authorization: `Bearer ${token}` } })
-      const data = await res.json()
-      all.push(...(data.files || []))
-      pageToken = data.nextPageToken
-    } while (pageToken)
-
-    if (recursive) {
-      // Fetch all subfolders (paginated)
-      const subfolders: { id: string }[] = []
-      let subPageToken: string | undefined
-      do {
-        const q = encodeURIComponent(`'${folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`)
-        const qs = `q=${q}&fields=nextPageToken,files(id,name,mimeType)&pageSize=1000${subPageToken ? `&pageToken=${subPageToken}` : ""}`
-        const res = await fetch(`https://www.googleapis.com/drive/v3/files?${qs}`, { headers: { Authorization: `Bearer ${token}` } })
-        const data = await res.json()
-        subfolders.push(...(data.files || []))
-        subPageToken = data.nextPageToken
-      } while (subPageToken)
-
-      // Recurse into each subfolder
-      for (const sub of subfolders) {
-        const subFiles = await listFilesInFolder(sub.id, true, token)
-        all.push(...subFiles)
-      }
-    }
-
-    return all
-  }
-
   const handleViewContents = async () => {
-    if (!gdriveToken) { onRequestAuth(); return }
     const urls = links.split("\n").map(l => l.trim()).filter(Boolean)
     if (urls.length === 0) return
     setImporting(true)
     setResults([])
     const newCreatives: Creative[] = []
 
-    await Promise.allSettled(urls.map(async (url) => {
+    const items = urls.map(url => {
       const parsed = extractFileId(url)
-      if (!parsed) { setResults(p => [...p, { name: url, status: "error", error: "Invalid Drive URL" }]); return }
-
-      if (parsed.type === "file") {
-        try {
-          const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${parsed.id}?fields=id,name,mimeType`, {
-            headers: { Authorization: `Bearer ${gdriveToken}` }
-          })
-          const meta = await metaRes.json()
-          if (!metaRes.ok) throw new Error(meta.error?.message || "Failed to get file info")
-          const res = await fetch("/api/google/import-drive", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ accessToken: gdriveToken, fileId: meta.id, fileName: meta.name, mimeType: meta.mimeType, adAccountId }),
-          })
-          const d = await res.json()
-          if (!res.ok) throw new Error(d.error || "Import failed")
-          newCreatives.push(d.creative)
-          setResults(p => [...p, { name: meta.name, status: "done" }])
-        } catch (e: any) {
-          setResults(p => [...p, { name: url, status: "error", error: e.message }])
-        }
-      } else {
-        // Folder: list all files with pagination + optional recursion, then import in parallel
-        try {
-          const files = await listFilesInFolder(parsed.id, includeSubfolders, gdriveToken)
-          await Promise.allSettled(files.map(async (file) => {
-            try {
-              const res = await fetch("/api/google/import-drive", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ accessToken: gdriveToken, fileId: file.id, fileName: file.name, mimeType: file.mimeType, adAccountId }),
-              })
-              const d = await res.json()
-              if (!res.ok) throw new Error(d.error || "Import failed")
-              newCreatives.push(d.creative)
-              setResults(p => [...p, { name: file.name, status: "done" }])
-            } catch (e: any) {
-              setResults(p => [...p, { name: file.name, status: "error", error: e.message }])
-            }
-          }))
-        } catch (e: any) {
-          setResults(p => [...p, { name: url, status: "error", error: e.message }])
-        }
+      if (!parsed) {
+        setResults(p => [...p, { name: url, status: "error", error: "Invalid Drive URL" }])
+        return null
       }
-    }))
+      return { ...parsed, label: url }
+    }).filter(Boolean) as { id: string; type: "file" | "folder"; label: string }[]
+
+    try {
+      const resolveRes = await fetch("/api/google/drive/resolve-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items, includeSubfolders }),
+      })
+      const resolved = await resolveRes.json()
+
+      if (resolveRes.status === 401 || resolved.connected === false) {
+        onRequestAuth()
+        throw new Error("Google Drive is not connected. Reconnect Google Drive and try again.")
+      }
+      if (!resolveRes.ok) throw new Error(resolved.error || "Failed to resolve Google Drive links")
+
+      ;(resolved.errors || []).forEach((err: { name: string; error: string }) => {
+        setResults(p => [...p, { name: err.name, status: "error", error: err.error }])
+      })
+
+      const files = (resolved.files || []) as { id: string; name: string; mimeType: string }[]
+      if (files.length === 0) {
+        setResults(p => p.length ? p : [...p, { name: "Google Drive links", status: "error", error: "No image or video files found" }])
+      } else {
+        let cursor = 0
+        const concurrency = 2
+        const importOne = async (file: { id: string; name: string; mimeType: string }) => {
+          try {
+            const res = await fetch("/api/google/import-drive", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fileId: file.id, fileName: file.name, mimeType: file.mimeType, adAccountId }),
+            })
+            const d = await res.json()
+            if (!res.ok) throw new Error(d.error || "Import failed")
+            newCreatives.push(d.creative)
+            setResults(p => [...p, { name: file.name, status: "done" }])
+          } catch (e: any) {
+            setResults(p => [...p, { name: file.name, status: "error", error: e.message }])
+          }
+        }
+
+        const worker = async () => {
+          while (cursor < files.length) {
+            const index = cursor++
+            await importOne(files[index])
+          }
+        }
+
+        await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker))
+      }
+    } catch (e: any) {
+      setResults(p => [...p, { name: "Google Drive", status: "error", error: e.message }])
+    }
 
     if (newCreatives.length > 0) onImported(newCreatives)
     setImporting(false)
@@ -4631,6 +4607,9 @@ function LoadMediaModal({
 
   const [gdriveToken, setGdriveToken] = useState<string | null>(() => loadCachedToken())
   const [gdriveQueue, setGdriveQueue] = useState<{ id: string; name: string; mimeType: string; status: "pending" | "importing" | "done" | "error"; error?: string }[]>([])
+  const [driveFiles, setDriveFiles] = useState<DriveFileItem[]>([])
+  const [driveFilesLoading, setDriveFilesLoading] = useState(false)
+  const [selectedDriveFileIds, setSelectedDriveFileIds] = useState<Set<string>>(new Set())
   const [gdriveImporting, setGdriveImporting] = useState(false)
   const [gdriveError, setGdriveError] = useState<string | null>(null)
   const gdriveTokenRef = useRef<string | null>(loadCachedToken())
@@ -4835,6 +4814,12 @@ function LoadMediaModal({
   const openGoogleDrivePicker = async () => {
     setGdriveError(null)
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || ""
+    const googleProjectNumber = clientId.split("-")[0] || ""
+
+    if (!clientId) {
+      setGdriveError("Missing Google Client ID in environment variables")
+      return
+    }
 
     // If scripts not preloaded yet, load them now (fallback)
     if (!gdriveScriptsReady.current) {
@@ -4894,6 +4879,17 @@ function LoadMediaModal({
 
     const token = gdriveTokenRef.current || await getToken()
 
+    setDriveFilesLoading(true)
+    const filesRes = await fetch("/api/google/drive/files?limit=50")
+    const filesData = await filesRes.json()
+    if (!filesRes.ok) throw new Error(filesData.error || "Failed to load Google Drive files")
+    if (!filesData.connected) throw new Error("Google Drive is not connected")
+    setDriveFiles(filesData.files || [])
+    setSelectedDriveFileIds(new Set())
+    setMediaTab("gdrive")
+    setDriveFilesLoading(false)
+    return
+
     await new Promise<void>(resolve => (window as any).gapi.load("picker", resolve))
 
     // Radix Dialog sets pointer-events:none on body — override while Picker is open
@@ -4908,6 +4904,8 @@ function LoadMediaModal({
       )
       .addView(new P.DocsView(P.ViewId.DOCS_IMAGES_AND_VIDEOS))
       .setOAuthToken(token)
+      .setOrigin(window.location.origin)
+      .setAppId(googleProjectNumber)
       .enableFeature(P.Feature.MULTISELECT_ENABLED)
       .setCallback(async (data: any) => {
         // Restore pointer-events when picker is dismissed or files picked
@@ -4915,8 +4913,8 @@ function LoadMediaModal({
           document.body.style.pointerEvents = ""
         }
         if (data.action !== P.Action.PICKED) return
-        const files = data.docs as { id: string; name: string; mimeType: string }[]
-        const queue = files.map(f => ({ id: f.id, name: f.name, mimeType: f.mimeType, status: "pending" as const }))
+        const files = data.docs as { id: string; name: string; mimeType?: string }[]
+        const queue = files.map(f => ({ id: f.id, name: f.name, mimeType: f.mimeType || "", status: "pending" as const }))
         setGdriveQueue(queue)
         setGdriveImporting(true)
 
@@ -4929,14 +4927,25 @@ function LoadMediaModal({
         await Promise.allSettled(files.map(async (f, i) => {
           setGdriveQueue(prev => prev.map((q, idx) => idx === i ? { ...q, status: "importing" } : q))
           try {
+            let fileName = f.name
+            let mimeType = f.mimeType
+            if (!mimeType) {
+              const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}?fields=id,name,mimeType`, {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+              const meta = await metaRes.json()
+              if (!metaRes.ok) throw new Error(meta.error?.message || "Failed to get file info")
+              fileName = meta.name || fileName
+              mimeType = meta.mimeType
+            }
             const res = await fetch("/api/google/import-drive", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                accessToken: gdriveTokenRef.current,
+                accessToken: token,
                 fileId: f.id,
-                fileName: f.name,
-                mimeType: f.mimeType,
+                fileName,
+                mimeType,
                 adAccountId,
               }),
             })
@@ -4977,8 +4986,100 @@ function LoadMediaModal({
     picker.setVisible(true)
     } catch (err: any) {
       document.body.style.pointerEvents = ""
+      setDriveFilesLoading(false)
       const msg = err.message || "Google Drive connection failed"
       setGdriveError(msg)
+    }
+  }
+
+  const importGoogleDriveFiles = async (files: DriveFileItem[]) => {
+    if (files.length === 0) return
+
+    const token = gdriveTokenRef.current
+    if (!token) {
+      setGdriveError("Google Drive is not connected")
+      return
+    }
+
+    setGdriveError(null)
+    setGdriveQueue(files.map(file => ({
+      id: file.id,
+      name: file.name,
+      mimeType: file.mimeType,
+      status: "pending" as const,
+    })))
+    setGdriveImporting(true)
+
+    const creativesBefore = [...allCreatives]
+    const selectedBefore = new Set(selected)
+    const imported: Creative[] = []
+    let errorCount = 0
+    let cursor = 0
+    const concurrency = 2
+
+    const importOne = async (file: DriveFileItem, index: number) => {
+      setGdriveQueue(prev => prev.map((q, i) => i === index ? { ...q, status: "importing" } : q))
+      try {
+        const res = await fetch("/api/google/import-drive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accessToken: token,
+            fileId: file.id,
+            fileName: file.name,
+            mimeType: file.mimeType,
+            adAccountId,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || "Import failed")
+
+        const creative: Creative = data.creative
+        imported.push(creative)
+        setAllCreatives(prev => [creative, ...prev.filter(c => c.id !== creative.id)])
+        setSelected(prev => new Set([...prev, creative.id]))
+        setGdriveQueue(prev => prev.map((q, i) => i === index ? { ...q, status: "done" } : q))
+      } catch (err: any) {
+        errorCount += 1
+        setGdriveQueue(prev => prev.map((q, i) => i === index
+          ? { ...q, status: "error", error: err.message || "Import failed" }
+          : q
+        ))
+      }
+    }
+
+    const worker = async () => {
+      while (cursor < files.length) {
+        const index = cursor++
+        await importOne(files[index], index)
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker))
+    setGdriveImporting(false)
+
+    if (imported.length > 0) {
+      const importedFileNames = new Set(imported.map(c => c.file_name))
+      setSelectedDriveFileIds(prev => {
+        const next = new Set(prev)
+        files.forEach(file => {
+          if (importedFileNames.has(file.name)) next.delete(file.id)
+        })
+        return next
+      })
+    }
+
+    if (imported.length > 0 && errorCount === 0) {
+      const newAllCreatives = [
+        ...imported,
+        ...creativesBefore.filter(c => !imported.some(n => n.id === c.id)),
+      ]
+      const finalSelectedIds = Array.from(new Set([...Array.from(selectedBefore), ...imported.map(c => c.id)]))
+      const selectedObjects = newAllCreatives.filter(c => finalSelectedIds.includes(c.id))
+      setTimeout(() => {
+        onConfirm(finalSelectedIds, selectedObjects)
+        onClose()
+      }, 800)
     }
   }
 
@@ -5912,6 +6013,99 @@ function LoadMediaModal({
                     <IconBrandGoogleDrive className="size-3.5" />Import more files
                   </Button>
                 )}
+              </div>
+            ) : driveFilesLoading || driveFiles.length > 0 ? (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-5 py-3 border-b">
+                  <div>
+                    <p className="text-sm font-medium">Google Drive files</p>
+                    <p className="text-xs text-muted-foreground">Recent images and videos from your Drive</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {driveFiles.length > 0 && (
+                      <>
+                        <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="size-4 rounded border-muted-foreground/30"
+                            checked={selectedDriveFileIds.size > 0 && selectedDriveFileIds.size === driveFiles.length}
+                            ref={el => {
+                              if (el) el.indeterminate = selectedDriveFileIds.size > 0 && selectedDriveFileIds.size < driveFiles.length
+                            }}
+                            onChange={e => setSelectedDriveFileIds(e.target.checked ? new Set(driveFiles.map(file => file.id)) : new Set())}
+                          />
+                          Select all
+                        </label>
+                        <Button
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={gdriveImporting || selectedDriveFileIds.size === 0}
+                          onClick={() => importGoogleDriveFiles(driveFiles.filter(file => selectedDriveFileIds.has(file.id)))}
+                        >
+                          {gdriveImporting ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBrandGoogleDrive className="size-3.5" />}
+                          Import selected{selectedDriveFileIds.size ? ` (${selectedDriveFileIds.size})` : ""}
+                        </Button>
+                      </>
+                    )}
+                    <Button variant="outline" size="sm" className="gap-1.5" onClick={openGoogleDrivePicker} disabled={driveFilesLoading || gdriveImporting}>
+                      {driveFilesLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconRefresh className="size-3.5" />}
+                      Refresh
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {driveFilesLoading ? (
+                    <div className="h-40 flex items-center justify-center">
+                      <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : driveFiles.length === 0 ? (
+                    <div className="h-40 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <IconBrandGoogleDrive className="size-8 opacity-40" />
+                      <p className="text-sm">No image or video files found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {driveFiles.map(file => {
+                        const isVideo = file.mimeType.startsWith("video/")
+                        const sizeMb = file.size ? `${(Number(file.size) / 1024 / 1024).toFixed(1)} MB` : ""
+                        const isDriveFileSelected = selectedDriveFileIds.has(file.id)
+                        return (
+                          <div key={file.id} className={cn("flex items-center gap-3 p-2.5 border rounded-lg bg-background hover:bg-muted/20", isDriveFileSelected && "border-primary/50 bg-primary/5")}>
+                            <input
+                              type="checkbox"
+                              className="size-4 rounded border-muted-foreground/30 shrink-0"
+                              checked={isDriveFileSelected}
+                              onChange={e => {
+                                setSelectedDriveFileIds(prev => {
+                                  const next = new Set(prev)
+                                  if (e.target.checked) next.add(file.id)
+                                  else next.delete(file.id)
+                                  return next
+                                })
+                              }}
+                            />
+                            <div className="size-11 rounded-md bg-muted overflow-hidden shrink-0 flex items-center justify-center">
+                              {file.thumbnailLink ? (
+                                <img src={file.thumbnailLink} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              ) : isVideo ? (
+                                <IconVideo className="size-5 text-muted-foreground/50" />
+                              ) : (
+                                <IconPhoto className="size-5 text-muted-foreground/50" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate" title={file.name}>{file.name}</p>
+                              <p className="text-xs text-muted-foreground">{isVideo ? "Video" : "Image"}{sizeMb ? ` · ${sizeMb}` : ""}</p>
+                            </div>
+                            <Button size="sm" className="gap-1.5" disabled={gdriveImporting} onClick={() => importGoogleDriveFiles([file])}>
+                              Import
+                            </Button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : (
               /* Empty state */

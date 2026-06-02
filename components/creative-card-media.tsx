@@ -13,6 +13,7 @@ interface Creative {
   fb_image_url?: string
   fb_thumbnail_url?: string
   fb_video_id?: string
+  status?: "pending" | "processing" | "ready" | "error"
 }
 
 // Capture a JPEG frame from a video URL via Canvas API (client-side, no Meta API call).
@@ -74,15 +75,18 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   const captureStartedRef = useRef(false)
 
   const isVideo = creative.media_type === "video"
+  const isPendingVideo = isVideo && creative.status === "pending" && !creative.fb_video_id && !creative.file_url
   const isCreativeMediaRoute = (url: string) => url.startsWith("/api/creatives/")
+  const isCreativeThumbnailRoute = (url: string) => isCreativeMediaRoute(url) && url.includes("variant=thumbnail")
   const isDisplayableImageUrl = (url: string) => /^https?:/.test(url) || isCreativeMediaRoute(url)
 
   const isVideoFile = (url: string) => {
     const ext = [".mp4", ".mov", ".webm", ".m4v", ".avi", ".mkv"]
     return ext.some(e => url.toLowerCase().includes(e)) || url.startsWith("blob:") || url.includes("fbcdn.net")
   }
+  const isSupabaseStorageUrl = (url: string) => url.includes("/storage/v1/object/public/")
 
-  const videoSrc = creative.file_url || ""
+  const videoSrc = isPendingVideo ? "" : (creative.file_url || "")
   const isGDrive = videoSrc.includes("#gdrive")
   const cleanVideoSrc = videoSrc.replace("#gdrive", "")
   const stableImageUrl =
@@ -99,17 +103,18 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
           ? creative.file_url
           : null)
 
-  // A "real" poster is either a stable https URL or a captured object URL.
-  // The proxy route (/api/creatives/*/media) is NOT a real poster — it triggers server-side work.
-  const hasRealPoster = metaThumb ? !metaThumb.startsWith("/api/creatives/") : false
+  // A poster can be a stable image URL or the thumbnail resolver route.
+  // Do not use the source resolver route as poster; it returns video bytes.
+  const hasRealPoster = metaThumb ? !metaThumb.startsWith("/api/creatives/") || isCreativeThumbnailRoute(metaThumb) : false
   const effectivePoster = capturedPoster || (hasRealPoster ? metaThumb : null)
 
-  const playable = !!(cleanVideoSrc && (/^(blob|data|https?):/.test(cleanVideoSrc) || cleanVideoSrc.startsWith("/")) && (isVideoFile(cleanVideoSrc) || isVideo))
+  const playable = !isPendingVideo && !!(cleanVideoSrc && (/^(blob|data|https?):/.test(cleanVideoSrc) || cleanVideoSrc.startsWith("/")) && (isVideoFile(cleanVideoSrc) || isVideo))
 
   // Trigger client-side canvas capture when video is playable but has no real cached thumbnail.
   useEffect(() => {
     if (!isVideo || !playable || hasRealPoster || capturedPoster || captureStartedRef.current) return
-    if (!cleanVideoSrc || !cleanVideoSrc.startsWith("https://")) return
+    if (!cleanVideoSrc || (!cleanVideoSrc.startsWith("https://") && !isCreativeMediaRoute(cleanVideoSrc))) return
+    if (isSupabaseStorageUrl(cleanVideoSrc)) return
     captureStartedRef.current = true
 
     let cancelled = false
@@ -242,10 +247,10 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   if (isVideo) {
     return (
       <div className={`${className} flex flex-col items-center justify-center gap-1.5 bg-muted`}>
-        {creative.fb_video_id ? (
+        {creative.fb_video_id || isPendingVideo ? (
           <>
             <IconLoader2 className={`${compact ? "size-3" : "size-5"} text-muted-foreground/40 animate-spin`} />
-            {!compact && <span className="text-[10px] text-muted-foreground/60">Generating preview…</span>}
+            {!compact && <span className="text-[10px] text-muted-foreground/60">{isPendingVideo ? "Uploading video..." : "Generating preview..."}</span>}
           </>
         ) : (
           <IconVideo className={`${compact ? "size-3.5" : "size-6"} text-muted-foreground/40`} />

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { uploadImageToMeta } from "@/lib/facebook"
+import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
+import { getGoogleTokenForOrg } from "@/lib/google-token"
 
 // POST /api/google/import-drive
 // Downloads a file from Google Drive using the user's OAuth token.
@@ -19,6 +20,22 @@ function sanitizeFileName(name: string) {
 }
 
 // TUS resumable upload — 20 MB chunks (was 6 MB: too many round-trips for large files)
+async function resolveStorageUploadUrl(publicSupabaseUrl: string) {
+  const internalUrl = process.env.SUPABASE_INTERNAL_URL
+  if (!internalUrl) return publicSupabaseUrl
+
+  try {
+    const res = await fetch(`${internalUrl}/storage/v1/status`, {
+      signal: AbortSignal.timeout(2500),
+    })
+    if (res.ok) return internalUrl
+  } catch {
+    console.warn(`[import-drive] SUPABASE_INTERNAL_URL is not reachable, falling back to ${publicSupabaseUrl}`)
+  }
+
+  return publicSupabaseUrl
+}
+
 async function tusUpload(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -75,9 +92,15 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { accessToken, fileId, fileName, mimeType, adAccountId } = await request.json()
-    if (!accessToken || !fileId || !adAccountId) {
-      return NextResponse.json({ error: "accessToken, fileId, adAccountId required" }, { status: 400 })
+    const { accessToken: clientAccessToken, fileId, fileName, mimeType, adAccountId } = await request.json()
+    if (!fileId || !adAccountId) {
+      return NextResponse.json({ error: "fileId and adAccountId required" }, { status: 400 })
+    }
+
+    let driveAccessToken = await getGoogleTokenForOrg(ctx.orgId)
+    if (!driveAccessToken) driveAccessToken = clientAccessToken
+    if (!driveAccessToken) {
+      return NextResponse.json({ error: "Google Drive is not connected. Reconnect Google Drive and try again." }, { status: 401 })
     }
 
     const isVideo = (mimeType as string)?.startsWith("video/")
@@ -89,8 +112,19 @@ export async function POST(request: NextRequest) {
     // ── Download from Google Drive ────────────────────────────────────────────
     let driveRes = await fetch(
       `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      { headers: { Authorization: `Bearer ${driveAccessToken}` } }
     )
+
+    if (driveRes.status === 401) {
+      const refreshed = await getGoogleTokenForOrg(ctx.orgId, { forceRefresh: true })
+      if (refreshed) {
+        driveAccessToken = refreshed
+        driveRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+          { headers: { Authorization: `Bearer ${driveAccessToken}` } }
+        )
+      }
+    }
 
     // Large files may return a virus-scan confirmation HTML page
     const contentType = driveRes.headers.get("content-type") || ""
@@ -104,12 +138,17 @@ export async function POST(request: NextRequest) {
       }
       driveRes = await fetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&confirm=${match[1]}`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
+        { headers: { Authorization: `Bearer ${driveAccessToken}` } }
       )
     }
 
     if (!driveRes.ok) {
       const errText = await driveRes.text()
+      if (driveRes.status === 401) {
+        return NextResponse.json({
+          error: "Google Drive token is invalid. Disconnect and reconnect Google Drive, then import again.",
+        }, { status: 401 })
+      }
       return NextResponse.json({ error: `Drive download failed (${driveRes.status}): ${errText}` }, { status: 400 })
     }
 
@@ -125,7 +164,8 @@ export async function POST(request: NextRequest) {
 
     const fileSize = fileBuffer.byteLength
     const admin = createAdminClient()
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const storageUploadUrl = await resolveStorageUploadUrl(publicSupabaseUrl)
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     const cfHeaders: Record<string, string> = {}
     if (process.env.CF_ACCESS_CLIENT_ID) cfHeaders["CF-Access-Client-Id"] = process.env.CF_ACCESS_CLIENT_ID
@@ -142,7 +182,7 @@ export async function POST(request: NextRequest) {
       const r = await uploadImageToMeta(normAccountId, connection.access_token, fileBuffer, fileName)
 
       try {
-        await tusUpload(supabaseUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
+        await tusUpload(storageUploadUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
       } catch (e: any) {
         console.error("[import-drive] Storage upload error (image):", e)
       }
@@ -178,7 +218,7 @@ export async function POST(request: NextRequest) {
     // ── Videos: dedup check before uploading ─────────────────────────────────
     const { data: existingVideo } = await admin
       .from("creatives")
-      .select("id, file_name, file_url, media_type, fb_image_url, fb_thumbnail_url, fb_image_hash, fb_video_id, status, ad_account_id, created_at")
+      .select("id, file_name, file_url, storage_path, media_type, fb_image_url, fb_thumbnail_url, fb_image_hash, fb_video_id, status, ad_account_id, created_at")
       .eq("org_id", ctx.orgId)
       .eq("file_name", fileName)
       .eq("file_size", fileSize)
@@ -188,7 +228,7 @@ export async function POST(request: NextRequest) {
       .limit(1)
       .maybeSingle()
 
-    if (existingVideo) {
+    if (existingVideo?.fb_video_id || existingVideo?.status === "ready") {
       return NextResponse.json({ creative: mapCreativeForClient(existingVideo) })
     }
 
@@ -197,6 +237,13 @@ export async function POST(request: NextRequest) {
     // Returning before TUS completes means the user sees the card in ~Drive-download
     // time instead of waiting for TUS (20-25 s extra for 200 MB).
     const { data: { publicUrl } } = admin.storage.from("ad-media").getPublicUrl(storagePath)
+    let cachedToStorage = false
+    try {
+      await tusUpload(storageUploadUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
+      cachedToStorage = true
+    } catch (e: any) {
+      console.warn("[import-drive] Supabase cache upload failed before return:", e.message)
+    }
 
     const { data: creative, error: insertError } = await admin
       .from("creatives")
@@ -205,8 +252,8 @@ export async function POST(request: NextRequest) {
         user_id: ctx.user.id,
         ad_account_id: normAccountId,
         file_name: fileName,
-        file_url: publicUrl,
-        storage_path: storagePath,
+        file_url: cachedToStorage ? publicUrl : "",
+        storage_path: cachedToStorage ? storagePath : null,
         media_type: "video",
         file_size: fileSize,
         fb_image_hash: null,
@@ -226,8 +273,14 @@ export async function POST(request: NextRequest) {
     const creativeId = creative.id
     after(async () => {
       try {
-        // Step 1: upload buffer to Supabase (must complete before Meta fetches the URL)
-        await tusUpload(supabaseUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
+        if (!cachedToStorage) try {
+          await tusUpload(storageUploadUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
+          await admin.from("creatives")
+            .update({ file_url: publicUrl, storage_path: storagePath })
+            .eq("id", creativeId)
+        } catch (e: any) {
+          console.warn(`[import-drive] Supabase cache upload failed for ${creativeId}:`, e.message)
+        }
 
         // Step 2: tell Meta to fetch the video from Supabase — no re-upload through server
         const conn = await getFacebookConnection(ctx.orgId)
@@ -235,23 +288,11 @@ export async function POST(request: NextRequest) {
           console.error(`[import-drive] no Facebook connection for org ${ctx.orgId}`)
           return
         }
-        const params = new URLSearchParams()
-        params.set("access_token", conn.access_token)
-        params.set("name", fileName as string)
-        params.set("file_url", publicUrl)
-        const metaRes = await fetch(`https://graph-video.facebook.com/v21.0/${normAccountId}/advideos`, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: params,
-        })
-        const metaData = await metaRes.json()
-        if (!metaRes.ok || metaData.error) {
-          throw new Error(metaData.error?.message || `Meta video upload failed (${metaRes.status})`)
-        }
+        const metaData = await uploadVideoToMeta(normAccountId, conn.access_token, fileBuffer, fileName)
         await admin.from("creatives")
-          .update({ fb_video_id: metaData.id, status: "processing" })
+          .update({ fb_video_id: metaData.videoId, status: "processing" })
           .eq("id", creativeId)
-        console.log(`[import-drive] video ${creativeId} sent to Meta via URL: ${metaData.id}`)
+        console.log(`[import-drive] video ${creativeId} uploaded to Meta: ${metaData.videoId}`)
       } catch (e: any) {
         console.error(`[import-drive] background Meta upload failed for ${creativeId}:`, e.message)
         await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)

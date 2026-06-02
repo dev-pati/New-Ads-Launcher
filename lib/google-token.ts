@@ -4,7 +4,7 @@
  */
 import { createAdminClient } from "@/lib/supabase/admin"
 
-export async function getGoogleTokenForOrg(orgId: string): Promise<string | null> {
+export async function getGoogleTokenForOrg(orgId: string, opts: { forceRefresh?: boolean } = {}): Promise<string | null> {
   const db = createAdminClient()
 
   const { data: conn } = await db
@@ -15,7 +15,7 @@ export async function getGoogleTokenForOrg(orgId: string): Promise<string | null
 
   if (!conn?.refresh_token) return null
 
-  const expired = !conn.expiry_at || new Date(conn.expiry_at).getTime() < Date.now() + 60_000
+  const expired = opts.forceRefresh || !conn.expiry_at || new Date(conn.expiry_at).getTime() < Date.now() + 60_000
   if (!expired) return conn.access_token
 
   // Refresh the token

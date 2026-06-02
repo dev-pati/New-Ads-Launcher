@@ -52,6 +52,75 @@ function stablePublicUrl(url?: string | null) {
   return url
 }
 
+function buildStorageObjectUrl(base: string, storagePath: string) {
+  const encodedPath = storagePath
+    .split("/")
+    .map(part => encodeURIComponent(part))
+    .join("/")
+  return `${base}/storage/v1/object/public/ad-media/${encodedPath}`
+}
+
+function buildStorageFetchHeaders(request: NextRequest, opts: { includeRange?: boolean; includeCloudflare?: boolean } = {}) {
+  const includeRange = opts.includeRange ?? true
+  const includeCloudflare = opts.includeCloudflare ?? true
+  const headers: Record<string, string> = {}
+  const range = request.headers.get("range")
+  if (includeRange && range) headers.Range = range
+  if (includeCloudflare && process.env.CF_ACCESS_CLIENT_ID) headers["CF-Access-Client-Id"] = process.env.CF_ACCESS_CLIENT_ID
+  if (includeCloudflare && process.env.CF_ACCESS_CLIENT_SECRET) headers["CF-Access-Client-Secret"] = process.env.CF_ACCESS_CLIENT_SECRET
+  return headers
+}
+
+async function proxyStorageObject(request: NextRequest, storagePath: string) {
+  const bases = [
+    process.env.SUPABASE_INTERNAL_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  ].filter(Boolean) as string[]
+
+  const headerAttempts = [
+    buildStorageFetchHeaders(request),
+    buildStorageFetchHeaders(request, { includeRange: false }),
+    buildStorageFetchHeaders(request, { includeCloudflare: false }),
+    buildStorageFetchHeaders(request, { includeRange: false, includeCloudflare: false }),
+  ]
+
+  let response: Response | null = null
+  let lastStatus = 0
+  for (const base of bases) {
+    for (const headers of headerAttempts) {
+      try {
+        const res = await fetch(buildStorageObjectUrl(base, storagePath), {
+          headers,
+          cache: "no-store",
+        })
+        lastStatus = res.status
+        if (res.ok || res.status === 206) {
+          response = res
+          break
+        }
+      } catch {}
+    }
+    if (response) break
+  }
+
+  if (!response) {
+    console.warn("[creative-media] storage source unavailable:", { storagePath, status: lastStatus || 502 })
+    return null
+  }
+
+  const headers = new Headers()
+  for (const key of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+    const value = response.headers.get(key)
+    if (value) headers.set(key, value)
+  }
+  headers.set("Cache-Control", "no-store")
+
+  return new NextResponse(response.body, {
+    status: response.status,
+    headers,
+  })
+}
+
 async function cacheBufferAsAsset(params: {
   buffer: Buffer
   contentType: string
@@ -154,6 +223,32 @@ export async function GET(
     }
 
     const creative = data as StoredCreative
+
+    if (creative.media_type === "video" && variant === "source" && creative.storage_path) {
+      const storageResponse = await proxyStorageObject(request, creative.storage_path)
+      if (storageResponse) return storageResponse
+
+      if (creative.fb_video_id) {
+        const connection = await getFacebookConnection(ctx.orgId)
+        if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+
+        const sourceUrl = await getVideoSource(creative.fb_video_id, connection.access_token)
+        if (sourceUrl) {
+          await admin
+            .from("creatives")
+            .update({ file_url: sourceUrl, storage_path: null })
+            .eq("id", creative.id)
+            .eq("org_id", ctx.orgId)
+
+          return noStoreRedirect(sourceUrl)
+        }
+      }
+
+      const stableSourceUrl = stablePublicUrl(creative.file_url)
+      if (stableSourceUrl) return noStoreRedirect(stableSourceUrl)
+
+      return NextResponse.json({ error: "Video source is not ready yet" }, { status: 404 })
+    }
 
     if (creative.media_type === "image") {
       const preferredStableUrl =
