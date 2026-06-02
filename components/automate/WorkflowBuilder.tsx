@@ -829,7 +829,13 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
           trigger_type: steps[0]?.triggerConfig?.event ?? "performance_monitoring",
           trigger_config: steps[0]?.triggerConfig ?? {},
           conditions: [],
-          actions: steps.slice(1).map(s => s.actionConfig).filter(Boolean),
+          // Save full step objects so delay + approval steps are preserved
+          actions: steps.slice(1).map(s => ({
+            kind:           s.kind,
+            actionConfig:   s.actionConfig   ?? null,
+            delayConfig:    s.delayConfig    ?? null,
+            approvalConfig: s.approvalConfig ?? null,
+          })),
           ad_account_ids: [],
         }),
       })

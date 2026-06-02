@@ -80,3 +80,18 @@ jobs:
           if [ "$response" != "200" ]; then echo "❌ Failed with status $response"; exit 1; fi
           fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired',0))" 2>/dev/null || echo "?")
           echo "✅ Scheduled triggers — fired: $fired"
+
+  resume-pending-executions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Call resume-pending-executions endpoint
+        run: |
+          response=$(curl -s -L -o /tmp/response.json -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/resume-pending-executions")
+          echo "HTTP Status: $response"
+          cat /tmp/response.json | python3 -m json.tool 2>/dev/null || cat /tmp/response.json
+          if [ "$response" != "200" ]; then echo "❌ Failed with status $response"; exit 1; fi
+          resumed=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('resumed',0))" 2>/dev/null || echo "?")
+          echo "✅ Resumed: $resumed delay executions"

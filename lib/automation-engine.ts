@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getFacebookConnection } from "@/lib/auth"
 import type { ActionConfig } from "@/lib/workflow-types"
+import { Resend } from "resend"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -27,12 +28,14 @@ export interface ActionResult {
 }
 
 export interface ExecutionResult {
-  status: "success" | "failed" | "skipped"
+  status: "success" | "failed" | "skipped" | "pending_delay" | "pending_approval"
   logs: StepLog[]
   triggerPayload: TriggerPayload
   actionResults: ActionResult[]
   durationMs: number
   executionDbId?: string
+  resumeAt?: string      // ISO timestamp — when to resume after delay
+  approvalId?: string    // DB id of automation_approvals record
 }
 
 function addLog(logs: StepLog[], msg: string, level: StepLog["level"] = "info") {
@@ -385,89 +388,276 @@ export async function executeAutomation(
       addLog(logs, `Type: ${options.mimeType ?? "unknown"}`)
     }
 
-    const actions: (ActionConfig & Record<string, any>)[] = Array.isArray(automation.actions)
-      ? automation.actions
-      : []
+    // Steps can be: {kind, actionConfig} | {kind:"delay", delayConfig} | {kind:"approval", approvalConfig}
+    // or legacy flat ActionConfig[] (backward compat)
+    const rawSteps: any[] = Array.isArray(automation.actions) ? automation.actions : []
+    const steps = rawSteps.map(s =>
+      s.kind ? s : { kind: "action", actionConfig: s }
+    )
 
-    addLog(logs, `Actions: ${actions.length} configured`)
+    addLog(logs, `Steps: ${steps.length} configured`)
+    return await execSteps(steps, options.startFromStep ?? 0, triggerPayload, automation, orgId, supabase, logs, actionResults, startMs, options)
+  } catch (err: any) {
+    addLog(logs, `Fatal error: ${err.message}`, "error")
+    return { status: "failed", logs, triggerPayload, actionResults, durationMs: Date.now() - startMs }
+  }
+}
 
-    // Fetch Meta token if needed
-    let fbToken: string | null = null
-    const META_ACTIONS = new Set([
-      "pause_ad", "pause_campaign", "pause_adset",
-      "enable_ad", "enable_campaign", "enable_adset",
-      "duplicate_ad", "duplicate_adset", "duplicate_campaign",
-      "increase_budget", "decrease_budget", "change_budget",
-    ])
-    if (actions.some(a => META_ACTIONS.has(a.event))) {
-      addLog(logs, "Fetching Meta connection...")
-      const conn = await getFacebookConnection(orgId)
-      fbToken = conn?.access_token ?? null
-      if (!fbToken) addLog(logs, "No Meta connection — Meta actions will be skipped", "warn")
-      else addLog(logs, "Meta connection found")
+// ─── Core step executor (handles delay, approval, action) ─────────────────────
+
+async function execSteps(
+  steps: any[],
+  startFrom: number,
+  triggerPayload: TriggerPayload,
+  automation: any,
+  orgId: string,
+  supabase: ReturnType<typeof createAdminClient>,
+  logs: StepLog[],
+  actionResults: ActionResult[],
+  startMs: number,
+  options: any
+): Promise<ExecutionResult> {
+
+  const META_ACTIONS = new Set([
+    "pause_ad", "pause_campaign", "pause_adset",
+    "enable_ad", "enable_campaign", "enable_adset",
+    "duplicate_ad", "duplicate_adset", "duplicate_campaign",
+    "increase_budget", "decrease_budget", "change_budget",
+  ])
+
+  // Fetch Meta token if any action step needs it
+  let fbToken: string | null = null
+  const hasMetaActions = steps.slice(startFrom).some(s => s.kind === "action" && META_ACTIONS.has(s.actionConfig?.event))
+  if (hasMetaActions) {
+    const conn = await getFacebookConnection(orgId)
+    fbToken = conn?.access_token ?? null
+    if (!fbToken) addLog(logs, "No Meta connection — Meta actions will be skipped", "warn")
+    else addLog(logs, "Meta connection found")
+  }
+
+  for (let i = startFrom; i < steps.length; i++) {
+    const step = steps[i]
+    const kind = step.kind ?? "action"
+
+    // ── DELAY ────────────────────────────────────────────────────────────────
+    if (kind === "delay") {
+      const delay = step.delayConfig ?? { unit: "hours", value: 1 }
+      const msMap: Record<string, number> = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 }
+      const delayMs  = (msMap[delay.unit] ?? 3_600_000) * (delay.value ?? 1)
+      const resumeAt = new Date(Date.now() + delayMs).toISOString()
+
+      addLog(logs, `DELAY: ${delay.value} ${delay.unit} — pausing until ${resumeAt}`)
+
+      const { data: exec } = await supabase.from("automation_executions").insert({
+        org_id:          orgId,
+        automation_id:   automation.id,
+        automation_name: automation.name,
+        status:          "pending",
+        entities_affected: 0,
+        api_calls:       actionResults.length,
+        action_taken:    "delay",
+        ad_account_id:   automation.ad_account_ids?.[0] ?? null,
+        details: {
+          isTest:         options.isTest ?? false,
+          resumeFromStep: i + 1,
+          resumeAt,
+          triggerPayload,
+          completedActionResults: actionResults,
+          completedLogs:          logs,
+          allSteps:               steps,
+        },
+      }).select("id").single()
+
+      await supabase.from("automations")
+        .update({ last_run_at: new Date().toISOString() })
+        .eq("id", automation.id)
+
+      return {
+        status: "pending_delay",
+        logs, triggerPayload, actionResults,
+        durationMs: Date.now() - startMs,
+        executionDbId: exec?.id,
+        resumeAt,
+      }
     }
 
-    // Execute each action
-    for (const action of actions) {
-      addLog(logs, `--- Executing action: ${action.event} ---`)
+    // ── APPROVAL ─────────────────────────────────────────────────────────────
+    if (kind === "approval") {
+      const approvalCfg = step.approvalConfig ?? { approvers: [], message: "", timeoutHours: 24 }
+      addLog(logs, `APPROVAL: Requesting approval from ${approvalCfg.approvers?.join(", ") || "no approvers configured"}`)
+
+      // Insert execution record in pending state
+      const { data: exec } = await supabase.from("automation_executions").insert({
+        org_id:          orgId,
+        automation_id:   automation.id,
+        automation_name: automation.name,
+        status:          "pending",
+        entities_affected: 0,
+        api_calls:       actionResults.length,
+        action_taken:    "approval",
+        ad_account_id:   automation.ad_account_ids?.[0] ?? null,
+        details: {
+          isTest:         options.isTest ?? false,
+          resumeFromStep: i + 1,
+          triggerPayload,
+          completedActionResults: actionResults,
+          completedLogs:          logs,
+          allSteps:               steps,
+        },
+      }).select("id").single()
+
+      // Insert approval record
+      const { data: approval } = await supabase.from("automation_approvals").insert({
+        org_id:           orgId,
+        automation_id:    automation.id,
+        execution_id:     exec?.id,
+        automation_name:  automation.name,
+        status:           "pending",
+        requested_action: steps.slice(i + 1).filter(s => s.kind === "action").map((s: any) => s.actionConfig?.event).join(", ") || "next steps",
+        details: {
+          approvers:      approvalCfg.approvers,
+          message:        approvalCfg.message,
+          timeoutHours:   approvalCfg.timeoutHours ?? 24,
+          triggerPayload,
+          executionId:    exec?.id,
+        },
+      }).select("id").single()
+
+      // Send approval email
+      if (approvalCfg.approvers?.length && process.env.RESEND_API_KEY) {
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? ""
+        const approveUrl = `${appUrl}/api/automations/executions/${exec?.id}/approve?token=${approval?.id}`
+        const rejectUrl  = `${appUrl}/api/automations/executions/${exec?.id}/reject?token=${approval?.id}`
+
+        const emailBody = `
+Automation "${automation.name}" requires your approval before continuing.
+
+${approvalCfg.message ? `Message: ${approvalCfg.message}\n\n` : ""}Next steps: ${steps.slice(i + 1).filter((s: any) => s.kind === "action").map((s: any) => s.actionConfig?.event).join(", ") || "continue automation"}
+
+✅ APPROVE: ${approveUrl}
+❌ REJECT:  ${rejectUrl}
+
+This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
+        `.trim()
+
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: "notifications@ads.patigroup.com",
+            to: approvalCfg.approvers,
+            subject: `[AdLauncher] Approval required: ${automation.name}`,
+            text: emailBody,
+          }),
+        }).catch(e => addLog(logs, `Failed to send approval email: ${e.message}`, "warn"))
+      }
+
+      await supabase.from("automations")
+        .update({ last_run_at: new Date().toISOString() })
+        .eq("id", automation.id)
+
+      return {
+        status: "pending_approval",
+        logs, triggerPayload, actionResults,
+        durationMs: Date.now() - startMs,
+        executionDbId: exec?.id,
+        approvalId: approval?.id,
+      }
+    }
+
+    // ── ACTION ────────────────────────────────────────────────────────────────
+    if (kind === "action" && step.actionConfig) {
+      const action = step.actionConfig as ActionConfig & Record<string, any>
+      addLog(logs, `--- Step ${i + 1}: ${action.event} ---`)
       let result: ActionResult
 
       if (action.event === "send_notification") {
         result = await execNotification(action, triggerPayload, automation.name, logs)
       } else if (META_ACTIONS.has(action.event)) {
-        if (!fbToken) {
-          result = { event: action.event, status: "skipped", message: "No Meta connection" }
-        } else {
-          result = await execMetaAction(action, triggerPayload, fbToken, logs)
-        }
+        result = fbToken
+          ? await execMetaAction(action, triggerPayload, fbToken, logs)
+          : { event: action.event, status: "skipped", message: "No Meta connection" }
       } else if (["add_sheet_row", "update_sheet_cell", "update_sheet_row"].includes(action.event)) {
         result = await execSheetsAction(action, triggerPayload, logs)
       } else if (action.event === "upload_to_media_library") {
         result = await execMediaLibraryAction(action, triggerPayload, orgId, logs)
       } else {
-        addLog(logs, `WARNING: Unsupported action type: ${action.event} — skipping`, "warn")
+        addLog(logs, `WARNING: Unsupported action: ${action.event} — skipping`, "warn")
         result = { event: action.event, status: "skipped", message: `Action "${action.event}" not yet implemented` }
       }
 
       actionResults.push(result)
       addLog(logs, `Result: ${result.status} — ${result.message}`)
     }
+  }
 
-    const overallStatus: "success" | "failed" | "skipped" =
-      actionResults.length === 0 ? "skipped"
-      : actionResults.some(r => r.status === "failed") ? "failed"
-      : actionResults.every(r => r.status === "success") ? "success"
-      : "skipped"
+  // All steps completed
+  const overallStatus: "success" | "failed" | "skipped" =
+    actionResults.length === 0 ? "skipped"
+    : actionResults.some(r => r.status === "failed") ? "failed"
+    : actionResults.every(r => r.status === "success") ? "success"
+    : "skipped"
 
-    const durationMs = Date.now() - startMs
-    addLog(logs, `Completed in ${durationMs}ms — ${overallStatus}`)
+  const durationMs = Date.now() - startMs
+  addLog(logs, `Completed in ${durationMs}ms — ${overallStatus}`)
 
-    // Log to automation_executions
-    const { data: exec } = await supabase
-      .from("automation_executions")
-      .insert({
-        org_id: orgId,
-        automation_id: automationId,
-        automation_name: automation.name,
-        status: overallStatus,
-        entities_affected: actionResults.filter(r => r.status === "success").length,
-        api_calls: actionResults.length,
-        action_taken: actions.map(a => a.event).join(", ") || "none",
-        ad_account_id: automation.ad_account_ids?.[0] ?? null,
-        details: { isTest: options.isTest ?? false, triggerPayload, actionResults, logs },
-      })
-      .select("id")
-      .single()
+  const { data: exec } = await supabase.from("automation_executions").insert({
+    org_id:          orgId,
+    automation_id:   automation.id,
+    automation_name: automation.name,
+    status:          overallStatus,
+    entities_affected: actionResults.filter(r => r.status === "success").length,
+    api_calls:       actionResults.length,
+    action_taken:    steps.filter(s => s.kind === "action").map((s: any) => s.actionConfig?.event).join(", ") || "none",
+    ad_account_id:   automation.ad_account_ids?.[0] ?? null,
+    details: { isTest: options.isTest ?? false, triggerPayload, actionResults, logs },
+  }).select("id").single()
 
-    // Update run stats
-    await supabase
-      .from("automations")
-      .update({ run_count: (automation.run_count ?? 0) + 1, last_run_at: new Date().toISOString() })
-      .eq("id", automationId)
+  await supabase.from("automations")
+    .update({ run_count: (automation.run_count ?? 0) + 1, last_run_at: new Date().toISOString() })
+    .eq("id", automation.id)
 
-    return { status: overallStatus, logs, triggerPayload, actionResults, durationMs, executionDbId: exec?.id }
-  } catch (err: any) {
-    addLog(logs, `Fatal error: ${err.message}`, "error")
+  return { status: overallStatus, logs, triggerPayload, actionResults, durationMs, executionDbId: exec?.id }
+}
+
+// ─── Resume execution (after delay or approval) ───────────────────────────────
+
+export async function resumeAutomation(executionId: string): Promise<ExecutionResult> {
+  const startMs = Date.now()
+  const supabase = createAdminClient()
+
+  const { data: exec, error } = await supabase
+    .from("automation_executions")
+    .select("*")
+    .eq("id", executionId)
+    .single()
+
+  if (error || !exec) {
+    return { status: "failed", logs: [{ ts: new Date().toISOString(), msg: "Execution not found", level: "error" }], triggerPayload: {}, actionResults: [], durationMs: 0 }
+  }
+
+  const details       = exec.details as any
+  const resumeFrom    = details.resumeFromStep ?? 0
+  const triggerPayload: TriggerPayload = details.triggerPayload ?? {}
+  const actionResults: ActionResult[]  = details.completedActionResults ?? []
+  const logs: StepLog[]                = details.completedLogs ?? []
+  const steps: any[]                   = details.allSteps ?? []
+
+  addLog(logs, `Resuming execution from step ${resumeFrom}`)
+
+  const { data: automation } = await supabase
+    .from("automations")
+    .select("*")
+    .eq("id", exec.automation_id)
+    .single()
+
+  if (!automation) {
     return { status: "failed", logs, triggerPayload, actionResults, durationMs: Date.now() - startMs }
   }
-}
+
+  // Mark old execution as superseded
+  await supabase.from("automation_executions")
+    .update({ status: "skipped", details: { ...details, supersededAt: new Date().toISOString() } })
+    .eq("id", executionId)
+
+  return execSteps(steps, resumeFrom, triggerPayload, automation, exec.org_id, supabase, logs, actionResults, startMs, { isTest: details.isTest ?? false })
