@@ -212,7 +212,7 @@ async function execNotification(
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: "notifications@ads.patigroup.com", to: recipients, subject, text }),
+    body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev", to: recipients, subject, text }),
   })
   const data = await res.json()
   if (!res.ok) return { event: "send_notification", status: "failed", message: data.message ?? "Email failed" }
@@ -677,7 +677,7 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
           method: "POST",
           headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            from: "notifications@ads.patigroup.com",
+            from: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev",
             to: approvalCfg.approvers,
             subject: `[AdLauncher] Approval required: ${automation.name}`,
             text: emailBody,
