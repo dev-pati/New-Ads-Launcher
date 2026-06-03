@@ -48,6 +48,7 @@ async function runValidatedCampaignCreate(adAccountId: string, accessToken: stri
     objective: "OUTCOME_TRAFFIC",
     status: "PAUSED",
     special_ad_categories: JSON.stringify([]),
+    is_adset_budget_sharing_enabled: "false",
     execution_options: JSON.stringify(["validate_only"]),
   })
   try {
