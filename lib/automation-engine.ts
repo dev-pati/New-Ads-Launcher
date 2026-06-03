@@ -440,7 +440,7 @@ async function execLaunchAdAction(
       const ad = await createAd(adAccountId, token, {
         name:          adName,
         adset_id:      adsetId,
-        page_id:       pageId,
+        page_id:       pageId ?? "",
         image_hash:    fbImageHash,
         video_id:      fbVideoId,
         thumbnail_url: fbThumbnailUrl,
