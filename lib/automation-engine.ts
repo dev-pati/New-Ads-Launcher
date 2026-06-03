@@ -482,6 +482,7 @@ export async function executeAutomation(
     mimeType?: string
     thumbnailUrl?: string
     isTest?: boolean
+    startFromStep?: number
   } = {}
 ): Promise<ExecutionResult> {
   const startMs = Date.now()
