@@ -81,6 +81,21 @@ jobs:
           fired=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('fired',0))" 2>/dev/null || echo "?")
           echo "✅ Scheduled triggers — fired: $fired"
 
+  snapshot-metrics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Call snapshot-metrics endpoint
+        run: |
+          response=$(curl -s -L -o /tmp/response.json -w "%{http_code}" -X GET \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/snapshot-metrics")
+          echo "HTTP Status: $response"
+          cat /tmp/response.json | python3 -m json.tool 2>/dev/null || cat /tmp/response.json
+          if [ "$response" != "200" ]; then echo "❌ Failed with status $response"; exit 1; fi
+          total=$(cat /tmp/response.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('totalCampaigns',0))" 2>/dev/null || echo "?")
+          echo "✅ Snapped $total campaigns"
+
   resume-pending-executions:
     runs-on: ubuntu-latest
     timeout-minutes: 10
