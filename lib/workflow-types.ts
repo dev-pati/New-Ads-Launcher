@@ -153,6 +153,7 @@ export interface NotificationConfig {
   via: "email" | "slack" | "both"
   emailRecipients: string[]
   slackChannel?: string
+  slackWebhookUrl?: string
   customMessage?: string
 }
 

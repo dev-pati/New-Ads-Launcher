@@ -184,6 +184,101 @@ async function execMetaAction(
       return { event: ev, status: "success", message: `Duplicated ${ids.length} item(s)`, data: { results } }
     }
 
+    // ── Swap Creative ─────────────────────────────────────────────────────────
+    case "swap_creative": {
+      const adIds      = resolveTargetIds(action, payload)
+      const newCreativeId = action.newCreativeId ?? action.creativeId
+      if (!adIds.length) return { event: ev, status: "skipped", message: "No target ad IDs configured" }
+      if (!newCreativeId) return { event: ev, status: "skipped", message: "No new creative ID configured" }
+
+      const results = await Promise.all(adIds.map(async adId => {
+        const res = await fetch(`${GRAPH}/${adId}?access_token=${token}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ creative: JSON.stringify({ creative_id: newCreativeId }) }).toString(),
+        })
+        const data = await res.json()
+        if (data.error) return { adId, error: data.error.message }
+        return { adId, success: true }
+      }))
+
+      const failed = results.filter(r => (r as any).error)
+      if (failed.length) return { event: ev, status: "failed", message: (failed[0] as any).error }
+      addLog(logs, `${ev}: swapped creative on ${adIds.length} ad(s) → creative ${newCreativeId}`)
+      return { event: ev, status: "success", message: `Creative swapped on ${adIds.length} ad(s)`, data: { results } }
+    }
+
+    // ── Set Minimum Spend ─────────────────────────────────────────────────────
+    case "set_minimum_spend": {
+      const ids    = resolveTargetIds(action, payload)
+      const amount = action.minimumSpendAmount ?? action.amount ?? 0
+      if (!ids.length) return { event: ev, status: "skipped", message: "No target ad set IDs configured" }
+      if (!amount)     return { event: ev, status: "skipped", message: "No minimum spend amount configured" }
+
+      const results = await Promise.all(ids.map(async id => {
+        const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ spend_cap: String(Math.round(amount * 100)) }).toString(),
+        })
+        const data = await res.json()
+        if (data.error) return { id, error: data.error.message }
+        return { id, spendCap: amount }
+      }))
+
+      const failed = results.filter(r => (r as any).error)
+      if (failed.length) return { event: ev, status: "failed", message: (failed[0] as any).error }
+      addLog(logs, `${ev}: set minimum spend $${amount} on ${ids.length} item(s)`)
+      return { event: ev, status: "success", message: `Set minimum spend $${amount} on ${ids.length} item(s)`, data: { results } }
+    }
+
+    // ── Meta Automated Rules ──────────────────────────────────────────────────
+    case "create_rule": {
+      const adAccountId = action.adAccountId ?? payload.entityIds?.[0]
+      if (!adAccountId) return { event: ev, status: "skipped", message: "No ad account ID configured" }
+
+      const actId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+      const ruleBody = new URLSearchParams({
+        access_token: token,
+        account_id:   actId,
+        name:         action.ruleName ?? "Auto Rule",
+        evaluation_spec: JSON.stringify({ evaluation_type: "SCHEDULE", filters: action.ruleFilters ?? [] }),
+        execution_spec:  JSON.stringify({ execution_type: action.ruleExecutionType ?? "PAUSE" }),
+        schedule_spec:   JSON.stringify({ schedule_type: "DAILY" }),
+        status:       "ENABLED",
+      })
+
+      const res  = await fetch(`${GRAPH}/me/ad_rules`, { method: "POST", body: ruleBody })
+      const data = await res.json()
+      if (data.error) return { event: ev, status: "failed", message: data.error.message }
+      addLog(logs, `${ev}: created rule "${action.ruleName}" (id: ${data.id})`)
+      return { event: ev, status: "success", message: `Created rule "${action.ruleName}"`, data: { ruleId: data.id } }
+    }
+
+    case "toggle_rule": {
+      const ruleId = action.ruleId
+      const enable = action.enable !== false
+      if (!ruleId) return { event: ev, status: "skipped", message: "No rule ID configured" }
+
+      const res  = await fetch(`${GRAPH}/${ruleId}?access_token=${token}`, {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ status: enable ? "ENABLED" : "DISABLED" }).toString(),
+      })
+      const data = await res.json()
+      if (data.error) return { event: ev, status: "failed", message: data.error.message }
+      addLog(logs, `${ev}: ${enable ? "enabled" : "disabled"} rule ${ruleId}`)
+      return { event: ev, status: "success", message: `Rule ${enable ? "enabled" : "disabled"}`, data: { ruleId } }
+    }
+
+    case "apply_existing_rule": {
+      const ruleId = action.ruleId
+      if (!ruleId) return { event: ev, status: "skipped", message: "No rule ID configured" }
+
+      const res  = await fetch(`${GRAPH}/${ruleId}/execute?access_token=${token}`, { method: "POST" })
+      const data = await res.json()
+      if (data.error) return { event: ev, status: "failed", message: data.error.message }
+      addLog(logs, `${ev}: executed rule ${ruleId}`)
+      return { event: ev, status: "success", message: `Rule executed`, data: { ruleId } }
+    }
+
     default:
       addLog(logs, `WARNING: Unsupported action type: ${ev} — skipping`, "warn")
       return { event: ev, status: "skipped", message: `Action "${ev}" not yet implemented` }
@@ -199,25 +294,67 @@ async function execNotification(
   const notif = action.notification
   if (!notif) return { event: "send_notification", status: "skipped", message: "No notification config" }
 
-  const key = process.env.RESEND_API_KEY
-  if (!key) return { event: "send_notification", status: "failed", message: "RESEND_API_KEY not configured" }
-
-  const recipients = notif.emailRecipients ?? []
-  if (!recipients.length) return { event: "send_notification", status: "skipped", message: "No email recipients" }
-
-  const subject = `Automation triggered: ${automationName}`
   const fileInfo = payload.fileName ? `\n\nFile: ${payload.fileName}` : ""
-  const text = (notif.customMessage || `Your automation "${automationName}" was triggered.`) + fileInfo
+  const messageBody = (notif.customMessage || `Your automation "${automationName}" was triggered.`) + fileInfo
+  const results: string[] = []
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev", to: recipients, subject, text }),
-  })
-  const data = await res.json()
-  if (!res.ok) return { event: "send_notification", status: "failed", message: data.message ?? "Email failed" }
-  addLog(logs, `Email sent to ${recipients.join(", ")}`)
-  return { event: "send_notification", status: "success", message: `Email sent to ${recipients.join(", ")}` }
+  // ── Email via Resend ────────────────────────────────────────────────────────
+  const recipients = notif.emailRecipients ?? []
+  if (recipients.length) {
+    const key = process.env.RESEND_API_KEY
+    if (!key) {
+      addLog(logs, "Email skipped: RESEND_API_KEY not configured", "warn")
+    } else {
+      const subject = `Automation triggered: ${automationName}`
+      const res  = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev",
+          to: recipients, subject, text: messageBody
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        addLog(logs, `Email failed: ${data.message}`, "warn")
+      } else {
+        addLog(logs, `Email sent to ${recipients.join(", ")}`)
+        results.push(`email:${recipients.join(",")}`)
+      }
+    }
+  }
+
+  // ── Slack webhook ───────────────────────────────────────────────────────────
+  const slackWebhookUrl = notif.slackWebhookUrl ?? process.env.SLACK_WEBHOOK_URL
+  if (slackWebhookUrl) {
+    const slackBody = {
+      text: `*${automationName}*\n${messageBody}`,
+      blocks: [
+        {
+          type: "section",
+          text: { type: "mrkdwn", text: `*🤖 Automation: ${automationName}*\n${notif.customMessage || "Triggered successfully."}` }
+        },
+        ...(payload.fileName ? [{
+          type: "context",
+          elements: [{ type: "mrkdwn", text: `📎 File: ${payload.fileName}` }]
+        }] : [])
+      ]
+    }
+    const res = await fetch(slackWebhookUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(slackBody),
+    })
+    if (!res.ok) {
+      addLog(logs, `Slack notification failed (${res.status})`, "warn")
+    } else {
+      addLog(logs, `Slack notification sent`)
+      results.push("slack")
+    }
+  }
+
+  if (!results.length) return { event: "send_notification", status: "skipped", message: "No notification channels configured" }
+  return { event: "send_notification", status: "success", message: `Notification sent via: ${results.join(", ")}` }
 }
 
 // ─── Google Sheets action executor ───────────────────────────────────────────
@@ -483,6 +620,7 @@ export async function executeAutomation(
     thumbnailUrl?: string
     isTest?: boolean
     startFromStep?: number
+    entityIds?: string[]
   } = {}
 ): Promise<ExecutionResult> {
   const startMs = Date.now()
@@ -494,6 +632,7 @@ export async function executeAutomation(
     fileUrl: options.fileUrl,
     mimeType: options.mimeType,
     thumbnailUrl: options.thumbnailUrl,
+    entityIds: options.entityIds,
   }
 
   try {

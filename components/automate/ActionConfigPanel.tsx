@@ -228,13 +228,18 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
         </div>
       )}
 
-      {/* SLACK CHANNEL */}
+      {/* SLACK WEBHOOK */}
       {showSlack && (
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Slack Channel</label>
-          <div className="flex items-center h-9 px-3 bg-muted/40 border border-border/60 rounded-lg">
-            <span className="text-[12px] text-muted-foreground"># your org default</span>
-          </div>
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Slack Webhook URL</label>
+          <input
+            type="url"
+            value={(notif as any).slackWebhookUrl ?? ""}
+            onChange={e => updateNotif({ ...(notif as any), slackWebhookUrl: e.target.value })}
+            placeholder="https://hooks.slack.com/services/..."
+            className="w-full px-3 py-2 text-[13px] bg-muted/40 border border-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <p className="text-[11px] text-muted-foreground/60">Tạo Incoming Webhook tại api.slack.com/apps</p>
         </div>
       )}
 

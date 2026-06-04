@@ -156,8 +156,9 @@ export async function GET(request: NextRequest) {
         automation.org_id,
         {
           isTest: false,
-          fileId:   checkResult.entityIds?.[0],
-          fileName: checkResult.entityNames?.[0],
+          fileId:    checkResult.entityIds?.[0],
+          fileName:  checkResult.entityNames?.[0],
+          entityIds: checkResult.entityIds ?? [],
         }
       )
 
