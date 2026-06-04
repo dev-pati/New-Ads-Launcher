@@ -345,6 +345,8 @@ export default function InsightsPage() {
   const [daily, setDaily]           = useState<DailyMetric[]>([])
   const [loadingMetrics, setLoadingMetrics] = useState(false)
   const [metricsError, setMetricsError]     = useState("")
+  const [metricsFromSnapshot, setMetricsFromSnapshot] = useState(false)
+  const [snapshotDate, setSnapshotDate]               = useState<string | null>(null)
   const [dashDatePreset, setDashDatePreset] = useState("last_30d")
   const [dashDateOpen, setDashDateOpen]     = useState(false)
   const dashDateRef = useRef<HTMLDivElement>(null)
@@ -401,7 +403,7 @@ export default function InsightsPage() {
     setLoadingMetrics(true); setMetricsError("")
     fetch(`/api/insights/metrics?adAccountId=${encodeURIComponent(selectedAccountId)}&datePreset=${dashDatePreset}`)
       .then(r => r.json())
-      .then(d => { if (d.error) { setMetricsError(d.error); return }; setMetrics(d.totals || null); setDaily(d.daily || []) })
+      .then(d => { if (d.error) { setMetricsError(d.error); return }; setMetrics(d.totals || null); setDaily(d.daily || []); setMetricsFromSnapshot(!!d.fromSnapshot); setSnapshotDate(d.snapshotDate ?? null) })
       .catch(e => setMetricsError(e.message))
       .finally(() => setLoadingMetrics(false))
   }, [selectedAccountId, dashDatePreset])
@@ -1106,6 +1108,15 @@ export default function InsightsPage() {
                 {loadingMetrics && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-8 justify-center">
                     <IconLoader2 className="size-4 animate-spin" /> Loading dashboard data…
+                  </div>
+                )}
+                {metricsFromSnapshot && !loadingMetrics && (
+                  <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+                    <IconAlertCircle className="size-4 shrink-0" />
+                    <span>
+                      Đang hiển thị dữ liệu đã lưu — tài khoản Meta không khả dụng.
+                      {snapshotDate && <span className="ml-1 opacity-70">Dữ liệu đến ngày {snapshotDate}.</span>}
+                    </span>
                   </div>
                 )}
                 {metricsError && <ErrorState message={metricsError} onRetry={loadMetrics} />}
