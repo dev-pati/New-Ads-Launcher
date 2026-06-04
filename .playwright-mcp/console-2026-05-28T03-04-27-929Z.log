@@ -1,4 +1,0 @@
-[    2447ms] [WARNING] [TikTok Pixel] - Duplicate Pixel ID
-Issue: The pixel ID is duplicate. This could impact the pixel data accuracy.
-Suggestion: Please double check and delete any unnecessary pixel code. @ https://analytics.tiktok.com/i18n/pixel/static/main.MWQ1MjcwZjdjMw.js:0
-[   21984ms] [LOG] [v0] Loading template: Performance Monitoring @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.258.2:0

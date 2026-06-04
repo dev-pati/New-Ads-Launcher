@@ -1,7 +1,0 @@
-[    2724ms] [LOG] [v0] Creating new automation @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.258.2:0
-[   61321ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_CLOSED @ https://admanage.ai/api/automation/approval/pending:0
-[   61322ms] [ERROR] Failed to fetch counts: TypeError: Failed to fetch
-    at window.fetch (https://admanage.ai/_next/static/chunks/07qzk~1tz.big.js?dpl=dpl_3yfGVNp9c8REVr9FJy1kVS9kqJ6h:32:99644)
-    at t (https://admanage.ai/_next/static/chunks/0xa1kj6--mofv.js?dpl=dpl_3yfGVNp9c8REVr9FJy1kVS9kqJ6h:14:175849) @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.258.2:0
-[   61326ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_CLOSED @ https://admanage.ai/api/automation/active:0
-[   66672ms] [ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://admanage.ai/api/organizations/default:0

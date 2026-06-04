@@ -1,3 +1,0 @@
-[    1712ms] [LOG] [v0] Fetching automation from API: template-log-ad-launches-sheets @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.258.2:0
-[    2415ms] [WARNING] [v0] Automation not found: template-log-ad-launches-sheets @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.258.2:0
-[   46896ms] [LOG] [v0] Loading template: Performance Monitoring @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.258.2:0

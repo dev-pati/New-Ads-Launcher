@@ -1,5 +1,8 @@
 # dependencies
 /node_modules
+
+# Playwright MCP logs
+.playwright-mcp/
 /.pnp
 .pnp.*
 .yarn/*
