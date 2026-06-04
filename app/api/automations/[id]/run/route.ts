@@ -24,7 +24,7 @@ export async function POST(
       fileUrl:      body.file_url,
       mimeType:     body.mime_type,
       thumbnailUrl: body.thumbnail_url,
-      isTest:       body.is_test ?? true,
+      isTest:       body.is_test ?? false, // default false — caller must explicitly set is_test:true for dry runs
     })
 
     return NextResponse.json({ ok: true, ...result })

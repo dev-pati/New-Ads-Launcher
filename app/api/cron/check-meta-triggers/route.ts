@@ -58,10 +58,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Filter: only Meta app triggers
+  // Filter: only Meta app triggers (appId === "meta" OR event starts with known Meta events)
+  const META_TRIGGER_EVENTS = ["performance_monitoring", "ad_approved", "campaign_status_change", "roas_threshold", "cpa_spike", "spend_threshold"]
   const metaAutomations = (automations ?? []).filter(a => {
     const cfg = a.trigger_config as any
-    return cfg?.appId === "meta" && cfg?.event
+    return cfg?.appId === "meta" || META_TRIGGER_EVENTS.includes(cfg?.event)
   })
 
   console.log(`[check-meta-triggers] Found ${metaAutomations.length} active Meta automations`)

@@ -56,11 +56,24 @@ export async function GET(
     )
   }
 
-  // Mark as approved
-  await db.from("automation_approvals").update({
-    status:      "approved",
-    reviewed_at: new Date().toISOString(),
-  }).eq("id", token)
+  // Mark as approved — use conditional update to prevent race with cron timeout
+  const { data: updated } = await db
+    .from("automation_approvals")
+    .update({ status: "approved", reviewed_at: new Date().toISOString() })
+    .eq("id", token)
+    .eq("status", "pending") // only update if still pending (race guard)
+    .select("id")
+    .single()
+
+  if (!updated) {
+    return new NextResponse(
+      `<html><body style="font-family:sans-serif;padding:40px;text-align:center">
+        <h2>⏰ Already processed</h2>
+        <p>This approval was already handled (approved, rejected, or timed out).</p>
+      </body></html>`,
+      { status: 409, headers: { "Content-Type": "text/html" } }
+    )
+  }
 
   // Resume the execution
   try {

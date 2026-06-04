@@ -122,6 +122,8 @@ async function execMetaAction(
       const amount      = action.budgetAmount ?? change?.amount ?? 0
       const isPercent   = (action.budgetAmountType ?? change?.unit ?? "%") === "percentage" || (change?.unit === "%")
 
+      if (!amount || amount <= 0) return { event: ev, status: "skipped", message: "No valid budget amount configured — amount must be > 0" }
+
       const updates = await Promise.all(ids.map(async id => {
         const fetchRes = await fetch(`${GRAPH}/${id}?fields=${budgetField}&access_token=${token}`)
         const fetchData = await fetchRes.json()
@@ -362,9 +364,14 @@ async function execNotification(
 async function execSheetsAction(
   action: ActionConfig,
   payload: TriggerPayload,
-  logs: StepLog[]
+  logs: StepLog[],
+  isTest = false
 ): Promise<ActionResult> {
   const ev = action.event
+  if (isTest) {
+    addLog(logs, `[TEST MODE] Would execute ${ev} on Google Sheets — skipped`, "info")
+    return { event: ev, status: "skipped", message: `[TEST] Would execute ${ev} on Sheets` }
+  }
   const spreadsheetId = action.actionSheetsSpreadsheetId
   const sheetName     = action.actionSheetsSheetName ?? "Sheet1"
 
@@ -437,9 +444,14 @@ async function execMediaLibraryAction(
   action: ActionConfig,
   payload: TriggerPayload,
   orgId: string,
-  logs: StepLog[]
+  logs: StepLog[],
+  isTest = false
 ): Promise<ActionResult> {
   const ev = action.event
+  if (isTest) {
+    addLog(logs, `[TEST MODE] Would upload to Media Library — skipped`, "info")
+    return { event: ev, status: "skipped", message: `[TEST] Would upload "${payload.fileName ?? "file"}" to Media Library` }
+  }
   if (!payload.fileUrl) return { event: ev, status: "skipped", message: "No file URL in trigger payload" }
 
   try {
@@ -540,11 +552,14 @@ async function execLaunchAdAction(
       .eq("id", payload.fileId)
       .single()
 
-    if (creative) {
-      fbImageHash   = creative.fb_image_hash ?? undefined
-      fbVideoId     = creative.fb_video_id   ?? undefined
-      fbThumbnailUrl= creative.fb_thumbnail_url ?? undefined
+    if (!creative) {
+      addLog(logs, `launch_ad: creative not found for fileId=${payload.fileId}`, "warn")
+      return { event: "launch_ad", status: "failed", message: `Creative record not found (id: ${payload.fileId})` }
     }
+
+    fbImageHash   = creative.fb_image_hash ?? undefined
+    fbVideoId     = creative.fb_video_id   ?? undefined
+    fbThumbnailUrl= creative.fb_thumbnail_url ?? undefined
 
     // Get page from ad account
     const { data: page } = await db
@@ -716,7 +731,15 @@ async function execSteps(
     if (kind === "delay") {
       const delay = step.delayConfig ?? { unit: "hours", value: 1 }
       const msMap: Record<string, number> = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 }
-      const delayMs  = (msMap[delay.unit] ?? 3_600_000) * (delay.value ?? 1)
+      if (!msMap[delay.unit]) {
+        addLog(logs, `DELAY: invalid unit "${delay.unit}" — defaulting to 1 hour`, "warn")
+        delay.unit = "hours"
+      }
+      if (!delay.value || delay.value <= 0) {
+        addLog(logs, `DELAY: invalid value ${delay.value} — defaulting to 1`, "warn")
+        delay.value = 1
+      }
+      const delayMs  = msMap[delay.unit] * delay.value
       const resumeAt = new Date(Date.now() + delayMs).toISOString()
 
       addLog(logs, `DELAY: ${delay.value} ${delay.unit} — pausing until ${resumeAt}`)
@@ -854,9 +877,9 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
           ? await execMetaAction(action, triggerPayload, fbToken, logs, isTest)
           : { event: action.event, status: "skipped", message: "No Meta connection" }
       } else if (["add_sheet_row", "update_sheet_cell", "update_sheet_row"].includes(action.event)) {
-        result = await execSheetsAction(action, triggerPayload, logs)
+        result = await execSheetsAction(action, triggerPayload, logs, isTest)
       } else if (action.event === "upload_to_media_library") {
-        result = await execMediaLibraryAction(action, triggerPayload, orgId, logs)
+        result = await execMediaLibraryAction(action, triggerPayload, orgId, logs, isTest)
       } else if (action.event === "launch_ad") {
         if (!fbToken) {
           result = { event: action.event, status: "skipped", message: "No Meta connection" }
@@ -864,8 +887,8 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
           result = await execLaunchAdAction(action, triggerPayload, fbToken, orgId, logs, isTest)
         }
       } else {
-        addLog(logs, `WARNING: Unsupported action: ${action.event} — skipping`, "warn")
-        result = { event: action.event, status: "skipped", message: `Action "${action.event}" not yet implemented` }
+        addLog(logs, `ERROR: Unsupported action type: ${action.event}`, "warn")
+        result = { event: action.event, status: "failed", message: `Action "${action.event}" is not supported` }
       }
 
       actionResults.push(result)

@@ -93,11 +93,11 @@ export async function GET(request: NextRequest) {
   for (const automation of scheduled) {
     const cfg = automation.trigger_config as any
 
-    // Prevent double-firing within same hour
+    // Prevent double-firing — require full 60min gap for hourly, 23h for daily
     if (automation.last_run_at) {
       const lastRun     = new Date(automation.last_run_at)
       const minutesSince = (now.getTime() - lastRun.getTime()) / 60_000
-      if (minutesSince < 55) {
+      if (minutesSince < 60) {
         results.push({ automationId: automation.id, name: automation.name, orgId: automation.org_id, fired: false, reason: `Ran ${minutesSince.toFixed(0)}min ago` })
         continue
       }
