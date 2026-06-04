@@ -75,11 +75,24 @@ export async function POST(request: NextRequest) {
       operator: c.operator,
     }))
 
-    const actionEntry: Record<string, any> = { type: action.type }
-    if (action.value) actionEntry.value = String(action.value)
+    // Map action types → Meta execution_type
+    const EXECUTION_TYPE_MAP: Record<string, string> = {
+      SEND_NOTIFICATION:        "SEND_NOTIFICATION",
+      PAUSE_AD:                 "PAUSE",
+      PAUSE_ADSET:              "PAUSE",
+      PAUSE_CAMPAIGN:           "PAUSE",
+      ENABLE_AD:                "ENABLE",
+      ENABLE_ADSET:             "ENABLE",
+      ENABLE_CAMPAIGN:          "ENABLE",
+      INCREASE_DAILY_BUDGET:    "ADJUST_BUDGET",
+      DECREASE_DAILY_BUDGET:    "ADJUST_BUDGET",
+      INCREASE_LIFETIME_BUDGET: "ADJUST_BUDGET",
+      DECREASE_LIFETIME_BUDGET: "ADJUST_BUDGET",
+    }
+    const executionType = EXECUTION_TYPE_MAP[action.type] ?? "SEND_NOTIFICATION"
 
-    // execution_type: SEND_NOTIFICATION for notify actions, ROTATE for everything else
-    const executionType = action.type === "SEND_NOTIFICATION" ? "SEND_NOTIFICATION" : "ROTATE"
+    const actionEntry: Record<string, any> = { type: action.type }
+    if (action.value !== undefined) actionEntry.value = String(action.value)
 
     const params = new URLSearchParams({
       access_token: token,
