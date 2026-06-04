@@ -1,6 +1,6 @@
 "use client"
 
-import { forwardRef, useImperativeHandle, useState, useRef, useEffect } from "react"
+import { forwardRef, useImperativeHandle, useState, useRef, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import {
   IconBell, IconMail, IconBrandSlack, IconPlus, IconX,
@@ -318,6 +318,125 @@ const TRIGGER_VARS = [
 ]
 const NAME_TEMPLATE_VARS = ["{{original_name}}", "{{date}}", "{{adset_name}}", "{{campaign_name}}"]
 
+// ─── AdSetPicker — hierarchical ad account → campaign → adset picker ──────────
+function AdSetPicker({ label, selectedIds, onChange, level = "adset" }: {
+  label: string
+  selectedIds: string[]
+  onChange: (ids: string[]) => void
+  level?: "adset" | "campaign" | "ad"
+}) {
+  const [accounts,  setAccounts]  = useState<{ id: string; name: string }[]>([])
+  const [campaigns, setCampaigns] = useState<{ id: string; name: string; accountId: string }[]>([])
+  const [adsets,    setAdsets]    = useState<{ id: string; name: string; campaignId: string }[]>([])
+  const [selAccount,  setSelAccount]  = useState("")
+  const [selCampaign, setSelCampaign] = useState("")
+  const [loadingCamp, setLoadingCamp] = useState(false)
+  const [loadingAdset, setLoadingAdset] = useState(false)
+
+  // Load ad accounts
+  useEffect(() => {
+    fetch("/api/facebook/ad-accounts")
+      .then(r => r.json())
+      .then(d => setAccounts((d.adAccounts ?? d.accounts ?? []).map((a: any) => ({ id: a.id ?? a.fb_ad_account_id, name: a.name ?? a.fb_ad_account_id }))))
+      .catch(() => {})
+  }, [])
+
+  // Load campaigns when account selected
+  const loadCampaigns = useCallback(async (accountId: string) => {
+    if (!accountId) return
+    setLoadingCamp(true)
+    try {
+      const res  = await fetch(`/api/facebook/campaigns?adAccountId=${encodeURIComponent(accountId)}`)
+      const data = await res.json()
+      setCampaigns((data.campaigns ?? data.data ?? []).map((c: any) => ({ id: c.id, name: c.name, accountId })))
+      setAdsets([])
+      setSelCampaign("")
+    } finally { setLoadingCamp(false) }
+  }, [])
+
+  // Load adsets when campaign selected
+  const loadAdsets = useCallback(async (campaignId: string) => {
+    if (!campaignId) return
+    setLoadingAdset(true)
+    try {
+      const res  = await fetch(`/api/facebook/adsets?campaignId=${encodeURIComponent(campaignId)}`)
+      const data = await res.json()
+      setAdsets((data.adsets ?? data.data ?? []).map((a: any) => ({ id: a.id, name: a.name, campaignId })))
+    } finally { setLoadingAdset(false) }
+  }, [])
+
+  const items = level === "campaign" ? campaigns : level === "ad" ? [] : adsets
+
+  return (
+    <div className="space-y-2">
+      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</label>
+
+      {/* Ad Account selector */}
+      <select
+        value={selAccount}
+        onChange={e => { setSelAccount(e.target.value); loadCampaigns(e.target.value) }}
+        className="w-full h-8 px-2 text-[12px] bg-muted/40 border border-border/60 rounded-lg"
+      >
+        <option value="">— Select Ad Account —</option>
+        {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+      </select>
+
+      {/* Campaign selector */}
+      {selAccount && (
+        <select
+          value={selCampaign}
+          onChange={e => { setSelCampaign(e.target.value); if (level !== "campaign") loadAdsets(e.target.value) }}
+          className="w-full h-8 px-2 text-[12px] bg-muted/40 border border-border/60 rounded-lg"
+          disabled={loadingCamp}
+        >
+          <option value="">{loadingCamp ? "Loading campaigns..." : "— Select Campaign —"}</option>
+          {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+      )}
+
+      {/* Adset list with checkboxes */}
+      {level !== "campaign" && selCampaign && (
+        <div className="border border-border/60 rounded-lg max-h-40 overflow-y-auto bg-muted/20">
+          {loadingAdset ? (
+            <div className="px-3 py-2 text-[12px] text-muted-foreground">Loading ad sets...</div>
+          ) : adsets.length === 0 ? (
+            <div className="px-3 py-2 text-[12px] text-muted-foreground">No ad sets found</div>
+          ) : adsets.map(a => (
+            <label key={a.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(a.id)}
+                onChange={e => {
+                  if (e.target.checked) onChange([...selectedIds, a.id])
+                  else onChange(selectedIds.filter(id => id !== a.id))
+                }}
+                className="rounded"
+              />
+              <span className="text-[12px] truncate">{a.name}</span>
+              <span className="text-[10px] text-muted-foreground/50 ml-auto shrink-0">{a.id}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {/* Selected summary */}
+      {selectedIds.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selectedIds.map(id => {
+            const name = [...accounts, ...campaigns, ...adsets].find(x => x.id === id)?.name ?? id
+            return (
+              <span key={id} className="flex items-center gap-1 text-[11px] px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+                {name.length > 20 ? name.slice(0, 18) + "…" : name}
+                <button onClick={() => onChange(selectedIds.filter(x => x !== id))} className="hover:text-destructive">×</button>
+              </span>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TriggerVarInput({ label, value, onChange, placeholder, description, vars = TRIGGER_VARS }: {
   label: string; value: string; onChange: (v: string) => void
   placeholder?: string; description?: string
@@ -363,11 +482,14 @@ function Toggle({ checked, onChange, label, description }: { checked: boolean; o
   )
 }
 
-function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange: (c: ActionConfig) => void }) {
+function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionConfig; onChange: (c: ActionConfig) => void; triggerAppId?: string }) {
   const ev = config.event
   const isPauseEnable = META_PAUSE_ENABLE_EVENTS.includes(ev)
   const isDuplicate   = META_DUPLICATE_EVENTS.includes(ev)
   const isBudget      = META_BUDGET_EVENTS.includes(ev)
+
+  // Triggers that don't provide qualifying entity IDs
+  const triggerHasNoIds = triggerAppId === "media_library" || triggerAppId === "manual" || !triggerAppId
 
   // Which trigger variable to suggest based on action level
   const triggerVar =
@@ -378,6 +500,8 @@ function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange:
   const targetLabel =
     ev.includes("campaign") ? "Campaigns" :
     ev.includes("adset")    ? "Ad Sets" : "Ads"
+
+  const pickerLevel = ev.includes("campaign") ? "campaign" as const : ev.includes("ad") && !ev.includes("adset") ? "ad" as const : "adset" as const
 
   return (
     <div className="p-5 space-y-4">
@@ -412,13 +536,22 @@ function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange:
 
         {/* ── Pause / Enable ─────────────────────────────────────────── */}
         {isPauseEnable && (
-          <TriggerVarInput
-            label={`${targetLabel} to ${ev.startsWith("pause") ? "Pause" : "Enable"}`}
-            value={config.actionTargetExpression ?? triggerVar}
-            onChange={v => onChange({ ...config, actionTargetExpression: v })}
-            vars={[{ key: triggerVar, label: `IDs from trigger` }]}
-            description={`Use ${triggerVar} to pass entities from the trigger. Or enter specific comma-separated IDs.`}
-          />
+          triggerHasNoIds ? (
+            <AdSetPicker
+              label={`${targetLabel} to ${ev.startsWith("pause") ? "Pause" : "Enable"}`}
+              selectedIds={config.targetIds ?? []}
+              onChange={ids => onChange({ ...config, targetIds: ids, actionTargetExpression: ids.join(",") })}
+              level={pickerLevel}
+            />
+          ) : (
+            <TriggerVarInput
+              label={`${targetLabel} to ${ev.startsWith("pause") ? "Pause" : "Enable"}`}
+              value={config.actionTargetExpression ?? triggerVar}
+              onChange={v => onChange({ ...config, actionTargetExpression: v })}
+              vars={[{ key: triggerVar, label: `IDs from trigger` }]}
+              description={`Use ${triggerVar} to pass entities from the trigger. Or enter specific comma-separated IDs.`}
+            />
+          )
         )}
 
         {/* ── Duplicate Ad ─────────────────────────────────────────── */}
@@ -761,15 +894,24 @@ function MetaActionSetup({ config, onChange }: { config: ActionConfig; onChange:
               <p className="text-[11px] text-muted-foreground">Modify budgets at the {config.targetLevel === "campaign" ? "campaign" : "ad set"} level</p>
             </div>
 
-            <TriggerVarInput
-              label={`Target ${config.targetLevel === "campaign" ? "Campaigns" : "Ad Sets"}`}
-              value={config.actionTargetExpression ?? (config.targetLevel === "campaign" ? "{{trigger.qualifyingCampaignIds}}" : "{{trigger.qualifyingAdSetIds}}")}
-              onChange={v => onChange({ ...config, actionTargetExpression: v })}
-              vars={config.targetLevel === "campaign"
-                ? [{ key: "{{trigger.qualifyingCampaignIds}}", label: "Campaigns from trigger" }]
-                : [{ key: "{{trigger.qualifyingAdSetIds}}", label: "Ad Sets from trigger" }]}
-              description="Paste comma-separated IDs or use a trigger variable"
-            />
+            {triggerHasNoIds ? (
+              <AdSetPicker
+                label={`Target ${config.targetLevel === "campaign" ? "Campaigns" : "Ad Sets"}`}
+                selectedIds={config.targetIds ?? []}
+                onChange={ids => onChange({ ...config, targetIds: ids, actionTargetExpression: ids.join(",") })}
+                level={config.targetLevel === "campaign" ? "campaign" : "adset"}
+              />
+            ) : (
+              <TriggerVarInput
+                label={`Target ${config.targetLevel === "campaign" ? "Campaigns" : "Ad Sets"}`}
+                value={config.actionTargetExpression ?? (config.targetLevel === "campaign" ? "{{trigger.qualifyingCampaignIds}}" : "{{trigger.qualifyingAdSetIds}}")}
+                onChange={v => onChange({ ...config, actionTargetExpression: v })}
+                vars={config.targetLevel === "campaign"
+                  ? [{ key: "{{trigger.qualifyingCampaignIds}}", label: "Campaigns from trigger" }]
+                  : [{ key: "{{trigger.qualifyingAdSetIds}}", label: "Ad Sets from trigger" }]}
+                description="Paste comma-separated IDs or use a trigger variable"
+              />
+            )}
 
             <SelectField
               label="Operation" value={config.budgetOperation ?? (ev === "increase_budget" ? "increase" : ev === "decrease_budget" ? "decrease" : "increase")}
@@ -1005,9 +1147,9 @@ function MediaLibraryActionSetup({ config, onChange }: { config: ActionConfig; o
 
 // ─── Setup tab dispatcher ─────────────────────────────────────────────────────
 
-function SetupTab({ config, onChange }: { config: ActionConfig; onChange: (c: ActionConfig) => void }) {
+function SetupTab({ config, onChange, triggerAppId }: { config: ActionConfig; onChange: (c: ActionConfig) => void; triggerAppId?: string }) {
   if (config.appId === "notification") return <NotificationSetup config={config} onChange={onChange} />
-  if (config.appId === "meta" || ALL_META_EVENTS.includes(config.event)) return <MetaActionSetup config={config} onChange={onChange} />
+  if (config.appId === "meta" || ALL_META_EVENTS.includes(config.event)) return <MetaActionSetup config={config} onChange={onChange} triggerAppId={triggerAppId} />
   if (config.appId === "sheets" || ["add_sheet_row","update_sheet_cell","update_sheet_row"].includes(config.event)) return <SheetsActionSetup config={config} onChange={onChange} />
   if (config.appId === "media_library" || config.event === "upload_to_media_library") return <MediaLibraryActionSetup config={config} onChange={onChange} />
 
@@ -1323,9 +1465,10 @@ interface Props {
   onChange: (c: ActionConfig) => void
   onClose?: () => void
   automationId?: string
+  triggerAppId?: string
 }
 
-export function ActionConfigPanel({ stepIndex, config, onChange, onClose, automationId }: Props) {
+export function ActionConfigPanel({ stepIndex, config, onChange, onClose, automationId, triggerAppId }: Props) {
   const [activeTab, setActiveTab] = useState<"setup" | "preview">("setup")
   const meta    = getActionMeta(config)
   const AppIcon = meta.icon
@@ -1376,7 +1519,7 @@ export function ActionConfigPanel({ stepIndex, config, onChange, onClose, automa
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {activeTab === "setup"
-          ? <SetupTab config={config} onChange={onChange} />
+          ? <SetupTab config={config} onChange={onChange} triggerAppId={triggerAppId} />
           : <PreviewTab config={config} automationId={automationId} />
         }
       </div>

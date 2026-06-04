@@ -1018,6 +1018,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
                 onChange={c => handleUpdateAction(selectedStep.id, c)}
                 onClose={() => setSelectedId(null)}
                 automationId={automationId}
+                triggerAppId={steps[0]?.triggerConfig?.appId}
               />
             )}
           </div>
