@@ -779,6 +779,17 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
               </p>
             </div>
 
+            {/* Ad Account — required for launch */}
+            <div className="space-y-1.5">
+              <label className="text-[12px] font-semibold text-foreground/80">Ad Account ID <span className="text-red-500">*</span></label>
+              <input type="text" placeholder="act_123456789"
+                value={config.launchAdAccountId ?? ""}
+                onChange={e => onChange({ ...config, launchAdAccountId: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
+              />
+              <p className="text-[11px] text-muted-foreground">Found in Ad Accounts page (format: act_xxxxx)</p>
+            </div>
+
             <AdSetPicker
               label="Target Ad Sets"
               selectedIds={config.launchTargetAdsets ?? []}
@@ -1260,7 +1271,8 @@ function MetaActionPreview({ config }: { config: ActionConfig }) {
           {isPause   && <PreviewRow label="Result" value="Status → PAUSED" />}
           {isEnable  && <PreviewRow label="Result" value="Status → ACTIVE" />}
           {isTarget  && <PreviewRow label="Target Ad Set" value={config.actionTargetAdsetId || "Not set"} />}
-          {ev === "apply_existing_rule" && <PreviewRow label="Rule ID" value={config.actionRuleId || "Not set"} />}
+          {ev === "apply_existing_rule" && <PreviewRow label="Rule ID" value={config.ruleId || config.actionRuleId || "Not set"} />}
+          {ev === "toggle_rule" && <PreviewRow label="Rule ID" value={config.ruleId || "Not set"} />}
           {ev === "set_minimum_spend" && <PreviewRow label="Min Spend" value={`${config.minSpendType === "percentage" ? "" : "$"}${config.minSpendAmount ?? 0}${config.minSpendType === "percentage" ? "%" : ""} (${config.minSpendType === "percentage" ? "Percentage" : "Fixed Amount"})`} accent />}
           <PreviewRow label="Approval" value={config.requireApproval ? "Required before executing" : "Not required"} />
         </div>

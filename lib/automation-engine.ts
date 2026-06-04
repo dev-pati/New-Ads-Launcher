@@ -161,9 +161,7 @@ async function execMetaAction(
     case "duplicate_ad":
     case "duplicate_adset":
     case "duplicate_campaign": {
-      const ids = resolveTargetIds(action, payload).length
-        ? resolveTargetIds(action, payload)
-        : (action.targetId ?? action.templateAdSetId ? [action.targetId ?? action.templateAdSetId!] : [])
+      const ids = resolveTargetIds(action, payload)
       if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
 
       const copies     = action.duplicateCopies ?? 1
@@ -212,7 +210,7 @@ async function execMetaAction(
     // ── Set Minimum Spend ─────────────────────────────────────────────────────
     case "set_minimum_spend": {
       const ids    = resolveTargetIds(action, payload)
-      const amount = action.minimumSpendAmount ?? action.amount ?? 0
+      const amount = action.minSpendAmount ?? action.minimumSpendAmount ?? action.amount ?? 0
       if (!ids.length) return { event: ev, status: "skipped", message: "No target ad set IDs configured" }
       if (!amount)     return { event: ev, status: "skipped", message: "No minimum spend amount configured" }
 
