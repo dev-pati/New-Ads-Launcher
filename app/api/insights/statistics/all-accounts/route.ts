@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { secureMetaFetch, delay } from "@/lib/meta-secure-fetch"
+import { allAccountsSnapshotFallback, datePresetToRange } from "@/lib/snapshot-fallback"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -95,6 +96,16 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error("[statistics/all-accounts]", err)
+    try {
+      const sp2 = request.nextUrl.searchParams
+      const ctx2 = await getAuthContext()
+      const rawIds = (sp2.get("adAccountIds") || sp2.get("adAccountId") || "").split(",").filter(Boolean)
+      if (ctx2 && rawIds.length) {
+        const { since, until } = datePresetToRange(sp2.get("datePreset") || "last_30d")
+        const snapshot = await allAccountsSnapshotFallback(ctx2.orgId, rawIds, since, until)
+        if (snapshot) return NextResponse.json(snapshot)
+      }
+    } catch {}
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

@@ -229,24 +229,103 @@ export async function snapshotPageInsights(
   }
 }
 
+// ── Adset-level snapshot ─────────────────────────────────────────────────────
+async function snapshotAdsets(orgId: string, actId: string, token: string, days: number) {
+  const since = ago(days), until = ago(1)
+  const fields = [
+    "adset_id","adset_name","campaign_id","campaign_name",
+    "spend","impressions","clicks","reach",
+    "actions","action_values","purchase_roas","cpm","cpc","ctr","date_start",
+  ].join(",")
+  const data = await metaFetch(
+    `${GRAPH}/${actId}/insights?fields=${encodeURIComponent(fields)}&time_range=${encodeURIComponent(JSON.stringify({ since, until }))}&level=adset&time_increment=1&limit=500&access_token=${token}`,
+    { caller: "auto-snapshot/adset" }
+  )
+  const insights: any[] = data.data ?? []
+  if (!insights.length) return
+  const now = new Date().toISOString()
+  const rows = insights.map((ins: any) => {
+    const spend = parseFloat(ins.spend ?? "0") || 0
+    const purchases = sumAction(ins.actions, PURCHASE_TYPES)
+    const purchaseVal = sumActionValue(ins.action_values, PURCHASE_TYPES)
+    return {
+      org_id: orgId, fb_ad_account_id: actId,
+      fb_campaign_id: ins.campaign_id, campaign_name: ins.campaign_name,
+      fb_adset_id: ins.adset_id, adset_name: ins.adset_name,
+      date: ins.date_start, spend,
+      impressions: parseInt(ins.impressions ?? "0") || 0,
+      clicks: parseInt(ins.clicks ?? "0") || 0,
+      reach: parseInt(ins.reach ?? "0") || 0,
+      purchases, purchase_value: purchaseVal,
+      leads: sumAction(ins.actions, LEAD_TYPES),
+      roas: parseFloat((ins.purchase_roas ?? [])[0]?.value ?? "0") || null,
+      cpa: purchases > 0 ? spend / purchases : null,
+      ctr: parseFloat(ins.ctr ?? "0") || 0,
+      cpm: parseFloat(ins.cpm ?? "0") || 0,
+      cpc: parseFloat(ins.cpc ?? "0") || 0,
+      raw_insights: ins, snapped_at: now,
+    }
+  })
+  const db = createAdminClient()
+  await db.from("adset_insights_snapshots")
+    .upsert(rows, { onConflict: "org_id,fb_adset_id,date" })
+  console.log(`[auto-snapshot] adsets: ${rows.length} rows for ${actId}`)
+}
+
+// ── Ad Account metrics snapshot ───────────────────────────────────────────────
+export async function snapshotAdAccountMetrics(
+  orgId: string, actId: string, token: string, userId: string
+): Promise<void> {
+  try {
+    const fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,spend_cap,owner_business,business"
+    const data = await metaFetch(
+      `${GRAPH}/${actId}?fields=${encodeURIComponent(fields)}&access_token=${token}`,
+      { caller: "auto-snapshot/ad-account-metrics" }
+    )
+    const db  = createAdminClient()
+    const now = new Date().toISOString()
+    await db.from("ad_account_metrics_snapshots").upsert({
+      org_id: orgId, user_id: userId,
+      fb_ad_account_id: actId,
+      fb_account_id: data.id,
+      name: data.name,
+      account_status: data.account_status,
+      currency: data.currency,
+      timezone_name: data.timezone_name,
+      amount_spent_minor: parseInt(data.amount_spent ?? "0") || null,
+      balance_minor: parseInt(data.balance ?? "0") || null,
+      spend_cap_minor: parseInt(data.spend_cap ?? "0") || null,
+      owner_business_id: data.owner_business?.id ?? data.business?.id ?? null,
+      owner_business_name: data.owner_business?.name ?? data.business?.name ?? null,
+      raw_meta: data,
+      synced_at: now,
+    }, { onConflict: "org_id,fb_ad_account_id,synced_at" }).select()
+    console.log(`[auto-snapshot] ad account metrics saved for ${actId}`)
+  } catch (err) {
+    console.warn("[auto-snapshot] ad account metrics failed:", err)
+  }
+}
+
 // ── Main entry point ─────────────────────────────────────────────────────────
 export async function autoSnapshotIfStale(
   orgId: string,
   adAccountId: string,
   accessToken: string,
   days = 7,
+  userId?: string,
 ): Promise<void> {
   try {
     const actId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
     const stale = await isStale("campaign_insights_snapshots", orgId, actId)
     if (!stale) return
 
-    // Run all snapshots in parallel (fire-and-forget per type)
     const since = ago(days), until = ago(1)
     await Promise.allSettled([
       snapshotCampaigns(orgId, actId, accessToken, days),
+      snapshotAdsets(orgId, actId, accessToken, days),
       snapshotAds(orgId, actId, accessToken, days),
       snapshotBreakdowns(orgId, actId, accessToken, since, until),
+      userId ? snapshotAdAccountMetrics(orgId, actId, accessToken, userId) : Promise.resolve(),
     ])
   } catch (err) {
     console.warn("[auto-snapshot] Failed silently:", err)

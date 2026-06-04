@@ -103,6 +103,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     getUser()
   }, [])
 
+  useEffect(() => {
+    // Fire-and-forget: trigger snapshot for all ad accounts once per session
+    const lastSnap = sessionStorage.getItem("auto_snap_fired")
+    if (lastSnap && Date.now() - parseInt(lastSnap) < 3_600_000) return // once per hour
+    sessionStorage.setItem("auto_snap_fired", String(Date.now()))
+    fetch("/api/insights/trigger-snapshot", { method: "POST" }).catch(() => {})
+  }, [])
+
   return (
     <OrgProvider>
       <AdAccountProvider>
