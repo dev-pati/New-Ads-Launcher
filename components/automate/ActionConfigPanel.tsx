@@ -557,13 +557,22 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
         {/* ── Duplicate Ad ─────────────────────────────────────────── */}
         {ev === "duplicate_ad" && (
           <>
-            <TriggerVarInput
-              label="Source Ads"
-              value={config.actionTargetExpression ?? "{{trigger.qualifyingAdIds}}"}
-              onChange={v => onChange({ ...config, actionTargetExpression: v })}
-              vars={[{ key: "{{trigger.qualifyingAdIds}}", label: "Ads from trigger" }]}
-              description="Use {{trigger.qualifyingAdIds}} to duplicate ads from the Performance Threshold trigger"
-            />
+            {triggerHasNoIds ? (
+              <AdSetPicker
+                label="Source Ads to Duplicate"
+                selectedIds={config.targetIds ?? []}
+                onChange={ids => onChange({ ...config, targetIds: ids, actionTargetExpression: ids.join(",") })}
+                level="ad"
+              />
+            ) : (
+              <TriggerVarInput
+                label="Source Ads"
+                value={config.actionTargetExpression ?? "{{trigger.qualifyingAdIds}}"}
+                onChange={v => onChange({ ...config, actionTargetExpression: v })}
+                vars={[{ key: "{{trigger.qualifyingAdIds}}", label: "Ads from trigger" }]}
+                description="Use {{trigger.qualifyingAdIds}} to duplicate ads from the Performance Threshold trigger"
+              />
+            )}
 
             <SelectField
               label="Target Ad Sets" value={config.targetFilter ?? "all"}
@@ -644,14 +653,12 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
         {/* ── Duplicate Ad Set ─────────────────────────────────────── */}
         {ev === "duplicate_adset" && (
           <>
-            <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Select Ad Set to Duplicate <span className="text-red-500">*</span></label>
-              <input type="text" placeholder="Ad Set ID"
-                value={config.actionTargetExpression ?? ""}
-                onChange={e => onChange({ ...config, actionTargetExpression: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
-              />
-            </div>
+            <AdSetPicker
+              label="Select Ad Set to Duplicate"
+              selectedIds={config.targetIds ?? []}
+              onChange={ids => onChange({ ...config, targetIds: ids, actionTargetExpression: ids.join(",") })}
+              level="adset"
+            />
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-foreground/80">Target Campaign (optional)</label>
               <input type="text" placeholder="Same campaign (default)"
@@ -684,14 +691,12 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
         {/* ── Duplicate Campaign ───────────────────────────────────── */}
         {ev === "duplicate_campaign" && (
           <>
-            <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Select Campaign to Duplicate <span className="text-red-500">*</span></label>
-              <input type="text" placeholder="Campaign ID"
-                value={config.actionTargetExpression ?? ""}
-                onChange={e => onChange({ ...config, actionTargetExpression: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
-              />
-            </div>
+            <AdSetPicker
+              label="Select Campaign to Duplicate"
+              selectedIds={config.targetIds ?? []}
+              onChange={ids => onChange({ ...config, targetIds: ids, actionTargetExpression: ids.join(",") })}
+              level="campaign"
+            />
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-foreground/80">New Name (optional)</label>
               <input type="text" placeholder="e.g. {{original_name}}_{{date}}"
@@ -712,30 +717,54 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
           </>
         )}
 
-        {/* ── Swap Creative / Create/Toggle/Update Rule / Apply Rule ─ */}
-        {(ev === "swap_creative" || ev === "create_rule" || ev === "toggle_rule" || ev === "update_rule" || ev === "apply_existing_rule") && (
+        {/* ── Swap Creative ─────────────────────────────────────────── */}
+        {ev === "swap_creative" && (
           <>
+            <AdSetPicker
+              label="Target Ads (to swap creative)"
+              selectedIds={config.targetIds ?? []}
+              onChange={ids => onChange({ ...config, targetIds: ids, actionTargetExpression: ids.join(",") })}
+              level="ad"
+            />
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Select Target <span className="text-red-500">*</span></label>
-              <input type="text" placeholder="Ad Set ID"
-                value={config.actionTargetAdsetId ?? ""}
-                onChange={e => onChange({ ...config, actionTargetAdsetId: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+              <label className="text-[12px] font-semibold text-foreground/80">New Creative ID <span className="text-red-500">*</span></label>
+              <input type="text" placeholder="Meta creative ID"
+                value={config.newCreativeId ?? ""}
+                onChange={e => onChange({ ...config, newCreativeId: e.target.value })}
+                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
               />
-              <p className="text-[11px] text-muted-foreground">Enter the Ad Set ID to target</p>
             </div>
+          </>
+        )}
 
-            {ev === "apply_existing_rule" && (
+        {/* ── Rules ─────────────────────────────────────────────────── */}
+        {(ev === "create_rule" || ev === "toggle_rule" || ev === "update_rule" || ev === "apply_existing_rule") && (
+          <>
+            {(ev === "toggle_rule" || ev === "apply_existing_rule") && (
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Select Rule <span className="text-red-500">*</span></label>
-                <input type="text" placeholder="Rule ID"
-                  value={config.actionRuleId ?? ""}
-                  onChange={e => onChange({ ...config, actionRuleId: e.target.value })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+                <label className="text-[12px] font-semibold text-foreground/80">Rule ID <span className="text-red-500">*</span></label>
+                <input type="text" placeholder="Facebook Rule ID"
+                  value={config.ruleId ?? ""}
+                  onChange={e => onChange({ ...config, ruleId: e.target.value })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
                 />
-                <p className="text-[11px] text-muted-foreground">
-                  Enter your existing Facebook Ad Rule ID. Applies to ads created in this automation.
-                </p>
+                <p className="text-[11px] text-muted-foreground">Lấy Rule ID từ Meta Ads Manager → Automated Rules</p>
+              </div>
+            )}
+            {ev === "toggle_rule" && (
+              <SelectField label="Action" value={String(config.enable ?? true)}
+                options={[{ value: "true", label: "Enable Rule" }, { value: "false", label: "Disable Rule" }]}
+                onChange={v => onChange({ ...config, enable: v === "true" })}
+              />
+            )}
+            {ev === "create_rule" && (
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold text-foreground/80">Rule Name <span className="text-red-500">*</span></label>
+                <input type="text" placeholder="My Auto Rule"
+                  value={config.ruleName ?? ""}
+                  onChange={e => onChange({ ...config, ruleName: e.target.value })}
+                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50"
+                />
               </div>
             )}
           </>
@@ -750,17 +779,12 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
               </p>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Target Ad Sets <span className="text-red-500">*</span></label>
-              <textarea
-                placeholder="One Ad Set ID per line"
-                value={(config.launchTargetAdsets ?? []).join("\n")}
-                onChange={e => onChange({ ...config, launchTargetAdsets: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })}
-                rows={3}
-                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono resize-none placeholder:text-muted-foreground/60"
-              />
-              <p className="text-[11px] text-muted-foreground">Ad Set IDs where the ad will be created</p>
-            </div>
+            <AdSetPicker
+              label="Target Ad Sets"
+              selectedIds={config.launchTargetAdsets ?? []}
+              onChange={ids => onChange({ ...config, launchTargetAdsets: ids })}
+              level="adset"
+            />
 
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-foreground/80">Ad Name Template</label>
@@ -844,13 +868,22 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
         {/* ── Set Minimum Spend ─────────────────────────────────────── */}
         {ev === "set_minimum_spend" && (
           <>
-            <TriggerVarInput
-              label="Ad Set IDs"
-              value={config.actionTargetExpression ?? "{{trigger.qualifyingAdSetIds}}"}
-              onChange={v => onChange({ ...config, actionTargetExpression: v })}
-              vars={[{ key: "{{trigger.qualifyingAdSetIds}}", label: "Ad Sets from trigger" }]}
-              description="Comma-separated ad set IDs or use a trigger variable"
-            />
+            {triggerHasNoIds ? (
+              <AdSetPicker
+                label="Target Ad Sets"
+                selectedIds={config.targetIds ?? []}
+                onChange={ids => onChange({ ...config, targetIds: ids, actionTargetExpression: ids.join(",") })}
+                level="adset"
+              />
+            ) : (
+              <TriggerVarInput
+                label="Ad Set IDs"
+                value={config.actionTargetExpression ?? "{{trigger.qualifyingAdSetIds}}"}
+                onChange={v => onChange({ ...config, actionTargetExpression: v })}
+                vars={[{ key: "{{trigger.qualifyingAdSetIds}}", label: "Ad Sets from trigger" }]}
+                description="Comma-separated ad set IDs or use a trigger variable"
+              />
+            )}
             <SelectField
               label="Minimum Spend Type" value={config.minSpendType ?? "fixed"}
               options={[

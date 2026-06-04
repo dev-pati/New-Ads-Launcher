@@ -190,6 +190,11 @@ export interface ActionConfig {
   actionRuleId?: string
   actionRuleName?: string
   actionTargetAdsetId?: string
+  ruleId?: string
+  ruleName?: string
+  enable?: boolean
+  // Meta — swap creative
+  newCreativeId?: string
   // Meta — set minimum spend
   minSpendType?: "fixed" | "percentage"
   minSpendAmount?: number
