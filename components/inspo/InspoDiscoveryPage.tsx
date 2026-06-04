@@ -9,7 +9,7 @@ import { InspoFilterBar } from "./InspoFilterBar"
 import { InspoSortControl } from "./InspoSortControl"
 import { AdCardGrid } from "./AdCardGrid"
 import { AdDetailModal } from "./AdDetailModal"
-import { IconBookmarkFilled, IconSearch } from "@tabler/icons-react"
+import { IconBookmarkFilled, IconSearch, IconLoader2 } from "@tabler/icons-react"
 
 type RawAdLibraryAd = {
   id: string
@@ -102,58 +102,66 @@ export function InspoDiscoveryPage({
   boards, savedMap, onSave, onUnsave, onCreateBoard, activeBoardId, boardAds, onAnalyzeAd, onBrandClick,
 }: Props) {
   const [activeTab, setActiveTab] = useState<InspoTab>("explore")
-  const [search,    setSearch]    = useState("myprotein")
+  const [search,    setSearch]    = useState("")
   const [filters,   setFilters]   = useState<FilterState>(DEFAULT_FILTERS)
   const [sort,      setSort]      = useState<SortOption>("recommended")
   const [selected,  setSelected]  = useState<DiscoveryAd | null>(null)
 
   // API state
-  const [apiAds,        setApiAds]        = useState<DiscoveryAd[]>([])
-  const [loading,       setLoading]       = useState(false)
-  const [error,         setError]         = useState<string | null>(null)
-  const [errorType,     setErrorType]     = useState<"no_connection" | "no_permission" | "generic" | null>(null)
-  const [searchedQuery, setSearchedQuery] = useState("")
+  const [apiAds,    setApiAds]    = useState<DiscoveryAd[]>([])
+  const [loading,   setLoading]   = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [error,     setError]     = useState<string | null>(null)
+  const [errorType, setErrorType] = useState<"no_connection" | "no_permission" | "generic" | null>(null)
+  const [hasMore,   setHasMore]   = useState(false)
+  const [offset,    setOffset]    = useState(0)
+  const [dataSource, setDataSource] = useState<"db" | "meta" | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const LIMIT = 48
 
-  const fetchAds = useCallback(async (q: string) => {
-    const key = q.toLowerCase().trim()
-    setSearchedQuery(q)
-    const cached = queryCache.get(key)
-    if (cached && Date.now() - cached.ts < CACHE_TTL) {
-      setApiAds(cached.ads)
-      return
-    }
-    setLoading(true)
-    setError(null)
-    setErrorType(null)
+  const fetchAds = useCallback(async (q: string, currentOffset = 0, append = false) => {
+    if (append) setLoadingMore(true)
+    else { setLoading(true); setError(null); setErrorType(null) }
+
+    const params = new URLSearchParams({ q, limit: String(LIMIT), offset: String(currentOffset) })
+    if (filters.platform?.length) params.set("platform", filters.platform[0])
+    if (filters.format?.length)   params.set("format",   filters.format[0])
+    if (sort === "newest")        params.set("sort", "newest")
+    else if (sort === "most_views") params.set("sort", "views")
+
     try {
-      const res  = await fetch(`/api/inspo/adscan?q=${encodeURIComponent(q)}&limit=50`)
+      const res  = await fetch(`/api/inspo/adscan?${params}`)
       const data = await res.json()
       if (!res.ok) {
         if (data.no_connection) setErrorType("no_connection")
-        else if (data.error_code === 200 || data.error_subcode === 2332002) setErrorType("no_permission")
+        else if (data.error_code === 200) setErrorType("no_permission")
         else setErrorType("generic")
         throw new Error(data.error || "Failed to fetch ads")
       }
       const mapped = ((data.ads || []) as RawAdLibraryAd[]).map(mapApiAd)
-      queryCache.set(key, { ads: mapped, ts: Date.now() })
-      setApiAds(mapped)
+      if (append) setApiAds(prev => [...prev, ...mapped])
+      else setApiAds(mapped)
+      setHasMore(!!data.hasMore)
+      setOffset(currentOffset + mapped.length)
+      setDataSource(data.source || "db")
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to fetch ads")
-      setApiAds([])
+      if (!append) setApiAds([])
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [])
+  }, [filters.platform, filters.format, sort])
 
-  // Debounce: 400ms after user stops typing
+  // Auto-load on mount and filter/sort changes
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    const q = search.trim()
-    if (!q) { setApiAds([]); setSearchedQuery(""); setError(null); return }
-    debounceRef.current = setTimeout(() => fetchAds(q), 400)
+    debounceRef.current = setTimeout(() => {
+      setOffset(0)
+      fetchAds(search.trim(), 0, false)
+    }, search ? 400 : 0)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [search, fetchAds])
+  }, [search, filters.platform, filters.format, sort, fetchAds])
 
   const boardAdIds = useMemo(() => {
     if (!activeBoardId || !boardAds) return undefined
@@ -216,25 +224,23 @@ export function InspoDiscoveryPage({
       </div>
 
       {/* Results count */}
-      {searchedQuery && !loading && !error && (
-        <div className="px-5 py-1.5 shrink-0">
+      {!loading && !error && apiAds.length > 0 && (
+        <div className="px-5 py-1.5 shrink-0 flex items-center gap-2">
           <p className="text-[11px] text-muted-foreground/60">
-            {filteredAds.length} ad{filteredAds.length !== 1 ? "s" : ""} for &quot;{searchedQuery}&quot;
+            {filteredAds.length} ads{search ? ` for "${search}"` : ""}
           </p>
+          {dataSource === "db" && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-medium">DB</span>
+          )}
+          {dataSource === "meta" && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-medium">Meta API</span>
+          )}
         </div>
       )}
 
       {/* Grid / Empty state */}
       <div className="relative z-0 flex-1 overflow-y-auto px-5 py-7">
-        {!searchedQuery && !loading && !error ? (
-          <div className="flex flex-col items-center justify-center py-32 text-center text-muted-foreground">
-            <IconSearch className="size-10 mb-3 opacity-25" />
-            <p className="font-medium text-sm">Search real ads</p>
-            <p className="text-xs mt-1 max-w-sm opacity-75">
-              Results come from SearchAPI when SEARCHAPI_API_KEY is configured, otherwise Meta Ad Library API.
-            </p>
-          </div>
-        ) : error ? (
+        {loading ? null : error ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-center px-4">
             {errorType === "no_connection" ? (
               <>
@@ -262,21 +268,48 @@ export function InspoDiscoveryPage({
               <p className="text-sm text-destructive">{error}</p>
             )}
           </div>
+        ) : filteredAds.length === 0 && !loading ? (
+          <div className="flex flex-col items-center justify-center py-32 text-center text-muted-foreground">
+            <IconSearch className="size-10 mb-3 opacity-25" />
+            <p className="font-medium text-sm">Chưa có data</p>
+            <p className="text-xs mt-1 max-w-sm opacity-75">
+              Chạy script crawl trên MacMini để index ads vào DB, sau đó browse được không cần keyword.
+            </p>
+            <code className="mt-3 text-xs bg-muted px-3 py-1.5 rounded">node scripts/crawl-inspo.mjs</code>
+          </div>
         ) : (
-          <AdCardGrid
-            ads={filteredAds}
-            boards={boards}
-            savedMap={savedMap}
-            onSave={async (adId, boardId) => {
-              const ad = apiAds.find(a => a.id === adId)
-              if (ad) await onSave(ad, boardId)
-            }}
-            onUnsave={onUnsave}
-            onCreateBoard={onCreateBoard}
-            onAdClick={setSelected}
-            onBrandClick={onBrandClick}
-            loading={loading}
-          />
+          <>
+            <AdCardGrid
+              ads={filteredAds}
+              boards={boards}
+              savedMap={savedMap}
+              onSave={async (adId, boardId) => {
+                const ad = apiAds.find(a => a.id === adId)
+                if (ad) await onSave(ad, boardId)
+              }}
+              onUnsave={onUnsave}
+              onCreateBoard={onCreateBoard}
+              onAdClick={setSelected}
+              onBrandClick={onBrandClick}
+              loading={loading}
+            />
+            {/* Load More */}
+            {hasMore && (
+              <div className="flex justify-center pt-6 pb-2">
+                <button
+                  onClick={() => fetchAds(search.trim(), offset, true)}
+                  disabled={loadingMore}
+                  className="px-6 py-2 text-sm rounded-lg border hover:bg-muted/50 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {loadingMore ? (
+                    <><IconLoader2 className="size-3.5 animate-spin" /> Loading...</>
+                  ) : (
+                    "Load more"
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
