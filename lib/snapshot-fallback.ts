@@ -7,6 +7,56 @@ function ago(days: number) {
   return new Date(Date.now() - days * 86_400_000).toISOString().split("T")[0]
 }
 
+// Parse actions array from raw_insights JSONB
+function getAct(raw: any, types: string[]): number {
+  const actions: any[] = raw?.actions ?? []
+  return actions.filter(a => types.includes(a.action_type))
+    .reduce((s, a) => s + (parseInt(a.value) || 0), 0)
+}
+function getActVal(raw: any, types: string[]): number {
+  const vals: any[] = raw?.action_values ?? []
+  return vals.filter(a => types.includes(a.action_type))
+    .reduce((s, a) => s + (parseFloat(a.value) || 0), 0)
+}
+
+function parseActionsFromRaw(raw: any, spend: number, impressions: number, clicks: number) {
+  const initiateCheckout  = getAct(raw, ["offsite_conversion.fb_pixel_initiate_checkout","initiate_checkout"])
+  const addPaymentInfo    = getAct(raw, ["offsite_conversion.fb_pixel_add_payment_info","add_payment_info"])
+  const registrations     = getAct(raw, ["complete_registration"])
+  const contentViews      = getAct(raw, ["offsite_conversion.fb_pixel_view_content"])
+  const appInstalls       = getAct(raw, ["mobile_app_install","app_install"])
+  const appActivations    = getAct(raw, ["app_activation"])
+  const postEngagements   = getAct(raw, ["post_engagement"])
+  const postReactions     = getAct(raw, ["post_reaction"])
+  const pageEngagements   = getAct(raw, ["page_engagement"])
+  const like              = getAct(raw, ["like"])
+  const comment           = getAct(raw, ["comment"])
+  const results           = getAct(raw, ["offsite_conversion.fb_pixel_purchase","purchase","lead","complete_registration","link_click","post_engagement"])
+  const addToCart         = getAct(raw, ["add_to_cart","offsite_conversion.fb_pixel_add_to_cart"])
+
+  return {
+    initiateCheckout, addPaymentInfo, registrations, contentViews,
+    appInstalls, appActivations, postEngagements, postReactions,
+    pageEngagements, like, comment, results, addToCart,
+    // Costs
+    costPerInitiateCheckout:  initiateCheckout > 0 ? spend / initiateCheckout : 0,
+    costPerAddPaymentInfo:    addPaymentInfo > 0 ? spend / addPaymentInfo : 0,
+    costPerRegistration:      registrations > 0 ? spend / registrations : 0,
+    costPerContentView:       contentViews > 0 ? spend / contentViews : 0,
+    costPerInstall:           appInstalls > 0 ? spend / appInstalls : 0,
+    costPerAppActivation:     appActivations > 0 ? spend / appActivations : 0,
+    costPerPostEngagement:    postEngagements > 0 ? spend / postEngagements : 0,
+    costPerPostReaction:      postReactions > 0 ? spend / postReactions : 0,
+    costPerPageEngagement:    pageEngagements > 0 ? spend / pageEngagements : 0,
+    costPerLike:              like > 0 ? spend / like : 0,
+    costPerComment:           comment > 0 ? spend / comment : 0,
+    costPerResult:            results > 0 ? spend / results : 0,
+    costPerAddToCart:         addToCart > 0 ? spend / addToCart : 0,
+    costPer1000Reached:       0, // requires reach not impressions
+    costPerLinkClick:         clicks > 0 ? spend / clicks : 0,
+  }
+}
+
 export function datePresetToRange(preset: string, sinceP = "", untilP = "") {
   if (sinceP && untilP) return { since: sinceP, until: untilP }
   const now   = new Date()
@@ -38,7 +88,7 @@ export async function adSnapshotFallback(orgId: string, adAccountId: string, sin
 
   const { data, error } = await db
     .from("ad_insights_snapshots")
-    .select("fb_ad_id,ad_name,fb_campaign_id,campaign_name,fb_adset_id,adset_name,date,spend,impressions,clicks,reach,purchases,purchase_value,leads,roas,cpa,ctr,cpm,cpc,video_views_3s,video_views_thruplay,frequency")
+    .select("fb_ad_id,ad_name,fb_campaign_id,campaign_name,fb_adset_id,adset_name,date,spend,impressions,inline_link_clicks,clicks,reach,purchases,purchase_value,leads,outbound_clicks,roas,cpa,ctr,cpm,cpc,video_views_3s,video_views_thruplay,video_p25_watched,video_p50_watched,video_p75_watched,video_p95_watched,video_p100_watched,video_30s_watched,video_avg_watch_pct,frequency,inline_link_click_ctr,thumbnail_url,raw_insights")
     .eq("org_id", orgId).eq("fb_ad_account_id", actId)
     .gte("date", since).lte("date", until)
     .order("spend", { ascending: false }).limit(500)
@@ -53,31 +103,66 @@ export async function adSnapshotFallback(orgId: string, adAccountId: string, sin
         adId: row.fb_ad_id, adName: row.ad_name,
         campaignId: row.fb_campaign_id, campaignName: row.campaign_name,
         adsetId: row.fb_adset_id, adsetName: row.adset_name,
+        thumbnailUrl: row.thumbnail_url,
         spend: 0, impressions: 0, clicks: 0, reach: 0,
         purchases: 0, purchaseValue: 0, leads: 0,
+        outboundClicks: 0,
         videoViews3s: 0, videoViewsThruplay: 0,
+        videoP25: 0, videoP50: 0, videoP75: 0, videoP95: 0, videoP100: 0, video30s: 0,
+        frequency: 0, _rawList: [] as any[],
       }
     }
     const a = byAd[row.fb_ad_id]
     a.spend         += parseFloat(row.spend ?? "0") || 0
     a.impressions   += row.impressions ?? 0
-    a.clicks        += row.clicks ?? 0
+    a.clicks        += row.inline_link_clicks ?? row.clicks ?? 0
     a.reach         += row.reach ?? 0
     a.purchases     += row.purchases ?? 0
     a.purchaseValue += parseFloat(row.purchase_value ?? "0") || 0
     a.leads         += row.leads ?? 0
+    a.outboundClicks    += row.outbound_clicks ?? 0
     a.videoViews3s      += row.video_views_3s ?? 0
     a.videoViewsThruplay += row.video_views_thruplay ?? 0
+    a.videoP25          += row.video_p25_watched ?? 0
+    a.videoP50          += row.video_p50_watched ?? 0
+    a.videoP75          += row.video_p75_watched ?? 0
+    a.videoP95          += row.video_p95_watched ?? 0
+    a.videoP100         += row.video_p100_watched ?? 0
+    a.video30s          += row.video_30s_watched ?? 0
+    a.frequency          = parseFloat(row.frequency ?? "0") || a.frequency
+    if (row.raw_insights) a._rawList.push(row.raw_insights)
   }
 
-  const ads = Object.values(byAd).map((a: any) => ({
-    ...a,
-    roas: a.spend > 0 ? a.purchaseValue / a.spend : 0,
-    cpa:  a.purchases > 0 ? a.spend / a.purchases : 0,
-    ctr:  a.impressions > 0 ? (a.clicks / a.impressions) * 100 : 0,
-    cpm:  a.impressions > 0 ? (a.spend / a.impressions) * 1000 : 0,
-    cpc:  a.clicks > 0 ? a.spend / a.clicks : 0,
-  })).sort((a, b) => b.spend - a.spend)
+  const ads = Object.values(byAd).map((a: any) => {
+    // Merge actions from all raw_insights rows for this ad
+    const mergedRaw = { actions: [] as any[], action_values: [] as any[] }
+    for (const r of a._rawList) {
+      mergedRaw.actions.push(...(r.actions ?? []))
+      mergedRaw.action_values.push(...(r.action_values ?? []))
+    }
+    const extra = parseActionsFromRaw(mergedRaw, a.spend, a.impressions, a.clicks)
+
+    return {
+      adId: a.adId, adName: a.adName,
+      campaignId: a.campaignId, campaignName: a.campaignName,
+      adsetId: a.adsetId, adsetName: a.adsetName,
+      thumbnailUrl: a.thumbnailUrl,
+      spend: a.spend, impressions: a.impressions, linkClicks: a.clicks,
+      reach: a.reach, frequency: a.frequency,
+      purchases: a.purchases, purchaseValue: a.purchaseValue, leads: a.leads,
+      outboundClicks: a.outboundClicks,
+      roas:  a.spend > 0 ? a.purchaseValue / a.spend : 0,
+      cpa:   a.purchases > 0 ? a.spend / a.purchases : 0,
+      ctr:   a.impressions > 0 ? (a.clicks / a.impressions) * 100 : 0,
+      cpm:   a.impressions > 0 ? (a.spend / a.impressions) * 1000 : 0,
+      cpc:   a.clicks > 0 ? a.spend / a.clicks : 0,
+      video3s: a.videoViews3s, thruplay: a.videoViewsThruplay,
+      videoP25: a.videoP25, videoP50: a.videoP50, videoP75: a.videoP75,
+      videoP95: a.videoP95, videoP100: a.videoP100, video30s: a.video30s,
+      avgWatchTime: 0,
+      ...extra,
+    }
+  }).sort((a, b) => b.spend - a.spend)
 
   return { ads, fromSnapshot: true }
 }
@@ -220,7 +305,7 @@ export async function topCreativesSnapshotFallback(orgId: string, adAccountId: s
 
   const { data, error } = await db
     .from("ad_insights_snapshots")
-    .select("fb_ad_id,ad_name,fb_campaign_id,campaign_name,fb_adset_id,adset_name,spend,impressions,clicks,purchases,purchase_value,leads,roas,cpa,ctr,cpm,cpc,video_views_3s,video_views_thruplay,thumbnail_url")
+    .select("fb_ad_id,ad_name,fb_campaign_id,campaign_name,fb_adset_id,adset_name,spend,impressions,inline_link_clicks,clicks,reach,purchases,purchase_value,leads,outbound_clicks,roas,cpa,ctr,cpm,cpc,video_views_3s,video_views_thruplay,video_p25_watched,video_p50_watched,video_p75_watched,video_p95_watched,video_p100_watched,video_30s_watched,video_avg_watch_pct,frequency,thumbnail_url,raw_insights")
     .eq("org_id", orgId).eq("fb_ad_account_id", actId)
     .gte("date", since).lte("date", until)
     .order("spend", { ascending: false }).limit(500)
@@ -230,26 +315,65 @@ export async function topCreativesSnapshotFallback(orgId: string, adAccountId: s
   const byAd: Record<string, any> = {}
   for (const row of data) {
     if (!byAd[row.fb_ad_id]) {
-      byAd[row.fb_ad_id] = { adId: row.fb_ad_id, adName: row.ad_name, campaignName: row.campaign_name, adsetName: row.adset_name, thumbnailUrl: row.thumbnail_url, spend: 0, impressions: 0, clicks: 0, purchases: 0, purchaseValue: 0, leads: 0, videoViews3s: 0, videoViewsThruplay: 0 }
+      byAd[row.fb_ad_id] = {
+        adId: row.fb_ad_id, adName: row.ad_name,
+        campaignName: row.campaign_name, adsetName: row.adset_name,
+        thumbnailUrl: row.thumbnail_url,
+        spend: 0, impressions: 0, clicks: 0, reach: 0,
+        purchases: 0, purchaseValue: 0, leads: 0, outboundClicks: 0,
+        videoViews3s: 0, videoViewsThruplay: 0,
+        videoP25: 0, videoP50: 0, videoP75: 0, videoP95: 0, videoP100: 0, video30s: 0,
+        frequency: 0, _rawList: [] as any[],
+      }
     }
     const a = byAd[row.fb_ad_id]
     a.spend         += parseFloat(row.spend ?? "0") || 0
     a.impressions   += row.impressions ?? 0
-    a.clicks        += row.clicks ?? 0
+    a.clicks        += row.inline_link_clicks ?? row.clicks ?? 0
+    a.reach         += row.reach ?? 0
     a.purchases     += row.purchases ?? 0
     a.purchaseValue += parseFloat(row.purchase_value ?? "0") || 0
     a.leads         += row.leads ?? 0
+    a.outboundClicks    += row.outbound_clicks ?? 0
     a.videoViews3s      += row.video_views_3s ?? 0
     a.videoViewsThruplay += row.video_views_thruplay ?? 0
+    a.videoP25          += row.video_p25_watched ?? 0
+    a.videoP50          += row.video_p50_watched ?? 0
+    a.videoP75          += row.video_p75_watched ?? 0
+    a.videoP95          += row.video_p95_watched ?? 0
+    a.videoP100         += row.video_p100_watched ?? 0
+    a.video30s          += row.video_30s_watched ?? 0
+    a.frequency          = parseFloat(row.frequency ?? "0") || a.frequency
+    if (row.raw_insights) a._rawList.push(row.raw_insights)
   }
 
-  const ads = Object.values(byAd).map((a: any) => ({
-    ...a,
-    roas: a.spend > 0 ? a.purchaseValue / a.spend : 0,
-    cpa:  a.purchases > 0 ? a.spend / a.purchases : 0,
-    ctr:  a.impressions > 0 ? (a.clicks / a.impressions) * 100 : 0,
-    cpm:  a.impressions > 0 ? (a.spend / a.impressions) * 1000 : 0,
-  })).sort((a, b) => b.spend - a.spend).slice(0, limit)
+  const ads = Object.values(byAd).map((a: any) => {
+    const mergedRaw = { actions: [] as any[], action_values: [] as any[] }
+    for (const r of a._rawList) {
+      mergedRaw.actions.push(...(r.actions ?? []))
+      mergedRaw.action_values.push(...(r.action_values ?? []))
+    }
+    const extra = parseActionsFromRaw(mergedRaw, a.spend, a.impressions, a.clicks)
+    return {
+      adId: a.adId, adName: a.adName,
+      campaignName: a.campaignName, adsetName: a.adsetName,
+      thumbnailUrl: a.thumbnailUrl,
+      spend: a.spend, impressions: a.impressions, linkClicks: a.clicks,
+      reach: a.reach, frequency: a.frequency,
+      purchases: a.purchases, purchaseValue: a.purchaseValue, leads: a.leads,
+      outboundClicks: a.outboundClicks,
+      roas:  a.spend > 0 ? a.purchaseValue / a.spend : 0,
+      cpa:   a.purchases > 0 ? a.spend / a.purchases : 0,
+      ctr:   a.impressions > 0 ? (a.clicks / a.impressions) * 100 : 0,
+      cpm:   a.impressions > 0 ? (a.spend / a.impressions) * 1000 : 0,
+      cpc:   a.clicks > 0 ? a.spend / a.clicks : 0,
+      video3s: a.videoViews3s, thruplay: a.videoViewsThruplay,
+      videoP25: a.videoP25, videoP50: a.videoP50, videoP75: a.videoP75,
+      videoP95: a.videoP95, videoP100: a.videoP100, video30s: a.video30s,
+      avgWatchTime: 0,
+      ...extra,
+    }
+  }).sort((a, b) => b.spend - a.spend).slice(0, limit)
 
   return { ads, fromSnapshot: true }
 }
