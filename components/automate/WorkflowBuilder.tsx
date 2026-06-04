@@ -602,6 +602,7 @@ function AddStepPopup({ x, y, onAddKind, onClose }: {
 function TopBar({
   name, onNameChange, saving, saved, running,
   onSave, onRun, onPreview, onHistory, historyOpen,
+  onNotifSettings, onMenuAction, automationStatus,
 }: {
   name: string
   onNameChange: (v: string) => void
@@ -613,9 +614,19 @@ function TopBar({
   onPreview: () => void
   onHistory: () => void
   historyOpen?: boolean
+  onNotifSettings: () => void
+  onMenuAction: (action: "rename" | "duplicate" | "delete" | "toggle") => void
+  automationStatus?: string
 }) {
   const router = useRouter()
   const [editingName, setEditingName] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false) }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [])
 
   return (
     <div className="border-b border-border bg-background shrink-0 z-10">
@@ -682,12 +693,31 @@ function TopBar({
             <IconHistory className="size-3.5" />
             History
           </button>
-          <button className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+          <button onClick={onNotifSettings} className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="Notification settings">
             <IconBell className="size-4" />
           </button>
-          <button className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-            <IconDots className="size-4" />
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button onClick={() => setMenuOpen(v => !v)} className="size-8 rounded-lg border border-border bg-background flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors" title="More options">
+              <IconDots className="size-4" />
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-9 z-50 w-44 bg-background border border-border rounded-xl shadow-lg py-1 text-sm">
+                <button onClick={() => { onMenuAction("rename"); setMenuOpen(false) }} className="w-full text-left px-3 py-2 hover:bg-muted transition-colors flex items-center gap-2">
+                  <IconDeviceFloppy className="size-3.5 text-muted-foreground" /> Rename
+                </button>
+                <button onClick={() => { onMenuAction("duplicate"); setMenuOpen(false) }} className="w-full text-left px-3 py-2 hover:bg-muted transition-colors flex items-center gap-2">
+                  <IconCheck className="size-3.5 text-muted-foreground" /> Duplicate
+                </button>
+                <button onClick={() => { onMenuAction("toggle"); setMenuOpen(false) }} className="w-full text-left px-3 py-2 hover:bg-muted transition-colors flex items-center gap-2">
+                  <IconBolt className="size-3.5 text-muted-foreground" /> {automationStatus === "active" ? "Disable" : "Enable"}
+                </button>
+                <div className="border-t border-border my-1" />
+                <button onClick={() => { onMenuAction("delete"); setMenuOpen(false) }} className="w-full text-left px-3 py-2 hover:bg-red-50 dark:hover:bg-red-950/20 text-red-600 transition-colors flex items-center gap-2">
+                  <IconX className="size-3.5" /> Delete
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -722,6 +752,11 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
   const [history,               setHistory]               = useState<any[]>([])
   const [loadingHistory,        setLoadingHistory]        = useState(false)
   const [showPreview,           setShowPreview]           = useState(false)
+  const [showNotifSettings,     setShowNotifSettings]     = useState(false)
+  const [notifEmail,            setNotifEmail]            = useState(initialWorkflow?.steps?.find(s => s.kind === "action" && s.actionConfig?.appId === "notification")?.actionConfig?.notification?.emailRecipients?.join(", ") ?? "")
+  const [notifOnSuccess,        setNotifOnSuccess]        = useState(true)
+  const [notifOnFail,           setNotifOnFail]           = useState(true)
+  const [automationStatus,      setAutomationStatus]      = useState("active")
 
   const selectedStep = steps.find(s => s.id === selectedId) ?? null
 
@@ -873,6 +908,44 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
     }
   }, [automationId, showHistory])
 
+  const handleMenuAction = useCallback(async (action: "rename" | "duplicate" | "delete" | "toggle") => {
+    if (action === "rename") {
+      const newName = window.prompt("Tên mới:", name)
+      if (newName && newName.trim()) setName(newName.trim())
+    } else if (action === "delete") {
+      if (!automationId) return
+      if (!window.confirm(`Xóa automation "${name}"? Không thể hoàn tác.`)) return
+      await fetch(`/api/automations/${automationId}`, { method: "DELETE" })
+      window.location.href = "/automate"
+    } else if (action === "toggle") {
+      setAutomationStatus(s => s === "active" ? "paused" : "active")
+      if (automationId) {
+        await fetch(`/api/automations/${automationId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: automationStatus === "active" ? "paused" : "active" }),
+        })
+      }
+    } else if (action === "duplicate") {
+      const res = await fetch("/api/automations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: `${name} (Copy)`,
+          trigger_type: steps[0]?.triggerConfig?.event ?? "performance_monitoring",
+          trigger_config: steps[0]?.triggerConfig ?? {},
+          actions: steps.filter(s => s.kind === "action").map(s => s.actionConfig),
+          steps: steps.map(s => ({
+            kind: s.kind, actionConfig: s.actionConfig ?? null,
+            delayConfig: s.delayConfig ?? null, approvalConfig: s.approvalConfig ?? null,
+          })),
+        }),
+      })
+      const data = await res.json()
+      if (data.id) window.location.href = `/automate/${data.id}`
+    }
+  }, [automationId, name, steps, automationStatus])
+
   const handleSave = useCallback(async () => {
     setSaving(true)
     try {
@@ -919,6 +992,9 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
         onPreview={() => setShowPreview(true)}
         onHistory={handleHistory}
         historyOpen={showHistory}
+        onNotifSettings={() => setShowNotifSettings(true)}
+        onMenuAction={handleMenuAction}
+        automationStatus={automationStatus}
       />
 
       {/* ── Full Preview Modal ─────────────────────────────────────────────── */}
@@ -1065,6 +1141,58 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
                   <IconDeviceFloppy className="size-3.5" /> Save
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Notification Settings Modal ─────────────────────────────────────── */}
+      {showNotifSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowNotifSettings(false)}>
+          <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div className="flex items-center gap-2">
+                <IconBell className="size-4 text-amber-500" />
+                <h2 className="text-base font-semibold">Notification Settings</h2>
+              </div>
+              <button onClick={() => setShowNotifSettings(false)} className="size-7 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">
+                <IconX className="size-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-[13px] text-muted-foreground">Nhận thông báo email khi automation chạy xong.</p>
+
+              {/* Email */}
+              <div className="space-y-1.5">
+                <label className="text-[12px] font-semibold">Email nhận thông báo</label>
+                <input
+                  type="email"
+                  placeholder="email@company.com"
+                  value={notifEmail}
+                  onChange={e => setNotifEmail(e.target.value)}
+                  className="w-full h-9 px-3 text-[13px] bg-muted/40 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                />
+                <p className="text-[11px] text-muted-foreground">Nhiều email cách nhau bằng dấu phẩy</p>
+              </div>
+
+              {/* Khi nào gửi */}
+              <div className="space-y-2">
+                <label className="text-[12px] font-semibold">Gửi khi nào</label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={notifOnSuccess} onChange={e => setNotifOnSuccess(e.target.checked)} className="rounded" />
+                  <span className="text-[13px]">Automation chạy thành công ✅</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={notifOnFail} onChange={e => setNotifOnFail(e.target.checked)} className="rounded" />
+                  <span className="text-[13px]">Automation thất bại hoặc bị skip ❌</span>
+                </label>
+              </div>
+            </div>
+            <div className="border-t px-5 py-3 flex justify-end gap-2">
+              <button onClick={() => setShowNotifSettings(false)} className="h-8 px-4 text-[13px] rounded-lg border hover:bg-muted transition-colors">Hủy</button>
+              <button onClick={() => { setShowNotifSettings(false); handleSave() }} className="h-8 px-4 text-[13px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5">
+                <IconCheck className="size-3.5" /> Lưu
+              </button>
             </div>
           </div>
         </div>
