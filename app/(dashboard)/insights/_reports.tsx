@@ -802,6 +802,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
   const [ads, setAds]           = useState<ReportAd[]>([])
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState("")
+  const [fromSnapshot, setFromSnapshot] = useState(false)
   const [loadTime, setLoadTime] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
 
@@ -870,6 +871,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
       .then(d => {
         if (d.error) { setError(d.error); return }
         setAds(d.ads || [])
+        setFromSnapshot(!!d.fromSnapshot)
         setLoadTime(Math.round((performance.now() - t0) / 100) / 10)
       })
       .catch(e => setError(e.message))
@@ -1357,6 +1359,12 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
       </div>
 
       {/* ── Content ── */}
+      {fromSnapshot && !loading && (
+        <div className="flex items-center gap-2 px-4 py-2 text-sm border-b border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 text-amber-800 dark:text-amber-300">
+          <IconAlertCircle className="size-4 shrink-0" />
+          <span>Đang hiển thị dữ liệu đã lưu — tài khoản Meta không khả dụng.</span>
+        </div>
+      )}
       <div className="flex-1 overflow-auto">
         {!selectedAccountId ? (
           <EmptyState icon={IconAlertCircle} title="No ad account selected" desc="Select an ad account from the sidebar." />

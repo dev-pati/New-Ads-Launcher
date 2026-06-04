@@ -192,6 +192,7 @@ export function AllAccountsView({ adAccounts }: { adAccounts: { id: string; name
   const [data, setData]     = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState("")
+  const [fromSnapshot, setFromSnapshot] = useState(false)
   const [metricKey, setMetricKey] = useState("spend")
 
   const load = useCallback(() => {
@@ -200,7 +201,7 @@ export function AllAccountsView({ adAccounts }: { adAccounts: { id: string; name
     setLoading(true); setError("")
     fetch(`/api/insights/statistics/all-accounts?adAccountIds=${encodeURIComponent(ids)}&datePreset=${datePreset}`)
       .then(r => r.json())
-      .then(d => { if (d.error) { setError(d.error); return }; setData(d) })
+      .then(d => { if (d.error) { setError(d.error); return }; setData(d); setFromSnapshot(!!d.fromSnapshot) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [adAccounts, datePreset])
@@ -253,6 +254,7 @@ export function AllAccountsView({ adAccounts }: { adAccounts: { id: string; name
         </div>
       </div>
 
+      {fromSnapshot && !loading && <SnapshotBanner />}
       {loading ? <LoadingState /> : error ? <ErrorMsg message={error} onRetry={load} /> : !data ? null : (
         <>
           {/* KPI row */}
@@ -2374,6 +2376,7 @@ export function ReachView() {
   const [data,    setData]    = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState("")
+  const [fromSnapshot, setFromSnapshot] = useState(false)
   const pickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -2391,7 +2394,7 @@ export function ReachView() {
     if (selectedCampaignId) params.set("campaignId", selectedCampaignId)
     fetch(`/api/insights/statistics/reach?${params}`)
       .then(r => r.json())
-      .then(d => { if (d.error) { setError(d.error); return }; setData(d); if (d.campaignList?.length) setCampaignsList(d.campaignList) })
+      .then(d => { if (d.error) { setError(d.error); return }; setData(d); setFromSnapshot(!!d.fromSnapshot); if (d.campaignList?.length) setCampaignsList(d.campaignList) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [accountId, datePreset, selectedCampaignId])
@@ -2452,6 +2455,7 @@ export function ReachView() {
         </div>
       </div>
 
+      {fromSnapshot && !loading && <SnapshotBanner />}
       {loading && <LoadingState />}
       {error   && <ErrorMsg message={error} onRetry={load} />}
       {!loading && !error && data && (
@@ -3259,6 +3263,174 @@ export function UploadStatsView() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─── Page Insights View ───────────────────────────────────────────────────────
+export function PageInsightsView() {
+  const [pages, setPages]             = useState<{ fb_page_id: string; name: string; picture_url?: string }[]>([])
+  const [selectedPageId, setSelectedPageId] = useState("")
+  const [days, setDays]               = useState(30)
+  const [data, setData]               = useState<any>(null)
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState("")
+  const [fromSnapshot, setFromSnapshot] = useState(false)
+
+  useEffect(() => {
+    fetch("/api/comments/pages")
+      .then(r => r.json())
+      .then(d => {
+        const list = d.pages || []
+        setPages(list)
+        if (list.length && !selectedPageId) setSelectedPageId(list[0].fb_page_id)
+      })
+      .catch(() => {})
+  }, [])
+
+  const load = useCallback(() => {
+    if (!selectedPageId) return
+    setLoading(true); setError("")
+    fetch(`/api/insights/page-insights?pageId=${encodeURIComponent(selectedPageId)}&days=${days}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) { setError(d.error); return }
+        setData(d); setFromSnapshot(!!d.fromSnapshot)
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [selectedPageId, days])
+
+  useEffect(() => { if (selectedPageId) load() }, [load, selectedPageId])
+
+  const daily: any[] = data?.daily || []
+  const totals        = data?.totals || {}
+  const fans          = data?.fans   || 0
+  const pageName      = data?.pageName || pages.find(p => p.fb_page_id === selectedPageId)?.name || selectedPageId
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h2 className="text-lg font-semibold">Page Insights</h2>
+          <p className="text-sm text-muted-foreground">Facebook Page performance — fans, reach & engagement</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {pages.length > 0 && (
+            <select value={selectedPageId} onChange={e => setSelectedPageId(e.target.value)}
+              className="h-8 px-2 text-sm rounded-lg border bg-background">
+              {pages.map(p => <option key={p.fb_page_id} value={p.fb_page_id}>{p.name}</option>)}
+            </select>
+          )}
+          <select value={days} onChange={e => setDays(Number(e.target.value))}
+            className="h-8 px-2 text-sm rounded-lg border bg-background">
+            <option value={7}>Last 7 days</option>
+            <option value={30}>Last 30 days</option>
+            <option value={90}>Last 90 days</option>
+          </select>
+          <button onClick={load} className="h-8 px-3 text-sm rounded-lg border hover:bg-muted/50 flex items-center gap-1.5">
+            <IconRefresh className="size-3.5" /> Refresh
+          </button>
+        </div>
+      </div>
+
+      {fromSnapshot && !loading && <SnapshotBanner />}
+      {loading && <LoadingState />}
+      {error && <ErrorMsg message={error} onRetry={load} />}
+
+      {!loading && !error && !pages.length && (
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <IconUsers className="size-10 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">No Facebook Pages connected.<br />Go to Connect → Pages to add a page.</p>
+        </div>
+      )}
+
+      {!loading && !error && data && (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <KpiCard label="Total Fans"       value={fmtK(fans)}                         sub={pageName} />
+            <KpiCard label="New Fans"         value={fmtK(totals.new_fans || 0)}         sub={`last ${days}d`} />
+            <KpiCard label="Total Reach"      value={fmtK(totals.reach || 0)}            sub={`last ${days}d`} />
+            <KpiCard label="Impressions"      value={fmtK(totals.impressions || 0)}      sub={`last ${days}d`} />
+            <KpiCard label="Post Engagements" value={fmtK(totals.post_engagements || 0)} sub={`last ${days}d`} />
+          </div>
+
+          {daily.length > 0 && (
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-sm font-medium mb-3">Daily Reach & Impressions</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={daily}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={fmtDay} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtK} />
+                  <Tooltip formatter={(v: any, name: any) => [fmtK(Number(v)), name]} labelFormatter={(s: any) => fmtDay(String(s))} />
+                  <Legend />
+                  <Bar dataKey="reach"       name="Reach"       fill="#3b82f6" radius={[3,3,0,0]} />
+                  <Bar dataKey="impressions" name="Impressions" fill="#8b5cf6" radius={[3,3,0,0]} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {daily.length > 0 && (
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-sm font-medium mb-3">Daily Engagement</p>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={daily}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={fmtDay} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtK} />
+                  <Tooltip formatter={(v: any, name: any) => [fmtK(Number(v)), name]} labelFormatter={(s: any) => fmtDay(String(s))} />
+                  <Legend />
+                  <Area dataKey="post_engagements" name="Post Engagements" fill="#10b981" stroke="#10b981" fillOpacity={0.3} />
+                  <Area dataKey="engaged_users"    name="Engaged Users"    fill="#f59e0b" stroke="#f59e0b" fillOpacity={0.3} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {daily.length > 0 && daily.some((d: any) => (d.fans || 0) > 0) && (
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-sm font-medium mb-3">Fans Growth</p>
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={daily}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={fmtDay} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtK} domain={["auto","auto"]} />
+                  <Tooltip formatter={(v: any) => [fmtK(Number(v)), "Total Fans"]} labelFormatter={(s: any) => fmtDay(String(s))} />
+                  <Area dataKey="fans" name="Total Fans" fill="#ec4899" stroke="#ec4899" fillOpacity={0.2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  {["Date","Fans","New Fans","Reach","Impressions","Engaged","Engagements","Page Views"].map(h => (
+                    <th key={h} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...daily].reverse().map((d: any) => (
+                  <tr key={d.date} className="border-t hover:bg-muted/30 transition-colors">
+                    <td className="px-3 py-2 text-muted-foreground">{fmtDay(d.date)}</td>
+                    <td className="px-3 py-2 font-medium">{fmtK(d.fans || 0)}</td>
+                    <td className="px-3 py-2 text-green-600">+{fmtK(d.new_fans || d.page_fan_adds || 0)}</td>
+                    <td className="px-3 py-2">{fmtK(d.reach || d.page_impressions_unique || 0)}</td>
+                    <td className="px-3 py-2">{fmtK(d.impressions || d.page_impressions || 0)}</td>
+                    <td className="px-3 py-2">{fmtK(d.engaged_users || d.page_engaged_users || 0)}</td>
+                    <td className="px-3 py-2">{fmtK(d.post_engagements || d.page_post_engagements || 0)}</td>
+                    <td className="px-3 py-2">{fmtK(d.page_views || d.page_views_total || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </>
       )}

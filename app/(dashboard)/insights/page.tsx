@@ -18,7 +18,7 @@ import {
   ResponsiveContainer, Legend, ComposedChart, Bar,
   BarChart,
 } from "recharts"
-import { AllAccountsView, SpendView, DemographicView, CountryView, AdHistoryView, PlacementsView, DeviceView, ReachView, CreativeAuditView, UploadStatsView } from "./_statistics"
+import { AllAccountsView, SpendView, DemographicView, CountryView, AdHistoryView, PlacementsView, DeviceView, ReachView, CreativeAuditView, UploadStatsView, PageInsightsView } from "./_statistics"
 import { CommentsView } from "./_comments"
 import { ReportsView, ReportSection } from "./_reports"
 
@@ -299,7 +299,7 @@ function MetricCard({ label, value, sparkData }: { label: string; value: string;
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 type Section = "dashboard" | "statistics" | "comments" | ReportSection
-type StatTab = "all-accounts" | "spend" | "demographic" | "country" | "ad-history" | "placements" | "device" | "reach" | "creative-audit" | "upload-stats"
+type StatTab = "all-accounts" | "spend" | "demographic" | "country" | "ad-history" | "placements" | "device" | "reach" | "creative-audit" | "upload-stats" | "page-insights"
 
 export default function InsightsPage() {
   const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
@@ -597,6 +597,7 @@ export default function InsightsPage() {
                   { id: "creative-audit" as StatTab, label: "Creative Audit" },
                   { id: "reach"          as StatTab, label: "Reach" },
                   { id: "device"         as StatTab, label: "Device" },
+                  { id: "page-insights"  as StatTab, label: "Page Insights" },
                 ]).map(sub => (
                   <button key={sub.id} onClick={() => { setStatTab(sub.id); setVisitedStatTabs(prev => new Set([...prev, sub.id])) }}
                     className={cn("flex items-center h-7 px-2.5 rounded-md text-xs w-full transition-colors",
@@ -1235,6 +1236,10 @@ export default function InsightsPage() {
             {visitedStatTabs.has("creative-audit") && selectedAccountId && (
               <div className={statTab !== "creative-audit" ? "hidden" : ""}><CreativeAuditView /></div>
             )}
+            {/* Page Insights — no account required */}
+            <div className={statTab !== "page-insights" ? "hidden" : ""}>
+              <PageInsightsView />
+            </div>
           </div>
         )}
 
