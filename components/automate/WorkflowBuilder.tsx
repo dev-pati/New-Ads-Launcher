@@ -721,6 +721,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
   const [showHistory,           setShowHistory]           = useState(false)
   const [history,               setHistory]               = useState<any[]>([])
   const [loadingHistory,        setLoadingHistory]        = useState(false)
+  const [showPreview,           setShowPreview]           = useState(false)
 
   const selectedStep = steps.find(s => s.id === selectedId) ?? null
 
@@ -915,10 +916,159 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
         running={running}
         onSave={handleSave}
         onRun={handleRun}
-        onPreview={() => {}}
+        onPreview={() => setShowPreview(true)}
         onHistory={handleHistory}
         historyOpen={showHistory}
       />
+
+      {/* ── Full Preview Modal ─────────────────────────────────────────────── */}
+      {showPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowPreview(false)}>
+          <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div>
+                <h2 className="text-base font-semibold">{name}</h2>
+                <p className="text-[12px] text-muted-foreground mt-0.5">{steps.length} step{steps.length !== 1 ? "s" : ""} · Full preview</p>
+              </div>
+              <button onClick={() => setShowPreview(false)} className="size-7 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">
+                <IconX className="size-4" />
+              </button>
+            </div>
+
+            {/* Steps */}
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
+              {steps.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-8">Chưa có steps nào. Thêm trigger và action trước.</p>
+              )}
+              {steps.map((step, i) => {
+                const stepNum = i + 1
+                if (step.kind === "trigger") {
+                  const cfg = step.triggerConfig
+                  const app = TRIGGER_APPS.find(a => a.appId === cfg?.appId) ?? ACTION_APPS.find(a => a.appId === cfg?.appId)
+                  return (
+                    <div key={step.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="size-7 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-[11px] font-bold text-violet-600">{stepNum}</div>
+                        {i < steps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
+                      </div>
+                      <div className="flex-1 pb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-violet-500 bg-violet-50 dark:bg-violet-900/20 px-1.5 py-0.5 rounded">TRIGGER</span>
+                          <span className="text-[13px] font-medium">{app?.name ?? cfg?.appId ?? "—"}</span>
+                        </div>
+                        <div className="text-[12px] text-muted-foreground space-y-0.5">
+                          {cfg?.event && <p>Event: <span className="text-foreground font-medium">{cfg.event}</span></p>}
+                          {cfg?.scheduleFrequency && <p>Schedule: <span className="text-foreground font-medium">{cfg.scheduleFrequency} · {cfg.scheduleTime ?? ""}</span></p>}
+                          {cfg?.roasTarget && <p>ROAS target: <span className="text-foreground font-medium">{cfg.roasTarget}</span></p>}
+                          {cfg?.cpaTarget && <p>CPA target: <span className="text-foreground font-medium">${cfg.cpaTarget}</span></p>}
+                          {(cfg?.thresholdConditions ?? []).length > 0 && <p>Conditions: <span className="text-foreground font-medium">{cfg!.thresholdConditions!.length} configured</span></p>}
+                          {(cfg?.adAccountIds ?? []).length > 0 && <p>Ad accounts: <span className="text-foreground font-medium">{cfg!.adAccountIds!.length} selected</span></p>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+                if (step.kind === "delay") {
+                  const cfg = step.delayConfig
+                  return (
+                    <div key={step.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="size-7 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-[11px] font-bold text-amber-600">{stepNum}</div>
+                        {i < steps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
+                      </div>
+                      <div className="flex-1 pb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">DELAY</span>
+                          <span className="text-[13px] font-medium">Wait {cfg?.value ?? 1} {cfg?.unit ?? "hours"}</span>
+                        </div>
+                        <p className="text-[12px] text-muted-foreground">Tự động tiếp tục sau {cfg?.value ?? 1} {cfg?.unit ?? "hours"}</p>
+                      </div>
+                    </div>
+                  )
+                }
+                if (step.kind === "approval") {
+                  const cfg = step.approvalConfig
+                  return (
+                    <div key={step.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="size-7 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[11px] font-bold text-blue-600">{stepNum}</div>
+                        {i < steps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
+                      </div>
+                      <div className="flex-1 pb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">APPROVAL</span>
+                          <span className="text-[13px] font-medium">Approval Required</span>
+                        </div>
+                        <div className="text-[12px] text-muted-foreground space-y-0.5">
+                          {(cfg?.approvers ?? []).length > 0
+                            ? <p>Approvers: <span className="text-foreground font-medium">{(cfg!.approvers).join(", ")}</span></p>
+                            : <p className="text-amber-500">⚠ Chưa có approvers</p>}
+                          <p>Timeout: <span className="text-foreground font-medium">{cfg?.timeoutHours ?? 24}h</span></p>
+                          {cfg?.message && <p className="text-muted-foreground/70 italic">"{cfg.message}"</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+                if (step.kind === "action") {
+                  const cfg = step.actionConfig
+                  const app = ACTION_APPS.find(a => a.appId === cfg?.appId)
+                  const ACTION_LABELS: Record<string, string> = {
+                    pause_ad: "Pause Ad", pause_adset: "Pause Ad Set", pause_campaign: "Pause Campaign",
+                    enable_ad: "Enable Ad", enable_adset: "Enable Ad Set", enable_campaign: "Enable Campaign",
+                    increase_budget: "Increase Budget", decrease_budget: "Decrease Budget", change_budget: "Change Budget",
+                    duplicate_ad: "Duplicate Ad", duplicate_adset: "Duplicate Ad Set", duplicate_campaign: "Duplicate Campaign",
+                    launch_ad: "Launch Ad", swap_creative: "Swap Creative", set_minimum_spend: "Set Minimum Spend",
+                    send_notification: "Send Notification", add_sheet_row: "Add Sheet Row",
+                    create_rule: "Create Rule", toggle_rule: "Toggle Rule", apply_existing_rule: "Apply Rule",
+                  }
+                  const targetIds = cfg?.targetIds ?? []
+                  return (
+                    <div key={step.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                        <div className="size-7 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-[11px] font-bold text-emerald-600">{stepNum}</div>
+                        {i < steps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
+                      </div>
+                      <div className="flex-1 pb-3">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">ACTION</span>
+                          <span className="text-[13px] font-medium">{app?.name ?? cfg?.appId ?? "—"} · {ACTION_LABELS[cfg?.event ?? ""] ?? cfg?.event ?? "—"}</span>
+                        </div>
+                        <div className="text-[12px] text-muted-foreground space-y-0.5">
+                          {targetIds.length > 0 && <p>Targets: <span className="text-foreground font-medium">{targetIds.length} ID{targetIds.length !== 1 ? "s" : ""} selected</span></p>}
+                          {cfg?.actionTargetExpression && !targetIds.length && <p>Target: <span className="text-foreground font-mono text-[11px]">{cfg.actionTargetExpression}</span></p>}
+                          {cfg?.budgetAmount && <p>Amount: <span className="text-foreground font-medium">{cfg.budgetAmountType === "percentage" ? `${cfg.budgetAmount}%` : `$${cfg.budgetAmount}`} ({cfg.budgetOperation ?? "increase"})</span></p>}
+                          {cfg?.launchAdAccountId && <p>Ad Account: <span className="text-foreground font-mono text-[11px]">{cfg.launchAdAccountId}</span></p>}
+                          {(cfg?.launchTargetAdsets ?? []).length > 0 && <p>Ad Sets: <span className="text-foreground font-medium">{cfg!.launchTargetAdsets!.length} selected</span></p>}
+                          {cfg?.notification?.emailRecipients?.length ? <p>Email: <span className="text-foreground font-medium">{cfg.notification.emailRecipients.join(", ")}</span></p> : null}
+                          {step.status !== "configured" && <p className="text-amber-500">⚠ Chưa cấu hình đầy đủ</p>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              })}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t px-5 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5">
+                {steps.every(s => s.status === "configured")
+                  ? <><IconCheck className="size-4 text-emerald-500" /><span className="text-[12px] text-emerald-600 font-medium">Tất cả steps đã cấu hình</span></>
+                  : <><IconX className="size-4 text-amber-500" /><span className="text-[12px] text-amber-600 font-medium">{steps.filter(s => s.status !== "configured").length} step chưa cấu hình</span></>}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setShowPreview(false)} className="h-8 px-4 text-[13px] rounded-lg border hover:bg-muted transition-colors">Đóng</button>
+                <button onClick={() => { setShowPreview(false); handleSave() }} className="h-8 px-4 text-[13px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5">
+                  <IconDeviceFloppy className="size-3.5" /> Save
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Run result toast */}
       {runResult && (
