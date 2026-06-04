@@ -438,4 +438,69 @@
   Cần bổ sung các thao tác hàng loạt để tiết kiệm thời gian vận hành ads:
   - Pause/Enable nhiều ads cùng lúc trong Ads Manager.
   - Bulk update budget cho nhiều ad sets.
+
+  15. Migration DB lên Supabase Cloud (04/06/2026)
+
+  Bối cảnh:
+  - Trước đây app dùng Supabase self-hosted trên MacMini (supabase.patiagency.com)
+  - Đã chuyển sang Supabase cloud (project của PATI Group) để ổn định hơn và không phụ thuộc MacMini
+
+  Thông tin cloud DB:
+  - Project URL: https://vrnstjkxumaaduqswkji.supabase.co
+  - Schema: ads_launcher (cần expose trong Project Settings → API → Exposed schemas)
+  - Backup config MacMini: .env.local.macmini (tại root project)
+
+  Các bước đã thực hiện:
+  1. Tạo file cloud_setup.sql (supabase/cloud_setup.sql) — schema đầy đủ 42 bảng cho fresh install
+  2. Chạy cloud_setup.sql trên Supabase Dashboard → SQL Editor
+  3. Backfill data từ MacMini sang cloud qua pg_dump + psql (Session Pooler vì cloud chỉ có IPv6)
+  4. Cập nhật .env.local với 3 keys mới: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY
+  5. Expose schema ads_launcher: Dashboard → Project Settings → API → Data API → Exposed schemas → thêm ads_launcher
+  6. Grant permissions: chạy SQL sau trong SQL Editor:
+     GRANT USAGE ON SCHEMA ads_launcher TO anon, authenticated, service_role;
+     GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ads_launcher TO anon, authenticated, service_role;
+     GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA ads_launcher TO anon, authenticated, service_role;
+
+  Migrations mới cần chạy (chưa có trong cloud_setup.sql):
+  - supabase/migrations/20260603_campaign_insights_snapshots.sql
+  - supabase/migrations/20260604_insights_snapshots_extended.sql
+  - supabase/migrations/20260604_adset_snapshots.sql
+  - supabase/migrations/20260604_snapshot_extended_metrics.sql
+
+  Rollback về MacMini (nếu cần):
+  cp .env.local.macmini .env.local && npm run dev
+
+  16. Hệ thống Snapshot Metrics — Data Offline khi Meta bị block
+
+  Mục tiêu: Sếp/nhân viên vẫn xem được số liệu ngay cả khi tài khoản Facebook bị khóa, bị ban, hoặc mất kết nối.
+
+  Cơ chế hoạt động:
+  1. Auto-save: Mỗi giờ khi user vào app → tự động snapshot tất cả ad accounts vào DB (fire-and-forget, không ảnh hưởng UI)
+  2. Auto-fallback: Khi Meta API lỗi → tự động đọc từ DB, hiện banner vàng "Đang hiển thị dữ liệu đã lưu"
+  3. Connection banner: Mọi trang trong app hiện banner đỏ/vàng khi tài khoản Facebook gặp sự cố
+
+  Các bảng snapshot:
+
+  | Bảng | Dữ liệu | Unique key |
+  |------|---------|------------|
+  | campaign_insights_snapshots | Metrics theo campaign theo ngày | (org_id, fb_campaign_id, date) |
+  | adset_insights_snapshots | Metrics theo adset theo ngày | (org_id, fb_adset_id, date) |
+  | ad_insights_snapshots | Metrics theo ad theo ngày (67 metrics) | (org_id, fb_ad_id, date) |
+  | insights_breakdown_snapshots | Age/gender/country/device breakdown | (org_id, account, date_range, type, value) |
+  | page_insights_snapshots | Facebook Page metrics theo ngày | (org_id, fb_page_id, date) |
+  | ad_account_metrics_snapshots | Spend cap, balance, remaining | (org_id, fb_ad_account_id, synced_at) |
+
+  Endpoints liên quan:
+  - POST /api/insights/trigger-snapshot — trigger snapshot tất cả accounts (gọi từ layout tự động)
+  - POST /api/insights/sync-snapshots — manual sync với tham số days (mặc định 7, tối đa 90)
+  - GET /api/insights/page-insights?pageId=xxx&days=30 — Page Insights với fallback
+  - GET /api/meta/connection-status — kiểm tra trạng thái kết nối Facebook
+
+  Các trang Insights có fallback DB:
+  - Dashboard metrics, Top Creatives, Spend, Demographic, Country, Device, Reach, Pacing, All Accounts, Page Insights
+
+  Lưu ý quan trọng:
+  - Snapshots chỉ có data sau lần đầu tiên user vào app thành công (Meta còn hoạt động)
+  - DB hiện tại trống → cần vào app 1 lần khi Facebook hoạt động để data được lưu
+  - Sau khi có data, kể cả bị block vẫn xem được số liệu đến ngày snapshot cuối cùng
   - Bulk duplicate ads/ad sets/campaigns.
