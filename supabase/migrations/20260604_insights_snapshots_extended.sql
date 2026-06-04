@@ -1,3 +1,5 @@
+SET search_path TO ads_launcher, public;
+
 -- Extended snapshot tables for full Meta Ads Manager coverage
 -- ad_insights_snapshots: per-ad daily metrics
 -- insights_breakdown_snapshots: demographic/country/device breakdowns
@@ -8,7 +10,7 @@
 -- ============================================================
 CREATE TABLE IF NOT EXISTS ad_insights_snapshots (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES ads_launcher.organizations(id) ON DELETE CASCADE,
   fb_ad_account_id TEXT NOT NULL,
   fb_campaign_id TEXT NOT NULL,
   fb_adset_id TEXT NOT NULL,
@@ -65,7 +67,7 @@ CREATE POLICY "Org members can update ad snapshots" ON ad_insights_snapshots FOR
 -- ============================================================
 CREATE TABLE IF NOT EXISTS insights_breakdown_snapshots (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES ads_launcher.organizations(id) ON DELETE CASCADE,
   fb_ad_account_id TEXT NOT NULL,
   date_start DATE NOT NULL,
   date_end DATE NOT NULL,
@@ -103,7 +105,7 @@ CREATE POLICY "Org members can update breakdown snapshots" ON insights_breakdown
 -- ============================================================
 CREATE TABLE IF NOT EXISTS page_insights_snapshots (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  org_id UUID NOT NULL REFERENCES ads_launcher.organizations(id) ON DELETE CASCADE,
   fb_page_id TEXT NOT NULL,
   page_name TEXT,
   date DATE NOT NULL,
