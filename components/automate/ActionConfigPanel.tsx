@@ -488,8 +488,9 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
   const isDuplicate   = META_DUPLICATE_EVENTS.includes(ev)
   const isBudget      = META_BUDGET_EVENTS.includes(ev)
 
-  // Triggers that don't provide qualifying entity IDs
-  const triggerHasNoIds = triggerAppId === "media_library" || triggerAppId === "manual" || !triggerAppId
+  // Only meta metric/schedule triggers provide qualifying entity IDs
+  const TRIGGERS_WITH_IDS = ["meta", "schedule"]
+  const triggerHasNoIds = !triggerAppId || !TRIGGERS_WITH_IDS.includes(triggerAppId)
 
   // Which trigger variable to suggest based on action level
   const triggerVar =
