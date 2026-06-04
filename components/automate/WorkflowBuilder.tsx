@@ -753,9 +753,10 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
   const [loadingHistory,        setLoadingHistory]        = useState(false)
   const [showPreview,           setShowPreview]           = useState(false)
   const [showNotifSettings,     setShowNotifSettings]     = useState(false)
-  const [notifEmail,            setNotifEmail]            = useState(initialWorkflow?.steps?.find(s => s.kind === "action" && s.actionConfig?.appId === "notification")?.actionConfig?.notification?.emailRecipients?.join(", ") ?? "")
-  const [notifOnSuccess,        setNotifOnSuccess]        = useState(true)
-  const [notifOnFail,           setNotifOnFail]           = useState(true)
+  const initNotif = (initialWorkflow as any)?.notif_config
+  const [notifEmail,            setNotifEmail]            = useState<string>((initNotif?.emails ?? []).join(", "))
+  const [notifOnSuccess,        setNotifOnSuccess]        = useState<boolean>(initNotif?.on_success ?? true)
+  const [notifOnFail,           setNotifOnFail]           = useState<boolean>(initNotif?.on_fail    ?? true)
   const [automationStatus,      setAutomationStatus]      = useState("active")
 
   const selectedStep = steps.find(s => s.id === selectedId) ?? null
@@ -966,6 +967,11 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
             approvalConfig: s.approvalConfig ?? null,
           })),
           ad_account_ids: [],
+          notif_config: {
+            emails:     notifEmail.split(",").map(e => e.trim()).filter(Boolean),
+            on_success: notifOnSuccess,
+            on_fail:    notifOnFail,
+          },
         }),
       })
       const data = await res.json()

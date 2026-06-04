@@ -14,7 +14,7 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const { name, trigger_type, trigger_config, conditions, actions, ad_account_ids } = body
+    const { name, trigger_type, trigger_config, conditions, actions, ad_account_ids, status, notif_config, steps } = body
 
     const supabase = await createClient()
     const updates: Record<string, any> = {}
@@ -24,6 +24,9 @@ export async function PATCH(
     if (conditions     !== undefined) updates.conditions      = conditions
     if (actions        !== undefined) updates.actions         = actions
     if (ad_account_ids !== undefined) updates.ad_account_ids  = ad_account_ids
+    if (status         !== undefined) updates.status          = status
+    if (notif_config   !== undefined) updates.notif_config    = notif_config
+    if (steps          !== undefined) updates.steps           = steps
 
     const { data, error } = await supabase
       .from("automations")

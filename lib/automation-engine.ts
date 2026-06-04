@@ -920,6 +920,29 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
     .update({ run_count: (automation.run_count ?? 0) + 1, last_run_at: new Date().toISOString() })
     .eq("id", automation.id)
 
+  // ── Send bell notification if configured ─────────────────────────────────
+  if (!options.isTest) {
+    const notifCfg = (automation as any).notif_config
+    const emails: string[] = notifCfg?.emails ?? []
+    const shouldSend =
+      (overallStatus === "success" && notifCfg?.on_success !== false) ||
+      (overallStatus === "failed"  && notifCfg?.on_fail    !== false)
+
+    if (emails.length && shouldSend) {
+      const resendKey = process.env.RESEND_API_KEY
+      if (resendKey) {
+        const icon    = overallStatus === "success" ? "✅" : "❌"
+        const subject = `${icon} Automation "${automation.name}" — ${overallStatus}`
+        const text    = `Automation: ${automation.name}\nStatus: ${overallStatus}\nDuration: ${durationMs}ms\nSteps completed: ${actionResults.length}\n\nDetails:\n${actionResults.map(r => `• ${r.event}: ${r.status} — ${r.message}`).join("\n")}`
+        await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev", to: emails, subject, text }),
+        }).catch(() => {})
+      }
+    }
+  }
+
   return { status: overallStatus, logs, triggerPayload, actionResults, durationMs, executionDbId: exec?.id }
 }
 
