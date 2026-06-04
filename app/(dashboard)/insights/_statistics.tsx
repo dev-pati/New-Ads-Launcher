@@ -72,6 +72,15 @@ function ErrorMsg({ message, onRetry }: { message: string; onRetry: () => void }
   )
 }
 
+function SnapshotBanner() {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300 mb-2">
+      <IconAlertCircle className="size-4 shrink-0" />
+      <span>Đang hiển thị dữ liệu đã lưu — tài khoản Meta không khả dụng.</span>
+    </div>
+  )
+}
+
 function DatePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [open, setOpen] = useState(false)
   const label = DATE_PRESETS.find(p => p.value === value)?.label || value
@@ -561,6 +570,7 @@ export function DemographicView() {
   const [data, setData]       = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState("")
+  const [fromSnapshot, setFromSnapshot] = useState(false)
   const [segmentDim, setSegmentDim]       = useState<"age" | "gender">("age")
   const [segmentMetric, setSegmentMetric] = useState("spend")
 
@@ -591,7 +601,7 @@ export function DemographicView() {
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); return }
-        setData(d)
+        setData(d); setFromSnapshot(!!d.fromSnapshot)
         // Always refresh the campaign picker list from account-level data
         if (d.campaignList?.length) setCampaignsList(d.campaignList)
       })
@@ -761,6 +771,7 @@ export function DemographicView() {
         )}
       </div>
 
+      {fromSnapshot && !loading && <SnapshotBanner />}
       {loading ? <LoadingState /> : error ? <ErrorMsg message={error} onRetry={load} /> : !data ? null : (
         <>
           {/* KPI cards */}
@@ -1016,6 +1027,7 @@ export function CountryView() {
   const [data, setData]                 = useState<any>(null)
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState("")
+  const [fromSnapshot, setFromSnapshot] = useState(false)
   const [chartMetric, setChartMetric]   = useState("spend")
   const [sortField, setSortField]       = useState("spend")
   const [sortDir, setSortDir]           = useState<"asc" | "desc">("desc")
@@ -1046,7 +1058,7 @@ export function CountryView() {
       .then(r => r.json())
       .then(d => {
         if (d.error) { setError(d.error); return }
-        setData(d)
+        setData(d); setFromSnapshot(!!d.fromSnapshot)
         if (d.campaignList?.length) setCampaignsList(d.campaignList)
       })
       .catch(e => setError(e.message))
@@ -1173,6 +1185,7 @@ export function CountryView() {
         )}
       </div>
 
+      {fromSnapshot && !loading && <SnapshotBanner />}
       {loading ? <LoadingState /> : error ? <ErrorMsg message={error} onRetry={load} /> : !data ? null : (
         <>
           {/* KPI Cards */}
@@ -2106,6 +2119,7 @@ export function DeviceView() {
   const [data,      setData]      = useState<any>(null)
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState("")
+  const [fromSnapshot, setFromSnapshot] = useState(false)
   const [aiText,    setAiText]    = useState("")
   const [aiLoading, setAiLoading] = useState(false)
 
@@ -2114,7 +2128,7 @@ export function DeviceView() {
     setLoading(true); setError(""); setAiText("")
     fetch(`/api/insights/statistics/device?adAccountId=${accountId}&datePreset=${datePreset}`)
       .then(r => r.json())
-      .then(d => { if (d.error) { setError(d.error); return }; setData(d) })
+      .then(d => { if (d.error) { setError(d.error); return }; setData(d); setFromSnapshot(!!d.fromSnapshot) })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [accountId, datePreset])
@@ -2188,6 +2202,7 @@ export function DeviceView() {
         </div>
       )}
 
+      {fromSnapshot && !loading && <SnapshotBanner />}
       {loading && <LoadingState />}
       {error   && <ErrorMsg message={error} onRetry={load} />}
 

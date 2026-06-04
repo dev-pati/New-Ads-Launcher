@@ -1,0 +1,224 @@
+- generic [ref=e1]:
+  - region "Notifications alt+T"
+  - alert [ref=e2]
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - button "T" [ref=e274] [cursor=pointer]:
+          - generic [ref=e276]: T
+        - generic [ref=e8]: Workspace
+      - navigation [ref=e9]:
+        - link "Launch" [ref=e10] [cursor=pointer]:
+          - /url: /launch
+          - img [ref=e11]
+          - generic [ref=e16]: Launch
+        - link "Assets" [ref=e17] [cursor=pointer]:
+          - /url: /library
+          - img [ref=e18]
+          - generic [ref=e20]: Assets
+        - link "Insights" [ref=e21] [cursor=pointer]:
+          - /url: /reports/top-ads
+          - img [ref=e22]
+          - generic [ref=e25]: Insights
+        - link "Automate" [ref=e26] [cursor=pointer]:
+          - /url: /automation
+          - img [ref=e27]
+          - generic [ref=e29]: Automate
+        - link "Connect" [ref=e30] [cursor=pointer]:
+          - /url: /integrations/ad-channels
+          - img [ref=e31]
+          - generic [ref=e33]: Connect
+        - link "Inspo" [ref=e34] [cursor=pointer]:
+          - /url: /adscan
+          - img [ref=e35]
+          - generic [ref=e37]: Inspo
+      - generic [ref=e38]:
+        - button "Search" [ref=e39] [cursor=pointer]:
+          - img [ref=e40]
+          - generic [ref=e43]: Search
+        - link "Rewards" [ref=e44] [cursor=pointer]:
+          - /url: /referrals
+          - img [ref=e45]
+          - generic [ref=e49]: Rewards
+        - link "Settings" [ref=e50] [cursor=pointer]:
+          - /url: /teams
+          - img [ref=e51]
+          - generic [ref=e54]: Settings
+        - button "Thuận Nguyễn Văn" [ref=e277] [cursor=pointer]:
+          - img "Thuận Nguyễn Văn" [ref=e278]
+    - generic [ref=e59]:
+      - generic [ref=e61]:
+        - generic [ref=e62]:
+          - generic [ref=e63]: Automate
+          - generic [ref=e64]:
+            - button "Notifications" [ref=e65] [cursor=pointer]:
+              - img [ref=e66]
+            - button "Collapse sidebar" [ref=e69]:
+              - img [ref=e70]
+        - list [ref=e280]:
+          - listitem [ref=e281]:
+            - link "Automations" [ref=e282] [cursor=pointer]:
+              - /url: /automation
+              - img [ref=e283]
+              - generic [ref=e285]: Automations
+          - listitem [ref=e286]:
+            - link "Rules" [ref=e287] [cursor=pointer]:
+              - /url: /rules
+              - img [ref=e288]
+              - generic [ref=e289]: Rules
+      - separator "Resize sidebar" [ref=e79]
+    - generic [ref=e83]:
+      - banner [ref=e84]:
+        - generic [ref=e85]:
+          - generic [ref=e86]:
+            - button [ref=e87] [cursor=pointer]:
+              - img [ref=e88]
+            - generic [ref=e90]:
+              - img [ref=e92]
+              - textbox "Automation name" [ref=e95]: Untitled Zap
+          - generic [ref=e96]:
+            - button "Save" [ref=e97] [cursor=pointer]:
+              - img [ref=e98]
+              - text: Save
+            - button "Run" [ref=e102] [cursor=pointer]:
+              - img [ref=e103]
+              - text: Run
+            - button "Full preview" [ref=e105] [cursor=pointer]:
+              - img [ref=e106]
+              - text: Full preview
+            - button "History" [disabled]:
+              - img
+              - text: History
+            - button "Notification settings" [ref=e109] [cursor=pointer]:
+              - img [ref=e110]
+            - button [ref=e113] [cursor=pointer]:
+              - img [ref=e114]
+        - combobox [ref=e290] [cursor=pointer]:
+          - generic [ref=e291]:
+            - img [ref=e292]
+            - generic [ref=e298]: GEC-JORDY 01
+          - img [ref=e299]
+      - main [ref=e120]:
+        - generic [ref=e121]:
+          - generic [ref=e125]:
+            - generic [ref=e126]:
+              - generic [ref=e127] [cursor=pointer]:
+                - generic [ref=e129]:
+                  - generic [ref=e130]: "1"
+                  - generic [ref=e131]: trigger
+                - generic [ref=e134]:
+                  - img "Google Drive" [ref=e637]
+                  - generic [ref=e138]:
+                    - heading "Google Drive · New Folder in Folder" [level=3] [ref=e720]
+                    - paragraph [ref=e669]: Daily 9am
+                  - button [ref=e140]:
+                    - img [ref=e141]
+              - generic [ref=e145]:
+                - img [ref=e147]
+                - button [ref=e150] [cursor=pointer]:
+                  - img [ref=e151]
+                - img [ref=e153]
+            - generic [ref=e155]:
+              - generic [ref=e156] [cursor=pointer]:
+                - generic [ref=e158]:
+                  - generic [ref=e159]: "2"
+                  - generic [ref=e160]: action
+                - generic [ref=e163]:
+                  - img [ref=e165]
+                  - heading "Choose an app" [level=3] [ref=e168]
+                  - button [ref=e169]:
+                    - img [ref=e170]
+              - generic [ref=e174]:
+                - img [ref=e176]
+                - button [ref=e178] [cursor=pointer]:
+                  - img [ref=e179]
+                - img [ref=e181]
+          - generic [ref=e310]:
+            - generic [ref=e311]:
+              - generic [ref=e312]:
+                - img "Google Drive" [ref=e640]
+                - generic [ref=e315]:
+                  - heading "1. Trigger" [level=2] [ref=e316]
+                  - paragraph [ref=e317]: When does this step fire?
+              - button [ref=e318] [cursor=pointer]:
+                - img [ref=e319]
+            - generic [ref=e322]:
+              - button "setup" [ref=e323]: setup
+              - button "preview" [ref=e325]
+            - generic [ref=e327]:
+              - generic [ref=e328]:
+                - text: App
+                - generic [ref=e329]:
+                  - generic [ref=e330]:
+                    - img "Google Drive" [ref=e642]
+                    - generic [ref=e643]: Google Drive
+                  - button "Change" [ref=e644]
+              - generic [ref=e645]:
+                - heading "Configure Google Drive Trigger" [level=4] [ref=e646]
+                - generic [ref=e647]:
+                  - generic [ref=e648]:
+                    - generic [ref=e649]: Account *
+                    - generic [ref=e650]:
+                      - img [ref=e651]
+                      - generic [ref=e654]: Google Drive Connected
+                    - paragraph [ref=e655]: Google Drive is a secure partner with Admanage. Your credentials are encrypted.
+                  - generic [ref=e656]:
+                    - generic [ref=e657]: Trigger Event *
+                    - combobox [active] [ref=e658]:
+                      - generic: New Folder in Folder
+                      - img [ref=e659]
+                  - generic [ref=e670]:
+                    - generic [ref=e671]: Parent Folder *
+                    - button "Browse Google Drive..." [ref=e673] [cursor=pointer]:
+                      - img [ref=e674]
+                      - text: Browse Google Drive...
+                    - button "Or paste folder URL / ID" [ref=e676]:
+                      - img [ref=e677]
+                      - text: Or paste folder URL / ID
+                  - generic [ref=e721]:
+                    - text: Folder Name Filter
+                    - combobox [ref=e722]:
+                      - generic: All Folders
+                      - img [ref=e723]
+                  - generic [ref=e725]:
+                    - generic [ref=e726]:
+                      - generic [ref=e727]: Enable Recursive Search
+                      - switch [ref=e728] [cursor=pointer]
+                    - paragraph [ref=e729]: Search for new folders within all subfolders, not just the top level. Only triggers when a new folder containing files is found — adding files to existing folders will not trigger.
+                  - generic [ref=e730]:
+                    - text: Minimum Files Required
+                    - spinbutton [ref=e731]
+                    - paragraph [ref=e732]: Only trigger when the folder contains at least this many files (0 = no minimum)
+                  - generic [ref=e733]:
+                    - text: Batch Strategy
+                    - combobox [ref=e734]:
+                      - generic: All files as one ad batch
+                      - img [ref=e735]
+                    - paragraph [ref=e737]: How to organize files inside each new subfolder into ads
+                  - paragraph [ref=e739]:
+                    - strong [ref=e740]: "Multi-Placement:"
+                    - text: Files sharing the same base name with dimension suffixes (e.g.
+                    - code [ref=e741]: creative_1x1.mp4
+                    - text: +
+                    - code [ref=e742]: creative_9x16.mp4
+                    - text: ) are auto-grouped into a single multi-placement ad. Works with videos and images. Disabled when Batch Strategy is "One ad per file".
+                  - generic [ref=e743]:
+                    - text: Check Frequency
+                    - combobox [ref=e744]:
+                      - generic: Daily
+                      - img [ref=e745]
+                  - paragraph [ref=e748]:
+                    - strong [ref=e749]: "Note:"
+                    - text: This parent folder will be checked once per day for new subfolders. Folders that have already been processed will not be processed again.
+            - button "Preview →" [ref=e395] [cursor=pointer]
+  - iframe
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - iframe
+          - iframe [ref=e183]:
+            - button "Open customer support" [ref=f16e4]:
+              - img [ref=f16e6]
+              - img [ref=f16e10]

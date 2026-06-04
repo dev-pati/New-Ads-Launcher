@@ -1,0 +1,231 @@
+- generic:
+  - region "Notifications alt+T"
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - generic: 📅
+                            - generic:
+                              - heading [level=3]: Scheduled · Scheduled Run
+                              - paragraph: Weekly Mon
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic: 📅
+                          - generic:
+                            - heading [level=2]: 1. Trigger
+                            - paragraph: When does this step fire?
+                        - button:
+                          - img
+                      - generic:
+                        - button: setup
+                        - button: preview
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: App
+                            - generic:
+                              - generic:
+                                - generic: 📅
+                                - generic: Scheduled
+                              - button: Change
+                          - generic:
+                            - text: Trigger event
+                            - combobox:
+                              - generic: Scheduled Run
+                              - img
+                          - generic:
+                            - heading [level=4]: Schedule Configuration
+                            - paragraph: Set when and how often this automation should run.
+                            - generic:
+                              - generic:
+                                - generic: Frequency *
+                                - combobox [expanded]:
+                                  - generic: Weekly
+                                  - img
+                              - generic:
+                                - generic: Day of Week *
+                                - combobox:
+                                  - generic: Select day
+                                  - img
+                              - generic:
+                                - generic: Time (BST) *
+                                - textbox
+                                - paragraph: Runs every week at this time.
+                              - generic:
+                                - generic: Start Date *
+                                - textbox
+                                - paragraph: The automation will start running from this date.
+                              - generic:
+                                - text: End Date (optional)
+                                - textbox
+                                - paragraph: Leave empty to run indefinitely.
+                      - generic:
+                        - button: Preview →
+  - alert
+  - iframe [ref=e183]:
+    - button "Open customer support" [ref=f32e4]:
+      - img [ref=f32e6]
+      - img [ref=f32e10]
+  - listbox [ref=e548]:
+    - option "One-time" [ref=e549]:
+      - generic [ref=e551]: One-time
+    - option "Daily" [ref=e552]:
+      - generic [ref=e554]: Daily
+    - option "Weekly" [active] [selected] [ref=e555]:
+      - img [ref=e558]
+      - generic [ref=e560]: Weekly
+    - option "Monthly" [ref=e561]:
+      - generic [ref=e563]: Monthly

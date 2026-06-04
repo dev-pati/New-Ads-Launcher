@@ -1,0 +1,193 @@
+- generic [ref=e1]:
+  - region "Notifications alt+T"
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - button "T" [ref=e274] [cursor=pointer]:
+          - generic [ref=e276]: T
+        - generic [ref=e7]: Workspace
+      - navigation [ref=e8]:
+        - link "Launch" [ref=e9] [cursor=pointer]:
+          - /url: /launch
+          - img [ref=e10]
+          - generic [ref=e15]: Launch
+        - link "Assets" [ref=e16] [cursor=pointer]:
+          - /url: /library
+          - img [ref=e17]
+          - generic [ref=e19]: Assets
+        - link "Insights" [ref=e20] [cursor=pointer]:
+          - /url: /reports/top-ads
+          - img [ref=e21]
+          - generic [ref=e24]: Insights
+        - link "Automate" [ref=e25] [cursor=pointer]:
+          - /url: /automation
+          - img [ref=e26]
+          - generic [ref=e28]: Automate
+        - link "Connect" [ref=e29] [cursor=pointer]:
+          - /url: /integrations/ad-channels
+          - img [ref=e30]
+          - generic [ref=e32]: Connect
+        - link "Inspo" [ref=e33] [cursor=pointer]:
+          - /url: /adscan
+          - img [ref=e34]
+          - generic [ref=e36]: Inspo
+      - generic [ref=e37]:
+        - button "Search" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+          - generic [ref=e42]: Search
+        - link "Rewards" [ref=e43] [cursor=pointer]:
+          - /url: /referrals
+          - img [ref=e44]
+          - generic [ref=e48]: Rewards
+        - link "Settings" [ref=e49] [cursor=pointer]:
+          - /url: /teams
+          - img [ref=e50]
+          - generic [ref=e53]: Settings
+        - button "Thuận Nguyễn Văn" [ref=e277] [cursor=pointer]:
+          - img "Thuận Nguyễn Văn" [ref=e278]
+    - generic [ref=e58]:
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]: Automate
+          - generic [ref=e63]:
+            - button "Notifications" [ref=e64] [cursor=pointer]:
+              - img [ref=e65]
+            - button "Collapse sidebar" [ref=e68]:
+              - img [ref=e69]
+        - list [ref=e280]:
+          - listitem [ref=e281]:
+            - link "Automations" [ref=e282] [cursor=pointer]:
+              - /url: /automation
+              - img [ref=e283]
+              - generic [ref=e285]: Automations
+          - listitem [ref=e286]:
+            - link "Rules" [ref=e287] [cursor=pointer]:
+              - /url: /rules
+              - img [ref=e288]
+              - generic [ref=e289]: Rules
+      - separator "Resize sidebar" [ref=e78]
+    - generic [ref=e82]:
+      - banner [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - button [ref=e86] [cursor=pointer]:
+              - img [ref=e87]
+            - generic [ref=e89]:
+              - img [ref=e91]
+              - textbox "Automation name" [ref=e94]: Untitled Zap
+          - generic [ref=e95]:
+            - button "Save" [ref=e96] [cursor=pointer]:
+              - img [ref=e97]
+              - text: Save
+            - button "Run" [ref=e101] [cursor=pointer]:
+              - img [ref=e102]
+              - text: Run
+            - button "Full preview" [ref=e104] [cursor=pointer]:
+              - img [ref=e105]
+              - text: Full preview
+            - button "History" [disabled]:
+              - img
+              - text: History
+            - button "Notification settings" [ref=e108] [cursor=pointer]:
+              - img [ref=e109]
+            - button [ref=e112] [cursor=pointer]:
+              - img [ref=e113]
+        - combobox [expanded] [ref=e290] [cursor=pointer]:
+          - generic [ref=e291]:
+            - img [ref=e292]
+            - generic [ref=e298]: GEC-JORDY 01
+          - img [ref=e299]
+      - main [ref=e119]:
+        - generic [ref=e120]:
+          - generic [ref=e124]:
+            - generic [ref=e125]:
+              - generic [ref=e126] [cursor=pointer]:
+                - generic [ref=e128]:
+                  - generic [ref=e129]: "1"
+                  - generic [ref=e130]: trigger
+                - generic [ref=e133]:
+                  - generic [ref=e451]: 📅
+                  - generic [ref=e137]:
+                    - heading "Scheduled · Select an event" [level=3] [ref=e452]
+                    - paragraph [ref=e304]: Select an event
+                  - button [ref=e139]:
+                    - img [ref=e140]
+              - generic [ref=e144]:
+                - img [ref=e146]
+                - button [ref=e149] [cursor=pointer]:
+                  - img [ref=e150]
+                - img [ref=e152]
+            - generic [ref=e154]:
+              - generic [ref=e155] [cursor=pointer]:
+                - generic [ref=e157]:
+                  - generic [ref=e158]: "2"
+                  - generic [ref=e159]: action
+                - generic [ref=e162]:
+                  - img [ref=e164]
+                  - heading "Choose an app" [level=3] [ref=e167]
+                  - button [ref=e168]:
+                    - img [ref=e169]
+              - generic [ref=e173]:
+                - img [ref=e175]
+                - button [ref=e177] [cursor=pointer]:
+                  - img [ref=e178]
+                - img [ref=e180]
+          - generic [ref=e310]:
+            - generic [ref=e311]:
+              - generic [ref=e312]:
+                - generic [ref=e453]: 📅
+                - generic [ref=e315]:
+                  - heading "1. Trigger" [level=2] [ref=e316]
+                  - paragraph [ref=e317]: When does this step fire?
+              - button [ref=e318] [cursor=pointer]:
+                - img [ref=e319]
+            - generic [ref=e322]:
+              - button "setup" [ref=e323]: setup
+              - button "preview" [ref=e325]
+            - generic [ref=e327]:
+              - generic [ref=e328]:
+                - text: App
+                - generic [ref=e329]:
+                  - generic [ref=e330]:
+                    - generic [ref=e396]: 📅
+                    - generic [ref=e454]: Scheduled
+                  - button "Change" [ref=e455]
+              - generic [ref=e456]:
+                - text: Trigger event
+                - combobox [ref=e457]:
+                  - generic: Choose an event
+                  - img [ref=e458]
+            - generic [ref=e394]:
+              - button "To continue, choose an event" [disabled]
+  - alert [ref=e181]
+  - iframe
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - iframe
+          - iframe [ref=e183]:
+            - button "Open customer support" [ref=f32e4]:
+              - img [ref=f32e6]
+              - img [ref=f32e10]
+  - dialog [ref=e461]:
+    - generic [ref=e462]:
+      - generic [ref=e464]:
+        - img [ref=e465]
+        - combobox [expanded] [active] [ref=e468]
+      - group [ref=e469]:
+        - option "GEC-JORDY 01 act_1615054019650974" [ref=e470] [cursor=pointer]:
+          - img
+          - generic [ref=e471]:
+            - img
+            - generic [ref=e472]:
+              - generic [ref=e473]: GEC-JORDY 01
+              - generic [ref=e474]: act_1615054019650974
+        - option "HOORAY 37_NLM act_987061553005765" [ref=e475] [cursor=pointer]:
+          - img
+          - generic [ref=e476]:
+            - img
+            - generic [ref=e477]:
+              - generic [ref=e478]: HOORAY 37_NLM
+              - generic [ref=e479]: act_987061553005765

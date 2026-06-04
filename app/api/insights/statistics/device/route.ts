@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { breakdownSnapshotFallback, datePresetToRange } from "@/lib/snapshot-fallback"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -166,6 +167,16 @@ export async function GET(request: NextRequest) {
     })
   } catch (err: any) {
     console.error("[statistics/device]", err)
+    try {
+      const sp2 = request.nextUrl.searchParams
+      const ctx2 = await getAuthContext()
+      const adAccountId = sp2.get("adAccountId") || ""
+      if (ctx2 && adAccountId) {
+        const { since, until } = datePresetToRange(sp2.get("datePreset") || "last_30d")
+        const snapshot = await breakdownSnapshotFallback(ctx2.orgId, adAccountId, since, until, ["device", "publisher_platform"])
+        if (snapshot) return NextResponse.json(snapshot)
+      }
+    } catch {}
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }

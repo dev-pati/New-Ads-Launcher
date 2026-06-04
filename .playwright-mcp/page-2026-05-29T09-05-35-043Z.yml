@@ -1,0 +1,192 @@
+- generic [ref=e1]:
+  - region "Notifications alt+T"
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - button "T" [ref=e278] [cursor=pointer]:
+          - generic [ref=e280]: T
+        - generic [ref=e7]: Workspace
+      - navigation [ref=e8]:
+        - link "Launch" [ref=e9] [cursor=pointer]:
+          - /url: /launch
+          - img [ref=e10]
+          - generic [ref=e15]: Launch
+        - link "Assets" [ref=e16] [cursor=pointer]:
+          - /url: /library
+          - img [ref=e17]
+          - generic [ref=e19]: Assets
+        - link "Insights" [ref=e20] [cursor=pointer]:
+          - /url: /reports/top-ads
+          - img [ref=e21]
+          - generic [ref=e24]: Insights
+        - link "Automate" [ref=e25] [cursor=pointer]:
+          - /url: /automation
+          - img [ref=e26]
+          - generic [ref=e28]: Automate
+        - link "Connect" [ref=e29] [cursor=pointer]:
+          - /url: /integrations/ad-channels
+          - img [ref=e30]
+          - generic [ref=e32]: Connect
+        - link "Inspo" [ref=e33] [cursor=pointer]:
+          - /url: /adscan
+          - img [ref=e34]
+          - generic [ref=e36]: Inspo
+      - generic [ref=e37]:
+        - button "Search" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+          - generic [ref=e42]: Search
+        - link "Rewards" [ref=e43] [cursor=pointer]:
+          - /url: /referrals
+          - img [ref=e44]
+          - generic [ref=e48]: Rewards
+        - link "Settings" [ref=e49] [cursor=pointer]:
+          - /url: /teams
+          - img [ref=e50]
+          - generic [ref=e53]: Settings
+        - button "Thuận Nguyễn Văn" [ref=e281] [cursor=pointer]:
+          - img "Thuận Nguyễn Văn" [ref=e282]
+    - generic [ref=e58]:
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]: Automate
+          - generic [ref=e63]:
+            - button "Notifications" [ref=e64] [cursor=pointer]:
+              - img [ref=e65]
+            - button "Collapse sidebar" [ref=e68]:
+              - img [ref=e69]
+        - list [ref=e284]:
+          - listitem [ref=e285]:
+            - link "Automations" [ref=e286] [cursor=pointer]:
+              - /url: /automation
+              - img [ref=e287]
+              - generic [ref=e289]: Automations
+          - listitem [ref=e290]:
+            - link "Rules" [ref=e291] [cursor=pointer]:
+              - /url: /rules
+              - img [ref=e292]
+              - generic [ref=e293]: Rules
+      - separator "Resize sidebar" [ref=e78]
+    - generic [ref=e82]:
+      - banner [ref=e83]:
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - button [ref=e86] [cursor=pointer]:
+              - img [ref=e87]
+            - generic [ref=e89]:
+              - img [ref=e91]
+              - textbox "Automation name" [ref=e94]: Untitled Zap
+          - generic [ref=e95]:
+            - button "Save" [ref=e96] [cursor=pointer]:
+              - img [ref=e97]
+              - text: Save
+            - button "Run" [ref=e101] [cursor=pointer]:
+              - img [ref=e102]
+              - text: Run
+            - button "Full preview" [ref=e104] [cursor=pointer]:
+              - img [ref=e105]
+              - text: Full preview
+            - button "History" [disabled]:
+              - img
+              - text: History
+            - button "Notification settings" [ref=e108] [cursor=pointer]:
+              - img [ref=e109]
+            - button [ref=e112] [cursor=pointer]:
+              - img [ref=e113]
+        - combobox [ref=e294] [cursor=pointer]:
+          - generic [ref=e295]:
+            - img [ref=e296]
+            - generic [ref=e302]: GEC-JORDY 01
+          - img [ref=e303]
+      - main [ref=e119]:
+        - generic [ref=e120]:
+          - generic [ref=e124]:
+            - generic [ref=e125]:
+              - generic [ref=e126] [cursor=pointer]:
+                - generic [ref=e128]:
+                  - generic [ref=e129]: "1"
+                  - generic [ref=e130]: trigger
+                - generic [ref=e133]:
+                  - img [ref=e135]
+                  - heading "Choose an app" [level=3] [ref=e138]
+                  - button [ref=e139]:
+                    - img [ref=e140]
+              - generic [ref=e144]:
+                - img [ref=e146]
+                - button [ref=e149] [cursor=pointer]:
+                  - img [ref=e150]
+                - img [ref=e152]
+            - generic [ref=e154]:
+              - generic [ref=e155] [cursor=pointer]:
+                - generic [ref=e157]:
+                  - generic [ref=e158]: "2"
+                  - generic [ref=e159]: action
+                - generic [ref=e162]:
+                  - img [ref=e306]
+                  - generic [ref=e166]:
+                    - heading "Meta · Pause Ad" [level=3] [ref=e1052]
+                    - paragraph [ref=e313]: Pause Ad
+                  - button [ref=e168]:
+                    - img [ref=e169]
+                - generic [ref=e314]:
+                  - generic [ref=e315]: Pause Ad
+                  - generic [ref=e407]: GlobalEcomCom LLC
+              - generic [ref=e173]:
+                - img [ref=e175]
+                - button [ref=e177] [cursor=pointer]:
+                  - img [ref=e178]
+                - img [ref=e180]
+          - generic [ref=e321]:
+            - generic [ref=e322]:
+              - generic [ref=e323]:
+                - img "Meta" [ref=e325]
+                - generic [ref=e326]:
+                  - heading "2. Action" [level=2] [ref=e327]
+                  - paragraph [ref=e328]: What happens when it fires?
+              - button [ref=e329] [cursor=pointer]:
+                - img [ref=e330]
+            - generic [ref=e333]:
+              - button "setup" [active] [ref=e334]: setup
+              - button "preview" [ref=e336]
+            - generic [ref=e1077]:
+              - generic [ref=e1078]:
+                - text: App
+                - generic [ref=e1079]:
+                  - generic [ref=e1080]:
+                    - img "Meta" [ref=e1082]
+                    - generic [ref=e1083]: Meta
+                  - button "Change" [ref=e1084]
+              - generic [ref=e1085]:
+                - text: Action event
+                - combobox [ref=e1086]:
+                  - generic: Pause Ad
+                  - img [ref=e1087]
+              - generic [ref=e1089]:
+                - heading "Meta Ads Configuration" [level=4] [ref=e1090]
+                - generic [ref=e1091]:
+                  - generic [ref=e1092]:
+                    - generic [ref=e1093]: Ad Account *
+                    - combobox [ref=e1094] [cursor=pointer]:
+                      - generic [ref=e1095]:
+                        - img [ref=e1096]
+                        - generic [ref=e1102]: GEC-JORDY 01
+                      - img [ref=e1103]
+                  - generic [ref=e1106]:
+                    - generic [ref=e1107]: Ads to Pause *
+                    - textbox "Use data pill from trigger..." [ref=e1110]
+                    - paragraph [ref=e1111]:
+                      - text: Use
+                      - code [ref=e1112]: "{{trigger.qualifyingAdIds}}"
+                      - text: to pause ads from the Performance Threshold trigger. These ads will have their status changed to PAUSED.
+            - button "Preview →" [ref=e1114] [cursor=pointer]
+  - alert [ref=e181]
+  - iframe
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - iframe
+          - iframe [ref=e183]:
+            - button "Open customer support" [ref=f29e4]:
+              - img [ref=f29e6]
+              - img [ref=f29e10]

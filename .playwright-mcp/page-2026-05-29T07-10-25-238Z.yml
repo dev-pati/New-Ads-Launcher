@@ -1,0 +1,238 @@
+- generic:
+  - region "Notifications alt+T"
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+              - generic: "17"
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Meta · Ad Approved
+                              - paragraph: Ad Approved
+                            - button:
+                              - img
+                          - generic:
+                            - generic: GlobalEcomCom LLC
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - heading [level=2]: 1. Trigger
+                            - paragraph: When does this step fire?
+                        - button:
+                          - img
+                      - generic:
+                        - button: setup
+                        - button: preview
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: App
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - img
+                                - generic: Meta
+                              - button: Change
+                          - generic:
+                            - text: Trigger event
+                            - combobox [expanded]:
+                              - generic: Ad Approved
+                              - img
+                          - generic:
+                            - heading [level=4]: Ad Approved Trigger
+                            - paragraph: Triggers when ads transition from review to active (approved). Checks for recently approved ads based on the lookback window.
+                            - generic:
+                              - generic: Ad Account *
+                              - combobox:
+                                - generic:
+                                  - img
+                                  - generic: GEC-JORDY 01
+                                - img
+                            - generic:
+                              - text: Campaign Filter
+                              - combobox:
+                                - generic: All Campaigns
+                                - img
+                            - generic:
+                              - text: Ad Set Filter
+                              - combobox:
+                                - generic: All Ad Sets
+                                - img
+                            - generic:
+                              - generic: Lookback Window *
+                              - combobox:
+                                - generic: Last 24 hours
+                                - img
+                              - paragraph: How far back to look for recently approved ads
+                      - generic:
+                        - button: Preview →
+  - alert
+  - iframe [ref=e183]:
+    - button "Open customer support" [ref=f7e4]:
+      - img [ref=f7e6]
+      - img [ref=f7e10]
+  - listbox [ref=e398]:
+    - option "Ad Approved" [active] [selected] [ref=e399]:
+      - img [ref=e402]
+      - generic [ref=e404]: Ad Approved
+    - option "Campaign Status Change" [ref=e405]:
+      - generic [ref=e407]: Campaign Status Change
+    - option "Performance Monitoring" [ref=e408]:
+      - generic [ref=e410]: Performance Monitoring
+    - option "Performance Threshold" [ref=e411]:
+      - generic [ref=e413]: Performance Threshold
+    - option "Best Performing Organic Post" [ref=e414]:
+      - generic [ref=e416]: Best Performing Organic Post

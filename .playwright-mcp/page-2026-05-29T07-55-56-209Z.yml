@@ -1,0 +1,265 @@
+- generic:
+  - region "Notifications alt+T"
+  - alert
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Google Sheets · Cell Value Changed
+                              - paragraph: Cell Value Changed
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - heading [level=2]: 1. Trigger
+                            - paragraph: When does this step fire?
+                        - button:
+                          - img
+                      - generic:
+                        - button: setup
+                        - button: preview
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: App
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - img
+                                - generic: Google Sheets
+                              - button: Change
+                          - generic:
+                            - text: Trigger event
+                            - combobox:
+                              - generic: Cell Value Changed
+                              - img
+                          - generic:
+                            - heading [level=4]: Configure Google Sheets Trigger
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - generic: Service Account Access
+                                  - button:
+                                    - img
+                                - generic:
+                                  - generic:
+                                    - paragraph: "Share your sheet with this email:"
+                                    - code: admanage-next@adtock.iam.gserviceaccount.com
+                                  - button:
+                                    - img
+                                - paragraph: Grant "Viewer" access to allow reading sheet data
+                              - generic:
+                                - generic: Spreadsheet ID or URL *
+                                - textbox:
+                                  - /placeholder: Paste spreadsheet URL or ID
+                                - paragraph:
+                                  - text: Paste the full URL or just the ID from docs.google.com/spreadsheets/d/
+                                  - strong: "[ID]"
+                                  - text: /edit
+                              - generic:
+                                - text: Sheet Name
+                                - textbox:
+                                  - /placeholder: Sheet1
+                                - paragraph: "The name of the sheet tab (default: Sheet1)"
+                              - generic:
+                                - text: Watch Mode
+                                - combobox [expanded]:
+                                  - generic: Single Cell
+                                  - img
+                                - paragraph: Watch a single cell for changes
+                              - generic:
+                                - heading [level=5]: Trigger Condition
+                                - paragraph: Automation runs when this cell matches the condition
+                                - generic:
+                                  - generic: Trigger Cell *
+                                  - textbox:
+                                    - /placeholder: C5
+                                  - paragraph: Cell reference to watch (e.g., C5, D10, AA1)
+                                - generic:
+                                  - text: Condition
+                                  - combobox:
+                                    - generic: Equals
+                                    - img
+                                - generic:
+                                  - generic: Value *
+                                  - textbox:
+                                    - /placeholder: "TRUE"
+                                  - paragraph: Trigger when cell equals this value
+                              - generic:
+                                - heading [level=5]: Data Mapping
+                                - paragraph: Map cells to data fields (optional)
+                                - button:
+                                  - img
+                                  - text: Add Mapping
+                              - generic:
+                                - paragraph:
+                                  - strong: "Note:"
+                                  - text: This cell will be checked daily at midnight UTC.
+                      - generic:
+                        - button: Preview →
+  - iframe [ref=e183]:
+    - button "Open customer support" [ref=f16e4]:
+      - img [ref=f16e6]
+      - img [ref=f16e10]
+  - listbox [ref=e407]:
+    - option "Single Cell" [active] [selected] [ref=e408]:
+      - img [ref=e411]
+      - generic [ref=e413]: Single Cell
+    - option "Entire Column" [ref=e414]:
+      - generic [ref=e416]: Entire Column

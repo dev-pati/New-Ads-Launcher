@@ -1,0 +1,107 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - link "AdLauncher AdLauncher" [ref=e5] [cursor=pointer]:
+          - /url: /
+          - img "AdLauncher" [ref=e6]
+          - generic [ref=e7]: AdLauncher
+        - navigation [ref=e8]:
+          - link "Features" [ref=e9] [cursor=pointer]:
+            - /url: "#features"
+          - link "How it works" [ref=e10] [cursor=pointer]:
+            - /url: "#how-it-works"
+          - link "Pricing" [ref=e11] [cursor=pointer]:
+            - /url: "#pricing"
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - img [ref=e21]
+        - generic [ref=e23]: Powered by Meta Marketing API
+      - heading "Launch Facebook Ads 10x Faster" [level=1] [ref=e24]:
+        - text: Launch Facebook Ads
+        - generic [ref=e25]:
+          - img "10x Faster"
+      - paragraph [ref=e26]: Create, manage, and launch Facebook ad campaigns at scale. Spreadsheet-style editing, real-time collaboration, and one-click publishing to Meta.
+      - generic [ref=e27]:
+        - link "Start Free" [ref=e28] [cursor=pointer]:
+          - /url: /auth/register
+          - text: Start Free
+          - img
+        - link "See How It Works" [ref=e29] [cursor=pointer]:
+          - /url: "#how-it-works"
+          - img
+          - text: See How It Works
+    - generic [ref=e31]:
+      - generic [ref=e32]:
+        - paragraph [ref=e33]: 500+
+        - paragraph [ref=e34]: Campaigns Launched
+      - generic [ref=e35]:
+        - paragraph [ref=e36]: 50+
+        - paragraph [ref=e37]: Active Teams
+      - generic [ref=e38]:
+        - paragraph [ref=e39]: 10x
+        - paragraph [ref=e40]: Faster Than Ads Manager
+      - generic [ref=e41]:
+        - paragraph [ref=e42]: 24/7
+        - paragraph [ref=e43]: Real-time Collaboration
+    - generic [ref=e44]:
+      - generic [ref=e45]:
+        - heading "Everything you need to scale ads" [level=2] [ref=e46]
+        - paragraph [ref=e47]: Built for agencies and teams who manage multiple Facebook ad accounts.
+      - generic [ref=e48]:
+        - generic [ref=e49]:
+          - img [ref=e51]
+          - heading "Spreadsheet-Style Editor" [level=3] [ref=e53]
+          - paragraph [ref=e54]: Edit ad creatives like a spreadsheet. Copy, paste, bulk-edit headlines, descriptions, and CTAs across rows.
+        - generic [ref=e55]:
+          - img [ref=e57]
+          - heading "Real-Time Collaboration" [level=3] [ref=e62]
+          - paragraph [ref=e63]: See who's editing what in real-time. Work together with your team without conflicts or overwrites.
+        - generic [ref=e64]:
+          - img [ref=e66]
+          - heading "One-Click Meta Publishing" [level=3] [ref=e68]
+          - paragraph [ref=e69]: Push creatives directly to Facebook Ads Manager. Auto-upload images, videos, and configure targeting.
+        - generic [ref=e70]:
+          - img [ref=e72]
+          - heading "Multi-Account Management" [level=3] [ref=e76]
+          - paragraph [ref=e77]: Manage multiple ad accounts, business managers, and pages from a single dashboard.
+        - generic [ref=e78]:
+          - img [ref=e80]
+          - heading "Bulk Creative Upload" [level=3] [ref=e84]
+          - paragraph [ref=e85]: Upload hundreds of creatives at once. Auto-hash images and upload videos to Meta servers.
+        - generic [ref=e86]:
+          - img [ref=e88]
+          - heading "Team & Organization" [level=3] [ref=e90]
+          - paragraph [ref=e91]: Invite team members, assign roles, and manage permissions across your organization.
+    - generic [ref=e93]:
+      - generic [ref=e94]:
+        - heading "How it works" [level=2] [ref=e95]
+        - paragraph [ref=e96]: From zero to launched in three simple steps.
+      - generic [ref=e97]:
+        - generic [ref=e98]:
+          - text: "01"
+          - heading "Connect Facebook" [level=3] [ref=e99]
+          - paragraph [ref=e100]: Link your Facebook Business Manager and ad accounts in one click.
+        - generic [ref=e101]:
+          - text: "02"
+          - heading "Create Creatives" [level=3] [ref=e102]
+          - paragraph [ref=e103]: Upload images and videos, write copy in a spreadsheet-style editor with your team.
+        - generic [ref=e104]:
+          - text: "03"
+          - heading "Launch Campaigns" [level=3] [ref=e105]
+          - paragraph [ref=e106]: Configure targeting and budget, then publish directly to Facebook with one click.
+    - generic [ref=e110]:
+      - heading "Ready to scale your Facebook Ads?" [level=2] [ref=e111]
+      - paragraph [ref=e112]: Join teams who are launching campaigns 10x faster. Free to start, no credit card required.
+      - link "Get Started Free" [ref=e114] [cursor=pointer]:
+        - /url: /auth/register
+        - text: Get Started Free
+        - img
+    - contentinfo [ref=e115]:
+      - generic [ref=e116]:
+        - generic [ref=e117]:
+          - img "Logo" [ref=e118]
+          - generic [ref=e119]: AdLauncher
+        - paragraph [ref=e120]: © 2026 AdLauncher. All rights reserved.
+  - button "Open Next.js Dev Tools" [ref=e126] [cursor=pointer]:
+    - img [ref=e127]

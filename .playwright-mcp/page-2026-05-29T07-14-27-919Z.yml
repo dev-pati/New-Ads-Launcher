@@ -1,0 +1,321 @@
+- generic:
+  - region "Notifications alt+T"
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Meta · Performance Threshold
+                              - paragraph: Daily 9am
+                            - button:
+                              - img
+                          - generic:
+                            - generic: Last 7 days
+                            - generic: All campaigns
+                            - generic: All ad sets
+                            - generic: All ads
+                            - generic: Spend > $0
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - heading [level=2]: 1. Trigger
+                            - paragraph: When does this step fire?
+                        - button:
+                          - img
+                      - generic:
+                        - button: setup
+                        - button: preview
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: App
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - img
+                                - generic: Meta
+                              - button: Change
+                          - generic:
+                            - text: Trigger event
+                            - combobox:
+                              - generic: Performance Threshold
+                              - img
+                          - generic:
+                            - generic:
+                              - generic:
+                                - heading [level=4]: Ad Account
+                                - link:
+                                  - /url: https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=1615054019650974
+                                  - img
+                                  - text: View in Ads Manager
+                              - generic:
+                                - generic: Select Ad Account(s) *
+                                - combobox:
+                                  - generic:
+                                    - img
+                                    - generic: GEC-JORDY 01
+                                  - img
+                            - generic:
+                              - heading [level=4]: Check Frequency
+                              - paragraph: How often should this trigger automatically check for matching ads?
+                              - generic:
+                                - combobox:
+                                  - generic: Daily
+                                  - img
+                                - paragraph: This automation will automatically run once per day.
+                            - generic:
+                              - heading [level=4]: Campaign Filter
+                              - paragraph: Optionally filter by campaign name
+                              - generic:
+                                - generic:
+                                  - text: Campaigns
+                                  - combobox:
+                                    - generic: All Campaigns
+                                    - img
+                            - generic:
+                              - heading [level=4]: Ad Set Filter
+                              - paragraph: Find ads in ad sets matching your filter
+                              - generic:
+                                - generic:
+                                  - text: Ad Sets
+                                  - combobox [expanded]:
+                                    - generic: All Ad Sets
+                                    - img
+                                - generic:
+                                  - text: Ad Status
+                                  - combobox:
+                                    - generic: All (with spend)
+                                    - img
+                            - generic:
+                              - heading [level=4]: Performance Criteria
+                              - paragraph: Define conditions that must be met (e.g., ROAS > 2 AND Spend > $200)
+                              - generic:
+                                - generic:
+                                  - text: Performance Period
+                                  - combobox:
+                                    - text: Last 7 days
+                                    - img
+                                  - paragraph: Time window used to evaluate ad performance metrics
+                                - generic:
+                                  - generic:
+                                    - checkbox:
+                                      - generic:
+                                        - img
+                                    - generic:
+                                      - text: Include today's partial data
+                                      - paragraph: Use live Meta insights through today, even though conversions and CPA may still change.
+                                  - text: Exclude Recent Days
+                                  - generic:
+                                    - spinbutton
+                                    - generic: days
+                                  - paragraph: Skip the most recent days from performance data
+                                - generic:
+                                  - text: Lookback Period
+                                  - combobox:
+                                    - text: All ads (no limit)
+                                    - img
+                                  - paragraph: Only check ads created within this time window
+                                - generic:
+                                  - generic:
+                                    - generic: Conditions
+                                    - generic:
+                                      - combobox:
+                                        - generic: Per Ad
+                                        - img
+                                  - generic:
+                                    - generic:
+                                      - combobox:
+                                        - generic: Spend
+                                        - img
+                                      - combobox:
+                                        - generic: ">"
+                                        - img
+                                      - generic:
+                                        - generic: $
+                                        - textbox:
+                                          - /placeholder: "0"
+                                          - text: "0"
+                                  - button:
+                                    - img
+                                    - text: Add Condition
+                                - generic:
+                                  - paragraph:
+                                    - text: "Rule: Scale ads where"
+                                    - generic: Spend > $0
+                                    - text: performance over the last 7 days (excluding today)
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - heading [level=4]: Preview Matching Ads
+                                  - img
+                                - generic:
+                                  - button: Preview
+                      - generic:
+                        - button: Preview →
+  - alert
+  - iframe [ref=e183]:
+    - button "Open customer support" [ref=f7e4]:
+      - img [ref=f7e6]
+      - img [ref=f7e10]
+  - listbox [ref=e785]:
+    - option "All Ad Sets" [active] [selected] [ref=e786]:
+      - img [ref=e789]
+      - generic [ref=e791]: All Ad Sets
+    - option "Select specific ad set" [ref=e792]:
+      - generic [ref=e794]: Select specific ad set
+    - option "Ad set name contains..." [ref=e795]:
+      - generic [ref=e797]: Ad set name contains...

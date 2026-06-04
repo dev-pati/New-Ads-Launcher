@@ -1,0 +1,241 @@
+- generic:
+  - region "Notifications alt+T"
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+              - generic: "17"
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+  - alert
+  - iframe [ref=e213]:
+    - button "Open customer support" [ref=f3e4]:
+      - img [ref=f3e6]
+      - img [ref=f3e10]
+  - dialog "Choose an app" [ref=e215]:
+    - generic [ref=e216]:
+      - heading "Choose an app" [level=2] [ref=e217]
+      - paragraph [ref=e218]: Select the app you want to use for this trigger
+    - generic [ref=e219]:
+      - img [ref=e220]
+      - textbox "Search apps..." [active] [ref=e223]
+    - generic [ref=e224]:
+      - button "🖼️ Media Library Upload media to your library or trigger automations when media is uploaded to specific boards." [ref=e225]:
+        - generic [ref=e226]: 🖼️
+        - generic [ref=e227]:
+          - generic [ref=e228]: Media Library
+          - generic [ref=e229]: Upload media to your library or trigger automations when media is uploaded to specific boards.
+      - button "Google Sheets Google Sheets Share your Google Sheet with our service account to enable automation. No sign-in required." [ref=e230]:
+        - img "Google Sheets" [ref=e232]
+        - generic [ref=e233]:
+          - generic [ref=e234]: Google Sheets
+          - generic [ref=e235]: Share your Google Sheet with our service account to enable automation. No sign-in required.
+      - button "Google Drive Google Drive Google Drive is a secure partner with Admanage. Your credentials are encrypted and can be removed at any time." [ref=e236]:
+        - img "Google Drive" [ref=e238]
+        - generic [ref=e239]:
+          - generic [ref=e240]: Google Drive
+          - generic [ref=e241]: Google Drive is a secure partner with Admanage. Your credentials are encrypted and can be removed at any time.
+      - button "Dropbox Dropbox Dropbox is a secure partner with Admanage. Your credentials are encrypted and can be removed at any time." [ref=e242]:
+        - img "Dropbox" [ref=e244]
+        - generic [ref=e245]:
+          - generic [ref=e246]: Dropbox
+          - generic [ref=e247]: Dropbox is a secure partner with Admanage. Your credentials are encrypted and can be removed at any time.
+      - button "SharePoint SharePoint SharePoint is a secure partner with Admanage. Your credentials are encrypted and can be removed at any time." [ref=e248]:
+        - img "SharePoint" [ref=e250]
+        - generic [ref=e251]:
+          - generic [ref=e252]: SharePoint
+          - generic [ref=e253]: SharePoint is a secure partner with Admanage. Your credentials are encrypted and can be removed at any time.
+      - button "AIR AIR Trigger automations from a publicly shared AIR board. Anyone with the board link can view — no AIR credentials are stored." [ref=e254]:
+        - img "AIR" [ref=e256]
+        - generic [ref=e257]:
+          - generic [ref=e258]: AIR
+          - generic [ref=e259]: Trigger automations from a publicly shared AIR board. Anyone with the board link can view — no AIR credentials are stored.
+      - button "Frame.io Frame.io Trigger automations when new files appear in a Frame.io project folder. Filter by review status (Approved, In Progress, etc.)." [ref=e260]:
+        - img "Frame.io" [ref=e262]
+        - generic [ref=e263]:
+          - generic [ref=e264]: Frame.io
+          - generic [ref=e265]: Trigger automations when new files appear in a Frame.io project folder. Filter by review status (Approved, In Progress, etc.).
+      - button "Adscan Adscan Trigger automations when competitor ads matching your filters appear in Adscan's Ad Library index." [ref=e266]:
+        - img "Adscan" [ref=e268]
+        - generic [ref=e269]:
+          - generic [ref=e270]: Adscan
+          - generic [ref=e271]: Trigger automations when competitor ads matching your filters appear in Adscan's Ad Library index.
+      - button "Meta Meta Meta Ads is a secure partner with Admanage. Your credentials are encrypted and can be removed at any time." [ref=e272]:
+        - img "Meta" [ref=e274]
+        - generic [ref=e275]:
+          - generic [ref=e276]: Meta
+          - generic [ref=e277]: Meta Ads is a secure partner with Admanage. Your credentials are encrypted and can be removed at any time.
+      - button "TikTok Ads TikTok Ads Monitor TikTok ad performance and launch cross-channel creatives." [ref=e278]:
+        - img "TikTok Ads" [ref=e280]
+        - generic [ref=e281]:
+          - generic [ref=e282]: TikTok Ads
+          - generic [ref=e283]: Monitor TikTok ad performance and launch cross-channel creatives.
+      - button "🚀 AdManage Trigger automations when ads are launched via AdManage." [ref=e284]:
+        - generic [ref=e285]: 🚀
+        - generic [ref=e286]:
+          - generic [ref=e287]: AdManage
+          - generic [ref=e288]: Trigger automations when ads are launched via AdManage.
+      - button "📅 Scheduled Run your automation on a recurring schedule (daily, weekly, monthly)." [ref=e289]:
+        - generic [ref=e290]: 📅
+        - generic [ref=e291]:
+          - generic [ref=e292]: Scheduled
+          - generic [ref=e293]: Run your automation on a recurring schedule (daily, weekly, monthly).
+      - button "▶️ Manual Trigger Run this automation manually on demand. No automatic trigger - you control when it runs." [ref=e294]:
+        - generic [ref=e295]: ▶️
+        - generic [ref=e296]:
+          - generic [ref=e297]: Manual Trigger
+          - generic [ref=e298]: Run this automation manually on demand. No automatic trigger - you control when it runs.
+    - button "Close" [ref=e299] [cursor=pointer]:
+      - img [ref=e300]
+      - generic [ref=e303]: Close

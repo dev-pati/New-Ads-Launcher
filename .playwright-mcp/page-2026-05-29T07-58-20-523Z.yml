@@ -1,0 +1,244 @@
+- generic:
+  - region "Notifications alt+T"
+  - alert
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Google Drive · New File in Folder
+                              - paragraph: Daily 9am
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - heading [level=2]: 1. Trigger
+                            - paragraph: When does this step fire?
+                        - button:
+                          - img
+                      - generic:
+                        - button: setup
+                        - button: preview
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: App
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - img
+                                - generic: Google Drive
+                              - button: Change
+                          - generic:
+                            - heading [level=4]: Configure Google Drive Trigger
+                            - generic:
+                              - generic:
+                                - generic: Account *
+                                - generic:
+                                  - img
+                                  - generic: Google Drive Connected
+                                - paragraph: Google Drive is a secure partner with Admanage. Your credentials are encrypted.
+                              - generic:
+                                - generic: Trigger Event *
+                                - combobox:
+                                  - generic: New File in Folder
+                                  - img
+                              - generic:
+                                - generic: Google Drive Folder *
+                                - generic:
+                                  - button:
+                                    - img
+                                    - text: Browse Google Drive...
+                                - button:
+                                  - img
+                                  - text: Or paste folder URL / ID
+                              - generic:
+                                - text: Batch Strategy
+                                - combobox [expanded]:
+                                  - generic: All files as one ad batch
+                                  - img
+                                - paragraph: How to organize files detected in the same poll cycle into ads
+                              - generic:
+                                - text: File Type
+                                - combobox:
+                                  - generic: All Media
+                                  - img
+                              - generic:
+                                - text: Check Frequency
+                                - combobox:
+                                  - generic: Daily
+                                  - img
+                              - generic:
+                                - generic:
+                                  - generic: Upload all files on first run
+                                  - switch
+                                - paragraph: This folder will be checked once per day for new files. Files that have already been processed will not be processed again. Files already in the folder at the time of the first run will not be processed.
+                      - generic:
+                        - button: Preview →
+  - iframe [ref=e183]:
+    - button "Open customer support" [ref=f16e4]:
+      - img [ref=f16e6]
+      - img [ref=f16e10]
+  - listbox [ref=e697]:
+    - option "All files as one ad batch" [active] [selected] [ref=e698]:
+      - img [ref=e701]
+      - generic [ref=e703]: All files as one ad batch
+    - option "One ad per file" [ref=e704]:
+      - generic [ref=e706]: One ad per file
+    - option "Group by file type" [ref=e707]:
+      - generic [ref=e709]: Group by file type

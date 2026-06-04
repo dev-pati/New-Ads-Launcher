@@ -1,0 +1,272 @@
+- generic [active] [ref=e1]:
+  - region "Notifications alt+T"
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - button "Loading workspace" [ref=e5] [cursor=pointer]:
+          - generic [ref=e6]: Loading workspace
+        - generic [ref=e7]: Workspace
+      - navigation [ref=e8]:
+        - link "Launch" [ref=e9] [cursor=pointer]:
+          - /url: /launch
+          - img [ref=e10]
+          - generic [ref=e15]: Launch
+        - link "Assets" [ref=e16] [cursor=pointer]:
+          - /url: /library
+          - img [ref=e17]
+          - generic [ref=e19]: Assets
+        - link "Insights" [ref=e20] [cursor=pointer]:
+          - /url: /reports/top-ads
+          - img [ref=e21]
+          - generic [ref=e24]: Insights
+        - link "Automate" [ref=e25] [cursor=pointer]:
+          - /url: /automation
+          - img [ref=e26]
+          - generic [ref=e28]: Automate
+        - link "Connect" [ref=e29] [cursor=pointer]:
+          - /url: /integrations/ad-channels
+          - img [ref=e30]
+          - generic [ref=e32]: Connect
+        - link "Inspo" [ref=e33] [cursor=pointer]:
+          - /url: /adscan
+          - img [ref=e34]
+          - generic [ref=e36]: Inspo
+      - generic [ref=e37]:
+        - button "Search" [ref=e38] [cursor=pointer]:
+          - img [ref=e39]
+          - generic [ref=e42]: Search
+        - link "Rewards" [ref=e43] [cursor=pointer]:
+          - /url: /referrals
+          - img [ref=e44]
+          - generic [ref=e48]: Rewards
+        - link "Settings" [ref=e49] [cursor=pointer]:
+          - /url: /teams
+          - img [ref=e50]
+          - generic [ref=e53]: Settings
+        - button "U" [ref=e54] [cursor=pointer]:
+          - generic [ref=e56]: U
+    - generic [ref=e58]:
+      - generic [ref=e61]:
+        - generic [ref=e62]: Automate
+        - generic [ref=e63]:
+          - button "Notifications" [ref=e64] [cursor=pointer]:
+            - img [ref=e65]
+          - button "Collapse sidebar" [ref=e68]:
+            - img [ref=e69]
+      - separator "Resize sidebar" [ref=e78]
+    - generic [ref=e82]:
+      - generic [ref=e84]:
+        - button "My Automations" [ref=e85]
+        - button "Templates" [ref=e86]
+        - button "Active" [ref=e87]
+        - button "Approvals" [ref=e88]
+        - button "Notifications" [ref=e89]
+        - button "History" [ref=e90]
+      - generic [ref=e92]:
+        - generic [ref=e93]:
+          - button "All" [ref=e94]
+          - button "Scaling" [ref=e95]
+          - button "Optimization" [ref=e96]
+          - button "Reporting" [ref=e97]
+        - generic [ref=e98]:
+          - generic [ref=e99]:
+            - generic [ref=e100]:
+              - img [ref=e101]
+              - generic [ref=e103]: Featured
+            - generic [ref=e104]:
+              - generic [ref=e105]:
+                - generic [ref=e106]: 📈
+                - generic [ref=e107]:
+                  - heading "Performance Monitoring" [level=3] [ref=e108]
+                  - generic [ref=e109]: Optimization
+              - paragraph [ref=e110]: Track key metric changes across your ad accounts. Get alerted when spend, CPA, or ROAS shifts significantly day-over-day or week-over-week so you can act fast.
+              - generic [ref=e111]:
+                - generic [ref=e112]:
+                  - img "Meta" [ref=e113]
+                  - img [ref=e114]
+                  - generic [ref=e116]: 🔔
+                  - generic [ref=e117]: 2 steps
+                - button "Use" [ref=e118] [cursor=pointer]:
+                  - text: Use
+                  - img [ref=e119]
+          - generic [ref=e122]:
+            - generic [ref=e123]:
+              - generic [ref=e124]: 🚀
+              - generic [ref=e125]:
+                - heading "Scale Top Performers" [level=3] [ref=e126]
+                - generic [ref=e127]: Scaling
+            - paragraph [ref=e128]: Automatically duplicate ads that exceed a ROAS threshold so you can scale winners quickly.
+            - generic [ref=e129]:
+              - generic [ref=e130]:
+                - img "Meta" [ref=e131]
+                - img [ref=e132]
+                - img "Meta" [ref=e134]
+                - generic [ref=e135]: 2 steps
+              - button "Use" [ref=e136] [cursor=pointer]:
+                - text: Use
+                - img [ref=e137]
+          - generic [ref=e140]:
+            - generic [ref=e141]:
+              - generic [ref=e142]: 💰
+              - generic [ref=e143]:
+                - heading "Budget Boost for Winners" [level=3] [ref=e144]
+                - generic [ref=e145]: Scaling
+            - paragraph [ref=e146]: Increase budget by 20% for campaigns with ROAS above 2 to capitalize on high-performing spend.
+            - generic [ref=e147]:
+              - generic [ref=e148]:
+                - img "Meta" [ref=e149]
+                - img [ref=e150]
+                - img "Meta" [ref=e152]
+                - generic [ref=e153]: 2 steps
+              - button "Use" [ref=e154] [cursor=pointer]:
+                - text: Use
+                - img [ref=e155]
+          - generic [ref=e158]:
+            - generic [ref=e159]:
+              - generic [ref=e160]: ✅
+              - generic [ref=e161]:
+                - heading "Post-Approval Scaling" [level=3] [ref=e162]
+                - generic [ref=e163]: Scaling
+            - paragraph [ref=e164]: Once an ad is approved by Meta, automatically duplicate it into additional ad sets for broader reach.
+            - generic [ref=e165]:
+              - generic [ref=e166]:
+                - img "Meta" [ref=e167]
+                - img [ref=e168]
+                - img "Meta" [ref=e170]
+                - generic [ref=e171]: 2 steps
+              - button "Use" [ref=e172] [cursor=pointer]:
+                - text: Use
+                - img [ref=e173]
+          - generic [ref=e176]:
+            - generic [ref=e177]:
+              - generic [ref=e178]: 🗂️
+              - generic [ref=e179]:
+                - heading "Auto Test Ads From Google Drive" [level=3] [ref=e180]
+                - generic [ref=e181]: Scaling
+            - paragraph [ref=e182]: Watch a Drive parent folder for each new batch folder, duplicate a source ad set, then launch every media file from that folder into the new ad set.
+            - generic [ref=e183]:
+              - generic [ref=e184]:
+                - img "Google Drive" [ref=e185]
+                - img [ref=e186]
+                - img "Meta" [ref=e188]
+                - img [ref=e189]
+                - img "Meta" [ref=e191]
+                - generic [ref=e192]: 3 steps
+              - button "Use" [ref=e193] [cursor=pointer]:
+                - text: Use
+                - img [ref=e194]
+          - generic [ref=e197]:
+            - generic [ref=e198]:
+              - generic [ref=e199]: 🎵
+              - generic [ref=e200]:
+                - heading "Launch Winners on TikTok" [level=3] [ref=e201]
+                - generic [ref=e202]: Scaling
+            - paragraph [ref=e203]: Find Facebook ads with ROAS above 2 and automatically launch them on TikTok to expand reach.
+            - generic [ref=e204]:
+              - generic [ref=e205]:
+                - img "Meta" [ref=e206]
+                - img [ref=e207]
+                - img "TikTok Ads" [ref=e209]
+                - generic [ref=e210]: 2 steps
+              - button "Use" [ref=e211] [cursor=pointer]:
+                - text: Use
+                - img [ref=e212]
+          - generic [ref=e215]:
+            - generic [ref=e216]:
+              - generic [ref=e217]: 👻
+              - generic [ref=e218]:
+                - heading "Launch Winners on Snapchat" [level=3] [ref=e219]
+                - generic [ref=e220]: Scaling
+            - paragraph [ref=e221]: Find Facebook ads with ROAS above 2 and automatically launch them on Snapchat.
+            - generic [ref=e222]:
+              - generic [ref=e223]:
+                - img "Meta" [ref=e224]
+                - img [ref=e225]
+                - img "Snapchat Ads" [ref=e227]
+                - generic [ref=e228]: 2 steps
+              - button "Use" [ref=e229] [cursor=pointer]:
+                - text: Use
+                - img [ref=e230]
+          - generic [ref=e233]:
+            - generic [ref=e234]:
+              - generic [ref=e235]: 📌
+              - generic [ref=e236]:
+                - heading "Launch Winners on Pinterest" [level=3] [ref=e237]
+                - generic [ref=e238]: Scaling
+            - paragraph [ref=e239]: Find Facebook ads with ROAS above 2 and automatically launch them on Pinterest.
+            - generic [ref=e240]:
+              - generic [ref=e241]:
+                - img "Meta" [ref=e242]
+                - img [ref=e243]
+                - img "Pinterest Ads" [ref=e245]
+                - generic [ref=e246]: 2 steps
+              - button "Use" [ref=e247] [cursor=pointer]:
+                - text: Use
+                - img [ref=e248]
+          - generic [ref=e251]:
+            - generic [ref=e252]:
+              - generic [ref=e253]: ⏸️
+              - generic [ref=e254]:
+                - heading "Pause Underperformers" [level=3] [ref=e255]
+                - generic [ref=e256]: Optimization
+            - paragraph [ref=e257]: Automatically pause ads with ROAS below 1 to stop wasting budget on low-performing creatives.
+            - generic [ref=e258]:
+              - generic [ref=e259]:
+                - img "Meta" [ref=e260]
+                - img [ref=e261]
+                - img "Meta" [ref=e263]
+                - generic [ref=e264]: 2 steps
+              - button "Use" [ref=e265] [cursor=pointer]:
+                - text: Use
+                - img [ref=e266]
+          - generic [ref=e269]:
+            - generic [ref=e270]:
+              - generic [ref=e271]: 🔄
+              - generic [ref=e272]:
+                - heading "Page-Like Creative Refresh" [level=3] [ref=e273]
+                - generic [ref=e274]: Optimization
+            - paragraph [ref=e275]: Refresh degrading page-like ads by swapping in a shortlisted library creative, pausing the old ad, and notifying the SMM.
+            - generic [ref=e276]:
+              - generic [ref=e277]:
+                - img "Meta" [ref=e278]
+                - img [ref=e279]
+                - img "Meta" [ref=e281]
+                - img [ref=e282]
+                - generic [ref=e284]: 🔔
+                - generic [ref=e285]: 3 steps
+              - button "Use" [ref=e286] [cursor=pointer]:
+                - text: Use
+                - img [ref=e287]
+          - generic [ref=e290]:
+            - generic [ref=e291]:
+              - generic [ref=e292]: 📅
+              - generic [ref=e293]:
+                - heading "Daily Budget Rule Toggle" [level=3] [ref=e294]
+                - generic [ref=e295]: Optimization
+            - paragraph [ref=e296]: Run a scheduled check every day and toggle an existing automation rule on or off based on the day.
+            - generic [ref=e297]:
+              - generic [ref=e298]:
+                - generic [ref=e299]: 📅
+                - img [ref=e300]
+                - img "Meta" [ref=e302]
+                - generic [ref=e303]: 2 steps
+              - button "Use" [ref=e304] [cursor=pointer]:
+                - text: Use
+                - img [ref=e305]
+          - generic [ref=e308]:
+            - generic [ref=e309]:
+              - generic [ref=e310]: 📊
+              - generic [ref=e311]:
+                - heading "Log Ad Launches to Sheets" [level=3] [ref=e312]
+                - generic [ref=e313]: Reporting
+            - paragraph [ref=e314]: Every time an ad is launched via AdManage, automatically log the details to a Google Sheet for tracking.
+            - generic [ref=e315]:
+              - generic [ref=e316]:
+                - generic [ref=e317]: 🚀
+                - img [ref=e318]
+                - img "Google Sheets" [ref=e320]
+                - generic [ref=e321]: 2 steps
+              - button "Use" [ref=e322] [cursor=pointer]:
+                - text: Use
+                - img [ref=e323]
+  - alert [ref=e325]

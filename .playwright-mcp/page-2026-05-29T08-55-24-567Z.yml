@@ -1,0 +1,235 @@
+- generic:
+  - region "Notifications alt+T"
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Meta · Select an event
+                              - paragraph: Select an event
+                            - button:
+                              - img
+                          - generic:
+                            - generic: GlobalEcomCom LLC
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - heading [level=2]: 2. Action
+                            - paragraph: What happens when it fires?
+                        - button:
+                          - img
+                      - generic:
+                        - button: setup
+                        - button: preview
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: App
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - img
+                                - generic: Meta
+                              - button: Change
+                          - generic:
+                            - text: Action event
+                            - combobox [expanded]:
+                              - generic: Choose an event
+                              - img
+                      - generic:
+                        - button [disabled]: To continue, choose an event
+  - alert
+  - iframe [ref=e183]:
+    - button "Open customer support" [ref=f29e4]:
+      - img [ref=f29e6]
+      - img [ref=f29e10]
+  - listbox [ref=e351]:
+    - option "Duplicate Campaign" [active] [ref=e352]:
+      - generic [ref=e354]: Duplicate Campaign
+    - option "Duplicate Ad Set" [ref=e355]:
+      - generic [ref=e357]: Duplicate Ad Set
+    - option "Duplicate Ad" [ref=e358]:
+      - generic [ref=e360]: Duplicate Ad
+    - option "Pause Ad" [ref=e361]:
+      - generic [ref=e363]: Pause Ad
+    - option "Pause Campaign" [ref=e364]:
+      - generic [ref=e366]: Pause Campaign
+    - option "Pause Ad Set" [ref=e367]:
+      - generic [ref=e369]: Pause Ad Set
+    - option "Enable Ad" [ref=e370]:
+      - generic [ref=e372]: Enable Ad
+    - option "Enable Campaign" [ref=e373]:
+      - generic [ref=e375]: Enable Campaign
+    - option "Enable Ad Set" [ref=e376]:
+      - generic [ref=e378]: Enable Ad Set
+    - option "Launch Ad" [ref=e379]:
+      - generic [ref=e381]: Launch Ad
+    - option "Swap Creative from Shortlist" [ref=e382]:
+      - generic [ref=e384]: Swap Creative from Shortlist
+    - option "Create Rule" [ref=e385]:
+      - generic [ref=e387]: Create Rule
+    - option "Toggle Rule" [ref=e388]:
+      - generic [ref=e390]: Toggle Rule
+    - option "Update Rule" [ref=e391]:
+      - generic [ref=e393]: Update Rule
+    - option "Change Budget" [ref=e394]:
+      - generic [ref=e396]: Change Budget
+    - option "Apply Existing Rule" [ref=e397]:
+      - generic [ref=e399]: Apply Existing Rule
+    - option "Set Minimum Spend" [ref=e400]:
+      - generic [ref=e402]: Set Minimum Spend
+    - img [ref=e404]

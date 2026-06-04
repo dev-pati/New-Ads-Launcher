@@ -1,0 +1,227 @@
+- generic:
+  - region "Notifications alt+T"
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+              - generic: "17"
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Meta · Campaign Status Change
+                              - paragraph: Daily 9am
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - heading [level=2]: 1. Trigger
+                            - paragraph: When does this step fire?
+                        - button:
+                          - img
+                      - generic:
+                        - button: setup
+                        - button: preview
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: App
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - img
+                                - generic: Meta
+                              - button: Change
+                          - generic:
+                            - text: Trigger event
+                            - combobox:
+                              - generic: Campaign Status Change
+                              - img
+                          - generic:
+                            - heading [level=4]: Campaign Status Change Trigger
+                            - paragraph: Triggers when campaigns match a specific status. Use this to detect when campaigns become active, get paused, or encounter issues.
+                            - generic:
+                              - generic: Ad Account *
+                              - combobox:
+                                - generic:
+                                  - img
+                                  - generic: GEC-JORDY 01
+                                - img
+                            - generic:
+                              - text: Campaign Filter
+                              - combobox [expanded]:
+                                - generic: All Campaigns
+                                - img
+                            - generic:
+                              - generic: Target Status *
+                              - combobox:
+                                - generic: Active
+                                - img
+                              - paragraph: Find campaigns with this effective status
+                      - generic:
+                        - button: Preview →
+  - alert
+  - iframe [ref=e205]:
+    - button "Open customer support" [ref=f3e4]:
+      - img [ref=f3e6]
+      - img [ref=f3e10]
+  - listbox [ref=e461]:
+    - option "All Campaigns" [active] [selected] [ref=e462]:
+      - img [ref=e465]
+      - generic [ref=e467]: All Campaigns
+    - option "Name Contains" [ref=e468]:
+      - generic [ref=e470]: Name Contains
+    - option "Name Equals" [ref=e471]:
+      - generic [ref=e473]: Name Equals

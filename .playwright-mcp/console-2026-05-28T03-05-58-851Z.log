@@ -1,0 +1,2 @@
+[    1775ms] [LOG] [v0] Fetching automation from API: template-auto-test-ads-google-drive @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.258.2:0
+[    2211ms] [WARNING] [v0] Automation not found: template-auto-test-ads-google-drive @ https://us-assets.i.posthog.com/static/posthog-recorder.js?v=1.258.2:0

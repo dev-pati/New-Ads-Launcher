@@ -1,0 +1,257 @@
+- generic:
+  - region "Notifications alt+T"
+  - generic:
+    - complementary:
+      - generic:
+        - button:
+          - generic:
+            - generic: T
+        - generic: Workspace
+      - navigation:
+        - link:
+          - /url: /launch
+          - img
+          - generic: Launch
+        - link:
+          - /url: /library
+          - img
+          - generic: Assets
+        - link:
+          - /url: /reports/top-ads
+          - img
+          - generic: Insights
+        - link:
+          - /url: /automation
+          - img
+          - generic: Automate
+        - link:
+          - /url: /integrations/ad-channels
+          - img
+          - generic: Connect
+        - link:
+          - /url: /adscan
+          - img
+          - generic: Inspo
+      - generic:
+        - button:
+          - img
+          - generic: Search
+        - link:
+          - /url: /referrals
+          - img
+          - generic: Rewards
+        - link:
+          - /url: /teams
+          - img
+          - generic: Settings
+        - button:
+          - generic:
+            - img
+    - generic:
+      - generic:
+        - generic:
+          - generic: Automate
+          - generic:
+            - button:
+              - img
+            - button:
+              - img
+        - generic:
+          - generic:
+            - list:
+              - listitem:
+                - link:
+                  - /url: /automation
+                  - img
+                  - generic: Automations
+              - listitem:
+                - link:
+                  - /url: /rules
+                  - img
+                  - generic: Rules
+      - separator
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - banner:
+              - generic:
+                - generic:
+                  - button:
+                    - img
+                  - generic:
+                    - generic:
+                      - img
+                    - generic:
+                      - textbox:
+                        - /placeholder: Automation name
+                        - text: Untitled Zap
+                - generic:
+                  - button:
+                    - img
+                    - text: Save
+                  - button:
+                    - img
+                    - text: Run
+                  - button:
+                    - img
+                    - text: Full preview
+                  - button [disabled]:
+                    - img
+                    - text: History
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - generic:
+                - generic:
+                  - combobox:
+                    - generic:
+                      - img
+                      - generic: GEC-JORDY 01
+                    - img
+            - main:
+              - generic:
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "1"
+                              - generic: trigger
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Choose an app
+                            - button:
+                              - img
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                      - generic:
+                        - generic:
+                          - generic:
+                            - generic:
+                              - generic: "2"
+                              - generic: action
+                          - generic:
+                            - generic:
+                              - img
+                            - generic:
+                              - heading [level=3]: Meta · Pause Ad
+                              - paragraph: Pause Ad
+                            - button:
+                              - img
+                          - generic:
+                            - generic: Pause Ad
+                            - generic: GlobalEcomCom LLC
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - button:
+                              - img
+                          - generic:
+                            - img
+                - generic:
+                  - generic:
+                    - generic:
+                      - generic:
+                        - generic:
+                          - generic:
+                            - img
+                          - generic:
+                            - heading [level=2]: 2. Action
+                            - paragraph: What happens when it fires?
+                        - button:
+                          - img
+                      - generic:
+                        - button: setup
+                        - button: preview
+                      - generic:
+                        - generic:
+                          - generic:
+                            - text: App
+                            - generic:
+                              - generic:
+                                - generic:
+                                  - img
+                                - generic: Meta
+                              - button: Change
+                          - generic:
+                            - text: Action event
+                            - combobox [expanded]:
+                              - generic: Pause Ad
+                              - img
+                          - generic:
+                            - heading [level=4]: Meta Ads Configuration
+                            - generic:
+                              - generic:
+                                - generic: Ad Account *
+                                - combobox:
+                                  - generic:
+                                    - img
+                                    - generic: GEC-JORDY 01
+                                  - img
+                              - generic:
+                                - generic: Ads to Pause *
+                                - generic:
+                                  - generic:
+                                    - textbox:
+                                      - /placeholder: Use data pill from trigger...
+                                - paragraph:
+                                  - text: Use
+                                  - code: "{{trigger.qualifyingAdIds}}"
+                                  - text: to pause ads from the Performance Threshold trigger. These ads will have their status changed to PAUSED.
+                      - generic:
+                        - button: Preview →
+  - alert
+  - iframe [ref=e183]:
+    - button "Open customer support" [ref=f29e4]:
+      - img [ref=f29e6]
+      - img [ref=f29e10]
+  - listbox [ref=e433]:
+    - option "Duplicate Campaign" [ref=e434]:
+      - generic [ref=e436]: Duplicate Campaign
+    - option "Duplicate Ad Set" [ref=e437]:
+      - generic [ref=e439]: Duplicate Ad Set
+    - option "Duplicate Ad" [ref=e440]:
+      - generic [ref=e442]: Duplicate Ad
+    - option "Pause Ad" [active] [selected] [ref=e443]:
+      - img [ref=e446]
+      - generic [ref=e448]: Pause Ad
+    - option "Pause Campaign" [ref=e449]:
+      - generic [ref=e451]: Pause Campaign
+    - option "Pause Ad Set" [ref=e452]:
+      - generic [ref=e454]: Pause Ad Set
+    - option "Enable Ad" [ref=e455]:
+      - generic [ref=e457]: Enable Ad
+    - option "Enable Campaign" [ref=e458]:
+      - generic [ref=e460]: Enable Campaign
+    - option "Enable Ad Set" [ref=e461]:
+      - generic [ref=e463]: Enable Ad Set
+    - option "Launch Ad" [ref=e464]:
+      - generic [ref=e466]: Launch Ad
+    - option "Swap Creative from Shortlist" [ref=e467]:
+      - generic [ref=e469]: Swap Creative from Shortlist
+    - option "Create Rule" [ref=e470]:
+      - generic [ref=e472]: Create Rule
+    - option "Toggle Rule" [ref=e473]:
+      - generic [ref=e475]: Toggle Rule
+    - option "Update Rule" [ref=e476]:
+      - generic [ref=e478]: Update Rule
+    - option "Change Budget" [ref=e479]:
+      - generic [ref=e481]: Change Budget
+    - option "Apply Existing Rule" [ref=e482]:
+      - generic [ref=e484]: Apply Existing Rule
+    - option "Set Minimum Spend" [ref=e485]:
+      - generic [ref=e487]: Set Minimum Spend
+    - img [ref=e489]
