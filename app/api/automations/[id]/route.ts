@@ -4,6 +4,30 @@ import { createClient }              from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const ctx = await getAuthContext()
+    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { id } = await params
+    const supabase = await createClient()
+    const { data, error } = await supabase
+      .from("automations")
+      .select("*")
+      .eq("id", id)
+      .eq("org_id", ctx.orgId)
+      .single()
+
+    if (error || !data) return NextResponse.json({ error: "Not found" }, { status: 404 })
+    return NextResponse.json({ automation: data })
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 })
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -278,9 +278,52 @@ export default async function AutomationBuilderPage({
 
   const templateWorkflow = template ? TEMPLATE_WORKFLOWS[template] : undefined
 
-  const initialWorkflow = isNew
-    ? (templateWorkflow ?? { name: "Untitled Zap" })
-    : undefined
+  let initialWorkflow: { id?: string; name?: string; steps?: WorkflowStep[] } | undefined
+
+  if (isNew) {
+    initialWorkflow = templateWorkflow ?? { name: "Untitled Zap" }
+  } else {
+    // Load existing automation from API (server-side, has session via cookies)
+    try {
+      const { cookies } = await import("next/headers")
+      const cookieStore = await cookies()
+      const cookieHeader = cookieStore.getAll().map(c => `${c.name}=${c.value}`).join("; ")
+
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+      const res = await fetch(`${baseUrl}/api/automations/${id}`, {
+        headers: { Cookie: cookieHeader },
+        cache: "no-store",
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const automation = data.automation
+        if (automation) {
+          // Rebuild steps from DB format
+          const steps: WorkflowStep[] = []
+          if (automation.trigger_config?.appId) {
+            steps.push({
+              id: "step-trigger",
+              kind: "trigger",
+              status: "configured",
+              triggerConfig: automation.trigger_config,
+            })
+          }
+          const actionSteps: WorkflowStep[] = (automation.actions ?? []).map((a: any, i: number) => ({
+            id: `step-${i + 2}`,
+            kind: a.kind ?? "action",
+            status: "configured",
+            actionConfig:   a.actionConfig   ?? (a.kind === "action" ? a : undefined),
+            delayConfig:    a.delayConfig    ?? undefined,
+            approvalConfig: a.approvalConfig ?? undefined,
+          }))
+          steps.push(...actionSteps)
+          initialWorkflow = { id: automation.id, name: automation.name, steps }
+        }
+      }
+    } catch (e) {
+      console.error("[AutomationBuilder] Failed to load automation:", e)
+    }
+  }
 
   return (
     <Suspense fallback={
