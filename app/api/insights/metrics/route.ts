@@ -3,6 +3,7 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getDbCachedFacebookMetadata } from "@/app/api/facebook/_db-cache"
 import { metaFetch } from "@/app/api/facebook/_meta-fetch"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { autoSnapshotIfStale } from "@/lib/auto-snapshot"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -225,6 +226,11 @@ export async function GET(request: NextRequest) {
       }
       },
     })
+
+    // Auto-save snapshot in background when data is fresh from Meta
+    if (result.source === "meta") {
+      void autoSnapshotIfStale(ctx.orgId, adAccountId, token)
+    }
 
     return NextResponse.json({
       ...result.value,
