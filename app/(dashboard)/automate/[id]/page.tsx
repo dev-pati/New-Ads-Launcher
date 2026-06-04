@@ -1,8 +1,5 @@
-"use client"
-
 import dynamic from "next/dynamic"
-import { use, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 import { IconLoader2 } from "@tabler/icons-react"
 import type { WorkflowStep } from "@/lib/workflow-types"
 
@@ -279,10 +276,24 @@ const TEMPLATE_WORKFLOWS: Record<string, { name: string; steps: WorkflowStep[] }
   },
 }
 
-function BuilderInner({ id }: { id: string }) {
-  const search   = useSearchParams()
-  const template = search.get("template")
-  const isNew    = id === "new"
+function BuilderInner({ initialWorkflow }: { initialWorkflow?: { name?: string; steps?: WorkflowStep[] } }) {
+  return (
+    <div className="h-full overflow-hidden">
+      <WorkflowBuilder initialWorkflow={initialWorkflow} />
+    </div>
+  )
+}
+
+export default async function AutomationBuilderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<{ template?: string }>
+}) {
+  const { id }       = await params
+  const { template } = await searchParams
+  const isNew        = id === "new"
 
   const templateWorkflow = template ? TEMPLATE_WORKFLOWS[template] : undefined
 
@@ -291,26 +302,12 @@ function BuilderInner({ id }: { id: string }) {
     : undefined
 
   return (
-    <div className="h-full overflow-hidden">
-      <WorkflowBuilder initialWorkflow={initialWorkflow} />
-    </div>
-  )
-}
-
-export default function AutomationBuilderPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  const { id } = use(params)
-
-  return (
     <Suspense fallback={
       <div className="flex h-full items-center justify-center">
         <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
       </div>
     }>
-      <BuilderInner id={id} />
+      <BuilderInner initialWorkflow={initialWorkflow} />
     </Suspense>
   )
 }
