@@ -1375,27 +1375,26 @@ function PreviewTab({ config, automationId }: { config: ActionConfig; automation
   const [dryRunResult, setDryRunResult] = useState<string | null>(null)
 
   const handleDryRun = async () => {
-    if (!automationId) {
-      setDryRunResult("❌ Save the automation first")
-      setTimeout(() => setDryRunResult(null), 3000)
-      return
-    }
     setDryRunning(true)
     setDryRunResult(null)
     try {
-      const res  = await fetch(`/api/automations/${automationId}/run`, {
+      // Call dry-run endpoint directly with current config (bypasses DB)
+      const notif = config.notification
+      if (!notif?.emailRecipients?.length && !notif?.slackWebhookUrl) {
+        setDryRunResult("⚠️ Chưa có email recipients — vào Setup tab để thêm email")
+        return
+      }
+
+      const res = await fetch("/api/automations/dry-run-notification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_test: true }),
+        body: JSON.stringify({ notification: notif }),
       })
       const data = await res.json()
-      const notifResult = data.actionResults?.find((r: any) => r.event === "send_notification")
-      if (notifResult?.status === "success") {
-        setDryRunResult("✅ Email sent successfully!")
-      } else if (notifResult?.status === "skipped") {
-        setDryRunResult(`⚠️ Skipped: ${notifResult.message}`)
+      if (data.ok) {
+        setDryRunResult(`✅ ${data.message ?? "Notification sent!"}`)
       } else {
-        setDryRunResult(`❌ Failed: ${notifResult?.message ?? data.error ?? "Unknown error"}`)
+        setDryRunResult(`❌ ${data.error ?? "Failed"}`)
       }
     } catch (err: any) {
       setDryRunResult(`❌ ${err.message}`)
