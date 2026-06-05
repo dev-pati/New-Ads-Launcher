@@ -152,14 +152,33 @@ export async function GET(request: NextRequest) {
         continue
       }
 
+      const tv = (checkResult.metaData as any)?.triggerVars ?? {}
       const execResult = await executeAutomation(
         automation.id,
         automation.org_id,
         {
-          isTest: false,
+          isTest:    false,
           fileId:    checkResult.entityIds?.[0],
           fileName:  checkResult.entityNames?.[0],
           entityIds: checkResult.entityIds ?? [],
+          entityNames: checkResult.entityNames ?? [],
+          // Pass all trigger variables
+          summary:           tv.summary,
+          metricFormatted:   tv.metricFormatted,
+          metricRaw:         tv.metricRaw,
+          previousValue:     tv.previousValue,
+          currentValue:      tv.currentValue,
+          actualChange:      tv.actualChange,
+          direction:         tv.direction,
+          directionPastTense:tv.directionPastTense,
+          threshold:         tv.threshold,
+          comparisonLabel:   tv.comparisonLabel,
+          comparisonWindow:  tv.comparisonWindow,
+          monitoringLevel:   tv.monitoringLevel,
+          qualifyingCount:   tv.qualifyingCount,
+          adsManagerLink:    tv.adsManagerLink,
+          currentDate:       tv.currentDate,
+          currentDateTime:   tv.currentDateTime,
         }
       )
 

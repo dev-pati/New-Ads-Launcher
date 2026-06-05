@@ -410,11 +410,46 @@ export async function checkPerformanceMonitoring(
 
   if (!allMet) return { fired: false, reason: `Conditions not met: ${failures.join(", ")}` }
 
+  // Build structured trigger variables from first matched condition
+  const firstMatch = matches[0] ?? ""
+  const firstCond  = conditions[0]
+  const metric     = firstCond?.metric ?? "spend"
+  const op         = firstCond?.operator ?? "decreases_by"
+  const valA       = (() => { const r = rowA; const m = metric; return m === "spend" ? parseFloat(r?.spend||"0") : m === "cpm" ? parseFloat(r?.cpm||"0") : m === "cpc" ? parseFloat(r?.cpc||"0") : m === "purchase_roas" ? parseFloat((r?.purchase_roas||[])[0]?.value||"0") : 0 })()
+  const valB       = (() => { const r = rowB; const m = metric; return r ? (m === "spend" ? parseFloat(r?.spend||"0") : m === "cpm" ? parseFloat(r?.cpm||"0") : m === "cpc" ? parseFloat(r?.cpc||"0") : m === "purchase_roas" ? parseFloat((r?.purchase_roas||[])[0]?.value||"0") : 0) : 0 })()
+  const changePct  = valB > 0 ? ((valA - valB) / valB) * 100 : 0
+  const isIncrease = changePct >= 0
+  const metricLabel: Record<string, string> = { spend: "Spend", cpm: "CPM", cpc: "CPC", ctr: "CTR", impressions: "Impressions", purchase_roas: "ROAS", cpa: "CPA", conversions: "Conversions" }
+  const fmt = (v: number, m: string) => m === "spend" || m === "cpm" || m === "cpc" || m === "cpa" ? `$${v.toFixed(2)}` : m === "purchase_roas" ? `${v.toFixed(2)}x` : m === "ctr" ? `${v.toFixed(2)}%` : v.toFixed(0)
+  const levelLabel: Record<string, string> = { account: "Account", campaign: "Campaign", adset: "Ad Set", ad: "Ad" }
+  const winLabel: Record<string, string>   = { day_over_day: "Day over Day", week_over_week: "Week over Week" }
+  const now = new Date()
+
+  const triggerVars = {
+    summary:           `${metricLabel[metric] ?? metric} ${isIncrease ? "increased" : "decreased"} by ${Math.abs(changePct).toFixed(1)}% ${winLabel[comparisonWindow] ?? comparisonWindow}: ${fmt(valB, metric)} → ${fmt(valA, metric)}`,
+    metricFormatted:   metricLabel[metric] ?? metric,
+    metricRaw:         metric,
+    previousValue:     fmt(valB, metric),
+    currentValue:      fmt(valA, metric),
+    actualChange:      changePct.toFixed(1),
+    direction:         isIncrease ? "increased" : "decreased",
+    directionPastTense:isIncrease ? "increased by" : "decreased by",
+    threshold:         String(firstCond?.value ?? ""),
+    comparisonLabel:   winLabel[comparisonWindow] ?? comparisonWindow,
+    comparisonWindow,
+    monitoringLevel:   levelLabel[monitoringLevel] ?? monitoringLevel,
+    qualifyingCount:   "1",
+    adsManagerLink:    `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId.replace("act_","")}`,
+    currentDate:       now.toLocaleDateString("en-US"),
+    currentDateTime:   now.toLocaleString("en-US"),
+  }
+
   return {
     fired: true,
     reason: `All conditions met: ${matches.join(", ")}`,
     entityIds: [adAccountId],
-    metaData: { periodA, periodB, matchedConditions: matches, currentMetrics: rowA },
+    entityNames: [adAccountId],
+    metaData: { periodA, periodB, matchedConditions: matches, currentMetrics: rowA, triggerVars },
   }
 }
 

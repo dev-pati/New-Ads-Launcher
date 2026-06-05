@@ -6,12 +6,33 @@ import { Resend } from "resend"
 const GRAPH = "https://graph.facebook.com/v25.0"
 
 export interface TriggerPayload {
+  // File/media context
   fileId?: string
   fileName?: string
   fileUrl?: string
   mimeType?: string
   thumbnailUrl?: string
+  // Entity context
   entityIds?: string[]
+  entityNames?: string[]
+  // Metric trigger variables (Performance Monitoring, ROAS, CPA, Spend)
+  summary?: string            // {{trigger.summary}} — ready-made full sentence
+  metricFormatted?: string    // {{trigger.metric}} — e.g. "Spend", "ROAS"
+  metricRaw?: string          // {{trigger.metricRaw}}
+  previousValue?: string      // {{trigger.previousValue}}
+  currentValue?: string       // {{trigger.currentValue}}
+  actualChange?: string       // {{trigger.actualChange}} — e.g. "-80.1"
+  direction?: string          // {{trigger.direction}} — "increased" | "decreased"
+  directionPastTense?: string // {{trigger.directionPastTense}} — "increased by" | "decreased by"
+  threshold?: string          // {{trigger.threshold}}
+  comparisonLabel?: string    // {{trigger.comparisonLabel}} — "Day over Day"
+  comparisonWindow?: string   // {{trigger.comparisonWindow}}
+  monitoringLevel?: string    // {{trigger.monitoringLevel}} — "Campaign" | "Ad Set"
+  qualifyingCount?: string    // {{trigger.qualifyingCount}}
+  adsManagerLink?: string     // {{trigger.adsManagerLink}}
+  // System
+  currentDate?: string        // {{trigger.currentDate}}
+  currentDateTime?: string    // {{trigger.currentDateTime}}
 }
 
 export interface StepLog {
@@ -294,8 +315,35 @@ async function execNotification(
   const notif = action.notification
   if (!notif) return { event: "send_notification", status: "skipped", message: "No notification config" }
 
-  const fileInfo = payload.fileName ? `\n\nFile: ${payload.fileName}` : ""
-  const messageBody = (notif.customMessage || `Your automation "${automationName}" was triggered.`) + fileInfo
+  // Replace ALL template variables
+  function resolveVars(text: string): string {
+    const now = new Date()
+    return text
+      .replace(/\{\{trigger\.summary\}\}/g,            payload.summary            ?? "")
+      .replace(/\{\{trigger\.metric\}\}/g,              payload.metricFormatted    ?? "")
+      .replace(/\{\{trigger\.metricFormatted\}\}/g,     payload.metricFormatted    ?? "")
+      .replace(/\{\{trigger\.metricRaw\}\}/g,           payload.metricRaw          ?? "")
+      .replace(/\{\{trigger\.previousValue\}\}/g,       payload.previousValue      ?? "")
+      .replace(/\{\{trigger\.currentValue\}\}/g,        payload.currentValue       ?? "")
+      .replace(/\{\{trigger\.actualChange\}\}/g,        payload.actualChange       ?? "")
+      .replace(/\{\{trigger\.direction\}\}/g,           payload.direction          ?? "")
+      .replace(/\{\{trigger\.directionPastTense\}\}/g,  payload.directionPastTense ?? "")
+      .replace(/\{\{trigger\.threshold\}\}/g,           payload.threshold          ?? "")
+      .replace(/\{\{trigger\.comparisonLabel\}\}/g,     payload.comparisonLabel    ?? "")
+      .replace(/\{\{trigger\.comparisonWindow\}\}/g,    payload.comparisonWindow   ?? "")
+      .replace(/\{\{trigger\.monitoringLevel\}\}/g,     payload.monitoringLevel    ?? "")
+      .replace(/\{\{trigger\.qualifyingCount\}\}/g,     payload.qualifyingCount    ?? "")
+      .replace(/\{\{trigger\.entityName\}\}/g,          payload.fileName           ?? payload.entityNames?.[0] ?? "")
+      .replace(/\{\{trigger\.qualifyingEntityIDs\}\}/g, (payload.entityIds ?? []).join(", "))
+      .replace(/\{\{trigger\.adsManagerLink\}\}/g,      payload.adsManagerLink     ?? "")
+      .replace(/\{\{trigger\.currentDate\}\}/g,         payload.currentDate        ?? now.toLocaleDateString("en-US"))
+      .replace(/\{\{trigger\.currentDateTime\}\}/g,     payload.currentDateTime    ?? now.toLocaleString("en-US"))
+      .replace(/\{\{filename\}\}/g,                     payload.fileName           ?? "")
+      .replace(/\{\{date\}\}/g,                         payload.currentDate        ?? now.toLocaleDateString("en-US"))
+  }
+
+  const rawMessage = notif.customMessage || `Your automation "${automationName}" was triggered.${payload.summary ? `\n\n${payload.summary}` : ""}`
+  const messageBody = resolveVars(rawMessage)
   const results: string[] = []
 
   // ── Email via Resend ────────────────────────────────────────────────────────
@@ -634,11 +682,29 @@ export async function executeAutomation(
     isTest?: boolean
     startFromStep?: number
     entityIds?: string[]
+    entityNames?: string[]
+    summary?: string
+    metricFormatted?: string
+    metricRaw?: string
+    previousValue?: string
+    currentValue?: string
+    actualChange?: string
+    direction?: string
+    directionPastTense?: string
+    threshold?: string
+    comparisonLabel?: string
+    comparisonWindow?: string
+    monitoringLevel?: string
+    qualifyingCount?: string
+    adsManagerLink?: string
+    currentDate?: string
+    currentDateTime?: string
   } = {}
 ): Promise<ExecutionResult> {
   const startMs = Date.now()
   const logs: StepLog[] = []
   const actionResults: ActionResult[] = []
+  const now = new Date()
   const triggerPayload: TriggerPayload = {
     fileId: options.fileId,
     fileName: options.fileName,
@@ -646,6 +712,23 @@ export async function executeAutomation(
     mimeType: options.mimeType,
     thumbnailUrl: options.thumbnailUrl,
     entityIds: options.entityIds,
+    entityNames: options.entityNames,
+    summary:           options.summary,
+    metricFormatted:   options.metricFormatted,
+    metricRaw:         options.metricRaw,
+    previousValue:     options.previousValue,
+    currentValue:      options.currentValue,
+    actualChange:      options.actualChange,
+    direction:         options.direction,
+    directionPastTense:options.directionPastTense,
+    threshold:         options.threshold,
+    comparisonLabel:   options.comparisonLabel,
+    comparisonWindow:  options.comparisonWindow,
+    monitoringLevel:   options.monitoringLevel,
+    qualifyingCount:   options.qualifyingCount,
+    adsManagerLink:    options.adsManagerLink,
+    currentDate:       options.currentDate ?? now.toLocaleDateString("en-US"),
+    currentDateTime:   options.currentDateTime ?? now.toLocaleString("en-US"),
   }
 
   try {
