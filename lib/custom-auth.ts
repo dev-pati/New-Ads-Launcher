@@ -32,6 +32,9 @@ export async function createSession(account: AuthAccount) {
     email: account.email,
     full_name: account.full_name || undefined,
     avatar_url: account.avatar_url || undefined,
+    // Required for Supabase RLS: auth.uid() = sub, auth.role() = "authenticated"
+    role: "authenticated",
+    aud: "authenticated",
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(account.id)

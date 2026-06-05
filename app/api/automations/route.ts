@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const sp = request.nextUrl.searchParams
     const status = sp.get("status")
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     let q = supabase
       .from("automations")
       .select("*")
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     if (!name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("automations")
       .insert({
