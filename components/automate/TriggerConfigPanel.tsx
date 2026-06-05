@@ -2953,8 +2953,25 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
         </div>
       )}
 
-      {/* Test with live data — not for Sheets/Drive (they have their own UI above) */}
-      {!isSheets && !isDrive && <div className="space-y-2">
+      {/* Schedule trigger preview */}
+      {config.appId === "schedule" && (
+        <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Next Run</p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[12px] font-medium">{config.scheduleFrequency ?? "daily"}</span>
+            <span className="px-2.5 py-1 rounded-full bg-muted text-foreground text-[12px] font-medium">{config.scheduleTime ?? "09:00"}</span>
+            <span className="px-2.5 py-1 rounded-full bg-muted text-foreground text-[12px] font-medium">{config.scheduleTimezone ?? "UTC"}</span>
+            {config.scheduleStartDate && <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-[12px]">From {config.scheduleStartDate}</span>}
+            {config.scheduleEndDate && <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-[12px]">Until {config.scheduleEndDate}</span>}
+          </div>
+          <p className="text-[12px] text-muted-foreground">
+            Automation sẽ tự động chạy theo lịch. MacMini cron check mỗi 5 phút và kích hoạt trong window 5 phút quanh giờ đã set.
+          </p>
+        </div>
+      )}
+
+      {/* Test with live data — not for Sheets/Drive/Schedule (no live records to preview) */}
+      {!isSheets && !isDrive && config.appId !== "schedule" && <div className="space-y-2">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
           Test with live data
         </p>
