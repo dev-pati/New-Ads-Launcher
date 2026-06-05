@@ -3,6 +3,7 @@ import { getFacebookConnection } from "@/lib/auth"
 import type { ActionConfig } from "@/lib/workflow-types"
 import { Resend } from "resend"
 import { sendEmail } from "@/lib/send-email"
+import { buildNotificationEmail } from "@/lib/email-template"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -394,10 +395,34 @@ async function execNotification(
 
   const finalMessage = messageBody + reportSection
 
+  // Build metrics object for HTML template
+  let metricsObj: any = undefined
+  if ((notif as any).includeReport && (notif as any).reportAdAccountId && reportSection) {
+    // Parse the metrics we already fetched above
+    const spendMatch    = reportSection.match(/Total Spend:\s+\$([0-9.]+)/)
+    const purchMatch    = reportSection.match(/Total Purchases:\s+(\d+)/)
+    const revMatch      = reportSection.match(/Revenue:\s+\$([0-9.]+)/)
+    const roasMatch     = reportSection.match(/Avg ROAS:\s+([0-9.]+)/)
+    metricsObj = {
+      totalSpend:    parseFloat(spendMatch?.[1] ?? "0"),
+      purchases:     parseInt(purchMatch?.[1] ?? "0"),
+      revenue:       parseFloat(revMatch?.[1] ?? "0"),
+      roas:          parseFloat(roasMatch?.[1] ?? "0"),
+      period:        (notif as any).reportPeriod ?? "yesterday",
+      campaigns:     [], // campaigns already in reportSection text
+    }
+  }
+
+  const { subject, html, text: emailText } = buildNotificationEmail({
+    automationName,
+    message: finalMessage || undefined,
+    metrics: metricsObj,
+    status: "info",
+  })
+
   const recipients = notif.emailRecipients ?? []
   if (recipients.length) {
-    const subject = `Automation triggered: ${automationName}`
-    const result = await sendEmail({ to: recipients, subject, text: finalMessage })
+    const result = await sendEmail({ to: recipients, subject, text: emailText, html })
     if (!result.ok) {
       addLog(logs, `Email failed: ${result.error}`, "warn")
     } else {

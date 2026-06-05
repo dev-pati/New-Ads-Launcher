@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { sendEmail } from "@/lib/send-email"
+import { buildNotificationEmail } from "@/lib/email-template"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -27,13 +28,14 @@ export async function POST(request: NextRequest) {
     const recipients: string[] = notification.emailRecipients ?? []
     if (recipients.length && (notification.via === "email" || notification.via === "both" || !notification.via)) {
       {
-        const emailResult = await sendEmail({
-          to: recipients,
-          subject: "🧪 Dry-run: Automation notification test",
-          text: notification.customMessage
-            ? `[DRY-RUN TEST]\n\n${notification.customMessage}\n\nNote: Template variables like {{trigger.summary}} will be replaced with real values when the automation fires.`
-            : "[DRY-RUN TEST]\n\nThis is a test notification. Your automation is configured correctly.",
+        const { subject, html, text } = buildNotificationEmail({
+          automationName: "Automation Test",
+          message: notification.customMessage
+            ? `[DRY-RUN]\n\n${notification.customMessage}\n\nℹ️ Template variables ({{trigger.summary}} etc.) sẽ được điền với data thực khi automation chạy.`
+            : "[DRY-RUN] Automation notification đã được cấu hình đúng.",
+          status: "info",
         })
+        const emailResult = await sendEmail({ to: recipients, subject: "🧪 " + subject, html, text })
         if (!emailResult.ok) errors.push(`Email: ${emailResult.error ?? "failed"}`)
         else results.push(`email → ${recipients.join(", ")}`)
       }
