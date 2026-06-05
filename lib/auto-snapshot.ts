@@ -295,7 +295,7 @@ export async function snapshotAdAccountMetrics(
   orgId: string, actId: string, token: string, userId: string
 ): Promise<void> {
   try {
-    const fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,spend_cap,owner_business,business"
+    const fields = "id,name,account_status,currency,timezone_name,amount_spent,balance,spend_cap"
     const data = await metaFetch(
       `${GRAPH}/${actId}?fields=${encodeURIComponent(fields)}&access_token=${token}`,
       { caller: "auto-snapshot/ad-account-metrics" }
@@ -313,8 +313,8 @@ export async function snapshotAdAccountMetrics(
       amount_spent_minor: parseInt(data.amount_spent ?? "0") || null,
       balance_minor: parseInt(data.balance ?? "0") || null,
       spend_cap_minor: parseInt(data.spend_cap ?? "0") || null,
-      owner_business_id: data.owner_business?.id ?? data.business?.id ?? null,
-      owner_business_name: data.owner_business?.name ?? data.business?.name ?? null,
+      owner_business_id: null,
+      owner_business_name: null,
       raw_meta: data,
       synced_at: now,
     }, { onConflict: "org_id,fb_ad_account_id,synced_at" }).select()
