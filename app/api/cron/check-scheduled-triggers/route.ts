@@ -106,12 +106,19 @@ export async function GET(request: NextRequest) {
   for (const automation of scheduled) {
     const cfg = automation.trigger_config as any
 
-    // Prevent double-firing — require full 60min gap for hourly, 23h for daily
+    // Prevent double-firing — cooldown based on frequency
+    // Manual Run clicks also update last_run_at, so use a generous cooldown
     if (automation.last_run_at) {
-      const lastRun     = new Date(automation.last_run_at)
+      const lastRun      = new Date(automation.last_run_at)
       const minutesSince = (now.getTime() - lastRun.getTime()) / 60_000
-      if (minutesSince < 60) {
-        results.push({ automationId: automation.id, name: automation.name, orgId: automation.org_id, fired: false, reason: `Ran ${minutesSince.toFixed(0)}min ago` })
+      const freq         = (automation.trigger_config as any)?.scheduleFrequency ?? "daily"
+      const cooldownMin  = freq === "monthly" ? 60 * 24 * 28
+                         : freq === "weekly"  ? 60 * 24 * 7
+                         : freq === "daily"   ? 60 * 23  // 23h gap for daily
+                         : 55 // hourly
+
+      if (minutesSince < cooldownMin) {
+        results.push({ automationId: automation.id, name: automation.name, orgId: automation.org_id, fired: false, reason: `Ran ${minutesSince.toFixed(0)}min ago (cooldown: ${cooldownMin}min)` })
         continue
       }
     }
