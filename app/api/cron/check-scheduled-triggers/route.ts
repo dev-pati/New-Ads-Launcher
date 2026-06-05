@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
   // Fetch all active scheduled automations
   const { data: automations } = await db
     .from("automations")
-    .select("id, org_id, name, trigger_config, actions, last_run_at")
+    .select("id, org_id, name, trigger_config, actions, last_run_at, last_scheduled_run_at")
     .eq("status", "active")
 
   const scheduled = (automations ?? []).filter(a => {
@@ -106,19 +106,20 @@ export async function GET(request: NextRequest) {
   for (const automation of scheduled) {
     const cfg = automation.trigger_config as any
 
-    // Prevent double-firing — cooldown based on frequency
-    // Manual Run clicks also update last_run_at, so use a generous cooldown
-    if (automation.last_run_at) {
-      const lastRun      = new Date(automation.last_run_at)
+    // Prevent double-firing — use last_scheduled_run_at (not last_run_at)
+    // so manual Run clicks don't block the scheduled trigger
+    const lastScheduled = (automation as any).last_scheduled_run_at
+    if (lastScheduled) {
+      const lastRun      = new Date(lastScheduled)
       const minutesSince = (now.getTime() - lastRun.getTime()) / 60_000
       const freq         = (automation.trigger_config as any)?.scheduleFrequency ?? "daily"
       const cooldownMin  = freq === "monthly" ? 60 * 24 * 28
                          : freq === "weekly"  ? 60 * 24 * 7
-                         : freq === "daily"   ? 60 * 23  // 23h gap for daily
-                         : 55 // hourly
+                         : freq === "daily"   ? 60 * 23
+                         : 55
 
       if (minutesSince < cooldownMin) {
-        results.push({ automationId: automation.id, name: automation.name, orgId: automation.org_id, fired: false, reason: `Ran ${minutesSince.toFixed(0)}min ago (cooldown: ${cooldownMin}min)` })
+        results.push({ automationId: automation.id, name: automation.name, orgId: automation.org_id, fired: false, reason: `Scheduled ran ${minutesSince.toFixed(0)}min ago` })
         continue
       }
     }
@@ -146,7 +147,7 @@ export async function GET(request: NextRequest) {
       })
 
       await db.from("automations")
-        .update({ last_run_at: now.toISOString() })
+        .update({ last_run_at: now.toISOString(), last_scheduled_run_at: now.toISOString() })
         .eq("id", automation.id)
 
       await db.from("automation_executions").insert({
