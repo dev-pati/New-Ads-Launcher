@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getFacebookConnection } from "@/lib/auth"
 import type { ActionConfig } from "@/lib/workflow-types"
 import { Resend } from "resend"
+import { sendEmail } from "@/lib/send-email"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -346,29 +347,16 @@ async function execNotification(
   const messageBody = resolveVars(rawMessage)
   const results: string[] = []
 
-  // ── Email via Resend ────────────────────────────────────────────────────────
+  // ── Email via Gmail SMTP → Resend fallback ──────────────────────────────────
   const recipients = notif.emailRecipients ?? []
   if (recipients.length) {
-    const key = process.env.RESEND_API_KEY
-    if (!key) {
-      addLog(logs, "Email skipped: RESEND_API_KEY not configured", "warn")
+    const subject = `Automation triggered: ${automationName}`
+    const result = await sendEmail({ to: recipients, subject, text: messageBody })
+    if (!result.ok) {
+      addLog(logs, `Email failed: ${result.error}`, "warn")
     } else {
-      const subject = `Automation triggered: ${automationName}`
-      const res  = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          from: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev",
-          to: recipients, subject, text: messageBody
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        addLog(logs, `Email failed: ${data.message}`, "warn")
-      } else {
-        addLog(logs, `Email sent to ${recipients.join(", ")}`)
-        results.push(`email:${recipients.join(",")}`)
-      }
+      addLog(logs, `Email sent to ${recipients.join(", ")}`)
+      results.push(`email:${recipients.join(",")}`)
     }
   }
 
@@ -903,7 +891,7 @@ async function execSteps(
       }).select("id").single()
 
       // Send approval email
-      if (approvalCfg.approvers?.length && process.env.RESEND_API_KEY) {
+      if (approvalCfg.approvers?.length) {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? ""
         const approveUrl = `${appUrl}/api/automations/executions/${exec?.id}/approve?token=${approval?.id}`
         const rejectUrl  = `${appUrl}/api/automations/executions/${exec?.id}/reject?token=${approval?.id}`
@@ -919,16 +907,12 @@ ${approvalCfg.message ? `Message: ${approvalCfg.message}\n\n` : ""}Next steps: $
 This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
         `.trim()
 
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            from: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev",
-            to: approvalCfg.approvers,
-            subject: `[AdLauncher] Approval required: ${automation.name}`,
-            text: emailBody,
-          }),
-        }).catch(e => addLog(logs, `Failed to send approval email: ${e.message}`, "warn"))
+        await sendEmail({
+          to: approvalCfg.approvers,
+          subject: `[AdLauncher] Approval required: ${automation.name}`,
+          text: emailBody,
+        }).then(r => { if (!r.ok) addLog(logs, `Failed to send approval email: ${r.error}`, "warn") })
+          .catch(e => addLog(logs, `Failed to send approval email: ${e.message}`, "warn"))
       }
 
       await supabase.from("automations")
@@ -1014,17 +998,10 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
       (overallStatus === "failed"  && notifCfg?.on_fail    !== false)
 
     if (emails.length && shouldSend) {
-      const resendKey = process.env.RESEND_API_KEY
-      if (resendKey) {
-        const icon    = overallStatus === "success" ? "✅" : "❌"
-        const subject = `${icon} Automation "${automation.name}" — ${overallStatus}`
-        const text    = `Automation: ${automation.name}\nStatus: ${overallStatus}\nDuration: ${durationMs}ms\nSteps completed: ${actionResults.length}\n\nDetails:\n${actionResults.map(r => `• ${r.event}: ${r.status} — ${r.message}`).join("\n")}`
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev", to: emails, subject, text }),
-        }).catch(() => {})
-      }
+      const icon    = overallStatus === "success" ? "✅" : "❌"
+      const subject = `${icon} Automation "${automation.name}" — ${overallStatus}`
+      const text    = `Automation: ${automation.name}\nStatus: ${overallStatus}\nDuration: ${durationMs}ms\nSteps completed: ${actionResults.length}\n\nDetails:\n${actionResults.map(r => `• ${r.event}: ${r.status} — ${r.message}`).join("\n")}`
+      await sendEmail({ to: emails, subject, text }).catch(() => {})
     }
   }
 
