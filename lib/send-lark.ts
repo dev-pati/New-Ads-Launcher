@@ -5,19 +5,26 @@
 
 const LARK_API = "https://open.larksuite.com/open-apis"
 
-// ── Get app access token ──────────────────────────────────────────────────────
-async function getAppToken(): Promise<string | null> {
+// ── Get tokens ───────────────────────────────────────────────────────────────
+async function getTokens(): Promise<{ appToken: string | null; tenantToken: string | null }> {
   const appId     = process.env.LARK_APP_ID
   const appSecret = process.env.LARK_APP_SECRET
-  if (!appId || !appSecret) return null
+  if (!appId || !appSecret) return { appToken: null, tenantToken: null }
 
-  const res = await fetch(`${LARK_API}/auth/v3/app_access_token/internal`, {
+  const res = await fetch(`${LARK_API}/auth/v3/tenant_access_token/internal`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
   })
   const data = await res.json()
-  return data.app_access_token ?? null
+  // tenant_access_token works for both messaging and contact APIs
+  const token = data.tenant_access_token ?? data.app_access_token ?? null
+  return { appToken: token, tenantToken: token }
+}
+
+async function getAppToken(): Promise<string | null> {
+  const { tenantToken } = await getTokens()
+  return tenantToken
 }
 
 // ── Get user open_id by email ─────────────────────────────────────────────────
