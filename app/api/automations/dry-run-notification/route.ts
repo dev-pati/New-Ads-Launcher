@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { sendEmail } from "@/lib/send-email"
 import { buildNotificationEmail } from "@/lib/email-template"
+import { sendLarkMessage, sendLarkGroupMessage } from "@/lib/send-lark"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -55,8 +56,24 @@ export async function POST(request: NextRequest) {
       else results.push("slack webhook")
     }
 
+    // ── Lark ───────────────────────────────────────────────────────────────────
+    const larkRecipients: string[] = notification.larkRecipients ?? []
+    const larkChatId: string = notification.larkChatId ?? ""
+    if ((larkRecipients.length || larkChatId) && notification.via === "lark") {
+      if (larkRecipients.length) {
+        const r = await sendLarkMessage({ recipients: larkRecipients, title: "🧪 Dry-run Test", message: "Automation notification đã được cấu hình đúng. Đây là tin nhắn test." })
+        if (!r.ok) errors.push(`Lark DM: ${r.error}`)
+        else results.push(`lark → ${larkRecipients.join(", ")}`)
+      }
+      if (larkChatId) {
+        const r = await sendLarkGroupMessage({ chatId: larkChatId, title: "🧪 Dry-run Test", message: "Automation notification đã được cấu hình đúng." })
+        if (!r.ok) errors.push(`Lark group: ${r.error}`)
+        else results.push("lark group")
+      }
+    }
+
     if (results.length === 0 && errors.length === 0) {
-      return NextResponse.json({ ok: false, error: "No notification channels configured (add email or Slack)" })
+      return NextResponse.json({ ok: false, error: "No notification channels configured (add email, Slack, or Lark)" })
     }
     if (errors.length > 0 && results.length === 0) {
       return NextResponse.json({ ok: false, error: errors.join("; ") })
