@@ -116,9 +116,8 @@ export async function GET(request: NextRequest) {
       accountAvatar = created.avatar_url
     }
 
-    await db
-      .from("profiles")
-      .upsert({ id: accountId, full_name: accountName, avatar_url: accountAvatar })
+    // Note: skip profiles upsert — profiles uses auth.users FK (Supabase Auth)
+    // but app uses custom accounts table
 
     await createSession({ id: accountId, email: accountEmail, full_name: accountName, avatar_url: accountAvatar })
 
