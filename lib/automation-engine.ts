@@ -349,8 +349,8 @@ async function execNotification(
   const rawMessage = notif.customMessage || `Your automation "${automationName}" was triggered.${payload.summary ? `\n\n${payload.summary}` : ""}`
   const messageBody = resolveVars(rawMessage)
   const results: string[] = []
+  const errors: string[]  = []
 
-  // ── Email via Gmail SMTP → Resend fallback ──────────────────────────────────
   // ── Fetch metrics report if configured ────────────────────────────────────
   let reportSection = ""
   if ((notif as any).includeReport && (notif as any).reportAdAccountId) {
@@ -426,6 +426,7 @@ async function execNotification(
     const result = await sendEmail({ to: recipients, subject, text: emailText, html })
     if (!result.ok) {
       addLog(logs, `Email failed: ${result.error}`, "warn")
+      errors.push(result.error ?? "Email failed")
     } else {
       addLog(logs, `Email sent to ${recipients.join(", ")}`)
       results.push(`email:${recipients.join(",")}`)
@@ -478,7 +479,10 @@ async function execNotification(
     }
   }
 
-  if (!results.length) return { event: "send_notification", status: "skipped", message: "No notification channels configured" }
+  if (!results.length) {
+    const msg = errors.length ? `Email failed: ${errors[0]}` : "No notification channels configured"
+    return { event: "send_notification", status: errors.length ? "failed" : "skipped", message: msg }
+  }
   return { event: "send_notification", status: "success", message: `Notification sent via: ${results.join(", ")}` }
 }
 
