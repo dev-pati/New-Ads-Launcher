@@ -155,6 +155,10 @@ export interface NotificationConfig {
   slackChannel?: string
   slackWebhookUrl?: string
   customMessage?: string
+  // Report settings — fetch metrics from DB and include in email
+  includeReport?: boolean
+  reportAdAccountId?: string
+  reportPeriod?: "yesterday" | "last_7d" | "last_30d"
 }
 
 export interface ActionConfig {

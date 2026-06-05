@@ -156,6 +156,21 @@ const EmailTagInput = forwardRef<EmailTagInputHandle, EmailTagInputProps>(
 
 // ─── Notification setup form ──────────────────────────────────────────────────
 
+function AdAccountPickerForNotif({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    fetch("/api/facebook/ad-accounts").then(r => r.json())
+      .then(d => setAccounts((d.adAccounts ?? d.accounts ?? []).map((a: any) => ({ id: a.id ?? a.fb_ad_account_id, name: a.name ?? a.fb_ad_account_id }))))
+      .catch(() => {})
+  }, [])
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} className="w-full h-8 px-2 text-[12px] bg-background border border-border/60 rounded-lg">
+      <option value="">— Select Ad Account —</option>
+      {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+    </select>
+  )
+}
+
 function NotificationSetup({ config, onChange }: { config: ActionConfig; onChange: (c: ActionConfig) => void }) {
   const notif: NotificationConfig = config.notification ?? { via: "both", emailRecipients: [], customMessage: "{{trigger.summary}}\n{{trigger.entityName}}" }
   const textareaRef   = useRef<HTMLTextAreaElement>(null)
@@ -242,6 +257,47 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
           <p className="text-[11px] text-muted-foreground/60">Tạo Incoming Webhook tại api.slack.com/apps</p>
         </div>
       )}
+
+      {/* INCLUDE METRICS REPORT */}
+      <div className="space-y-3 border border-border/60 rounded-xl p-3 bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[12px] font-semibold">Đính kèm báo cáo metrics</p>
+            <p className="text-[11px] text-muted-foreground">Tự động fetch số liệu từ DB và đưa vào email</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => updateNotif({ includeReport: !notif.includeReport })}
+            className={`relative w-10 h-5 rounded-full transition-colors ${notif.includeReport ? "bg-primary" : "bg-muted-foreground/30"}`}
+          >
+            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${notif.includeReport ? "translate-x-5" : "translate-x-0.5"}`} />
+          </button>
+        </div>
+
+        {notif.includeReport && (
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-muted-foreground/70">Ad Account</label>
+              <AdAccountPickerForNotif
+                value={notif.reportAdAccountId ?? ""}
+                onChange={v => updateNotif({ reportAdAccountId: v })}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-muted-foreground/70">Period</label>
+              <select
+                value={notif.reportPeriod ?? "yesterday"}
+                onChange={e => updateNotif({ reportPeriod: e.target.value as any })}
+                className="w-full h-8 px-2 text-[12px] bg-background border border-border/60 rounded-lg"
+              >
+                <option value="yesterday">Yesterday</option>
+                <option value="last_7d">Last 7 days</option>
+                <option value="last_30d">Last 30 days</option>
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* CUSTOM MESSAGE */}
       <div className="space-y-1.5">

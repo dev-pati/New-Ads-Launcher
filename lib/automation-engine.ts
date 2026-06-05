@@ -311,7 +311,8 @@ async function execNotification(
   action: ActionConfig,
   payload: TriggerPayload,
   automationName: string,
-  logs: StepLog[]
+  logs: StepLog[],
+  orgId = ""
 ): Promise<ActionResult> {
   const notif = action.notification
   if (!notif) return { event: "send_notification", status: "skipped", message: "No notification config" }
@@ -348,10 +349,55 @@ async function execNotification(
   const results: string[] = []
 
   // ── Email via Gmail SMTP → Resend fallback ──────────────────────────────────
+  // ── Fetch metrics report if configured ────────────────────────────────────
+  let reportSection = ""
+  if ((notif as any).includeReport && (notif as any).reportAdAccountId) {
+    try {
+      const db      = createAdminClient()
+      const actId   = (notif as any).reportAdAccountId
+      const period  = (notif as any).reportPeriod ?? "yesterday"
+      const ago     = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString().split("T")[0]
+      const since   = period === "yesterday" ? ago(1) : period === "last_7d" ? ago(7) : ago(30)
+      const until   = ago(1)
+
+      const { data: rows } = await db
+        .from("campaign_insights_snapshots")
+        .select("campaign_name,spend,impressions,clicks,purchases,purchase_value,roas,ctr,cpm")
+        .eq("org_id", orgId)
+        .eq("fb_ad_account_id", actId.startsWith("act_") ? actId : `act_${actId}`)
+        .gte("date", since).lte("date", until)
+        .order("spend", { ascending: false })
+        .limit(10)
+
+      if (rows?.length) {
+        const totSpend = rows.reduce((s, r) => s + (parseFloat(r.spend ?? "0") || 0), 0)
+        const totPurch = rows.reduce((s, r) => s + (r.purchases ?? 0), 0)
+        const totVal   = rows.reduce((s, r) => s + (parseFloat(r.purchase_value ?? "0") || 0), 0)
+        const avgROAS  = totSpend > 0 ? (totVal / totSpend).toFixed(2) : "—"
+
+        reportSection = `\n\n━━━ METRICS REPORT (${period.replace("_", " ")}) ━━━\n`
+        reportSection += `Total Spend:     $${totSpend.toFixed(2)}\n`
+        reportSection += `Total Purchases: ${totPurch}\n`
+        reportSection += `Revenue:         $${totVal.toFixed(2)}\n`
+        reportSection += `Avg ROAS:        ${avgROAS}x\n`
+        reportSection += `\nTop Campaigns:\n`
+        const byCampaign: Record<string, number> = {}
+        for (const r of rows) { byCampaign[r.campaign_name ?? "Unknown"] = (byCampaign[r.campaign_name ?? "Unknown"] ?? 0) + (parseFloat(r.spend ?? "0") || 0) }
+        Object.entries(byCampaign).sort((a, b) => b[1] - a[1]).slice(0, 5).forEach(([name, spend]) => {
+          reportSection += `  • ${name.length > 40 ? name.slice(0, 38) + "…" : name}: $${spend.toFixed(2)}\n`
+        })
+      } else {
+        reportSection = `\n\n[No metrics data found for this period. Sync data via Insights → Sync Now]`
+      }
+    } catch { /* silent */ }
+  }
+
+  const finalMessage = messageBody + reportSection
+
   const recipients = notif.emailRecipients ?? []
   if (recipients.length) {
     const subject = `Automation triggered: ${automationName}`
-    const result = await sendEmail({ to: recipients, subject, text: messageBody })
+    const result = await sendEmail({ to: recipients, subject, text: finalMessage })
     if (!result.ok) {
       addLog(logs, `Email failed: ${result.error}`, "warn")
     } else {
@@ -937,7 +983,7 @@ This approval will expire in ${approvalCfg.timeoutHours ?? 24} hours.
       const isTest = options.isTest ?? false
 
       if (action.event === "send_notification") {
-        result = await execNotification(action, triggerPayload, automation.name, logs)
+        result = await execNotification(action, triggerPayload, automation.name, logs, orgId)
       } else if (META_ACTIONS.has(action.event)) {
         // Pass isTest so Meta mutations are skipped in test mode
         result = fbToken
