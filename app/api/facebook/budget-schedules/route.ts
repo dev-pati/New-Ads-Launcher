@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const sp = request.nextUrl.searchParams
     const adAccountId = sp.get("adAccountId") || ""
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     let q = supabase
       .from("budget_schedules")
       .select("*")
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     const norm = adAccountId.startsWith("act_") ? adAccountId.slice(4) : adAccountId
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("budget_schedules")
       .insert({
@@ -92,7 +92,7 @@ export async function DELETE(request: NextRequest) {
     const { id } = await request.json()
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { error } = await supabase
       .from("budget_schedules")
       .update({ status: "cancelled" })

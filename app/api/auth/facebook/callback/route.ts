@@ -9,7 +9,6 @@ import {
 } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAuthUser } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -43,7 +42,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get user's org (from cookie or first org)
-    const supabaseServer = await createClient()
+    const supabaseServer = createAdminClient()
     const cookieStore = request.cookies
     let orgId = cookieStore.get("active_org_id")?.value
 

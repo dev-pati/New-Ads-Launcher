@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 // Add media to an ad
 export async function POST(
@@ -14,7 +14,7 @@ export async function POST(
     }
 
     const { id: adId } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Verify ad belongs to user
     const { data: ad } = await supabase
@@ -115,7 +115,7 @@ export async function DELETE(
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Get media to find storage path
     const { data: media } = await supabase

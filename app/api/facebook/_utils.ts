@@ -1,5 +1,5 @@
 import { getAdAccounts } from "@/lib/facebook"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getCachedFacebookMetadata } from "./_cache"
 
 interface OrgAdAccountRow {
@@ -24,7 +24,7 @@ export async function getOrgAdAccountInfo(
   accessToken: string
 ) {
   const requested = normalizeAdAccountId(adAccountId)
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data: orgAdAccounts } = await supabase
     .from("ad_accounts")
     .select("fb_ad_account_id, currency")

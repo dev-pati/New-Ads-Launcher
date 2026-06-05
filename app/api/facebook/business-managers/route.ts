@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function GET() {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data: bms, error } = await supabase
       .from("business_managers")
       .select(`

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 // POST /api/facebook/ad-media/save
 // Upsert FB media library items into the creatives table so they can be used for launch.
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "ad_account_id and items required" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Separate images and videos
     const imageHashes = items.filter(i => i.fb_image_hash).map(i => i.fb_image_hash!)

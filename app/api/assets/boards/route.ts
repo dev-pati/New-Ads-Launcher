@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient as createServerClient } from "@/lib/supabase/server"
 
 export async function GET() {
   try {
@@ -72,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     const db = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createAdminClient()
-      : await createServerClient()
+      : await createAdminClient()
     const { data, error } = await db
       .from("asset_boards")
       .insert({ org_id: ctx.orgId, user_id: ctx.user.id, name: name.trim(), description: description || null })

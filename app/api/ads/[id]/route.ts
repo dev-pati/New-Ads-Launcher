@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 // Get a single ad
 export async function GET(
@@ -14,7 +14,7 @@ export async function GET(
     }
 
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
       .from("ads")
@@ -52,7 +52,7 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     // Only allow updating certain fields
     const allowedFields = [
@@ -102,7 +102,7 @@ export async function DELETE(
     }
 
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { error } = await supabase
       .from("ads")

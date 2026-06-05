@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const search    = sp.get("search") || ""
     const limit     = parseInt(sp.get("limit") || "200")
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     let query = supabase
       .from("comments")
       .select("*")

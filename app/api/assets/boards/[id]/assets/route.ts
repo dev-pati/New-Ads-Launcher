@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient as createServerClient } from "@/lib/supabase/server"
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -17,7 +16,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const db = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createAdminClient()
-      : await createServerClient()
+      : await createAdminClient()
 
     const { data: board, error: boardError } = await db
       .from("asset_boards")
@@ -69,7 +68,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const db = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createAdminClient()
-      : await createServerClient()
+      : await createAdminClient()
 
     const { data: board, error: boardError } = await db
       .from("asset_boards")

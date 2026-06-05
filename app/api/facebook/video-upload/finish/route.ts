@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
 
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ad account not in your workspace" }, { status: 403 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data: creative, error: insertError } = await supabase
       .from("creatives")
       .insert({

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -16,7 +15,7 @@ export async function POST(
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const admin = createAdminClient()
 
     // Verify creative belongs to org

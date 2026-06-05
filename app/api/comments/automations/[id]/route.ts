@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -10,7 +10,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { id } = await params
     const body = await request.json()
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("comment_automations")
       .update(body)
@@ -30,7 +30,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { error } = await supabase
       .from("comment_automations")
       .delete()

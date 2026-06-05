@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     const { page_id } = await request.json()
     if (!page_id) return NextResponse.json({ error: "page_id required" }, { status: 400 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data: page } = await supabase
       .from("pages")
       .select("fb_page_id, name, page_access_token")

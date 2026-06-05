@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const sp = request.nextUrl.searchParams
     const status = sp.get("status") || "pending"
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("automation_approvals")
       .select("*, automations(name, trigger_type)")
@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "id and action (approved|rejected) required" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("automation_approvals")
       .update({ status: action, reviewed_by: ctx.user.id, reviewed_at: new Date().toISOString() })

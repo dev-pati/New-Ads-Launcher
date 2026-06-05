@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 const GRAPH = "https://graph.facebook.com/v25.0"
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const { message, page_id } = await request.json()
     if (!message?.trim()) return NextResponse.json({ error: "message required" }, { status: 400 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data: comment } = await supabase
       .from("comments")

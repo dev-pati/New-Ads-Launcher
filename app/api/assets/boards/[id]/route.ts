@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient as createServerClient } from "@/lib/supabase/server"
 
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -11,7 +10,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     const { id } = await params
     const db = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createAdminClient()
-      : await createServerClient()
+      : await createAdminClient()
 
     const { data: board, error: boardError } = await db
       .from("asset_boards")
@@ -57,7 +56,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const body = await request.json()
     const db = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createAdminClient()
-      : await createServerClient()
+      : await createAdminClient()
 
     const { data, error } = await db
       .from("asset_boards")
@@ -85,7 +84,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params
     const db = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createAdminClient()
-      : await createServerClient()
+      : await createAdminClient()
 
     const { error } = await db
       .from("asset_boards")

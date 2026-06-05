@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext }            from "@/lib/auth"
-import { createClient }              from "@/lib/supabase/server"
+import { createAdminClient }         from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +13,7 @@ export async function GET(
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("automations")
       .select("*")
@@ -40,7 +40,7 @@ export async function PATCH(
     const body = await request.json()
     const { name, trigger_type, trigger_config, conditions, actions, ad_account_ids, status, notif_config, steps } = body
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const updates: Record<string, any> = {}
     if (name           !== undefined) updates.name            = name.trim()
     if (trigger_type   !== undefined) updates.trigger_type    = trigger_type
@@ -76,7 +76,7 @@ export async function DELETE(
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { error } = await supabase
       .from("automations").delete().eq("id", id).eq("org_id", ctx.orgId)
 

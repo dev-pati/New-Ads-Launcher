@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { mapCreativeForClient } from "@/lib/creative-media"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { fireMediaUploadedTriggers } from "@/lib/media-trigger-checker"
 
 export async function GET(
@@ -13,7 +13,7 @@ export async function GET(
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
       .from("creatives")
@@ -40,7 +40,7 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const allowedFields = ["headline", "primary_text", "description", "cta", "link_url", "file_name", "status"]
     const updates: Record<string, unknown> = {}
@@ -87,7 +87,7 @@ export async function DELETE(
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id } = await params
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data: creative } = await supabase
       .from("creatives")

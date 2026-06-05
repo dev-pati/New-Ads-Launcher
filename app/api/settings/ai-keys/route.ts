@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function GET() {
   const ctx = await getAuthContext()
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data } = await supabase
     .from("org_ai_keys")
     .select("gemini_api_key, openai_api_key")
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json()
   const { gemini_api_key, openai_api_key } = body
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { error } = await supabase
     .from("org_ai_keys")
     .upsert(

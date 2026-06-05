@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
@@ -19,7 +18,7 @@ export async function GET() {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("mcp_api_keys")
       .select("id, name, api_key, last_used_at, created_at")
@@ -74,7 +73,7 @@ export async function DELETE(request: NextRequest) {
     const { id } = await request.json()
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { error } = await supabase
       .from("mcp_api_keys")
       .delete()

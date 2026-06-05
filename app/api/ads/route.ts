@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 // List ads for the authenticated user
 export async function GET(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     const pageId = request.nextUrl.searchParams.get("page_id")
     const adAccountId = request.nextUrl.searchParams.get("ad_account_id")
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     let query = supabase
       .from("ads")
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase
       .from("ads")

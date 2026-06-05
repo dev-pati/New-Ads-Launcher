@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     let adAccountIdToUse = queryAdAccountId
 
     if (!adAccountIdToUse) {
-      const supabase = await createClient()
+      const supabase = createAdminClient()
       const { data: adAccounts } = await supabase
         .from("ad_accounts")
         .select("fb_ad_account_id")

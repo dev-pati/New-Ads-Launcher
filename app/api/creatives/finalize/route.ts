@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadImageToMeta } from "@/lib/facebook"
 import { mapCreativeForClient } from "@/lib/creative-media"
@@ -75,7 +74,7 @@ export async function POST(request: NextRequest) {
       if (dup) return NextResponse.json({ creative: mapCreativeForClient(dup), rateLimitPct: 0 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     let fbAdAccountId: string = adAccountIdParam || ""
 
     if (!fbAdAccountId) {

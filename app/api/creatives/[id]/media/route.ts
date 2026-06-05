@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createClient } from "@/lib/supabase/server"
 import { getVideoSource, getVideoThumbnail } from "@/lib/facebook"
 import { isMetaCdnUrl } from "@/lib/creative-media"
 import { extractThumbnailFromUrl } from "@/lib/ffmpeg-thumbnail"
@@ -209,7 +208,7 @@ export async function GET(
     const { id } = await params
     const variant = request.nextUrl.searchParams.get("variant")
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const admin = createAdminClient()
     const { data, error } = await supabase
       .from("creatives")

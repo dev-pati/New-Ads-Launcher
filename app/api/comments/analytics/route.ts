@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
 
@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     const pageId = sp.get("page_id") || ""
     const range  = sp.get("range") || "last_30d"
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
 
     const since = new Date()
     if      (range === "last_7d")       since.setDate(since.getDate() - 7)

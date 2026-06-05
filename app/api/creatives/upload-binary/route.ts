@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadImageToMeta, uploadVideoUrlToMeta } from "@/lib/facebook"
 import { mapCreativeForClient } from "@/lib/creative-media"
@@ -75,7 +74,7 @@ export async function POST(request: NextRequest) {
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     let fbAdAccountId = adAccountIdParam
 
     if (!fbAdAccountId) {

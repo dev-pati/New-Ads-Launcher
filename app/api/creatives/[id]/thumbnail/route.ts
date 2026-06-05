@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { mapCreativeForClient } from "@/lib/creative-media"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getVideoReadyData } from "@/lib/facebook"
 
 interface CreativeUpdate {
@@ -19,7 +19,7 @@ export async function POST(
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data: creative } = await supabase
       .from("creatives")
       .select("id, media_type, storage_path, fb_video_id, fb_thumbnail_url, fb_image_url, file_url, status")

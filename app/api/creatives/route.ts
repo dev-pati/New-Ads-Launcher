@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
-import { createClient } from "@/lib/supabase/server"
 import { uploadImageToMeta, uploadVideoToMeta, pollVideoReady } from "@/lib/facebook"
 import { notifyOrgMembers } from "@/lib/notify-org"
 
@@ -50,7 +49,7 @@ export async function GET(request: NextRequest) {
     const limit  = Math.min(parseInt(url.searchParams.get("limit") || "20", 10), 200)
     const cursor = url.searchParams.get("cursor") || null  // last item's created_at (ISO string)
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     let query = supabase
       .from("creatives")
       .select("*")
@@ -117,7 +116,7 @@ export async function POST(request: NextRequest) {
     // Case 1: Metadata update or JSON-based upload (already uploaded on client)
     if (contentType.includes("application/json")) {
       const body = await request.json()
-      const supabase = await createClient()
+      const supabase = createAdminClient()
       const { data: creative, error: insertError } = await supabase
         .from("creatives")
         .insert({
@@ -171,7 +170,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     let fbAdAccountId = adAccountIdParam
 
     if (!fbAdAccountId) {
@@ -297,7 +296,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "ids are required" }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data: creatives, error: fetchError } = await supabase
       .from("creatives")
       .select("id, storage_path")

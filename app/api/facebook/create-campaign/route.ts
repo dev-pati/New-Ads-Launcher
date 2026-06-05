@@ -11,7 +11,7 @@ import {
   uploadVideoToMeta,
 } from "@/lib/facebook"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getOrgAdAccountInfo, normalizeAdAccountId } from "../_utils"
 
 export const runtime = "nodejs"
@@ -377,7 +377,7 @@ async function resolveStoredCreativeMedia(
   token: string,
   creativeId: string
 ): Promise<{ imageHash?: string; videoId?: string; thumbnailUrl?: string }> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data: creative, error } = await supabase
     .from("creatives")
     .select("id, ad_account_id, file_name, file_url, media_type, fb_image_hash, fb_image_url, fb_thumbnail_url, fb_video_id")

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createAd, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
 import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
@@ -20,7 +19,7 @@ export async function POST(request: NextRequest) {
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
     const token = connection.access_token
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const adminDb = createAdminClient()
 
     const body = await request.json()

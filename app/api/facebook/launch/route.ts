@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail } from "@/lib/facebook"
 
@@ -215,7 +214,7 @@ export async function POST(request: NextRequest) {
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data: adAccounts } = await supabase.from("ad_accounts").select("fb_ad_account_id").eq("org_id", ctx.orgId)
     if (!adAccounts?.length) return NextResponse.json({ error: "No ad account found" }, { status: 400 })
 
