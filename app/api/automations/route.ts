@@ -40,10 +40,9 @@ export async function POST(request: NextRequest) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await request.json()
-    const { name, description, trigger_type, trigger_config, conditions, actions, ad_account_ids, requires_approval, template_id } = body
+    const { name, description, trigger_type, trigger_config, conditions, actions, ad_account_ids, requires_approval, template_id, notif_config, steps } = body
 
     if (!name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 })
-    if (!trigger_type) return NextResponse.json({ error: "trigger_type required" }, { status: 400 })
 
     const supabase = await createClient()
     const { data, error } = await supabase
@@ -52,13 +51,15 @@ export async function POST(request: NextRequest) {
         org_id: ctx.orgId,
         name: name.trim(),
         description: description || null,
-        trigger_type,
-        trigger_config: trigger_config || {},
+        trigger_type: trigger_type || (steps?.[0]?.triggerConfig?.event ?? "performance_monitoring"),
+        trigger_config: trigger_config || steps?.[0]?.triggerConfig || {},
         conditions: conditions || [],
-        actions: actions || [],
+        actions: actions || steps?.slice(1) || [],
+        steps: steps || null,
         ad_account_ids: ad_account_ids || [],
         requires_approval: requires_approval || false,
         template_id: template_id || null,
+        notif_config: notif_config || null,
         status: "active",
       })
       .select()

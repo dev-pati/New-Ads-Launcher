@@ -60,7 +60,7 @@ function defaultTriggerForApp(appId: AppId): TriggerConfig {
         checkFrequency: "daily",
       }
     case "schedule":
-      return { appId: "schedule", event: "schedule", checkFrequency: "daily", scheduleTime: "09:00" }
+      return { appId: "schedule", event: "schedule", checkFrequency: "daily", scheduleFrequency: "daily", scheduleTime: "09:00", scheduleTimezone: "UTC" }
     case "google_drive":
       return { appId: "google_drive", event: "drive_new_file_in_folder", checkFrequency: "daily", driveBatchStrategy: "one_per_file", driveFileType: "all", driveUploadAllOnFirstRun: false }
     case "manual":
@@ -296,7 +296,9 @@ function ApprovalConfigPanel({ stepIndex, config, onChange, onClose }: {
 
   const addApprover = () => {
     const email = emailInput.trim()
-    if (!email || config.approvers.includes(email)) return
+    if (!email) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return // invalid email format
+    if (config.approvers.includes(email)) return
     onChange({ ...config, approvers: [...config.approvers, email] })
     setEmailInput("")
   }

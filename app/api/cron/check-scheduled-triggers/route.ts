@@ -17,15 +17,27 @@ export const maxDuration = 120
 function shouldFireNow(cfg: any, now: Date): boolean {
   const freq      = cfg.scheduleFrequency ?? "daily"
   const timeStr   = cfg.scheduleTime ?? "09:00"
+  if (!/^\d{2}:\d{2}$/.test(timeStr)) return false // invalid format guard
   const [hh, mm]  = timeStr.split(":").map(Number)
+  if (isNaN(hh) || isNaN(mm) || hh > 23 || mm > 59) return false
+
+  // Convert scheduleTime to UTC if timezone provided
+  let targetHour = hh, targetMin = mm
+  if (cfg.scheduleTimezone && cfg.scheduleTimezone !== "UTC") {
+    try {
+      const localNow = new Date(now.toLocaleString("en-US", { timeZone: cfg.scheduleTimezone }))
+      const utcOffset = (now.getTime() - localNow.getTime()) / 3_600_000
+      targetHour = (hh + Math.round(utcOffset) + 24) % 24
+    } catch { /* fallback to UTC */ }
+  }
 
   const nowHour   = now.getUTCHours()
   const nowMin    = now.getUTCMinutes()
   const nowDay    = now.getUTCDay()   // 0=Sun, 1=Mon...
   const nowDate   = now.getUTCDate()  // 1-31
 
-  // Match time within the same hour (cron runs every hour)
-  const timeMatches = nowHour === hh && nowMin < 60
+  // Match time: cron runs every 5 min, so allow 5-minute window
+  const timeMatches = nowHour === targetHour && nowMin >= targetMin && nowMin < targetMin + 5
 
   if (!timeMatches) return false
 
@@ -85,6 +97,7 @@ export async function GET(request: NextRequest) {
 
   const scheduled = (automations ?? []).filter(a => {
     const cfg = a.trigger_config as any
+    if (!cfg) { console.warn(`[check-scheduled-triggers] Automation ${a.id} has no trigger_config`); return false }
     return cfg?.appId === "schedule" || cfg?.event === "schedule"
   })
 
@@ -118,7 +131,12 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      const execResult = await executeAutomation(automation.id, automation.org_id, { isTest: false })
+      const execResult = await executeAutomation(automation.id, automation.org_id, {
+        isTest: false,
+        currentDate:     now.toLocaleDateString("en-US"),
+        currentDateTime: now.toLocaleString("en-US"),
+        summary: `Scheduled automation "${automation.name}" triggered at ${cfg.scheduleTime} ${cfg.scheduleTimezone ?? "UTC"}`,
+      })
 
       await db.from("automations")
         .update({ last_run_at: now.toISOString() })

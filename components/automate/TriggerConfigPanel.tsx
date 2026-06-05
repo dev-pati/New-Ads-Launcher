@@ -1294,6 +1294,24 @@ function ScheduleTriggerSetup({ config, onChange }: {
               className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
+          <div className="space-y-1.5">
+            <label className="text-[12px] font-semibold text-foreground/80">Timezone</label>
+            <select
+              value={config.scheduleTimezone ?? "UTC"}
+              onChange={e => onChange({ ...config, scheduleTimezone: e.target.value })}
+              className="w-full h-9 px-2 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="UTC">UTC</option>
+              <option value="Asia/Ho_Chi_Minh">Vietnam (UTC+7)</option>
+              <option value="Asia/Bangkok">Bangkok (UTC+7)</option>
+              <option value="Asia/Singapore">Singapore (UTC+8)</option>
+              <option value="Asia/Tokyo">Tokyo (UTC+9)</option>
+              <option value="America/New_York">New York (UTC-5/-4)</option>
+              <option value="America/Los_Angeles">Los Angeles (UTC-8/-7)</option>
+              <option value="Europe/London">London (UTC+0/+1)</option>
+            </select>
+            <p className="text-[11px] text-muted-foreground">Giờ hiện tại là UTC. Chọn timezone để cron chạy đúng giờ địa phương.</p>
+          </div>
         </>
       )}
 

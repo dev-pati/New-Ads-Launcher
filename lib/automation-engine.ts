@@ -756,9 +756,11 @@ export async function executeAutomation(
       addLog(logs, `Type: ${options.mimeType ?? "unknown"}`)
     }
 
-    // Steps can be: {kind, actionConfig} | {kind:"delay", delayConfig} | {kind:"approval", approvalConfig}
-    // or legacy flat ActionConfig[] (backward compat)
-    const rawSteps: any[] = Array.isArray(automation.actions) ? automation.actions : []
+    // Prefer full steps array (includes trigger, delays, approvals) over legacy actions
+    // automation.steps = full WorkflowStep[], automation.actions = legacy actions-only array
+    const rawSteps: any[] = Array.isArray((automation as any).steps)
+      ? (automation as any).steps.filter((s: any) => s.kind !== "trigger") // skip trigger step
+      : Array.isArray(automation.actions) ? automation.actions : []
     const steps = rawSteps.map(s =>
       s.kind ? s : { kind: "action", actionConfig: s }
     )
@@ -1058,9 +1060,11 @@ export async function resumeAutomation(executionId: string): Promise<ExecutionRe
     .from("automations")
     .select("*")
     .eq("id", exec.automation_id)
+    .eq("org_id", exec.org_id) // org isolation guard
     .single()
 
   if (!automation) {
+    addLog(logs, `Automation not found or org mismatch for execution ${executionId}`, "error")
     return { status: "failed", logs, triggerPayload, actionResults, durationMs: Date.now() - startMs }
   }
 
