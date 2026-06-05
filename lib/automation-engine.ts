@@ -4,6 +4,7 @@ import type { ActionConfig } from "@/lib/workflow-types"
 import { Resend } from "resend"
 import { sendEmail } from "@/lib/send-email"
 import { buildNotificationEmail } from "@/lib/email-template"
+import { sendLarkMessage, sendLarkGroupMessage } from "@/lib/send-lark"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -457,6 +458,23 @@ async function execNotification(
     } else {
       addLog(logs, `Slack notification sent`)
       results.push("slack")
+    }
+  }
+
+  // ── Lark via API ─────────────────────────────────────────────────────────────
+  const larkRecipients: string[] = (notif as any).larkRecipients ?? []
+  const larkChatId: string = (notif as any).larkChatId ?? ""
+  if (larkRecipients.length || larkChatId) {
+    const larkTitle = `${automationName}`
+    if (larkRecipients.length) {
+      const larkResult = await sendLarkMessage({ recipients: larkRecipients, title: larkTitle, message: finalMessage })
+      if (!larkResult.ok) addLog(logs, `Lark DM failed: ${larkResult.error}`, "warn")
+      else { addLog(logs, `Lark DM sent to ${larkRecipients.join(", ")}`); results.push(`lark:${larkRecipients.join(",")}`) }
+    }
+    if (larkChatId) {
+      const larkResult = await sendLarkGroupMessage({ chatId: larkChatId, title: larkTitle, message: finalMessage })
+      if (!larkResult.ok) addLog(logs, `Lark group failed: ${larkResult.error}`, "warn")
+      else { addLog(logs, `Lark group message sent`); results.push("lark:group") }
     }
   }
 

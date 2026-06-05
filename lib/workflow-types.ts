@@ -150,10 +150,12 @@ export interface TriggerConfig {
 }
 
 export interface NotificationConfig {
-  via: "email" | "slack" | "both"
+  via: "email" | "slack" | "lark" | "both"
   emailRecipients: string[]
   slackChannel?: string
   slackWebhookUrl?: string
+  larkRecipients?: string[]   // email addresses of Lark users
+  larkChatId?: string         // Lark group chat ID
   customMessage?: string
   // Report settings — fetch metrics from DB and include in email
   includeReport?: boolean

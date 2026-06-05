@@ -191,6 +191,7 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
 
   const showEmail = notif.via === "email" || notif.via === "both"
   const showSlack = notif.via === "slack" || notif.via === "both"
+  const showLark  = notif.via === "lark"
 
   return (
     <div className="space-y-5 p-5">
@@ -212,7 +213,7 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
       <div className="space-y-2">
         <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Send Via</label>
         <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border/60 rounded-xl">
-          {(["email", "slack", "both"] as const).map(v => (
+          {(["email", "slack", "lark", "both"] as const).map(v => (
             <button
               key={v}
               onClick={() => updateNotif({ via: v })}
@@ -225,8 +226,9 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
             >
               {v === "email" && <IconMail className="size-3.5" />}
               {v === "slack" && <IconBrandSlack className="size-3.5" />}
+              {v === "lark"  && <span className="text-[11px] font-bold">L</span>}
               {v === "both"  && <><IconMail className="size-3" /><span className="text-[10px]">+</span><IconBrandSlack className="size-3" /></>}
-              {v === "email" ? "Email" : v === "slack" ? "Slack" : "Both"}
+              {v === "email" ? "Email" : v === "slack" ? "Slack" : v === "lark" ? "Lark" : "Both"}
             </button>
           ))}
         </div>
@@ -255,6 +257,31 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
             className="w-full px-3 py-2 text-[13px] bg-muted/40 border border-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           <p className="text-[11px] text-muted-foreground/60">Tạo Incoming Webhook tại api.slack.com/apps</p>
+        </div>
+      )}
+
+      {/* LARK RECIPIENTS */}
+      {showLark && (
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Lark Recipients (email)</label>
+            <EmailTagInput
+              recipients={notif.larkRecipients ?? []}
+              onChange={r => updateNotif({ larkRecipients: r })}
+            />
+            <p className="text-[11px] text-muted-foreground/60">Email của user trong Lark workspace</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Lark Group Chat ID (tuỳ chọn)</label>
+            <input
+              type="text"
+              value={notif.larkChatId ?? ""}
+              onChange={e => updateNotif({ larkChatId: e.target.value })}
+              placeholder="oc_xxxxxxxxxx"
+              className="w-full px-3 py-2 text-[13px] bg-muted/40 border border-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+            />
+            <p className="text-[11px] text-muted-foreground/60">Chat ID của group Lark (lấy từ URL hoặc bot settings)</p>
+          </div>
         </div>
       )}
 
