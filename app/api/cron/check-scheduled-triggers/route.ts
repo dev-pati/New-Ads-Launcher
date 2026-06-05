@@ -90,10 +90,22 @@ export async function GET(request: NextRequest) {
   }[] = []
 
   // Fetch all active scheduled automations
-  const { data: automations } = await db
+  const { data: automations, error: dbError } = await db
     .from("automations")
     .select("id, org_id, name, trigger_config, actions, last_run_at, last_scheduled_run_at")
     .eq("status", "active")
+
+  // Debug: expose DB info when ?debug=true
+  const isDebug = request.nextUrl.searchParams.get("debug") === "true"
+  if (isDebug) {
+    return NextResponse.json({
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      dbSchema:    process.env.NEXT_PUBLIC_SUPABASE_DB_SCHEMA,
+      dbError:     dbError?.message ?? null,
+      totalActive: automations?.length ?? 0,
+      automations: automations?.map(a => ({ id: a.id, name: a.name, trigger_type: (a as any).trigger_type, appId: (a.trigger_config as any)?.appId })) ?? [],
+    })
+  }
 
   const scheduled = (automations ?? []).filter(a => {
     const cfg = a.trigger_config as any
