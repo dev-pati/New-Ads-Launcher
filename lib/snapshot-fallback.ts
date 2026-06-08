@@ -57,6 +57,53 @@ function parseActionsFromRaw(raw: any, spend: number, impressions: number, click
   }
 }
 
+function asActId(adAccountId: string) {
+  return adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+}
+
+function toInsight(row: {
+  spend?: number | string | null
+  impressions?: number | string | null
+  clicks?: number | string | null
+  reach?: number | string | null
+  purchases?: number | string | null
+  leads?: number | string | null
+  cpa?: number | string | null
+  cpc?: number | string | null
+  cpm?: number | string | null
+  ctr?: number | string | null
+}) {
+  const spend = parseFloat(String(row.spend ?? "0")) || 0
+  const impressions = parseInt(String(row.impressions ?? "0"), 10) || 0
+  const clicks = parseInt(String(row.clicks ?? "0"), 10) || 0
+  const purchases = parseInt(String(row.purchases ?? "0"), 10) || 0
+  const leads = parseInt(String(row.leads ?? "0"), 10) || 0
+  const actions = [
+    clicks > 0 ? { action_type: "link_click", value: String(clicks) } : null,
+    purchases > 0 ? { action_type: "purchase", value: String(purchases) } : null,
+    leads > 0 ? { action_type: "lead", value: String(leads) } : null,
+  ].filter(Boolean)
+  const costPerAction = [
+    clicks > 0 ? { action_type: "link_click", value: String(spend / clicks) } : null,
+    purchases > 0 ? { action_type: "purchase", value: String(spend / purchases) } : null,
+    leads > 0 ? { action_type: "lead", value: String(spend / leads) } : null,
+  ].filter(Boolean)
+
+  return {
+    spend: String(spend),
+    impressions: String(impressions),
+    clicks: String(clicks),
+    reach: String(parseInt(String(row.reach ?? "0"), 10) || 0),
+    cpc: String(row.cpc ?? (clicks > 0 ? spend / clicks : 0)),
+    cpm: String(row.cpm ?? (impressions > 0 ? (spend / impressions) * 1000 : 0)),
+    ctr: String(row.ctr ?? (impressions > 0 ? (clicks / impressions) * 100 : 0)),
+    actions,
+    cost_per_action_type: costPerAction,
+    date_start: "",
+    date_stop: "",
+  }
+}
+
 export function datePresetToRange(preset: string, sinceP = "", untilP = "") {
   if (sinceP && untilP) return { since: sinceP, until: untilP }
   const now   = new Date()
@@ -79,6 +126,174 @@ export function datePresetToRange(preset: string, sinceP = "", untilP = "") {
     return { since: `${y}-${String(m).padStart(2, "0")}-01`, until: last.toISOString().split("T")[0] }
   }
   return { since: ago(30), until: ago(1) }
+}
+
+export async function campaignManagerSnapshotFallback(orgId: string, adAccountId: string, since: string, until: string) {
+  const db = createAdminClient()
+  const { data, error } = await db
+    .from("campaign_insights_snapshots")
+    .select("fb_campaign_id,campaign_name,campaign_status,effective_status,spend,impressions,clicks,reach,purchases,leads,cpa,cpc,cpm,ctr,date")
+    .eq("org_id", orgId)
+    .eq("fb_ad_account_id", asActId(adAccountId))
+    .gte("date", since)
+    .lte("date", until)
+    .order("date", { ascending: true })
+
+  if (error || !data?.length) return null
+
+  const byCampaign: Record<string, any> = {}
+  for (const row of data) {
+    if (!byCampaign[row.fb_campaign_id]) {
+      byCampaign[row.fb_campaign_id] = {
+        id: row.fb_campaign_id,
+        name: row.campaign_name || row.fb_campaign_id,
+        status: row.campaign_status || row.effective_status || "UNKNOWN",
+        effective_status: row.effective_status || row.campaign_status || "UNKNOWN",
+        objective: "UNKNOWN",
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        reach: 0,
+        purchases: 0,
+        leads: 0,
+      }
+    }
+    const c = byCampaign[row.fb_campaign_id]
+    c.spend += parseFloat(row.spend ?? "0") || 0
+    c.impressions += row.impressions ?? 0
+    c.clicks += row.clicks ?? 0
+    c.reach += row.reach ?? 0
+    c.purchases += row.purchases ?? 0
+    c.leads += row.leads ?? 0
+    c.status = row.campaign_status || c.status
+    c.effective_status = row.effective_status || c.effective_status
+  }
+
+  const campaigns = Object.values(byCampaign).map((c: any) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    effective_status: c.effective_status,
+    objective: c.objective,
+    insights: { data: [toInsight(c)] },
+  }))
+
+  return { campaigns, fromSnapshot: true, readOnly: true }
+}
+
+export async function adsetManagerSnapshotFallback(orgId: string, adAccountId: string, campaignId: string | null, since: string, until: string) {
+  const db = createAdminClient()
+  let q = db
+    .from("adset_insights_snapshots")
+    .select("fb_campaign_id,campaign_name,fb_adset_id,adset_name,spend,impressions,clicks,reach,purchases,leads,cpa,cpc,cpm,ctr,date")
+    .eq("org_id", orgId)
+    .eq("fb_ad_account_id", asActId(adAccountId))
+    .gte("date", since)
+    .lte("date", until)
+    .order("date", { ascending: true })
+  if (campaignId) q = q.eq("fb_campaign_id", campaignId)
+
+  const { data, error } = await q
+  if (error || !data?.length) return null
+
+  const byAdset: Record<string, any> = {}
+  for (const row of data) {
+    if (!byAdset[row.fb_adset_id]) {
+      byAdset[row.fb_adset_id] = {
+        id: row.fb_adset_id,
+        name: row.adset_name || row.fb_adset_id,
+        status: "UNKNOWN",
+        effective_status: "UNKNOWN",
+        campaign_id: row.fb_campaign_id,
+        campaign_name: row.campaign_name,
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        reach: 0,
+        purchases: 0,
+        leads: 0,
+      }
+    }
+    const a = byAdset[row.fb_adset_id]
+    a.spend += parseFloat(row.spend ?? "0") || 0
+    a.impressions += row.impressions ?? 0
+    a.clicks += row.clicks ?? 0
+    a.reach += row.reach ?? 0
+    a.purchases += row.purchases ?? 0
+    a.leads += row.leads ?? 0
+  }
+
+  const adSets = Object.values(byAdset).map((a: any) => ({
+    id: a.id,
+    name: a.name,
+    status: a.status,
+    effective_status: a.effective_status,
+    campaign_id: a.campaign_id,
+    campaign_name: a.campaign_name,
+    insights: { data: [toInsight(a)] },
+  }))
+
+  return { adSets, fromSnapshot: true, readOnly: true }
+}
+
+export async function adsManagerSnapshotFallback(orgId: string, adAccountId: string, adSetId: string | null, since: string, until: string) {
+  const db = createAdminClient()
+  let q = db
+    .from("ad_insights_snapshots")
+    .select("fb_campaign_id,campaign_name,fb_adset_id,adset_name,fb_ad_id,ad_name,ad_status,effective_status,thumbnail_url,spend,impressions,clicks,reach,purchases,leads,cpa,cpc,cpm,ctr,date")
+    .eq("org_id", orgId)
+    .eq("fb_ad_account_id", asActId(adAccountId))
+    .gte("date", since)
+    .lte("date", until)
+    .order("date", { ascending: true })
+  if (adSetId) q = q.eq("fb_adset_id", adSetId)
+
+  const { data, error } = await q
+  if (error || !data?.length) return null
+
+  const byAd: Record<string, any> = {}
+  for (const row of data) {
+    if (!byAd[row.fb_ad_id]) {
+      byAd[row.fb_ad_id] = {
+        id: row.fb_ad_id,
+        name: row.ad_name || row.fb_ad_id,
+        status: row.ad_status || row.effective_status || "UNKNOWN",
+        effective_status: row.effective_status || row.ad_status || "UNKNOWN",
+        campaign_id: row.fb_campaign_id,
+        adset_id: row.fb_adset_id,
+        thumbnail_url: row.thumbnail_url,
+        spend: 0,
+        impressions: 0,
+        clicks: 0,
+        reach: 0,
+        purchases: 0,
+        leads: 0,
+      }
+    }
+    const ad = byAd[row.fb_ad_id]
+    ad.spend += parseFloat(row.spend ?? "0") || 0
+    ad.impressions += row.impressions ?? 0
+    ad.clicks += row.clicks ?? 0
+    ad.reach += row.reach ?? 0
+    ad.purchases += row.purchases ?? 0
+    ad.leads += row.leads ?? 0
+    ad.status = row.ad_status || ad.status
+    ad.effective_status = row.effective_status || ad.effective_status
+    ad.thumbnail_url = row.thumbnail_url || ad.thumbnail_url
+  }
+
+  const ads = Object.values(byAd).map((ad: any) => ({
+    id: ad.id,
+    name: ad.name,
+    status: ad.status,
+    effective_status: ad.effective_status,
+    campaign_id: ad.campaign_id,
+    adset_id: ad.adset_id,
+    creative: ad.thumbnail_url ? { id: ad.id, thumbnail_url: ad.thumbnail_url, image_url: ad.thumbnail_url } : undefined,
+    insights: { data: [toInsight(ad)] },
+  }))
+
+  return { ads, fromSnapshot: true, readOnly: true }
 }
 
 // ── Ad-level fallback (for /api/insights/report) ─────────────────────────────

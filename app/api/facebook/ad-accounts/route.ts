@@ -7,6 +7,32 @@ import { annotateAdAccounts, persistAdAccountMetrics } from "@/lib/sync-ad-accou
 
 const AD_ACCOUNTS_TTL_MS = 15 * 60 * 1000
 
+async function getSavedAdAccounts(orgId: string) {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from("ad_accounts")
+    .select("fb_ad_account_id, fb_account_id, name, currency, account_status, amount_spent_minor, balance_minor, spend_cap_minor, timezone_name, owner_business_id, owner_business_name, ownership")
+    .eq("org_id", orgId)
+    .order("name")
+
+  if (error || !data?.length) return []
+
+  return data.map((row: any) => ({
+    id: row.fb_ad_account_id,
+    account_id: row.fb_account_id || row.fb_ad_account_id?.replace(/^act_/, ""),
+    name: row.name || row.fb_ad_account_id,
+    currency: row.currency || "USD",
+    account_status: row.account_status ?? 0,
+    amount_spent: row.amount_spent_minor != null ? String(row.amount_spent_minor) : undefined,
+    balance: row.balance_minor != null ? String(row.balance_minor) : undefined,
+    spend_cap: row.spend_cap_minor != null ? String(row.spend_cap_minor) : undefined,
+    timezone_name: row.timezone_name || undefined,
+    owner_business: row.owner_business_id ? { id: row.owner_business_id, name: row.owner_business_name || undefined } : undefined,
+    ownership: row.ownership || "unknown",
+    fromSnapshot: true,
+  }))
+}
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
@@ -14,10 +40,13 @@ export async function GET(request: NextRequest) {
 
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) {
+      const saved = await getSavedAdAccounts(ctx.orgId)
       return NextResponse.json({
-        adAccounts: [],
+        adAccounts: saved,
         connected: false,
         needsReconnect: true,
+        fromSnapshot: saved.length > 0,
+        readOnly: saved.length > 0,
       })
     }
 
@@ -53,6 +82,21 @@ export async function GET(request: NextRequest) {
     const isRateLimit   = lower.includes("too many calls") || lower.includes("rate limit") || lower.includes("#4 ")
     const isTokenExpiry = lower.includes("expired") || lower.includes("invalid") || lower.includes("oauth") || lower.includes("session")
     console.error("[ad-accounts]", msg)
+    const ctx = await getAuthContext()
+    if (ctx) {
+      const saved = await getSavedAdAccounts(ctx.orgId)
+      if (saved.length > 0) {
+        return NextResponse.json({
+          error: msg,
+          rateLimited: isRateLimit,
+          needsReconnect: isTokenExpiry,
+          adAccounts: saved,
+          fromSnapshot: true,
+          readOnly: true,
+          metaUnavailable: true,
+        })
+      }
+    }
     return NextResponse.json(
       {
         error: msg,

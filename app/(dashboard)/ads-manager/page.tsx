@@ -319,10 +319,9 @@ export default function AdsManagerPage() {
   }
 
   const fetchHistory = async () => {
-    if (!selectedAccountId) return
     setHistoryLoading(true)
     try {
-      const r = await fetch(`/api/launch-history?account_id=${encodeURIComponent(selectedAccountId)}&limit=30`)
+      const r = await fetch("/api/launch-history?limit=30")
       const d = await r.json()
       setHistoryBatches(d.batches || [])
     } catch {} finally { setHistoryLoading(false) }
@@ -1670,7 +1669,7 @@ export default function AdsManagerPage() {
         <SheetContent className="w-[480px] sm:w-[540px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>Launch History</SheetTitle>
-            <SheetDescription>Recent ad launches for this account</SheetDescription>
+            <SheetDescription>Recent ad launches across this workspace</SheetDescription>
           </SheetHeader>
           <div className="mt-4 space-y-3">
             {historyLoading && (
@@ -1679,7 +1678,7 @@ export default function AdsManagerPage() {
               </div>
             )}
             {!historyLoading && historyBatches.length === 0 && (
-              <div className="text-center py-10 text-sm text-muted-foreground">No launch history found for this account.</div>
+              <div className="text-center py-10 text-sm text-muted-foreground">No launch history found for this workspace.</div>
             )}
             {!historyLoading && historyBatches.map((b: any) => (
               <div key={b.id} className="border rounded-xl p-4 space-y-2">
@@ -1695,6 +1694,7 @@ export default function AdsManagerPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                   <div><span className="text-muted-foreground">Ads: </span><span className="font-medium">{b.total_ads} ({b.failed_ads} failed)</span></div>
+                  <div><span className="text-muted-foreground">Launcher: </span><span className="font-medium">{b.launcher?.full_name || b.user_name || b.launcher?.email || "Unknown"}</span></div>
                   {b.ad_account_name && <div><span className="text-muted-foreground">Account: </span><span className="font-medium">{b.ad_account_name}</span></div>}
                   {b.headline && <div className="col-span-2"><span className="text-muted-foreground">Headline: </span><span className="font-medium truncate">{b.headline}</span></div>}
                   {b.cta && <div><span className="text-muted-foreground">CTA: </span><span className="font-medium">{b.cta}</span></div>}

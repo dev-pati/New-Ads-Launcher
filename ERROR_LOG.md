@@ -5,6 +5,37 @@
 
 ---
 
+## [2026-06-08] Launch History chi hien mot account va thieu log tu route launch cu
+
+**WHY:** Lead muon xem tat ca nguoi launch ads trong app/workspace, khong chi du lieu cua ad account dang chon.
+
+**PROBLEM:** Meta Ads Manager khong cung cap attribution theo user noi bo cua app. App phai tu ghi `user_id/user_name` khi bam Launch. UI Ads Manager lai goi `/api/launch-history` voi `account_id`, nen chi thay batch cua account hien tai. Route `app/api/facebook/launch/route.ts` cu cung chua insert `launch_batches`, lam mot so luong launch khong xuat hien trong history.
+
+**FIX:** Bo filter `account_id` mac dinh o Ads Manager history de xem toan workspace, enrich `/api/launch-history` bang thong tin launcher tu `accounts`, va them insert `launch_batches` cho route launch cu kem created ads/adset mapping.
+
+**PREVENTION:** Moi endpoint tao ads phai ghi mot batch history chung voi `org_id`, `user_id`, `ad_account_id`, `created_ads`, status va errors; UI chi filter theo account/user khi nguoi dung chu dong chon filter.
+
+---
+
+## [2026-06-08] Meta account bị block làm Ads Manager không xem được dữ liệu đã lưu
+
+**WHY:** Các endpoint Ads Manager chính (`/api/facebook/ad-accounts`, `/campaigns`, `/adsets`, `/ads`) ưu tiên gọi Meta realtime bằng `facebook_connections.access_token`. Khi token/account bị block, expired hoặc revoked, route trả lỗi trước khi thử đọc dữ liệu snapshot đã lưu trong Supabase.
+
+**PROBLEM:** User vẫn login app nội bộ được và DB vẫn còn historical data, nhưng Ads Manager có thể trắng/lỗi vì không có selected ad account hoặc vì campaign/adset/ad API realtime fail. App chưa tự chuyển sang read-only snapshot mode khi Meta unavailable.
+
+**FIX:**
+1. Thêm fallback cho `/api/facebook/ad-accounts` đọc bảng `ad_accounts` khi không có/không dùng được Meta connection.
+2. Thêm `campaignManagerSnapshotFallback`, `adsetManagerSnapshotFallback`, `adsManagerSnapshotFallback` trong `lib/snapshot-fallback.ts`.
+3. Nối fallback vào `/api/facebook/campaigns`, `/api/facebook/adsets`, `/api/facebook/ads`.
+4. Response fallback trả thêm `fromSnapshot: true`, `readOnly: true`, `metaUnavailable: true` để UI có thể nhận biết chế độ dữ liệu cũ/read-only.
+
+**PREVENTION:**
+- Các endpoint đọc dữ liệu Meta nên có DB snapshot/cache fallback nếu route không mutate dữ liệu.
+- Route mutate như launch/toggle/delete/update vẫn phải yêu cầu token Meta hợp lệ.
+- Snapshot cron cần chạy định kỳ khi token còn tốt để đảm bảo read-only mode có data khi account gặp sự cố.
+
+---
+
 ## [2026-06-08] Facebook reconnect bằng account mới vẫn hiển thị account cũ
 
 **WHY:** Facebook callback upsert connection mới với `is_active=true` nhưng không deactivate các connection cũ trong cùng organization. Khi org có nhiều `facebook_connections.is_active=true`, helper `getFacebookConnection()` query `.single()` theo org active connection nên app có thể đọc connection cũ hoặc đọc không ổn định.

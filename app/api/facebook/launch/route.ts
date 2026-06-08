@@ -198,7 +198,15 @@ async function createAdsInAdset(
         degrees_of_freedom_spec: creative.fb_video_id ? vidDof : imgDof,
       })
       await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
-      results.push({ creativeId: creative.id, adId: ad.id, adName: resolveName(baseName, startIndex + i), fileName: creative.file_name })
+      results.push({
+        creativeId: creative.id,
+        adId: ad.id,
+        adName: resolveName(baseName, startIndex + i),
+        fileName: creative.file_name,
+        adSetId: adsetId,
+        thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || null,
+        mediaType: creative.media_type || "image",
+      })
     } catch (err: any) {
       errors.push({ creativeId: creative.id, error: err.message })
     }
@@ -208,8 +216,10 @@ async function createAdsInAdset(
 
 export async function POST(request: NextRequest) {
   try {
+    const launchStartedAt = Date.now()
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const authCtx = ctx
 
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
@@ -367,9 +377,11 @@ export async function POST(request: NextRequest) {
     }
     const { data: creatives } = await supabase.from("creatives").select("*").in("id", creativeIds).eq("org_id", ctx.orgId)
     if (!creatives?.length) return NextResponse.json({ error: "No creatives found" }, { status: 400 })
+    const launchCreatives = creatives as any[]
 
     const allResults: any[] = []
     const allErrors: any[] = []
+    const launchedAdsets = new Map<string, string>()
 
     // Map legacy campaign objectives to v25 OUTCOME_* equivalents
     const LEGACY_OBJECTIVE_MAP: Record<string, string> = {
@@ -400,9 +412,15 @@ export async function POST(request: NextRequest) {
 
     // Resolve adset for a given campaignId
     async function resolveAdset(campaignId: string, creativeSubset: any[], index = 1) {
-      if (adsetMode === "existing") return existingAdsetId || template.adset.id
+      if (adsetMode === "existing") {
+        const adsetId = existingAdsetId || template.adset.id
+        if (adsetId) launchedAdsets.set(adsetId, template.adset.name || adsetId)
+        return adsetId
+      }
       if (adsetMode === "new") {
-        const s = await buildAdset(adAccountId, token, template, campaignId, newAdsetName || template.adset.name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+        const name = newAdsetName || template.adset.name
+        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+        launchedAdsets.set(s.id, name || s.id)
         return s.id
       }
       if (adsetMode === "per_creative") {
@@ -411,8 +429,60 @@ export async function POST(request: NextRequest) {
       if (adsetMode === "auto_divide") {
         const name = applyPattern(autoDividePattern || "Ad Set {index:01}", { index, date: dateStr, shortDate: shortDateStr })
         const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+        launchedAdsets.set(s.id, name)
         return s.id
       }
+    }
+
+    async function saveLaunchBatch() {
+      const status = allErrors.length === 0 ? "success" : allResults.length > 0 ? "partial" : "failed"
+      const creativeThumbs = launchCreatives
+        .map((c: any) => c.fb_thumbnail_url || c.fb_image_url || c.file_url || null)
+        .filter(Boolean)
+      const adsetIds = [...new Set([
+        ...Array.from(launchedAdsets.keys()),
+        ...allResults.map((r: any) => r.adSetId).filter(Boolean),
+      ])] as string[]
+      const adsetNames = adsetIds.map((id) => launchedAdsets.get(id) || id)
+      const userName = authCtx.user.full_name || authCtx.user.email?.split("@")[0] || "Unknown"
+      const { data: savedAccount } = await supabase
+        .from("ad_accounts")
+        .select("name")
+        .eq("org_id", authCtx.orgId)
+        .eq("fb_ad_account_id", adAccountId)
+        .maybeSingle()
+
+      const { error } = await supabase.from("launch_batches").insert({
+        org_id: authCtx.orgId,
+        user_id: authCtx.user.id,
+        user_name: userName,
+        ad_account_id: adAccountId,
+        ad_account_name: savedAccount?.name || adAccountId,
+        adset_ids: adsetIds,
+        adset_names: adsetNames,
+        creative_ids: creativeIds,
+        creative_thumbs: creativeThumbs,
+        primary_text: textOverride?.primaryTexts?.join("\n") || null,
+        headline: textOverride?.headlines?.join("\n") || null,
+        cta: textOverride?.cta || commonCta || null,
+        web_link: textOverride?.websiteUrl || commonWebsiteUrl || null,
+        page_id: pageId || null,
+        status,
+        total_ads: allResults.length,
+        failed_ads: allErrors.length,
+        duration_ms: Date.now() - launchStartedAt,
+        errors: allErrors,
+        created_ads: allResults.map((r: any) => ({
+          adId: r.adId,
+          adSetId: r.adSetId,
+          adSetName: r.adSetId ? launchedAdsets.get(r.adSetId) || r.adSetId : undefined,
+          creativeId: r.creativeId,
+          fileName: r.fileName,
+          thumbnailUrl: r.thumbnailUrl || null,
+          mediaType: r.mediaType || "image",
+        })),
+      })
+      if (error) console.error("[launch] Failed to save launch batch:", error)
     }
 
     // Custom config mode: bypass normal campaign loop entirely
@@ -434,6 +504,7 @@ export async function POST(request: NextRequest) {
         for (const adsetConfig of campConfig.adsets) {
           if (!adsetConfig.creativeIds?.length) continue
           const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+          launchedAdsets.set(adset.id, adsetConfig.name)
           const adsetCreatives = creatives.filter((c: any) => adsetConfig.creativeIds.includes(c.id))
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
           const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
@@ -442,6 +513,7 @@ export async function POST(request: NextRequest) {
           allErrors.push(...errors)
         }
       }
+      await saveLaunchBatch()
       return NextResponse.json({
         success: true, created: allResults, errors: allErrors,
         summary: `${allResults.length} ads created, ${allErrors.length} failed`,
@@ -494,6 +566,7 @@ export async function POST(request: NextRequest) {
           const filename = creative.file_name.replace(/\.[^/.]+$/, "")
           const name = applyPattern(adsetNamePattern || "{filename}", { filename, index: i + 1, date: dateStr, shortDate: shortDateStr })
           const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+          launchedAdsets.set(adset.id, name)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
           const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
           allResults.push(...results)
@@ -517,6 +590,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         const adsetId = await resolveAdset(campaignId, campaignCreatives)
+        if (adsetId) launchedAdsets.set(adsetId, launchedAdsets.get(adsetId) || template.adset.name || adsetId)
         const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
         const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
         allResults.push(...results)
@@ -524,6 +598,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await saveLaunchBatch()
     return NextResponse.json({
       success: true,
       created: allResults,

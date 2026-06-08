@@ -37,7 +37,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message || "Failed to fetch history" }, { status: 500 })
     }
 
-    return NextResponse.json({ batches: data || [] })
+    const batches = data || []
+    const userIds = [...new Set(batches.map((b: any) => b.user_id).filter(Boolean))]
+    let accountById = new Map<string, any>()
+
+    if (userIds.length > 0) {
+      const { data: accounts, error: accountsError } = await supabase
+        .from("accounts")
+        .select("id,email,full_name,avatar_url")
+        .in("id", userIds)
+
+      if (accountsError) {
+        console.warn("[launch-history] Failed to enrich launcher accounts:", accountsError.message)
+      } else {
+        accountById = new Map((accounts || []).map((account: any) => [account.id, account]))
+      }
+    }
+
+    return NextResponse.json({
+      batches: batches.map((batch: any) => {
+        const launcher = accountById.get(batch.user_id)
+        return {
+          ...batch,
+          launcher: launcher || null,
+          user_name: batch.user_name || launcher?.full_name || launcher?.email || "Unknown",
+        }
+      }),
+    })
   } catch (err: any) {
     console.error("launch-history error:", err)
     return NextResponse.json({ error: err.message || "Server error" }, { status: 500 })
