@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getAuthContext } from "@/lib/auth"
 
 export async function POST(req: NextRequest) {
   try {
+    const ctx = await getAuthContext()
+    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
     const { accessToken, spreadsheetId } = await req.json()
     if (!accessToken || !spreadsheetId) {
       return NextResponse.json({ error: "Missing accessToken or spreadsheetId" }, { status: 400 })

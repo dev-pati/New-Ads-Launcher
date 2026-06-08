@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getAuthContext } from "@/lib/auth"
 
 // Same-origin proxy for Supabase Storage uploads — eliminates CORS errors
 // when uploading directly from the browser to supabase.patiagency.com.
@@ -9,6 +10,9 @@ export const maxDuration = 300
 export const dynamic = "force-dynamic"
 
 export async function PUT(request: NextRequest) {
+  const ctx = await getAuthContext()
+  if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
   const signedUrl = request.nextUrl.searchParams.get("url")
   if (!signedUrl) return NextResponse.json({ error: "url required" }, { status: 400 })
 

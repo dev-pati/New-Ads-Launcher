@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getExistingAds } from "@/lib/facebook"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { getCachedFacebookMetadata } from "../_cache"
 
 const EXISTING_ADS_TTL_MS = 5 * 60 * 1000 // 5 min cache
@@ -25,8 +26,7 @@ export async function GET(request: NextRequest) {
 
     // Security: verify ad account belongs to this org
     const norm = (id: string) => id.startsWith("act_") ? id.slice(4) : id
-    const { createClient } = await import("@/lib/supabase/server")
-    const supabase = await createClient()
+    const supabase = createAdminClient()
     const { data: orgAccounts } = await supabase
       .from("ad_accounts")
       .select("fb_ad_account_id")

@@ -10,9 +10,10 @@ async function getFfmpeg(): Promise<any | null> {
   if (_ffmpegReady) return _Ffmpeg
   _ffmpegReady = true
   try {
+    const dynamicImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<any>
     const [{ default: Ffmpeg }, { default: ffmpegPath }] = await Promise.all([
-      import("fluent-ffmpeg"),
-      import("ffmpeg-static"),
+      dynamicImport("fluent-ffmpeg"),
+      dynamicImport("ffmpeg-static"),
     ])
     if (ffmpegPath) Ffmpeg.setFfmpegPath(ffmpegPath)
     _Ffmpeg = Ffmpeg
