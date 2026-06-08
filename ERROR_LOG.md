@@ -5,6 +5,24 @@
 
 ---
 
+## [2026-06-08] Facebook reconnect bằng account mới vẫn hiển thị account cũ
+
+**WHY:** Facebook callback upsert connection mới với `is_active=true` nhưng không deactivate các connection cũ trong cùng organization. Khi org có nhiều `facebook_connections.is_active=true`, helper `getFacebookConnection()` query `.single()` theo org active connection nên app có thể đọc connection cũ hoặc đọc không ổn định.
+
+**PROBLEM:** User reconnect bằng Muhasin nhưng UI/API sau callback vẫn có thể trả về Curtis. Các Meta API sau đó có nguy cơ dùng token Facebook không đúng account vừa connect.
+
+**FIX:**
+1. Trong `/api/auth/facebook/callback`, trước khi upsert connection mới, update tất cả `facebook_connections` của org hiện tại thành `is_active=false`.
+2. Upsert connection vừa OAuth xong với `is_active=true`.
+3. Sửa `getFacebookConnection()` để lấy active connection mới nhất theo `updated_at`, `created_at` và dùng `maybeSingle()` thay vì phụ thuộc vào `.single()`.
+
+**PREVENTION:**
+- Mỗi organization chỉ nên có một Facebook connection active nếu app đang vận hành theo model org-level connection.
+- Reconnect flow phải thay thế active token cũ rõ ràng.
+- Query connection active phải deterministic bằng `order + limit(1)`.
+
+---
+
 ## [2026-06-08] Vercel deploy fail vì `ffmpeg-static` download binary
 
 **WHY:** `ffmpeg-static` chạy script postinstall để download ffmpeg binary trong lúc Vercel install dependencies. Download binary `b6.1.1` fail nên `npm install` dừng với exit code 1 trước khi Next build chạy.

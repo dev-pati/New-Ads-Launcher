@@ -61,7 +61,10 @@ export async function getFacebookConnection(orgId: string) {
     .select("id, fb_user_id, fb_user_name, fb_picture_url, access_token, token_expires_at")
     .eq("org_id", orgId)
     .eq("is_active", true)
-    .single()
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
 
   return data
 }
