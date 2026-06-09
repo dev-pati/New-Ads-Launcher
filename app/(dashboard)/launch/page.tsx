@@ -12215,7 +12215,7 @@ function CtaPickerCell({ value, onChange }: {
 function TableMode({
   rows, adSets, onAddRow, onUpdateRow, onDeleteRow, onDuplicateRow,
   selectedPage, igAccountCache, selectedIgPageId, searchQuery, launchAsActive, pages, selectedAccountId,
-  onOpenCreativePicker,
+  onOpenCreativePicker, onUploadRowFiles,
 }: {
   rows: TableRow[]
   adSets: AdSet[]
@@ -12231,6 +12231,7 @@ function TableMode({
   pages: FacebookPage[]
   selectedAccountId: string
   onOpenCreativePicker: (rowId: string) => void
+  onUploadRowFiles: (rowId: string, files: FileList | File[]) => Promise<void>
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedVar, setExpandedVar] = useState<Record<string, { primary: boolean; headline: boolean; description: boolean }>>({})
@@ -12239,8 +12240,8 @@ function TableMode({
   const [profilePopoverRow, setProfilePopoverRow] = useState<string | null>(null)
   const [profilePopoverPos, setProfilePopoverPos] = useState<{ top: number; left: number } | null>(null)
   const [rowModal, setRowModal] = useState<{ type: RowModalType; rowId: string } | null>(null)
-  const [uploadingRowId] = useState<string | null>(null)
-  const [uploadError] = useState<string | null>(null)
+  const [uploadingRowId, setUploadingRowId] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const profilePopoverRef = useRef<HTMLDivElement>(null)
   const tableScrollRef = useRef<HTMLDivElement>(null)
   const isDragging = useRef(false)
@@ -12249,6 +12250,19 @@ function TableMode({
 
   const handleCreativeCellClick = (rowId: string) => {
     onOpenCreativePicker(rowId)
+  }
+
+  const handleRowUpload = async (rowId: string, files: FileList | null) => {
+    if (!files || files.length === 0 || uploadingRowId) return
+    setUploadError(null)
+    setUploadingRowId(rowId)
+    try {
+      await onUploadRowFiles(rowId, files)
+    } catch (err: any) {
+      setUploadError(err?.message || "Upload failed")
+    } finally {
+      setUploadingRowId(null)
+    }
   }
 
   const onTableMouseDown = (e: React.MouseEvent) => {
@@ -12345,6 +12359,11 @@ function TableMode({
 
   return (
     <>
+    {uploadError && (
+      <div className="px-4 py-2 text-xs text-destructive border-b bg-destructive/5">
+        {uploadError}
+      </div>
+    )}
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div
         ref={tableScrollRef}
@@ -12447,9 +12466,21 @@ function TableMode({
                         SINGLE
                       </span>
                       <div className="relative group/creative">
-                        <div
-                          onClick={() => handleCreativeCellClick(row.id)}
+                        <input
+                          id={`table-row-upload-${row.id}`}
+                          type="file"
+                          accept="image/*,video/*"
+                          multiple
+                          className="hidden"
+                          onChange={e => {
+                            handleRowUpload(row.id, e.target.files)
+                            e.currentTarget.value = ""
+                          }}
+                        />
+                        <label
+                          htmlFor={`table-row-upload-${row.id}`}
                           className="size-20 rounded border-2 border-dashed border-border/60 overflow-hidden relative flex items-center justify-center bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer"
+                          title={row.creative ? "Upload to replace creative" : "Upload creative from your computer"}
                         >
                           {uploadingRowId === row.id ? (
                             <IconLoader2 className="size-5 text-muted-foreground animate-spin" />
@@ -12476,10 +12507,18 @@ function TableMode({
                           {/* Replace overlay on hover (when has creative) */}
                           {row.creative && uploadingRowId !== row.id && (
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity">
-                              <span className="text-[9px] text-white font-medium">Replace</span>
+                              <span className="text-[9px] text-white font-medium">Upload</span>
                             </div>
                           )}
-                        </div>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); handleCreativeCellClick(row.id) }}
+                          className="absolute bottom-1 right-1 size-5 rounded bg-background/90 border border-border flex items-center justify-center text-muted-foreground opacity-0 group-hover/creative:opacity-100 transition-opacity hover:text-foreground"
+                          title="Choose from media library"
+                        >
+                          <IconFolder className="size-3" />
+                        </button>
                         {/* Remove button */}
                         {row.creative && uploadingRowId !== row.id && (
                           <button
@@ -13743,10 +13782,10 @@ export default function LaunchPage() {
     })
   }
 
-  const handleUploadFiles = async (filesIn: FileList | File[]) => {
-    if (!selectedAccountId) { setError("Select an ad account first"); return }
+  const handleUploadFiles = async (filesIn: FileList | File[]): Promise<Creative[]> => {
+    if (!selectedAccountId) { setError("Select an ad account first"); return [] }
     const files = Array.from(filesIn).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"))
-    if (files.length === 0) { setError("No valid image/video files selected"); return }
+    if (files.length === 0) { setError("No valid image/video files selected"); return [] }
     setError("")
     setUploadDockOpen(true)
 
@@ -13814,10 +13853,12 @@ export default function LaunchPage() {
 
     // Upload all files in parallel; swap temp creative → real creative when done
     let anyUploaded = false
+    const uploadedByTempId = new Map<string, Creative>()
     await Promise.allSettled(items.map(async (item) => {
       const real = await uploadOneFile(item)
       if (real) {
         anyUploaded = true
+        uploadedByTempId.set(item.id, real)
         // Swap temp → real, but ALWAYS keep local blob URL for instant preview.
         // Dedup afterward: dedup check may return an existing creative already in the list.
         setSelectedCreatives(prev => {
@@ -13882,6 +13923,7 @@ export default function LaunchPage() {
     }))
     // Refresh Library tab so freshly uploaded items appear with thumbnails
     if (anyUploaded) setMediaRefreshSignal(s => s + 1)
+    return items.map(item => uploadedByTempId.get(item.id)).filter(Boolean) as Creative[]
   }
 
   // Legacy props for GalleryMediaPanel — kept for backward compat (now empty)
@@ -14282,6 +14324,34 @@ export default function LaunchPage() {
       if (idx < 0) return prev
       const copy = { ...prev[idx], id: crypto.randomUUID(), adName: prev[idx].adName ? `${prev[idx].adName} (copy)` : "" }
       return [...prev.slice(0, idx + 1), copy, ...prev.slice(idx + 1)]
+    })
+  }
+  const uploadTableRowFiles = async (rowId: string, files: FileList | File[]) => {
+    const uploaded = await handleUploadFiles(files)
+    if (uploaded.length === 0) return
+
+    setTableRows(prev => {
+      const idx = prev.findIndex(r => r.id === rowId)
+      if (idx < 0) return prev
+      const baseRow = prev[idx]
+      const firstClean = (uploaded[0].file_name || "").replace(/\.[^/.]+$/, "")
+      const updatedBase: TableRow = {
+        ...baseRow,
+        creative: uploaded[0],
+        adName: baseRow.adName?.trim() ? baseRow.adName : firstClean,
+      }
+      const extraRows: TableRow[] = uploaded.slice(1).map(c => ({
+        ...baseRow,
+        id: crypto.randomUUID(),
+        creative: c,
+        adName: (c.file_name || "").replace(/\.[^/.]+$/, ""),
+      }))
+      return [
+        ...prev.slice(0, idx),
+        updatedBase,
+        ...extraRows,
+        ...prev.slice(idx + 1),
+      ]
     })
   }
 
@@ -15218,6 +15288,7 @@ export default function LaunchPage() {
                 searchQuery={tableSearchQuery}
                 launchAsActive={launchAsActive}
                 onOpenCreativePicker={(rowId) => setCreativePickerRowId(rowId)}
+                onUploadRowFiles={uploadTableRowFiles}
                 pages={pages}
                 selectedAccountId={selectedAccountId || ""}
               />

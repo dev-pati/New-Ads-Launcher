@@ -5,6 +5,25 @@
 
 ---
 
+## [2026-06-09] Table mode creative cell khong upload file local
+
+**WHY:** O creative trong Table Mode chi goi `LoadMediaModal` de chon creative tu library. No khong co file input va khong noi vao upload pipeline local co san cua Launch page.
+
+**PROBLEM:** Khi click bieu tuong Upload trong cot Creative, user khong the chon file tu may local va creative upload xong khong duoc gan vao row/table.
+
+**FIX:**
+- Them hidden file input cho tung row trong `TableMode`
+- Click vao o creative se mo native file picker cho image/video local
+- Refactor `handleUploadFiles()` de return danh sach `Creative[]` da upload xong
+- Them `uploadTableRowFiles()` de gan creative dau tien vao row dang click va tao extra rows cho cac file con lai
+- Giu upload dock/progress pipeline hien co de upload image/video nhu gallery mode
+
+**PREVENTION:**
+- Khi tao UI upload trong table/grid, phai noi truc tiep vao upload pipeline va co callback gan ket qua ve row dang thao tac
+- Cac handler upload nen return ket qua domain object (`Creative[]`) thay vi chi update state noi bo
+
+---
+
 ## [2026-06-09] Page Insights loi `(#100) The value must be a valid insights metric`
 
 **WHY:** Meta Graph API v25 khong con chap nhan mot so legacy Page Insights metrics nhu `page_fans`, `page_fan_adds`, `page_impressions`, `page_engaged_users`, `page_reactions_total`.
