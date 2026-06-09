@@ -5,6 +5,23 @@
 
 ---
 
+## [2026-06-09] Table mode video thumbnail khong hover-play sau upload
+
+**WHY:** O creative trong Table Mode render media bang `<img>` dua tren thumbnail URL. Video upload xong chi hien thumbnail/play icon tinh, khong co `<video>` element nen hover khong the play.
+
+**PROBLEM:** Sau khi upload video local vao row table, user thay thumbnail nhung hover vao video khong chay. Table row cung nhan creative DB raw, khong giu local `blob:` URL nhu Gallery Mode nen video moi upload khong co source playable ngay lap tuc.
+
+**FIX:**
+- Doi creative cell trong Table Mode sang dung `CreativeCardMedia` de reuse hover-play video behavior
+- Giu `blob:` local URL trong creative tra ve cho table row sau upload, de video co source playable ngay
+- Dat overlay/play icon `pointer-events-none` de khong chan hover event cua `<video>`
+
+**PREVENTION:**
+- Moi UI render creative/video nen reuse `CreativeCardMedia` thay vi tu render `<img>` thumbnail rieng
+- Upload pipeline can tra ve display-ready creative object cho UI dang thao tac, bao gom local preview URL khi Meta thumbnail/source chua san sang
+
+---
+
 ## [2026-06-09] Table mode creative cell khong upload file local
 
 **WHY:** O creative trong Table Mode chi goi `LoadMediaModal` de chon creative tu library. No khong co file input va khong noi vao upload pipeline local co san cua Launch page.

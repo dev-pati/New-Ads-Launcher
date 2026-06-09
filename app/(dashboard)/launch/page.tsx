@@ -12437,12 +12437,6 @@ function TableMode({
               const ptVars = row.primaryTextVariations || []
               const hlVars = row.headlineVariations || []
               const descVars = row.descriptionVariations || []
-              const mediaSrc = proxyFbImage(row.creative
-                ? (row.creative.media_type === "video"
-                    ? row.creative.fb_thumbnail_url
-                    : (row.creative.fb_image_url || row.creative.file_url))
-                : null)
-
               return (
                 <tr
                   key={row.id}
@@ -12484,13 +12478,13 @@ function TableMode({
                         >
                           {uploadingRowId === row.id ? (
                             <IconLoader2 className="size-5 text-muted-foreground animate-spin" />
-                          ) : mediaSrc ? (
-                            <img src={mediaSrc} className="w-full h-full object-cover" alt="" loading="lazy" />
                           ) : row.creative?.status === "pending" ? (
                             <div className="flex flex-col items-center gap-1">
                               <IconClock className="size-4 text-amber-500/70" />
                               <span className="text-[9px] text-amber-600/70 leading-none text-center">Pending</span>
                             </div>
+                          ) : row.creative ? (
+                            <CreativeCardMedia creative={row.creative} className="w-full h-full object-cover" compact />
                           ) : (
                             <div className="flex flex-col items-center gap-1">
                               <IconUpload className="size-4 text-muted-foreground/40" />
@@ -12498,7 +12492,7 @@ function TableMode({
                             </div>
                           )}
                           {row.creative?.media_type === "video" && !uploadingRowId && (
-                            <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                               <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
                                 <IconPlayerPlay className="size-2.5 text-white fill-white" />
                               </div>
@@ -12506,7 +12500,7 @@ function TableMode({
                           )}
                           {/* Replace overlay on hover (when has creative) */}
                           {row.creative && uploadingRowId !== row.id && (
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity">
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity pointer-events-none">
                               <span className="text-[9px] text-white font-medium">Upload</span>
                             </div>
                           )}
@@ -13858,9 +13852,16 @@ export default function LaunchPage() {
       const real = await uploadOneFile(item)
       if (real) {
         anyUploaded = true
-        uploadedByTempId.set(item.id, real)
         // Swap temp → real, but ALWAYS keep local blob URL for instant preview.
         // Dedup afterward: dedup check may return an existing creative already in the list.
+        const tempCreative = tempCreatives.find(c => c.id === item.id)
+        const displayCreative: Creative = {
+          ...real,
+          file_url: tempCreative?.file_url || real.file_url || real.fb_thumbnail_url || real.fb_image_url || "",
+          fb_image_url: real.fb_image_url || tempCreative?.fb_image_url,
+          fb_thumbnail_url: real.fb_thumbnail_url || tempCreative?.fb_thumbnail_url,
+        }
+        uploadedByTempId.set(item.id, displayCreative)
         setSelectedCreatives(prev => {
           const mapped = prev.map(c => {
             if (c.id !== item.id) return c
