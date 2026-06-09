@@ -200,10 +200,15 @@ export async function snapshotPageInsights(
     const db    = createAdminClient()
     const since = ago(days), until = ago(1)
     const metrics = [
-      "page_fans","page_fan_adds","page_impressions_unique","page_impressions",
-      "page_impressions_organic_unique","page_impressions_paid_unique",
-      "page_engaged_users","page_post_engagements","page_reactions_total",
+      "page_follows",
+      "page_daily_follows",
+      "page_daily_unfollows",
+      "page_impressions_unique",
+      "page_impressions_paid_unique",
+      "page_post_engagements",
+      "page_actions_post_reactions_total",
       "page_views_total",
+      "page_video_views",
     ].join(",")
     const data = await metaFetch(
       `${GRAPH}/${pageId}/insights?metric=${encodeURIComponent(metrics)}&period=day&since=${since}&until=${until}&access_token=${pageToken}`,
@@ -222,15 +227,15 @@ export async function snapshotPageInsights(
     const now  = new Date().toISOString()
     const rows = Object.values(byDate).map((d: any) => ({
       org_id: orgId, fb_page_id: pageId, page_name: pageName, date: d.date,
-      fans:              d.page_fans ?? 0,
-      new_fans:          d.page_fan_adds ?? 0,
+      fans:              d.page_follows ?? 0,
+      new_fans:          d.page_daily_follows ?? 0,
       reach:             d.page_impressions_unique ?? 0,
-      impressions:       d.page_impressions ?? 0,
-      organic_reach:     d.page_impressions_organic_unique ?? 0,
+      impressions:       d.page_impressions_unique ?? 0,
+      organic_reach:     d.page_impressions_unique ?? 0,
       paid_reach:        d.page_impressions_paid_unique ?? 0,
-      engaged_users:     d.page_engaged_users ?? 0,
+      engaged_users:     d.page_post_engagements ?? 0,
       post_engagements:  d.page_post_engagements ?? 0,
-      reactions:         d.page_reactions_total ?? 0,
+      reactions:         d.page_actions_post_reactions_total ?? 0,
       page_views:        d.page_views_total ?? 0,
       raw_insights: d, snapped_at: now,
     }))

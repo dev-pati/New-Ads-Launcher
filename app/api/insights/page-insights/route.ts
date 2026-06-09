@@ -48,11 +48,18 @@ export async function GET(request: NextRequest) {
     const pageName  = page?.name || pageId
 
     const since = ago(days), until = ago(1)
+    // Meta removed several legacy Page Insights metrics in recent Graph API
+    // versions. Keep this list to metrics that are valid in v25.
     const metrics = [
-      "page_fans","page_fan_adds","page_impressions_unique","page_impressions",
-      "page_impressions_organic_unique","page_impressions_paid_unique",
-      "page_engaged_users","page_post_engagements","page_reactions_total",
+      "page_follows",
+      "page_daily_follows",
+      "page_daily_unfollows",
+      "page_impressions_unique",
+      "page_impressions_paid_unique",
+      "page_post_engagements",
+      "page_actions_post_reactions_total",
       "page_views_total",
+      "page_video_views",
     ].join(",")
 
     const data = await metaFetch(
@@ -71,24 +78,56 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const daily = Object.values(byDate).sort((a: any, b: any) => a.date.localeCompare(b.date))
+    const daily = Object.values(byDate)
+      .sort((a: any, b: any) => a.date.localeCompare(b.date))
+      .map((d: any) => ({
+        ...d,
+        fans: d.page_follows ?? 0,
+        new_fans: d.page_daily_follows ?? 0,
+        reach: d.page_impressions_unique ?? 0,
+        impressions: d.page_impressions_unique ?? 0,
+        paid_reach: d.page_impressions_paid_unique ?? 0,
+        engaged_users: d.page_post_engagements ?? 0,
+        post_engagements: d.page_post_engagements ?? 0,
+        reactions: d.page_actions_post_reactions_total ?? 0,
+        page_views: d.page_views_total ?? 0,
+        video_views: d.page_video_views ?? 0,
+      }))
     const latest: any = daily[daily.length - 1] ?? {}
 
     const totals = daily.reduce((acc: any, d: any) => ({
-      reach:            acc.reach            + (d.page_impressions_unique ?? 0),
-      impressions:      acc.impressions      + (d.page_impressions ?? 0),
-      engaged_users:    acc.engaged_users    + (d.page_engaged_users ?? 0),
-      post_engagements: acc.post_engagements + (d.page_post_engagements ?? 0),
-      new_fans:         acc.new_fans         + (d.page_fan_adds ?? 0),
+      reach:            acc.reach            + (d.reach ?? 0),
+      impressions:      acc.impressions      + (d.impressions ?? 0),
+      engaged_users:    acc.engaged_users    + (d.engaged_users ?? 0),
+      post_engagements: acc.post_engagements + (d.post_engagements ?? 0),
+      new_fans:         acc.new_fans         + (d.new_fans ?? 0),
     }), { reach: 0, impressions: 0, engaged_users: 0, post_engagements: 0, new_fans: 0 })
+
+    let recentPosts: any[] = []
+    try {
+      const postsData = await metaFetch(
+        `${GRAPH}/${pageId}/posts?fields=${encodeURIComponent("id,message,story,created_time,permalink_url,full_picture,status_type")}&limit=6&access_token=${pageToken}`,
+        { caller: "insights/page-insights/posts" }
+      )
+      recentPosts = (postsData.data || []).map((post: any) => ({
+        id: post.id,
+        message: post.message || post.story || "",
+        created_time: post.created_time,
+        permalink_url: post.permalink_url || null,
+        full_picture: post.full_picture || null,
+        status_type: post.status_type || null,
+      }))
+    } catch (postErr) {
+      console.warn("[insights/page-insights] recent posts unavailable:", postErr)
+    }
 
     // Auto-save to snapshots in background
     void snapshotPageInsights(ctx.orgId, pageId, pageName, pageToken, days)
 
     return NextResponse.json({
       pageId, pageName,
-      fans: latest.page_fans ?? 0,
-      daily, totals,
+      fans: latest.fans ?? 0,
+      daily, totals, recentPosts,
       fromSnapshot: false,
     })
   } catch (err: any) {

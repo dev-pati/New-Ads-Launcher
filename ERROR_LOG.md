@@ -5,6 +5,20 @@
 
 ---
 
+## [2026-06-09] Page Insights loi `(#100) The value must be a valid insights metric`
+
+**WHY:** Meta Graph API v25 khong con chap nhan mot so legacy Page Insights metrics nhu `page_fans`, `page_fan_adds`, `page_impressions`, `page_engaged_users`, `page_reactions_total`.
+
+**PROBLEM:** Man `Insights > Statistics > Page Insights` goi `/api/insights/page-insights` voi danh sach metric cu, lam Meta tra `(#100)` va UI khong load du lieu de quay App Review cho `pages_read_engagement`.
+
+**FIX:** Cap nhat route Page Insights va auto-snapshot Page Insights sang bo metric hop le tren v25: `page_follows`, `page_daily_follows`, `page_impressions_unique`, `page_post_engagements`, `page_actions_post_reactions_total`, `page_views_total`, v.v. Route normalize lai du lieu daily/totals cho UI hien thi.
+
+**FOLLOW-UP:** Page Insights metrics co the hop le nhung Meta van tra rong neu Page khong co du aggregate data. Them block `Recent Page Posts` doc `/PAGE_ID/posts` de chung minh `pages_read_engagement` bang Page content thuc te khi quay App Review.
+
+**PREVENTION:** Khi nang Graph API version hoac quay App Review, can test tung Meta insight metric truc tiep voi page token that; tranh gom legacy metrics vao mot request vi chi mot metric invalid se lam ca call fail.
+
+---
+
 ## [2026-06-08] Launch History chi hien mot account va thieu log tu route launch cu
 
 **WHY:** Lead muon xem tat ca nguoi launch ads trong app/workspace, khong chi du lieu cua ad account dang chon.

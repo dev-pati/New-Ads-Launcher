@@ -3309,29 +3309,33 @@ export function PageInsightsView() {
   const daily: any[] = data?.daily || []
   const totals        = data?.totals || {}
   const fans          = data?.fans   || 0
+  const recentPosts: any[] = data?.recentPosts || []
   const pageName      = data?.pageName || pages.find(p => p.fb_page_id === selectedPageId)?.name || selectedPageId
+  const selectedPage  = pages.find(p => p.fb_page_id === selectedPageId)
+  const featuredPost  = recentPosts[0]
+  const secondaryPosts = recentPosts.slice(1, 6)
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-lg font-semibold">Page Insights</h2>
           <p className="text-sm text-muted-foreground">Facebook Page performance — fans, reach & engagement</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           {pages.length > 0 && (
             <select value={selectedPageId} onChange={e => setSelectedPageId(e.target.value)}
-              className="h-8 px-2 text-sm rounded-lg border bg-background">
+              className="h-9 min-w-[220px] px-3 text-sm rounded-lg border bg-background">
               {pages.map(p => <option key={p.fb_page_id} value={p.fb_page_id}>{p.name}</option>)}
             </select>
           )}
           <select value={days} onChange={e => setDays(Number(e.target.value))}
-            className="h-8 px-2 text-sm rounded-lg border bg-background">
+            className="h-9 px-3 text-sm rounded-lg border bg-background">
             <option value={7}>Last 7 days</option>
             <option value={30}>Last 30 days</option>
             <option value={90}>Last 90 days</option>
           </select>
-          <button onClick={load} className="h-8 px-3 text-sm rounded-lg border hover:bg-muted/50 flex items-center gap-1.5">
+          <button onClick={load} className="h-9 px-3 text-sm rounded-lg border hover:bg-muted/50 flex items-center gap-1.5">
             <IconRefresh className="size-3.5" /> Refresh
           </button>
         </div>
@@ -3356,6 +3360,116 @@ export function PageInsightsView() {
             <KpiCard label="Total Reach"      value={fmtK(totals.reach || 0)}            sub={`last ${days}d`} />
             <KpiCard label="Impressions"      value={fmtK(totals.impressions || 0)}      sub={`last ${days}d`} />
             <KpiCard label="Post Engagements" value={fmtK(totals.post_engagements || 0)} sub={`last ${days}d`} />
+          </div>
+
+          <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                {selectedPage?.picture_url ? (
+                  <img
+                    src={selectedPage.picture_url}
+                    alt=""
+                    className="size-8 rounded-lg border object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="size-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <IconPhoto className="size-4" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">Recent Page Posts</p>
+                  <p className="text-xs text-muted-foreground truncate">Content read from the selected Facebook Page</p>
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground shrink-0">{recentPosts.length} posts</span>
+            </div>
+            {recentPosts.length > 0 ? (
+              <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                <div className="p-4 border-b lg:border-b-0 lg:border-r">
+                  <div className="overflow-hidden rounded-lg border bg-muted/20">
+                    <div className="aspect-[16/9] bg-muted flex items-center justify-center overflow-hidden">
+                      {featuredPost?.full_picture ? (
+                        <img src={featuredPost.full_picture} alt="" className="size-full object-cover" />
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <IconPhoto className="size-8" />
+                          <span className="text-xs">No image returned</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-4">
+                      <p className="text-sm font-medium leading-5 line-clamp-3">
+                        {featuredPost?.message || featuredPost?.story || "Post without text"}
+                      </p>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          {featuredPost?.created_time ? new Date(featuredPost.created_time).toLocaleString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          }) : "No timestamp"}
+                        </p>
+                        {featuredPost?.permalink_url && (
+                          <a
+                            href={featuredPost.permalink_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs font-medium text-primary hover:underline shrink-0"
+                          >
+                            View post
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="divide-y">
+                  {secondaryPosts.length > 0 ? secondaryPosts.map((post: any) => (
+                    <div key={post.id} className="p-3 flex gap-3">
+                      <div className="size-16 rounded-lg border bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+                        {post.full_picture ? (
+                          <img src={post.full_picture} alt="" className="size-full object-cover" />
+                        ) : (
+                          <IconPhoto className="size-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm leading-5 line-clamp-2">
+                          {post.message || post.story || "Post without text"}
+                        </p>
+                        <div className="mt-1.5 flex items-center justify-between gap-2">
+                          <p className="text-xs text-muted-foreground truncate">
+                            {post.created_time ? new Date(post.created_time).toLocaleString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            }) : "No timestamp"}
+                          </p>
+                          {post.permalink_url && (
+                            <a
+                              href={post.permalink_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline shrink-0"
+                            >
+                              View
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="p-4 text-sm text-muted-foreground">Only one recent post was returned by Meta.</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                No recent Page posts returned for this Page.
+              </div>
+            )}
           </div>
 
           {daily.length > 0 && (
