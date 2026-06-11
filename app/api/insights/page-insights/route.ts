@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse }              from "next/server"
 import { getAuthContext, getFacebookConnection }  from "@/lib/auth"
 import { createAdminClient }                      from "@/lib/supabase/admin"
-import { metaFetch }                              from "@/app/api/facebook/_meta-fetch"
+import { metaFetch, MetaApiError }                from "@/app/api/facebook/_meta-fetch"
 import { pageSnapshotFallback }                   from "@/lib/snapshot-fallback"
 import { snapshotPageInsights }                   from "@/lib/auto-snapshot"
 
@@ -19,6 +19,14 @@ const GRAPH = "https://graph.facebook.com/v25.0"
 
 function ago(days: number) {
   return new Date(Date.now() - days * 86_400_000).toISOString().split("T")[0]
+}
+
+function sortNewestFirst(items: any[]) {
+  return [...items].sort((a, b) => {
+    const left = new Date(a?.created_time || 0).getTime()
+    const right = new Date(b?.created_time || 0).getTime()
+    return (Number.isFinite(right) ? right : 0) - (Number.isFinite(left) ? left : 0)
+  })
 }
 
 export async function GET(request: NextRequest) {
@@ -44,7 +52,34 @@ export async function GET(request: NextRequest) {
       .eq("fb_page_id", pageId)
       .maybeSingle()
 
-    const pageToken = page?.page_access_token || connection.access_token
+    let pageToken = page?.page_access_token || ""
+    if (!pageToken) {
+      try {
+        const accounts = await metaFetch(
+          `${GRAPH}/me/accounts?fields=${encodeURIComponent("id,name,access_token")}&limit=100&access_token=${connection.access_token}`,
+          { caller: "insights/page-insights/me-accounts" }
+        )
+        const matched = (accounts.data || []).find((item: any) => item.id === pageId)
+        pageToken = matched?.access_token || ""
+
+        if (pageToken && page?.fb_page_id) {
+          void db
+            .from("pages")
+            .update({ page_access_token: pageToken })
+            .eq("org_id", ctx.orgId)
+            .eq("fb_page_id", pageId)
+        }
+      } catch (err) {
+        console.warn("[insights/page-insights] fallback page token unavailable:", err)
+      }
+    }
+
+    if (!pageToken) {
+      return NextResponse.json({
+        error: "Page Access Token not found for this Page. Reconnect the Page or select a Page that has been authorized.",
+      }, { status: 400 })
+    }
+
     const pageName  = page?.name || pageId
 
     const since = ago(days), until = ago(1)
@@ -104,21 +139,76 @@ export async function GET(request: NextRequest) {
     }), { reach: 0, impressions: 0, engaged_users: 0, post_engagements: 0, new_fans: 0 })
 
     let recentPosts: any[] = []
+    let recentPostsError: string | null = null
+    let recentPostsPermissionRequired = false
     try {
+      const postFields = "id,message,story,created_time,permalink_url,full_picture,status_type,reactions.summary(true),comments.summary(true),shares,insights.metric(post_impressions,post_reach,post_video_views)"
       const postsData = await metaFetch(
-        `${GRAPH}/${pageId}/posts?fields=${encodeURIComponent("id,message,story,created_time,permalink_url,full_picture,status_type")}&limit=6&access_token=${pageToken}`,
+        `${GRAPH}/${pageId}/posts?fields=${encodeURIComponent(postFields)}&limit=10&access_token=${pageToken}`,
         { caller: "insights/page-insights/posts" }
       )
-      recentPosts = (postsData.data || []).map((post: any) => ({
-        id: post.id,
-        message: post.message || post.story || "",
-        created_time: post.created_time,
-        permalink_url: post.permalink_url || null,
-        full_picture: post.full_picture || null,
-        status_type: post.status_type || null,
+      recentPosts = sortNewestFirst((postsData.data || []).map((post: any) => {
+        const insights = post.insights?.data || []
+        const reactions = post.reactions?.summary?.total_count ?? 0
+        const comments = post.comments?.summary?.total_count ?? 0
+        const shares = post.shares?.count ?? 0
+        const reach = insights.find((d: any) => d.name === "post_reach")?.values?.[0]?.value ?? 0
+        const impressions = insights.find((d: any) => d.name === "post_impressions")?.values?.[0]?.value ?? 0
+        const videoViews = insights.find((d: any) => d.name === "post_video_views")?.values?.[0]?.value ?? 0
+        return {
+          id: post.id,
+          message: post.message || post.story || "",
+          created_time: post.created_time,
+          permalink_url: post.permalink_url || null,
+          full_picture: post.full_picture || null,
+          status_type: post.status_type || null,
+          reactions,
+          comments,
+          shares,
+          engagement: reactions + comments + shares,
+          reach,
+          impressions,
+          video_views: videoViews,
+        }
       }))
     } catch (postErr) {
       console.warn("[insights/page-insights] recent posts unavailable:", postErr)
+      if (postErr instanceof MetaApiError && postErr.code === 10) {
+        recentPostsError = "Public Page posts require pages_read_engagement or Page Public Content Access."
+        recentPostsPermissionRequired = true
+        recentPosts = []
+      } else {
+        try {
+          const fallbackFields = "id,message,story,created_time,permalink_url,full_picture,status_type,reactions.summary(true),comments.summary(true),shares"
+          const fallbackPosts = await metaFetch(
+            `${GRAPH}/${pageId}/posts?fields=${encodeURIComponent(fallbackFields)}&limit=10&access_token=${pageToken}`,
+            { caller: "insights/page-insights/posts-fallback" }
+          )
+          recentPosts = sortNewestFirst((fallbackPosts.data || []).map((post: any) => {
+            const reactions = post.reactions?.summary?.total_count ?? 0
+            const comments = post.comments?.summary?.total_count ?? 0
+            const shares = post.shares?.count ?? 0
+            return {
+              id: post.id,
+              message: post.message || post.story || "",
+              created_time: post.created_time,
+              permalink_url: post.permalink_url || null,
+              full_picture: post.full_picture || null,
+              status_type: post.status_type || null,
+              reactions,
+              comments,
+              shares,
+              engagement: reactions + comments + shares,
+              reach: 0,
+              impressions: 0,
+              video_views: 0,
+            }
+          }))
+        } catch (fallbackErr) {
+          console.warn("[insights/page-insights] recent posts fallback unavailable:", fallbackErr)
+          recentPostsError = fallbackErr instanceof Error ? fallbackErr.message : "Public Page posts are unavailable."
+        }
+      }
     }
 
     // Auto-save to snapshots in background
@@ -128,6 +218,8 @@ export async function GET(request: NextRequest) {
       pageId, pageName,
       fans: latest.fans ?? 0,
       daily, totals, recentPosts,
+      recentPostsError,
+      recentPostsPermissionRequired,
       fromSnapshot: false,
     })
   } catch (err: any) {

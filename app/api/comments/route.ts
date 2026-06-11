@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
 
     const sp        = request.nextUrl.searchParams
     const pageId    = sp.get("page_id") || ""
+    const postId    = sp.get("post_id") || ""
     const sentiment = sp.get("sentiment") || ""
     const unreplied = sp.get("unreplied") === "1"
     const search    = sp.get("search") || ""
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     if (pageId)    query = query.eq("page_id", pageId)
+    if (postId)    query = query.eq("fb_post_id", postId)
     if (sentiment) query = query.eq("sentiment", sentiment)
     if (unreplied) query = query.eq("is_replied", false)
     if (search)    query = query.ilike("message", `%${search}%`)

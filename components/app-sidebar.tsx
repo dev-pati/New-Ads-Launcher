@@ -13,6 +13,7 @@ import {
   IconRocket,
   IconPhoto,
   IconChartBar,
+  IconMessage,
   IconBolt,
   IconLink,
   IconBulb,
@@ -66,6 +67,14 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    id: "page-manager",
+    label: "Page Manager",
+    icon: IconMessage,
+    subItems: [
+      { label: "Page Manager", href: "/page-manager" },
+    ],
+  },
+  {
     id: "automate",
     label: "Automate",
     icon: IconBolt,
@@ -112,6 +121,7 @@ function getActiveSection(pathname: string): string {
   if (pathname.startsWith("/launch") || pathname.startsWith("/ads-manager") || pathname.startsWith("/templates")) return "launch"
   if (pathname.startsWith("/assets")) return "assets"
   if (pathname.startsWith("/insights")) return "insights"
+  if (pathname.startsWith("/page-manager")) return "page-manager"
   if (pathname.startsWith("/automate")) return "automate"
   if (pathname.startsWith("/connect") || pathname.startsWith("/rate-limit")) return "connect"
   if (pathname.startsWith("/ad-accounts")) return "ad-accounts"

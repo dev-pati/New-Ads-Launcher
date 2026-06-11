@@ -142,17 +142,42 @@ export async function POST(request: NextRequest) {
     const { page_id } = await request.json()
     if (!page_id) return NextResponse.json({ error: "page_id required" }, { status: 400 })
 
+    // Reject mock/demo page IDs early
+    if (/^p-\d+$/.test(page_id)) {
+      return NextResponse.json({
+        error: "Cannot sync a demo page. Please select a real Facebook Page from the page picker.",
+        isMockPage: true,
+      }, { status: 400 })
+    }
+
     const supabase = createAdminClient()
+    let token: string | null = null
+    let pageName: string | undefined
+
+    // Try to get page-specific access token from pages table
     const { data: page } = await supabase
       .from("pages")
       .select("fb_page_id, name, page_access_token")
       .eq("org_id", ctx.orgId)
       .eq("fb_page_id", page_id)
-      .single()
+      .maybeSingle()
 
-    if (!page?.page_access_token) return NextResponse.json({ error: "Page not found or no access token" }, { status: 400 })
+    if (page?.page_access_token) {
+      token = page.page_access_token
+      pageName = page.name
+    } else {
+      // Fallback: use the org's Facebook connection user token.
+      // This works for pages where the user has admin access.
+      const { getFacebookConnection } = await import("@/lib/auth")
+      const connection = await getFacebookConnection(ctx.orgId)
+      if (!connection?.access_token) {
+        return NextResponse.json({
+          error: "No Facebook access token found. Please reconnect your Facebook account at /connect.",
+        }, { status: 400 })
+      }
+      token = connection.access_token
+    }
 
-    const token   = page.page_access_token
     const apiKey  = process.env.GEMINI_API_KEY
     const fields  = "id,message,story,created_time,comments{id,message,from,created_time,can_hide,is_hidden,like_count,comment_count}"
 
@@ -174,7 +199,7 @@ export async function POST(request: NextRequest) {
           fb_post_id:      post.id,
           fb_post_message: postMessage,
           page_id:         page_id,
-          page_name:       page.name,
+          page_name:       pageName ?? null,
           message:         c.message || "",
           from_name:       c.from?.name || "Unknown",
           from_id:         c.from?.id || "",

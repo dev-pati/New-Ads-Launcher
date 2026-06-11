@@ -49,96 +49,10 @@ export const FB_PERMISSIONS = [
   "business_management",
   "pages_show_list",
   "pages_read_engagement",
+  "pages_read_user_content",
+  "pages_messaging",
+  "pages_manage_metadata",
   "ads_read",
-  "ads_management",
-  "catalog_management",
-].join(",")
-
-export function getFacebookLoginUrl(redirectUri: string, state: string) {
-  const params = new URLSearchParams({
-    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
-    redirect_uri: redirectUri,
-    scope: FB_PERMISSIONS,
-    response_type: "code",
-    state,
-  })
-  return `https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth?${params}`
-}
-
-export async function exchangeCodeForToken(
-  code: string,
-  redirectUri: string
-): Promise<{ access_token: string; token_type: string; expires_in: number }> {
-  const params = new URLSearchParams({
-    client_id: process.env.FACEBOOK_APP_ID!,
-    client_secret: process.env.FACEBOOK_APP_SECRET!,
-    redirect_uri: redirectUri,
-    code,
-  })
-
-  const res = await secureMetaFetch(`${GRAPH_API_BASE}/oauth/access_token?${params}`)
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to exchange code for token")
-  }
-  return res.json()
-}
-
-export async function getLongLivedToken(
-  shortLivedToken: string
-): Promise<{ access_token: string; token_type: string; expires_in: number }> {
-  const params = new URLSearchParams({
-    grant_type: "fb_exchange_token",
-    client_id: process.env.FACEBOOK_APP_ID!,
-    client_secret: process.env.FACEBOOK_APP_SECRET!,
-    fb_exchange_token: shortLivedToken,
-  })
-
-  const res = await secureMetaFetch(`${GRAPH_API_BASE}/oauth/access_token?${params}`)
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to get long-lived token")
-  }
-  return res.json()
-}
-
-export interface FacebookUser {
-  id: string
-  name: string
-  email?: string
-  picture?: { data: { url: string } }
-}
-
-export async function getFacebookUser(accessToken: string): Promise<FacebookUser> {
-  const res = await fetch(
-    `${GRAPH_API_BASE}/me?fields=id,name,picture`,
-    { headers: buildMetaHeaders(accessToken) }
-  )
-  if (!res.ok) {
-    const error = await res.json()
-    throw new Error(error.error?.message || "Failed to get user info")
-  }
-  return res.json()
-}
-
-export interface InstagramAccount {
-  id: string
-  username?: string
-  profile_pic?: string
-}
-
-export interface FacebookPage {
-  id: string
-  name: string
-  access_token: string
-  category: string
-  picture?: { data: { url: string } }
-  instagram_accounts?: { data: InstagramAccount[] }
-}
-
-function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)) }
-
-export async function getFacebookPages(accessToken: string): Promise<FacebookPage[]> {
   const url = `${GRAPH_API_BASE}/me/accounts?fields=id,name,access_token,category,picture&access_token=${accessToken}`
   const MAX_RETRIES = 3
 
@@ -1446,10 +1360,16 @@ export interface ExistingAdItem {
   status: string
   effective_status: string
   date_created: string
+  campaign_id?: string
+  campaign_name?: string
+  adset_id?: string
+  adset_name?: string
   page_name?: string
   page_id?: string
   post_id?: string
   post_url?: string
+  object_story_id?: string
+  effective_object_story_id?: string
   thumb_url?: string
   image_hash?: string
   video_id?: string
@@ -1468,6 +1388,158 @@ export interface ExistingAdItem {
   cta?: string
 }
 
+export interface DarkPostAdItem {
+  id: string
+  name: string
+  status: string
+  effective_status: string
+  date_created: string
+  campaign_id?: string
+  campaign_name?: string
+  adset_id?: string
+  adset_name?: string
+  page_name?: string
+  page_id?: string
+  post_id?: string
+  post_url?: string
+  object_story_id?: string
+  effective_object_story_id?: string
+  thumb_url?: string
+  image_url?: string
+  image_hash?: string
+  video_id?: string
+  media_type: "image" | "video" | "unknown"
+  primaryText?: string
+  headline?: string
+  description?: string
+  link?: string
+}
+
+export async function getDarkPostAds(
+  adAccountId: string,
+  accessToken: string,
+  opts: { limit?: number; after?: string }
+): Promise<{ ads: DarkPostAdItem[]; paging?: { after?: string; before?: string } }> {
+  const accId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+  const limit = Math.min(opts.limit || 100, 100)
+
+  const fields = [
+    "id",
+    "name",
+    "status",
+    "effective_status",
+    "created_time",
+    "campaign{id,name}",
+    "adset{id,name}",
+    "creative{id,thumbnail_url,image_hash,video_id,object_story_id,effective_object_story_id,object_story_spec{page_id,link_data{message,name,description,link,image_hash,picture},video_data{message,title,video_id,image_url,call_to_action},instagram_actor_id}}",
+  ].join(",")
+
+  const params = new URLSearchParams({
+    fields,
+    limit: String(limit),
+    access_token: accessToken,
+  })
+  if (opts.after) params.set("after", opts.after)
+
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${accId}/ads?${params}`)
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}))
+    throwMetaError(e, "Failed to fetch dark post ads")
+  }
+  const data = await res.json()
+
+  const pageIds = new Set<string>()
+  for (const ad of (data.data || [])) {
+    const storyId = ad.creative?.object_story_id || ad.creative?.effective_object_story_id
+    const pid = ad.creative?.object_story_spec?.page_id || (typeof storyId === "string" && storyId.includes("_") ? storyId.split("_")[0] : undefined)
+    if (pid) pageIds.add(pid)
+  }
+
+  const pageNameMap = new Map<string, string>()
+  if (pageIds.size > 0) {
+    try {
+      const idsParam = Array.from(pageIds).join(",")
+      const pageRes = await secureMetaFetch(`${GRAPH_API_BASE}/?ids=${idsParam}&fields=id,name&access_token=${accessToken}`)
+      if (pageRes.ok) {
+        const pageData = await pageRes.json()
+        for (const pid of pageIds) {
+          if (pageData[pid]?.name) pageNameMap.set(pid, pageData[pid].name)
+        }
+      }
+    } catch {}
+  }
+
+  const imageHashes = new Set<string>()
+  for (const ad of (data.data || [])) {
+    const linkData = ad.creative?.object_story_spec?.link_data
+    const imageHash = ad.creative?.image_hash || linkData?.image_hash
+    if (imageHash) imageHashes.add(imageHash)
+  }
+
+  const imageUrlMap = new Map<string, string>()
+  if (imageHashes.size > 0) {
+    try {
+      const hashesParam = JSON.stringify(Array.from(imageHashes))
+      const imageRes = await secureMetaFetch(
+        `${GRAPH_API_BASE}/${accId}/adimages?hashes=${encodeURIComponent(hashesParam)}&fields=hash,url,url_128&access_token=${accessToken}`
+      )
+      if (imageRes.ok) {
+        const imageData = await imageRes.json()
+        const images = Array.isArray(imageData.data)
+          ? imageData.data
+          : Object.values(imageData.images || {})
+        for (const image of images as any[]) {
+          if (image?.hash && (image.url || image.url_128)) {
+            imageUrlMap.set(image.hash, image.url || image.url_128)
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const ads: DarkPostAdItem[] = (data.data || []).map((ad: any) => {
+    const oss = ad.creative?.object_story_spec || {}
+    const objectStoryId = ad.creative?.object_story_id
+    const effectiveObjectStoryId = ad.creative?.effective_object_story_id
+    const postId = objectStoryId || effectiveObjectStoryId
+    const pageId = oss.page_id || (typeof postId === "string" && postId.includes("_") ? postId.split("_")[0] : undefined)
+    const linkData = oss.link_data
+    const videoData = oss.video_data
+    const imageHash = ad.creative?.image_hash || linkData?.image_hash
+    const videoId = ad.creative?.video_id || videoData?.video_id
+    const imageUrl = imageHash ? imageUrlMap.get(imageHash) : undefined
+
+    return {
+      id: ad.id,
+      name: ad.name,
+      status: ad.status,
+      effective_status: ad.effective_status,
+      date_created: ad.created_time,
+      campaign_id: ad.campaign?.id,
+      campaign_name: ad.campaign?.name,
+      adset_id: ad.adset?.id,
+      adset_name: ad.adset?.name,
+      page_name: pageId ? pageNameMap.get(pageId) : undefined,
+      page_id: pageId,
+      post_id: postId,
+      post_url: postId ? `https://www.facebook.com/${postId.split("_").join("/posts/")}` : undefined,
+      object_story_id: objectStoryId,
+      effective_object_story_id: effectiveObjectStoryId,
+      thumb_url: ad.creative?.thumbnail_url,
+      image_url: imageUrl || linkData?.picture || videoData?.image_url || undefined,
+      image_hash: imageHash,
+      video_id: videoId,
+      media_type: videoId ? "video" : imageHash ? "image" : "unknown",
+      primaryText: linkData?.message || videoData?.message || undefined,
+      headline: linkData?.name || videoData?.title || undefined,
+      description: linkData?.description || undefined,
+      link: linkData?.link || videoData?.call_to_action?.value?.link || undefined,
+    }
+  })
+
+  return { ads, paging: data.paging?.cursors }
+}
+
 export async function getExistingAds(
   adAccountId: string,
   accessToken: string,
@@ -1483,7 +1555,9 @@ export async function getExistingAds(
     "status",
     "effective_status",
     "created_time",
-    "creative{id,thumbnail_url,image_hash,video_id,object_story_id,object_story_spec{page_id,link_data,video_data,instagram_actor_id}}",
+    "campaign{id,name}",
+    "adset{id,name}",
+    "creative{id,thumbnail_url,image_hash,video_id,object_story_id,effective_object_story_id,object_story_spec{page_id,link_data,video_data,instagram_actor_id}}",
     `insights.date_preset(${datePreset}){spend,impressions,reach,actions,purchase_roas}`,
   ].join(",")
 
@@ -1514,7 +1588,8 @@ export async function getExistingAds(
   // Collect unique page IDs to fetch page names in batch
   const pageIds = new Set<string>()
   for (const ad of (data.data || [])) {
-    const pid = ad.creative?.object_story_spec?.page_id
+    const storyId = ad.creative?.object_story_id || ad.creative?.effective_object_story_id
+    const pid = ad.creative?.object_story_spec?.page_id || (typeof storyId === "string" && storyId.includes("_") ? storyId.split("_")[0] : undefined)
     if (pid) pageIds.add(pid)
   }
 
@@ -1535,7 +1610,10 @@ export async function getExistingAds(
   const ads: ExistingAdItem[] = (data.data || []).map((ad: any) => {
     const insights = ad.insights?.data?.[0] || {}
     const oss = ad.creative?.object_story_spec || {}
-    const pageId = oss.page_id
+    const objectStoryId = ad.creative?.object_story_id
+    const effectiveObjectStoryId = ad.creative?.effective_object_story_id
+    const postId = objectStoryId || effectiveObjectStoryId
+    const pageId = oss.page_id || (typeof postId === "string" && postId.includes("_") ? postId.split("_")[0] : undefined)
     const linkData = oss.link_data
     const videoData = oss.video_data
 
@@ -1562,10 +1640,16 @@ export async function getExistingAds(
       status: ad.status,
       effective_status: ad.effective_status,
       date_created: ad.created_time,
+      campaign_id: ad.campaign?.id,
+      campaign_name: ad.campaign?.name,
+      adset_id: ad.adset?.id,
+      adset_name: ad.adset?.name,
       page_name: pageId ? pageNameMap.get(pageId) : undefined,
       page_id: pageId,
-      post_id: ad.creative?.object_story_id,
-      post_url: ad.creative?.object_story_id ? `https://www.facebook.com/${ad.creative.object_story_id.split("_").join("/posts/")}` : undefined,
+      post_id: postId,
+      post_url: postId ? `https://www.facebook.com/${postId.split("_").join("/posts/")}` : undefined,
+      object_story_id: objectStoryId,
+      effective_object_story_id: effectiveObjectStoryId,
       thumb_url: thumb,
       image_hash: imageHash,
       video_id: videoId,

@@ -23,6 +23,15 @@ export class MetaRateLimitError extends Error {
   }
 }
 
+export class MetaApiError extends Error {
+  code: number
+  constructor(message: string, code: number) {
+    super(message)
+    this.name = "MetaApiError"
+    this.code = code
+  }
+}
+
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613])
 const MAX_RETRIES = 3
 const BACKOFF_BASE_MS = 2000 // 2s → 4s → 8s (was 1s → 2s → 4s)
@@ -79,7 +88,7 @@ export async function metaFetch(
 
         // Non-rate-limit Meta error — throw immediately, no retry
         console.error(`[meta-api] ERROR      | code=${code} | caller=${caller} | ${endpoint} | ${msg}`)
-        throw new Error(msg)
+        throw new MetaApiError(msg, code)
       }
 
       if (attempt > 0) {
@@ -88,7 +97,7 @@ export async function metaFetch(
 
       return data
     } catch (err) {
-      if (err instanceof MetaRateLimitError) throw err
+      if (err instanceof MetaRateLimitError || err instanceof MetaApiError) throw err
       // Network error — retry
       lastError = err as Error
       console.error(`[meta-api] NET ERROR  | attempt=${attempt}/${MAX_RETRIES} | caller=${caller} | ${endpoint} | ${(err as Error).message}`)
