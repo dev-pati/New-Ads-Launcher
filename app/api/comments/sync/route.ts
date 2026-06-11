@@ -178,11 +178,18 @@ export async function POST(request: NextRequest) {
       token = connection.access_token
     }
 
+    if (!token) {
+      return NextResponse.json({
+        error: "No Facebook access token found. Please reconnect your Facebook account at /connect.",
+      }, { status: 400 })
+    }
+
+    const accessToken = token
     const apiKey  = process.env.GEMINI_API_KEY
     const fields  = "id,message,story,created_time,comments{id,message,from,created_time,can_hide,is_hidden,like_count,comment_count}"
 
     const feedRes = await fetch(
-      `${GRAPH}/${page_id}/posts?fields=${fields}&limit=10&access_token=${token}`
+      `${GRAPH}/${page_id}/posts?fields=${fields}&limit=10&access_token=${accessToken}`
     )
     const feedData = await feedRes.json()
     if (feedData.error) return NextResponse.json({ error: feedData.error.message }, { status: 400 })
@@ -246,7 +253,7 @@ export async function POST(request: NextRequest) {
 
     // Run automations on new comments
     if (inserted?.length) {
-      await runAutomations(ctx.orgId, inserted, token, supabase, apiKey)
+      await runAutomations(ctx.orgId, inserted, accessToken, supabase, apiKey)
     }
 
     return NextResponse.json({ new_count: inserted?.length || 0, total_fetched: rawComments.length })
