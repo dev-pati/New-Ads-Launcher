@@ -53,6 +53,95 @@ export const FB_PERMISSIONS = [
   "pages_messaging",
   "pages_manage_metadata",
   "ads_read",
+  "ads_management",
+  "catalog_management",
+].join(",")
+
+export function getFacebookLoginUrl(redirectUri: string, state: string) {
+  const params = new URLSearchParams({
+    client_id: process.env.NEXT_PUBLIC_FACEBOOK_APP_ID!,
+    redirect_uri: redirectUri,
+    scope: FB_PERMISSIONS,
+    response_type: "code",
+    state,
+  })
+  return `https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth?${params}`
+}
+
+export async function exchangeCodeForToken(
+  code: string,
+  redirectUri: string
+): Promise<{ access_token: string; token_type: string; expires_in: number }> {
+  const params = new URLSearchParams({
+    client_id: process.env.FACEBOOK_APP_ID!,
+    client_secret: process.env.FACEBOOK_APP_SECRET!,
+    redirect_uri: redirectUri,
+    code,
+  })
+
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/oauth/access_token?${params}`)
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error?.message || "Failed to exchange code for token")
+  }
+  return res.json()
+}
+
+export async function getLongLivedToken(
+  shortLivedToken: string
+): Promise<{ access_token: string; token_type: string; expires_in: number }> {
+  const params = new URLSearchParams({
+    grant_type: "fb_exchange_token",
+    client_id: process.env.FACEBOOK_APP_ID!,
+    client_secret: process.env.FACEBOOK_APP_SECRET!,
+    fb_exchange_token: shortLivedToken,
+  })
+
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/oauth/access_token?${params}`)
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error?.message || "Failed to get long-lived token")
+  }
+  return res.json()
+}
+
+export interface FacebookUser {
+  id: string
+  name: string
+  email?: string
+  picture?: { data: { url: string } }
+}
+
+export async function getFacebookUser(accessToken: string): Promise<FacebookUser> {
+  const res = await fetch(
+    `${GRAPH_API_BASE}/me?fields=id,name,picture`,
+    { headers: buildMetaHeaders(accessToken) }
+  )
+  if (!res.ok) {
+    const error = await res.json()
+    throw new Error(error.error?.message || "Failed to get user info")
+  }
+  return res.json()
+}
+
+export interface InstagramAccount {
+  id: string
+  username?: string
+  profile_pic?: string
+}
+
+export interface FacebookPage {
+  id: string
+  name: string
+  access_token: string
+  category: string
+  picture?: { data: { url: string } }
+  instagram_accounts?: { data: InstagramAccount[] }
+}
+
+function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)) }
+
+export async function getFacebookPages(accessToken: string): Promise<FacebookPage[]> {
   const url = `${GRAPH_API_BASE}/me/accounts?fields=id,name,access_token,category,picture&access_token=${accessToken}`
   const MAX_RETRIES = 3
 
