@@ -49,7 +49,6 @@ export const FB_PERMISSIONS = [
   "business_management",
   "pages_show_list",
   "pages_read_engagement",
-  "pages_read_user_content",
   "pages_messaging",
   "pages_manage_metadata",
   "ads_read",
