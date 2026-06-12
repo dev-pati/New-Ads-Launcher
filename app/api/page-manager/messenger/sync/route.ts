@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
+import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -22,34 +23,15 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient()
-    let token: string | null = null
-    let pageName: string | null = null
-
-    // Get page-specific access token from pages table
-    const { data: page } = await supabase
-      .from("pages")
-      .select("fb_page_id, name, page_access_token")
-      .eq("org_id", ctx.orgId)
-      .eq("fb_page_id", page_id)
-      .maybeSingle()
-
-    if (page?.page_access_token) {
-      token = page.page_access_token
-      pageName = page.name
-    } else {
-      // Fallback: use connection token
-      const { getFacebookConnection } = await import("@/lib/auth")
-      const connection = await getFacebookConnection(ctx.orgId)
-      if (!connection?.access_token) {
-        return NextResponse.json({
-          error: "No Facebook access token found. Please reconnect your Facebook account at /connect.",
-        }, { status: 400 })
-      }
-      token = connection.access_token
+    const pageToken = await resolveOrgPageAccessToken(supabase, ctx.orgId, ctx.user.id, page_id)
+    if (!pageToken?.token) {
+      return NextResponse.json({
+        error: "Page token not found. Please reconnect Facebook and select this Page again.",
+      }, { status: 400 })
     }
 
     // 1. Fetch conversations from Facebook API
-    const convUrl = `${GRAPH}/${page_id}/conversations?fields=id,updated_time,unread_count,participants&limit=15&access_token=${token}`
+    const convUrl = `${GRAPH}/${page_id}/conversations?fields=id,updated_time,unread_count,participants&limit=15&access_token=${pageToken.token}`
     const convRes = await fetch(convUrl)
     const convData = await convRes.json()
 
@@ -73,7 +55,7 @@ export async function POST(request: NextRequest) {
       if (!customerPsid) continue
 
       // 2. Fetch recent messages for this conversation thread
-      const msgUrl = `${GRAPH}/${thread.id}/messages?fields=id,message,created_time,from,to,attachments&limit=25&access_token=${token}`
+      const msgUrl = `${GRAPH}/${thread.id}/messages?fields=id,message,created_time,from,to,attachments&limit=25&access_token=${pageToken.token}`
       const msgRes = await fetch(msgUrl)
       const msgData = await msgRes.json()
 
@@ -114,7 +96,7 @@ export async function POST(request: NextRequest) {
           {
             org_id: ctx.orgId,
             page_id,
-            page_name: pageName || page_id,
+            page_name: pageToken.pageName || page_id,
             customer_psid: customerPsid,
             customer_name: customerName,
             status,

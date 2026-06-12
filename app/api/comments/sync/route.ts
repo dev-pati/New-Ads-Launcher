@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
+import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -151,40 +152,14 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient()
-    let token: string | null = null
-    let pageName: string | undefined
-
-    // Try to get page-specific access token from pages table
-    const { data: page } = await supabase
-      .from("pages")
-      .select("fb_page_id, name, page_access_token")
-      .eq("org_id", ctx.orgId)
-      .eq("fb_page_id", page_id)
-      .maybeSingle()
-
-    if (page?.page_access_token) {
-      token = page.page_access_token
-      pageName = page.name
-    } else {
-      // Fallback: use the org's Facebook connection user token.
-      // This works for pages where the user has admin access.
-      const { getFacebookConnection } = await import("@/lib/auth")
-      const connection = await getFacebookConnection(ctx.orgId)
-      if (!connection?.access_token) {
-        return NextResponse.json({
-          error: "No Facebook access token found. Please reconnect your Facebook account at /connect.",
-        }, { status: 400 })
-      }
-      token = connection.access_token
-    }
-
-    if (!token) {
+    const pageToken = await resolveOrgPageAccessToken(supabase, ctx.orgId, ctx.user.id, page_id)
+    if (!pageToken?.token) {
       return NextResponse.json({
-        error: "No Facebook access token found. Please reconnect your Facebook account at /connect.",
+        error: "Page token not found. Please reconnect Facebook and select this Page again.",
       }, { status: 400 })
     }
 
-    const accessToken = token
+    const accessToken = pageToken.token
     const apiKey  = process.env.GEMINI_API_KEY
     const fields  = "id,message,story,created_time,comments{id,message,from,created_time,can_hide,is_hidden,like_count,comment_count}"
 
@@ -206,7 +181,7 @@ export async function POST(request: NextRequest) {
           fb_post_id:      post.id,
           fb_post_message: postMessage,
           page_id:         page_id,
-          page_name:       pageName ?? null,
+          page_name:       pageToken.pageName ?? null,
           message:         c.message || "",
           from_name:       c.from?.name || "Unknown",
           from_id:         c.from?.id || "",

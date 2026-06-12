@@ -1027,6 +1027,8 @@ export default function PageManagerPage() {
   const [messengerError, setMessengerError] = useState("")
   const [messengerSetupRequired, setMessengerSetupRequired] = useState(false)
   const [messengerSyncing, setMessengerSyncing] = useState(false)
+  const [messengerSubscribing, setMessengerSubscribing] = useState(false)
+  const [messengerWebhookStatus, setMessengerWebhookStatus] = useState<"idle" | "ready">("idle")
 
   useEffect(() => {
     let active = true
@@ -1949,6 +1951,40 @@ export default function PageManagerPage() {
       setMessengerSyncing(false)
     }
   }, [messengerSyncing, loadMessengerInbox, selectedPage?.id])
+
+  const subscribeMessengerWebhooks = useCallback(async () => {
+    const pageId = selectedPage?.id
+    if (!pageId || messengerSubscribing) return false
+
+    if (/^p-\d+$/.test(pageId)) {
+      setMessengerWebhookStatus("idle")
+      return false
+    }
+
+    setMessengerSubscribing(true)
+    setMessengerError("")
+    try {
+      const res = await fetch("/api/page-manager/messenger/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_id: pageId }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) throw new Error(data.error || "Unable to enable Messenger webhooks.")
+      setMessengerWebhookStatus("ready")
+      return true
+    } catch (err: any) {
+      setMessengerWebhookStatus("idle")
+      setMessengerError(err?.message || "Unable to enable Messenger webhooks.")
+      return false
+    } finally {
+      setMessengerSubscribing(false)
+    }
+  }, [messengerSubscribing, selectedPage?.id])
+
+  useEffect(() => {
+    setMessengerWebhookStatus("idle")
+  }, [selectedPage?.id])
 
   useEffect(() => {
     if (tab !== "comments" && tab !== "inbox") return
@@ -3199,16 +3235,28 @@ export default function PageManagerPage() {
                       </div>
                        <div className="flex items-center gap-1">
                         <Button
+                          variant={messengerWebhookStatus === "ready" ? "secondary" : "outline"}
+                          size="sm"
+                          className="h-8 gap-1.5 rounded-full px-3"
+                          title="Enable Messenger webhooks for the selected Page"
+                          onClick={() => void subscribeMessengerWebhooks()}
+                          disabled={!selectedPage?.id || messengerSubscribing || /^p-\d+$/.test(selectedPage?.id || "")}
+                        >
+                          {messengerSubscribing ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconCheck className="size-3.5" />}
+                          {messengerWebhookStatus === "ready" ? "Webhooks on" : "Enable webhooks"}
+                        </Button>
+                        <Button
                           variant="ghost"
                           size="icon"
                           className="size-8 rounded-full"
                           title="Sync Inbox"
                           onClick={async () => {
+                            await subscribeMessengerWebhooks()
                             await Promise.allSettled([syncComments(), syncMessenger()])
                           }}
-                          disabled={commentsLoading || commentsSyncing || messengerLoading || messengerSyncing}
+                          disabled={commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing}
                         >
-                          <IconRefresh className={cn("size-4", (commentsLoading || commentsSyncing || messengerLoading || messengerSyncing) && "animate-spin")} />
+                          <IconRefresh className={cn("size-4", (commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing) && "animate-spin")} />
                         </Button>
                         <Button variant="ghost" size="icon" className="size-8 rounded-full">
                           <IconDots className="size-4" />
@@ -3255,18 +3303,31 @@ export default function PageManagerPage() {
                             {messengerError ? (
                               <p className="mt-2 text-xs text-amber-700">{messengerError}</p>
                             ) : null}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mt-4 gap-1.5 rounded-full"
-                              onClick={async () => {
-                                await Promise.allSettled([syncComments(), syncMessenger()])
-                              }}
-                              disabled={commentsLoading || commentsSyncing || messengerLoading || messengerSyncing}
-                            >
-                              <IconRefresh className={cn("size-3.5", (commentsLoading || commentsSyncing || messengerLoading || messengerSyncing) && "animate-spin")} />
-                              Sync inbox
-                            </Button>
+                            <div className="mt-4 flex flex-wrap justify-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5 rounded-full"
+                                onClick={() => void subscribeMessengerWebhooks()}
+                                disabled={!selectedPage?.id || messengerSubscribing || /^p-\d+$/.test(selectedPage?.id || "")}
+                              >
+                                {messengerSubscribing ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconCheck className="size-3.5" />}
+                                {messengerWebhookStatus === "ready" ? "Webhooks enabled" : "Enable webhooks"}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5 rounded-full"
+                                onClick={async () => {
+                                  await subscribeMessengerWebhooks()
+                                  await Promise.allSettled([syncComments(), syncMessenger()])
+                                }}
+                                disabled={commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing}
+                              >
+                                <IconRefresh className={cn("size-3.5", (commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing) && "animate-spin")} />
+                                Sync inbox
+                              </Button>
+                            </div>
                           </div>
                         ) : null}
                         {pageThreads.map(thread => {

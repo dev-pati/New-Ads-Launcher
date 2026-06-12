@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createHmac, timingSafeEqual } from "crypto"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -25,6 +26,25 @@ function verifyToken() {
   return process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || ""
 }
 
+function appSecret() {
+  return process.env.FACEBOOK_APP_SECRET || ""
+}
+
+function isValidSignature(request: NextRequest, rawBody: string) {
+  const signature = request.headers.get("x-hub-signature-256")
+  const secret = appSecret()
+
+  // Keep dev usable when app secret is not configured locally.
+  if (!secret) return process.env.NODE_ENV !== "production"
+  if (!signature || !signature.startsWith("sha256=")) return false
+
+  const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`
+  const actualBuf = Buffer.from(signature)
+  const expectedBuf = Buffer.from(expected)
+  if (actualBuf.length !== expectedBuf.length) return false
+  return timingSafeEqual(actualBuf, expectedBuf)
+}
+
 function eventTime(timestamp?: number) {
   return timestamp ? new Date(timestamp).toISOString() : new Date().toISOString()
 }
@@ -45,8 +65,8 @@ function eventType(event: MessengerEvent) {
 }
 
 async function storeMessengerEvent(page: any, event: MessengerEvent) {
-  const pageId = event.recipient?.id || page.fb_page_id
   const isEcho = Boolean(event.message?.is_echo)
+  const pageId = isEcho ? event.sender?.id || page.fb_page_id : event.recipient?.id || page.fb_page_id
   const customerPsid = isEcho ? event.recipient?.id : event.sender?.id
   const direction = isEcho ? "outbound" : "inbound"
   const text = eventText(event)
@@ -132,10 +152,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    if (body.object !== "page") return NextResponse.json({ success: true })
+    const rawBody = await request.text()
+    if (!isValidSignature(request, rawBody)) {
+      return NextResponse.json({ error: "Invalid webhook signature" }, { status: 401 })
+    }
+
+    const body = JSON.parse(rawBody || "{}")
+    if (body.object !== "page") {
+      return NextResponse.json({ received: true }, { status: 200 })
+    }
 
     const supabase = createAdminClient()
+    const jobs: Promise<void>[] = []
 
     for (const entry of body.entry || []) {
       const pageId = entry.id
@@ -150,12 +178,14 @@ export async function POST(request: NextRequest) {
 
       for (const event of entry.messaging || []) {
         for (const page of pages) {
-          await storeMessengerEvent(page, event)
+          jobs.push(storeMessengerEvent(page, event))
         }
       }
     }
 
-    return NextResponse.json({ success: true })
+    // Respond quickly to Meta and finish processing in this request lifecycle.
+    await Promise.allSettled(jobs)
+    return NextResponse.json({ received: true }, { status: 200 })
   } catch (err) {
     console.error("[messenger/webhook]", err)
     return NextResponse.json({ error: err instanceof Error ? err.message : "Webhook error" }, { status: 500 })

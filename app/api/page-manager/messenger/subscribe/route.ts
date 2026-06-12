@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
+import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
@@ -15,25 +16,22 @@ export async function POST(request: NextRequest) {
     if (!page_id) return NextResponse.json({ error: "page_id required" }, { status: 400 })
 
     const supabase = createAdminClient()
-    const { data: page } = await supabase
-      .from("pages")
-      .select("fb_page_id, page_access_token")
-      .eq("org_id", ctx.orgId)
-      .eq("fb_page_id", page_id)
-      .maybeSingle()
+    const pageToken = await resolveOrgPageAccessToken(supabase, ctx.orgId, ctx.user.id, page_id)
 
-    if (!page?.page_access_token) {
+    if (!pageToken?.token) {
       return NextResponse.json({ error: "Page token not found. Reconnect Facebook and select this Page again." }, { status: 400 })
     }
 
-    const fields = "messages,messaging_postbacks"
+    const fields = "messages,messaging_postbacks,message_echoes"
+    const params = new URLSearchParams({
+      subscribed_fields: fields,
+      access_token: pageToken.token,
+    })
+
     const res = await fetch(`${GRAPH}/${page_id}/subscribed_apps`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        subscribed_fields: fields,
-        access_token: page.page_access_token,
-      }),
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.error) {
