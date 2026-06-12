@@ -36,8 +36,15 @@ export async function resolveOrgPageAccessToken(
 
         return { token: metaPage.access_token, pageName: metaPage.name }
       }
+
+      console.warn(`[page-token] page ${pageId} is not available in current /me/accounts result`)
+      return null
     } catch (err) {
       console.warn("[page-token] unable to refresh page token from Meta", err)
+      const message = err instanceof Error ? err.message.toLowerCase() : String(err || "").toLowerCase()
+      if (message.includes("expired") || message.includes("invalid") || message.includes("oauth") || message.includes("session") || message.includes("revoked")) {
+        return null
+      }
     }
   }
 

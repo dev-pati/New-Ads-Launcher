@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
+import { normalizeMetaError } from "@/lib/meta-error"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
@@ -35,7 +36,10 @@ export async function POST(request: NextRequest) {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok || data.error) {
-      return NextResponse.json({ error: data.error?.message || "Unable to subscribe Page webhooks." }, { status: 400 })
+      return NextResponse.json(
+        normalizeMetaError(data, "Unable to subscribe Page webhooks.", { pageId: page_id, permission: "pages_manage_metadata" }),
+        { status: 400 }
+      )
     }
 
     return NextResponse.json({ success: true, subscribed_fields: fields, meta: data })

@@ -13,6 +13,14 @@ import {
 } from "@/components/ui/popover"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -21,6 +29,8 @@ import {
 } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Label } from "@/components/ui/label"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Separator } from "@/components/ui/separator"
 import {
   DEFAULT_PAGE_MANAGER_SETTINGS,
   type PageManagerSettings,
@@ -32,15 +42,21 @@ import {
   IconBrandFacebook,
   IconBrandInstagram,
   IconArrowBackUp,
+  IconBell,
   IconCheck,
   IconChevronDown,
+  IconCirclePlus,
   IconDots,
+  IconEdit,
   IconClock,
+  IconGif,
   IconInfoCircle,
   IconEye,
   IconEyeOff,
   IconFilter,
   IconMessage,
+  IconMicrophone,
+  IconMoodSmile,
   IconPhoto,
   IconPlayerPlay,
   IconPlus,
@@ -60,7 +76,7 @@ type PageItem = {
   id: string
   name: string
   picture?: string
-  status: "connected" | "synced" | "permission_required"
+  status: "connected" | "synced" | "permission_required" | "disconnected"
   followers: string
   inbox: number
   comments: number
@@ -70,10 +86,13 @@ type PageItem = {
 
 type PageOption = {
   id: string
+  workspacePageId?: string
+  metaPageId?: string
   name: string
   category: string
   picture?: string
-  status: "connected" | "synced" | "permission_required"
+  status: "connected" | "synced" | "permission_required" | "disconnected"
+  isActive?: boolean
 }
 
 type AdAccountOption = {
@@ -122,6 +141,7 @@ type UnifiedInboxThread = {
   conversation?: MessengerConversation
   conversationId?: string
   customerPsid?: string
+  customerProfilePic?: string | null
 }
 
 type InboxReplyRecord = {
@@ -354,6 +374,12 @@ type MessengerConversation = {
   last_inbound_at?: string | null
   last_outbound_at?: string | null
   messages: MessengerMessage[]
+}
+
+type MessengerAttachmentPreview = {
+  type: string
+  url: string
+  title: string
 }
 
 type CommentAutomation = {
@@ -665,6 +691,7 @@ function stateTone(state: string) {
 function pageStatusMeta(status: PageOption["status"]) {
   if (status === "connected") return { label: "Connected", dot: "bg-emerald-500", text: "text-emerald-700" }
   if (status === "synced") return { label: "Synced", dot: "bg-blue-500", text: "text-blue-700" }
+  if (status === "disconnected") return { label: "Disconnected", dot: "bg-red-500", text: "text-red-700" }
   return { label: "Permission needed", dot: "bg-amber-500", text: "text-amber-700" }
 }
 
@@ -747,6 +774,97 @@ function StatCard({ label, value, desc, icon: Icon }: { label: string; value: st
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function getMessengerAttachmentPreviews(message: MessengerMessage): MessengerAttachmentPreview[] {
+  const attachments = Array.isArray(message.attachments) ? message.attachments : []
+
+  return attachments
+    .map((attachment: any) => {
+      const type = String(attachment?.type || attachment?.mime_type || "attachment").toLowerCase()
+      const payload = attachment?.payload || attachment
+      const url = String(payload?.url || payload?.sticker_url || payload?.image_url || payload?.src || "").trim()
+      if (!url) return null
+
+      const title =
+        type.includes("image") ? "Image" :
+        type.includes("video") ? "Video" :
+        type.includes("audio") ? "Audio" :
+        type.includes("file") ? "File" :
+        type.includes("sticker") ? "Sticker" :
+        "Attachment"
+
+      return { type, url, title }
+    })
+    .filter(Boolean) as MessengerAttachmentPreview[]
+}
+
+function MessengerAttachmentContent({ message }: { message: MessengerMessage }) {
+  const attachments = getMessengerAttachmentPreviews(message)
+  const visibleText = message.message && message.message !== "[Attachment]" ? message.message : ""
+
+  if (!attachments.length) {
+    return <p className="whitespace-pre-wrap">{visibleText || "[Attachment]"}</p>
+  }
+
+  return (
+    <div className="space-y-2">
+      {visibleText ? <p className="whitespace-pre-wrap">{visibleText}</p> : null}
+      {attachments.map((attachment, index) => {
+        if (attachment.type.includes("image") || attachment.type.includes("sticker")) {
+          return (
+            <a key={`${attachment.url}-${index}`} href={attachment.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border bg-background/70">
+              <img src={attachment.url} alt={attachment.title} className="max-h-80 w-full object-contain" loading="lazy" />
+            </a>
+          )
+        }
+
+        if (attachment.type.includes("video")) {
+          return (
+            <video key={`${attachment.url}-${index}`} src={attachment.url} controls className="max-h-80 w-full rounded-xl border bg-black" />
+          )
+        }
+
+        if (attachment.type.includes("audio")) {
+          return <audio key={`${attachment.url}-${index}`} src={attachment.url} controls className="w-full" />
+        }
+
+        return (
+          <a
+            key={`${attachment.url}-${index}`}
+            href={attachment.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-between gap-3 rounded-xl border bg-background/70 px-3 py-2 text-xs hover:bg-muted/70"
+          >
+            <span>{attachment.title}</span>
+            <span className="text-muted-foreground">Open</span>
+          </a>
+        )
+      })}
+    </div>
+  )
+}
+
+function InboxAvatar({
+  name,
+  src,
+  size = "default",
+  online,
+}: {
+  name: string
+  src?: string | null
+  size?: "sm" | "default" | "lg"
+  online?: boolean
+}) {
+  const initial = name?.trim()?.charAt(0)?.toUpperCase() || "?"
+  return (
+    <Avatar size={size} className={cn(size === "lg" && "size-14", size === "default" && "size-10", size === "sm" && "size-8")}>
+      {src ? <AvatarImage src={src} alt={name} /> : null}
+      <AvatarFallback className="bg-[#E4E6EB] text-[#050505]">{initial}</AvatarFallback>
+      {online ? <span className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-white bg-emerald-500" /> : null}
+    </Avatar>
   )
 }
 
@@ -937,19 +1055,22 @@ function ListSetting({
 }
 
 export default function PageManagerPage() {
-  const [selectedPageId, setSelectedPageId] = useState(PAGES[0].id)
-  const [pageOptions, setPageOptions] = useState<PageOption[]>(
-    PAGES.map(page => ({
-      id: page.id,
-      name: page.name,
-      category: `${page.followers} followers`,
-      picture: page.picture,
-      status: page.status,
-    }))
-  )
+  const [selectedPageId, setSelectedPageId] = useState("")
+  const [pageOptions, setPageOptions] = useState<PageOption[]>([])
   const [pagePickerOpen, setPagePickerOpen] = useState(false)
   const [pagePickerSearch, setPagePickerSearch] = useState("")
   const [pagePickerLoading, setPagePickerLoading] = useState(false)
+  const [pagePickerError, setPagePickerError] = useState("")
+  const [addPagesOpen, setAddPagesOpen] = useState(false)
+  const [managePagesOpen, setManagePagesOpen] = useState(false)
+  const [availablePages, setAvailablePages] = useState<PageOption[]>([])
+  const [availablePagesLoading, setAvailablePagesLoading] = useState(false)
+  const [availablePagesSearch, setAvailablePagesSearch] = useState("")
+  const [selectedAvailablePageIds, setSelectedAvailablePageIds] = useState<string[]>([])
+  const [workspacePages, setWorkspacePages] = useState<PageOption[]>([])
+  const [workspacePagesLoading, setWorkspacePagesLoading] = useState(false)
+  const [pageActionLoading, setPageActionLoading] = useState(false)
+  const [pagesModalError, setPagesModalError] = useState("")
   const [adAccounts, setAdAccounts] = useState<AdAccountOption[]>([])
   const [selectedAdAccountId, setSelectedAdAccountId] = useState("")
   const [adAccountsLoading, setAdAccountsLoading] = useState(false)
@@ -959,6 +1080,9 @@ export default function PageManagerPage() {
   const [postScope, setPostScope] = useState<"all" | "public" | "dark">("all")
   const [darkPostPageScope, setDarkPostPageScope] = useState<"ad_account" | "selected_page">("selected_page")
   const [selectedThreadId, setSelectedThreadId] = useState(THREADS[0].id)
+  const [inboxSourceFilter, setInboxSourceFilter] = useState<"all" | "unread" | "messenger" | "comments">("all")
+  const [inboxSearchQuery, setInboxSearchQuery] = useState("")
+  const [inboxListScrollTop, setInboxListScrollTop] = useState(0)
   const [selectedCommentFilter, setSelectedCommentFilter] = useState<CommentFilter>("all")
   const [commentSort, setCommentSort] = useState<CommentSort>("newest")
   const [query, setQuery] = useState("")
@@ -1030,79 +1154,88 @@ export default function PageManagerPage() {
   const [messengerSubscribing, setMessengerSubscribing] = useState(false)
   const [messengerWebhookStatus, setMessengerWebhookStatus] = useState<"idle" | "ready">("idle")
 
-  useEffect(() => {
-    let active = true
+  const mapApiPage = useCallback((page: any): PageOption => ({
+    id: page.page_id || page.id,
+    workspacePageId: page.workspace_page_id,
+    metaPageId: page.meta_page_id,
+    name: page.name || page.page_name || page.page_id || page.id,
+    category: page.category || "Facebook Page",
+    picture: page.picture || page.page_picture_url || undefined,
+    status: page.status || "connected",
+    isActive: page.is_active !== false,
+  }), [])
 
-    async function loadPages() {
-      setPagePickerLoading(true)
-      try {
-        const cached = sessionStorage.getItem("page_manager_pages_cache")
-        if (cached) {
-          const parsed = JSON.parse(cached) as { ts: number; pages: PageOption[] }
-          if (Date.now() - parsed.ts < 10 * 60 * 1000 && Array.isArray(parsed.pages) && parsed.pages.length > 0) {
-            if (active) setPageOptions(parsed.pages)
-            return
-          }
-        }
-
-        const res = await fetch("/api/facebook/pages")
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || "Failed to load pages")
-
-        const apiPages: PageOption[] = (data.pages || []).map((page: any) => ({
-          id: page.id,
-          name: page.name,
-          category: page.category || "Facebook Page",
-          picture: page.picture?.data?.url,
-          status: "connected",
-        }))
-
-        const nextPages = apiPages.length
-          ? apiPages
-          : PAGES.map(page => ({
-              id: page.id,
-              name: page.name,
-              category: `${page.followers} followers`,
-              picture: page.picture,
-              status: page.status,
-            }))
-
-        if (active) setPageOptions(nextPages)
-        try {
-          sessionStorage.setItem("page_manager_pages_cache", JSON.stringify({ ts: Date.now(), pages: nextPages }))
-        } catch {}
-      } catch {
-        if (active) {
-          setPageOptions(
-            PAGES.map(page => ({
-              id: page.id,
-              name: page.name,
-              category: `${page.followers} followers`,
-              picture: page.picture,
-              status: page.status,
-            }))
-          )
-        }
-      } finally {
-        if (active) setPagePickerLoading(false)
+  const loadWorkspacePages = useCallback(async (activeOnly = true) => {
+    setPagePickerLoading(activeOnly)
+    setWorkspacePagesLoading(!activeOnly)
+    setPagePickerError("")
+    try {
+      const res = await fetch(`/api/workspace/pages${activeOnly ? "" : "?active=false"}`)
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Failed to load workspace Pages")
+      const pages = Array.isArray(data.pages) ? data.pages.map(mapApiPage) : []
+      if (activeOnly) setPageOptions(pages)
+      else setWorkspacePages(pages)
+      return pages
+    } catch (err: any) {
+      const message = err?.message || "Unable to load workspace Pages."
+      if (activeOnly) {
+        setPageOptions([])
+        setPagePickerError(message)
+      } else {
+        setWorkspacePages([])
+        setPagesModalError(message)
       }
+      return []
+    } finally {
+      setPagePickerLoading(false)
+      setWorkspacePagesLoading(false)
     }
+  }, [mapApiPage])
 
-    loadPages()
-    return () => {
-      active = false
+  const loadAvailablePages = useCallback(async () => {
+    setAvailablePagesLoading(true)
+    setPagesModalError("")
+    try {
+      const res = await fetch("/api/meta/pages/available")
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Failed to load available Pages")
+      const pages = Array.isArray(data.pages) ? data.pages.map(mapApiPage) : []
+      setAvailablePages(pages)
+      return pages
+    } catch (err: any) {
+      setAvailablePages([])
+      setPagesModalError(err?.message || "Unable to load available Pages.")
+      return []
+    } finally {
+      setAvailablePagesLoading(false)
     }
-  }, [])
+  }, [mapApiPage])
 
-  // Auto-select the first real Facebook page once pages load from Meta API.
-  // This prevents the inbox from trying to load with mock page IDs like "p-1".
+  const syncMetaPages = useCallback(async () => {
+    setPageActionLoading(true)
+    setPagesModalError("")
+    try {
+      const res = await fetch("/api/meta/pages/sync", { method: "POST" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Failed to sync Meta Pages")
+      await loadAvailablePages()
+      return data
+    } catch (err: any) {
+      setPagesModalError(err?.message || "Unable to sync Meta Pages.")
+      return null
+    } finally {
+      setPageActionLoading(false)
+    }
+  }, [loadAvailablePages])
+
   useEffect(() => {
-    const isMock = /^p-\d+$/.test(selectedPageId)
-    if (!isMock) return // already using a real page ID
-    const firstReal = pageOptions.find(page => !/^p-\d+$/.test(page.id))
-    if (firstReal) {
-      setSelectedPageId(firstReal.id)
-    }
+    void loadWorkspacePages(true)
+  }, [loadWorkspacePages])
+
+  useEffect(() => {
+    if (selectedPageId && pageOptions.some(page => page.id === selectedPageId)) return
+    setSelectedPageId(pageOptions[0]?.id || "")
   }, [pageOptions, selectedPageId])
 
   useEffect(() => {
@@ -1154,7 +1287,7 @@ export default function PageManagerPage() {
   }, [])
 
   const selectedPage = useMemo(
-    () => pageOptions.find(option => option.id === selectedPageId) || pageOptions[0],
+    () => pageOptions.find(option => option.id === selectedPageId) || pageOptions[0] || null,
     [pageOptions, selectedPageId]
   )
   const selectedAdAccount = useMemo(
@@ -1180,6 +1313,13 @@ export default function PageManagerPage() {
     () => pageOptions.filter(page => page.id !== selectedPage?.id),
     [pageOptions, selectedPage?.id]
   )
+  const filteredAvailablePages = useMemo(() => {
+    const q = availablePagesSearch.trim().toLowerCase()
+    if (!q) return availablePages
+    return availablePages.filter(page =>
+      [page.name, page.category, page.status].some(value => value.toLowerCase().includes(q))
+    )
+  }, [availablePages, availablePagesSearch])
 
   const updateSettingsSection = useCallback(
     <T extends PageManagerSettingSection>(section: T, patch: Partial<PageManagerSettings[T]>) => {
@@ -1378,23 +1518,55 @@ export default function PageManagerPage() {
     }
   }, [selectedPage?.id])
 
-  const pageThreads = useMemo<UnifiedInboxThread[]>(() => {
+  const patchMessengerConversation = useCallback(async (
+    conversationId: string,
+    pageId: string,
+    patch: { unread_count?: number; status?: MessengerConversation["status"]; assigned_to?: string }
+  ) => {
+    setMessengerConversations(prev => prev.map(conversation =>
+      conversation.id === conversationId && conversation.page_id === pageId
+        ? { ...conversation, ...patch }
+        : conversation
+    ))
+
+    try {
+      const res = await fetch("/api/page-manager/messenger/inbox", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          page_id: pageId,
+          ...patch,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.conversation) {
+        setMessengerConversations(prev => prev.map(conversation =>
+          conversation.id === conversationId ? { ...conversation, ...data.conversation } : conversation
+        ))
+      }
+    } catch (err) {
+      console.error("[page-manager] failed to patch Messenger conversation", err)
+    }
+  }, [])
+
+  const allPageThreads = useMemo<UnifiedInboxThread[]>(() => {
     const settings = pageManagerSettings.conversations
     const realMessengerThreads: UnifiedInboxThread[] = messengerConversations
       .filter(conversation => conversation.page_id === selectedPage?.id)
       .map(conversation => {
         const id = `messenger:${conversation.id}`
         const reply = inboxAutoReplies[id]
-        const handled = Boolean(inboxHandledThreads[id])
         const replied = Boolean(reply || conversation.status === "replied")
-        const pending = (conversation.unread_count || 0) > 0 && !replied && !handled
+        const closed = conversation.status === "closed" || inboxTaskState[id] === "closed"
+        const pending = !replied && !closed && (conversation.status === "pending" || (conversation.unread_count || 0) > 0)
         const baseThread: ThreadItem = {
           id,
           pageId: conversation.page_id,
           name: conversation.customer_name || conversation.customer_psid || "Messenger user",
           lastMessage: conversation.last_message || "Messenger interaction",
           updatedAt: conversation.last_message_at ? postDate(conversation.last_message_at) : "No timestamp",
-          unread: replied || handled ? 0 : conversation.unread_count || 0,
+          unread: conversation.unread_count || 0,
           label: "Lead",
           sentiment: "neutral",
         }
@@ -1407,11 +1579,12 @@ export default function PageManagerPage() {
           conversation,
           conversationId: conversation.id,
           customerPsid: conversation.customer_psid,
+          customerProfilePic: conversation.customer_profile_pic || null,
           latestMessage: reply ? `You: ${reply.text}` : baseThread.lastMessage,
           latestAt: reply?.at || baseThread.updatedAt,
           lastInteractionAt,
-          responseStatus: replied || handled ? "replied" : pending ? "pending" : "open",
-          status: replied || handled ? "replied" : inboxTaskState[id] === "closed" ? "closed" : pending ? "pending" : conversation.status || settings.defaultStatus,
+          responseStatus: replied ? "replied" : pending ? "pending" : "open",
+          status: replied ? "replied" : closed ? "closed" : pending ? "pending" : conversation.status || settings.defaultStatus,
           taskState: inboxTaskState[id] || (conversation.status === "closed" ? "closed" : "open"),
           assignedTo: inboxAssignments[id] || conversation.assigned_to || getThreadAssignment(baseThread),
           tags: Array.from(new Set(["Messenger", ...getThreadTags(baseThread)])).slice(0, 4),
@@ -1508,6 +1681,38 @@ export default function PageManagerPage() {
     selectedDemoPage,
     selectedPage?.id,
   ])
+
+  const pageThreads = useMemo(() => {
+    const normalizedQuery = inboxSearchQuery.trim().toLowerCase()
+    return allPageThreads.filter(thread => {
+      if (normalizedQuery) {
+        const haystack = `${thread.name} ${thread.latestMessage} ${thread.sourceLabel} ${thread.assignedTo || ""}`.toLowerCase()
+        if (!haystack.includes(normalizedQuery)) return false
+      }
+      if (inboxSourceFilter === "unread") return thread.unread > 0 || thread.responseStatus === "pending"
+      if (inboxSourceFilter === "messenger") return thread.sourceType === "messenger"
+      if (inboxSourceFilter === "comments") return thread.sourceType === "ad_comment"
+      return true
+    })
+  }, [allPageThreads, inboxSearchQuery, inboxSourceFilter])
+
+  const virtualizedPageThreads = useMemo(() => {
+    const rowHeight = 96
+    const viewportHeight = 500
+    const overscan = 5
+    const startIndex = Math.max(0, Math.floor(inboxListScrollTop / rowHeight) - overscan)
+    const visibleCount = Math.ceil(viewportHeight / rowHeight) + overscan * 2
+    const endIndex = Math.min(pageThreads.length, startIndex + visibleCount)
+
+    return {
+      rowHeight,
+      startIndex,
+      visibleThreads: pageThreads.slice(startIndex, endIndex),
+      totalHeight: pageThreads.length * rowHeight,
+      offsetTop: startIndex * rowHeight,
+    }
+  }, [inboxListScrollTop, pageThreads])
+
   const selectedThread = useMemo(
     () => pageThreads.find(t => t.id === selectedThreadId) || pageThreads[0] || {
       ...THREADS[0],
@@ -1780,6 +1985,23 @@ export default function PageManagerPage() {
 
   useEffect(() => {
     if (tab !== "inbox") return
+    if (selectedThread?.sourceType !== "messenger") return
+    if (!selectedThread.conversationId || !selectedThread.pageId || selectedThread.unread <= 0) return
+
+    void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
+      unread_count: 0,
+    })
+  }, [
+    patchMessengerConversation,
+    selectedThread?.conversationId,
+    selectedThread?.pageId,
+    selectedThread?.sourceType,
+    selectedThread?.unread,
+    tab,
+  ])
+
+  useEffect(() => {
+    if (tab !== "inbox") return
     if (!pageManagerSettings.automation.autoReplyEnabled) return
     if (inboxAiLoading) return
 
@@ -1902,13 +2124,16 @@ export default function PageManagerPage() {
       const res = await fetch("/api/comments/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page_id: pageId }),
+        body: JSON.stringify({ page_id: pageId, ad_account_id: selectedAdAccountId || undefined }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         let errorMsg = data.error || "Unable to sync comments."
-        if (errorMsg.includes("pages_read_engagement") || errorMsg.includes("Public Content Access")) {
-          errorMsg = "Lỗi đồng bộ Comments: Ứng dụng Facebook cần quyền 'pages_read_engagement' để đọc bình luận. Vui lòng chuyển Facebook App sang Development Mode trong trang quản trị Meta Developers hoặc kết nối lại tài khoản và cấp đủ quyền."
+        if (data.needsReconnect || data.type === "object_unavailable" || data.type === "token") {
+          try { sessionStorage.removeItem("page_manager_pages_cache") } catch {}
+          errorMsg = "Page này không còn truy cập được bằng token hiện tại. Hãy reconnect Facebook, refresh danh sách Page, rồi chọn lại Page."
+        } else if (data.type === "permission" || errorMsg.includes("pages_read_engagement") || errorMsg.includes("Public Content Access")) {
+          errorMsg = "Lỗi đồng bộ Comments: Facebook App cần quyền 'pages_read_engagement' để đọc bình luận. Với app Live, quyền này cần App Review cho user ngoài role app."
         }
         throw new Error(errorMsg)
       }
@@ -1919,7 +2144,7 @@ export default function PageManagerPage() {
     } finally {
       setCommentsSyncing(false)
     }
-  }, [commentsSyncing, loadComments, selectedPage?.id])
+  }, [commentsSyncing, loadComments, selectedAdAccountId, selectedPage?.id])
 
   const syncMessenger = useCallback(async () => {
     const pageId = selectedPage?.id
@@ -1934,13 +2159,16 @@ export default function PageManagerPage() {
       const res = await fetch("/api/page-manager/messenger/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ page_id: pageId }),
+        body: JSON.stringify({ page_id: pageId, full_history: true }),
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         let errorMsg = data.error || "Unable to sync Messenger."
-        if (data.code === 200 || errorMsg.includes("pages_messaging") || errorMsg.includes("appropriate role")) {
-          errorMsg = "Lỗi đồng bộ Messenger: Ứng dụng Facebook cần quyền 'pages_messaging' để đọc tin nhắn. Vui lòng chuyển Facebook App sang Development Mode trong trang quản trị Meta Developers hoặc kết nối lại tài khoản và cấp đủ quyền."
+        if (data.needsReconnect || data.type === "object_unavailable" || data.type === "token") {
+          try { sessionStorage.removeItem("page_manager_pages_cache") } catch {}
+          errorMsg = "Page này không còn truy cập được bằng token hiện tại. Hãy reconnect Facebook, refresh danh sách Page, rồi chọn lại Page."
+        } else if (data.type === "permission" || data.code === 200 || errorMsg.includes("pages_messaging") || errorMsg.includes("appropriate role")) {
+          errorMsg = "Lỗi đồng bộ Messenger: Facebook App cần quyền 'pages_messaging' để đọc tin nhắn. Với app Live, quyền này cần App Review cho user ngoài role app."
         }
         throw new Error(errorMsg)
       }
@@ -1970,7 +2198,16 @@ export default function PageManagerPage() {
         body: JSON.stringify({ page_id: pageId }),
       })
       const data = await res.json().catch(() => ({}))
-      if (!res.ok || data.error) throw new Error(data.error || "Unable to enable Messenger webhooks.")
+      if (!res.ok || data.error) {
+        let errorMsg = data.error || "Unable to enable Messenger webhooks."
+        if (data.needsReconnect || data.type === "object_unavailable" || data.type === "token") {
+          try { sessionStorage.removeItem("page_manager_pages_cache") } catch {}
+          errorMsg = "Page này không còn truy cập được bằng token hiện tại. Hãy reconnect Facebook, refresh danh sách Page, rồi chọn lại Page."
+        } else if (data.type === "permission" || errorMsg.includes("pages_manage_metadata")) {
+          errorMsg = "Không bật được webhook: Facebook App cần quyền 'pages_manage_metadata' cho Page này."
+        }
+        throw new Error(errorMsg)
+      }
       setMessengerWebhookStatus("ready")
       return true
     } catch (err: any) {
@@ -1992,6 +2229,14 @@ export default function PageManagerPage() {
     void loadCommentAutomations(false)
     if (tab === "inbox") void loadMessengerInbox()
   }, [tab, loadComments, loadCommentAutomations, loadMessengerInbox])
+
+  useEffect(() => {
+    if (tab !== "inbox" || !selectedPage?.id) return
+    const timer = window.setInterval(() => {
+      void loadMessengerInbox()
+    }, 15000)
+    return () => window.clearInterval(timer)
+  }, [loadMessengerInbox, selectedPage?.id, tab])
 
   const visibleComments = useMemo(() => {
     const search = query.trim().toLowerCase()
@@ -2693,6 +2938,91 @@ export default function PageManagerPage() {
     setPagePickerOpen(false)
   }
 
+  const openAddPagesModal = () => {
+    setPagePickerOpen(false)
+    setAddPagesOpen(true)
+    setSelectedAvailablePageIds([])
+    setAvailablePagesSearch("")
+    void loadAvailablePages()
+  }
+
+  const openManagePagesModal = () => {
+    setPagePickerOpen(false)
+    setManagePagesOpen(true)
+    setPagesModalError("")
+    void loadWorkspacePages(false)
+  }
+
+  const toggleAvailablePageSelection = (metaPageId?: string) => {
+    if (!metaPageId) return
+    setSelectedAvailablePageIds(prev =>
+      prev.includes(metaPageId)
+        ? prev.filter(id => id !== metaPageId)
+        : [...prev, metaPageId]
+    )
+  }
+
+  const addSelectedPagesToWorkspace = async () => {
+    if (!selectedAvailablePageIds.length) return
+    setPageActionLoading(true)
+    setPagesModalError("")
+    try {
+      const res = await fetch("/api/workspace/pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meta_page_ids: selectedAvailablePageIds }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Unable to add selected Pages")
+      const pages = Array.isArray(data.pages) ? data.pages.map(mapApiPage) : []
+      setPageOptions(pages)
+      setSelectedAvailablePageIds([])
+      setAddPagesOpen(false)
+      if (!selectedPageId && pages[0]) setSelectedPageId(pages[0].id)
+      await loadAvailablePages()
+    } catch (err: any) {
+      setPagesModalError(err?.message || "Unable to add selected Pages.")
+    } finally {
+      setPageActionLoading(false)
+    }
+  }
+
+  const updateWorkspacePageActive = async (page: PageOption, isActive: boolean) => {
+    if (!page.workspacePageId) return
+    setPageActionLoading(true)
+    setPagesModalError("")
+    try {
+      const res = await fetch(`/api/workspace/pages/${page.workspacePageId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: isActive }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Unable to update Page")
+      await Promise.all([loadWorkspacePages(true), loadWorkspacePages(false), loadAvailablePages()])
+    } catch (err: any) {
+      setPagesModalError(err?.message || "Unable to update Page.")
+    } finally {
+      setPageActionLoading(false)
+    }
+  }
+
+  const removeWorkspacePage = async (page: PageOption) => {
+    if (!page.workspacePageId) return
+    setPageActionLoading(true)
+    setPagesModalError("")
+    try {
+      const res = await fetch(`/api/workspace/pages/${page.workspacePageId}`, { method: "DELETE" })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Unable to remove Page")
+      await Promise.all([loadWorkspacePages(true), loadWorkspacePages(false), loadAvailablePages()])
+    } catch (err: any) {
+      setPagesModalError(err?.message || "Unable to remove Page.")
+    } finally {
+      setPageActionLoading(false)
+    }
+  }
+
   const activeSettingsMeta = FANPAGE_SETTINGS_TABS.find(item => item.id === settingsTab) || FANPAGE_SETTINGS_TABS[0]
 
   const updateTemplate = (id: string, patch: Partial<QuickReplyTemplate>) => {
@@ -3048,9 +3378,9 @@ export default function PageManagerPage() {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium leading-tight">{selectedPage.name}</p>
+                        <p className="truncate text-sm font-medium leading-tight">{selectedPage?.name || "No Page selected"}</p>
                         <p className="truncate text-[11px] leading-tight text-muted-foreground">
-                          {selectedPage.category}
+                          {selectedPage?.category || "Add a Page to this workspace"}
                         </p>
                       </div>
                     </div>
@@ -3067,7 +3397,7 @@ export default function PageManagerPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="text-sm font-semibold">Choose Page</p>
-                        <p className="text-xs text-muted-foreground">{pageOptions.length} pages from Meta</p>
+                        <p className="text-xs text-muted-foreground">{pageOptions.length} workspace Pages</p>
                       </div>
                       {pagePickerLoading ? <IconLoader2 className="size-4 animate-spin text-muted-foreground" /> : null}
                     </div>
@@ -3076,12 +3406,12 @@ export default function PageManagerPage() {
                       <Input
                         value={pagePickerSearch}
                         onChange={event => setPagePickerSearch(event.target.value)}
-                        placeholder="Search pages"
+                        placeholder="Search working pages"
                         className="h-10 rounded-lg border-border/70 bg-muted/30 pl-9 text-sm shadow-none focus-visible:bg-background focus-visible:ring-2 focus-visible:ring-primary/20"
                       />
                     </div>
                   </div>
-                  <ScrollArea className="h-[min(360px,calc(100vh-250px))]">
+                  <div className="max-h-[min(360px,calc(100vh-250px))] overflow-y-auto">
                     <div className="divide-y divide-border/60">
                       {filteredPageOptions.map(page => {
                         const selected = selectedPage?.id === page.id
@@ -3125,13 +3455,194 @@ export default function PageManagerPage() {
                       })}
                       {!pagePickerLoading && filteredPageOptions.length === 0 && (
                         <div className="px-3 py-10 text-center text-sm text-muted-foreground">
-                          No pages matched your search.
+                          <p className="font-medium text-foreground">No pages added yet</p>
+                          <p className="mt-1 text-xs">Add Pages to this workspace before using Page Manager.</p>
+                          <Button size="sm" className="mt-4 gap-1.5" onClick={openAddPagesModal}>
+                            <IconPlus className="size-3.5" />
+                            Add Page
+                          </Button>
                         </div>
                       )}
                     </div>
-                  </ScrollArea>
+                  </div>
+                  <div className="border-t p-2">
+                    <Button variant="ghost" className="w-full justify-start gap-2" onClick={openAddPagesModal}>
+                      <IconPlus className="size-4" />
+                      Add Page
+                    </Button>
+                    <Button variant="ghost" className="w-full justify-start gap-2" onClick={openManagePagesModal}>
+                      <IconSettings className="size-4" />
+                      Manage Pages
+                    </Button>
+                  </div>
                 </PopoverContent>
               </Popover>
+
+              <Dialog open={addPagesOpen} onOpenChange={setAddPagesOpen}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Add Pages to Workspace</DialogTitle>
+                    <DialogDescription>
+                      Select Meta Pages that should be available in this workspace. Tokens stay server-side.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <div className="relative flex-1">
+                        <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={availablePagesSearch}
+                          onChange={event => setAvailablePagesSearch(event.target.value)}
+                          placeholder="Search available pages"
+                          className="pl-9"
+                        />
+                      </div>
+                      <Button variant="outline" className="gap-1.5" onClick={() => void syncMetaPages()} disabled={pageActionLoading || availablePagesLoading}>
+                        {pageActionLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconRefresh className="size-3.5" />}
+                        Sync Meta Pages
+                      </Button>
+                    </div>
+                    {pagesModalError ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{pagesModalError}</div>
+                    ) : null}
+                    <div className="rounded-xl border">
+                      <ScrollArea className="h-[360px]">
+                        <div className="divide-y">
+                          {availablePagesLoading ? (
+                            <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                              <IconLoader2 className="mr-2 size-4 animate-spin" />
+                              Loading available Pages...
+                            </div>
+                          ) : filteredAvailablePages.length ? (
+                            filteredAvailablePages.map(page => {
+                              const checked = Boolean(page.metaPageId && selectedAvailablePageIds.includes(page.metaPageId))
+                              const status = pageStatusMeta(page.status)
+                              return (
+                                <label key={page.metaPageId || page.id} className="flex cursor-pointer items-center gap-3 px-3 py-3 hover:bg-muted/50">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleAvailablePageSelection(page.metaPageId)}
+                                    className="size-4 rounded border-border"
+                                  />
+                                  <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60">
+                                    {page.picture ? (
+                                      <img src={page.picture} alt={page.name} className="size-full object-cover" />
+                                    ) : (
+                                      <div className="flex size-full items-center justify-center text-sm font-semibold">{page.name.charAt(0)}</div>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-sm font-medium">{page.name}</p>
+                                    <div className="mt-0.5 flex items-center gap-2 text-xs">
+                                      <span className={cn("size-1.5 rounded-full", status.dot)} />
+                                      <span className={cn("font-medium", status.text)}>{status.label}</span>
+                                      <span className="text-muted-foreground">/</span>
+                                      <span className="truncate text-muted-foreground">{page.category}</span>
+                                    </div>
+                                  </div>
+                                </label>
+                              )
+                            })
+                          ) : (
+                            <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+                              <p className="font-medium text-foreground">No available Pages</p>
+                              <p className="mt-1">All synced Pages are already in this workspace, or Meta Pages have not been synced yet.</p>
+                              <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={() => void syncMetaPages()} disabled={pageActionLoading}>
+                                {pageActionLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconRefresh className="size-3.5" />}
+                                Sync Meta Pages
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setAddPagesOpen(false)}>Cancel</Button>
+                    <Button onClick={() => void addSelectedPagesToWorkspace()} disabled={!selectedAvailablePageIds.length || pageActionLoading}>
+                      {pageActionLoading ? <IconLoader2 className="mr-2 size-4 animate-spin" /> : null}
+                      Add Selected Pages
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={managePagesOpen} onOpenChange={setManagePagesOpen}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Manage Workspace Pages</DialogTitle>
+                    <DialogDescription>
+                      Disable or remove Pages from this workspace without deleting the original Meta Page inventory.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {pagesModalError ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{pagesModalError}</div>
+                  ) : null}
+                  <div className="rounded-xl border">
+                    <ScrollArea className="h-[360px]">
+                      <div className="divide-y">
+                        {workspacePagesLoading ? (
+                          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                            <IconLoader2 className="mr-2 size-4 animate-spin" />
+                            Loading workspace Pages...
+                          </div>
+                        ) : workspacePages.length ? (
+                          workspacePages.map(page => {
+                            const status = pageStatusMeta(page.status)
+                            const active = page.isActive !== false
+                            return (
+                              <div key={page.workspacePageId || page.id} className="flex items-center gap-3 px-3 py-3">
+                                <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60">
+                                  {page.picture ? (
+                                    <img src={page.picture} alt={page.name} className="size-full object-cover" />
+                                  ) : (
+                                    <div className="flex size-full items-center justify-center text-sm font-semibold">{page.name.charAt(0)}</div>
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium">{page.name}</p>
+                                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs">
+                                    <span className={cn("size-1.5 rounded-full", status.dot)} />
+                                    <span className={cn("font-medium", status.text)}>{status.label}</span>
+                                    <span className="text-muted-foreground">/</span>
+                                    <span className="truncate text-muted-foreground">{page.category}</span>
+                                    <Badge variant={active ? "default" : "outline"} className="h-5 rounded-full px-2 text-[10px]">
+                                      {active ? "Active" : "Inactive"}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                {page.status !== "connected" ? (
+                                  <Button variant="outline" size="sm" onClick={() => void syncMetaPages()} disabled={pageActionLoading}>
+                                    Reconnect
+                                  </Button>
+                                ) : null}
+                                <Button variant="outline" size="sm" onClick={() => void updateWorkspacePageActive(page, !active)} disabled={pageActionLoading}>
+                                  {active ? "Disable" : "Enable"}
+                                </Button>
+                                <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700" onClick={() => void removeWorkspacePage(page)} disabled={pageActionLoading}>
+                                  Remove
+                                </Button>
+                              </div>
+                            )
+                          })
+                        ) : (
+                          <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+                            <p className="font-medium text-foreground">No workspace Pages yet</p>
+                            <Button size="sm" className="mt-4 gap-1.5" onClick={openAddPagesModal}>
+                              <IconPlus className="size-3.5" />
+                              Add Page
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setManagePagesOpen(false)}>Close</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
               <Select
                 value={selectedAdAccountId || "none"}
@@ -3225,19 +3736,87 @@ export default function PageManagerPage() {
                   {commentsError && <p className={cn("font-medium", messengerError && "mt-2")}>{commentsError}</p>}
                 </div>
               )}
-              <div className="grid gap-4 xl:grid-cols-[360px_minmax(0,1fr)]">
-                <Card className="border-border/70 overflow-hidden shadow-none">
-                  <CardHeader className="border-b pb-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <CardTitle className="text-sm">Conversations</CardTitle>
-                        <CardDescription>Messenger messages and ad comments for the selected Page.</CardDescription>
+              {!selectedPage ? (
+                <Card className="border-dashed shadow-none">
+                  <CardContent className="flex min-h-[360px] flex-col items-center justify-center text-center">
+                    <IconBrandFacebook className="size-10 text-[#1877F2]" />
+                    <h2 className="mt-4 text-lg font-semibold">No pages added yet</h2>
+                    <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                      Add Pages to this workspace before loading Inbox, Posts, Comments, or Page settings.
+                    </p>
+                    <Button className="mt-5 gap-1.5" onClick={openAddPagesModal}>
+                      <IconPlus className="size-4" />
+                      Add Page
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : null}
+              <div className={cn(
+                "grid min-h-[calc(100vh-230px)] overflow-hidden rounded-2xl border border-[#E4E6EB] bg-[#F0F2F5] shadow-sm lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[372px_minmax(0,1fr)_320px] dark:border-border dark:bg-muted/30",
+                !selectedPage && "hidden"
+              )}>
+                <Card className="overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
+                  <CardHeader className="border-b border-[#E4E6EB] p-4 dark:border-border">
+                    <div className="flex items-center justify-between gap-3">
+                      <CardTitle className="text-xl font-semibold tracking-normal text-[#050505] dark:text-foreground">Chats</CardTitle>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button variant="secondary" size="icon" className="size-9 rounded-full bg-[#E4E6EB] text-[#050505] hover:bg-[#D8DADF] dark:bg-muted dark:text-foreground">
+                          <IconDots className="size-4" />
+                        </Button>
+                        <Button variant="secondary" size="icon" className="size-9 rounded-full bg-[#E4E6EB] text-[#050505] hover:bg-[#D8DADF] dark:bg-muted dark:text-foreground">
+                          <IconEdit className="size-4" />
+                        </Button>
                       </div>
-                       <div className="flex items-center gap-1">
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-2">
+                      <div className="relative min-w-0 flex-1">
+                        <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#65676B]" />
+                        <Input
+                          placeholder="Search Messenger"
+                          value={inboxSearchQuery}
+                          onChange={event => {
+                            setInboxSearchQuery(event.target.value)
+                            setInboxListScrollTop(0)
+                          }}
+                          className="h-10 rounded-full border-0 bg-[#F0F2F5] pl-9 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-[#0084FF] dark:bg-muted"
+                        />
+                      </div>
+                      <Button variant="secondary" size="icon" className="size-10 shrink-0 rounded-full bg-[#F0F2F5] text-[#050505] hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground">
+                        <IconFilter className="size-4" />
+                      </Button>
+                    </div>
+
+                    <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1">
+                      {[
+                        { id: "all", label: "All", count: allPageThreads.length },
+                        { id: "unread", label: "Unread", count: allPageThreads.filter(thread => thread.unread > 0 || thread.responseStatus === "pending").length },
+                        { id: "messenger", label: "Messenger", count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
+                        { id: "comments", label: "Comments", count: allPageThreads.filter(thread => thread.sourceType === "ad_comment").length },
+                      ].map(item => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setInboxSourceFilter(item.id as typeof inboxSourceFilter)}
+                          className={cn(
+                            "h-9 shrink-0 rounded-full px-3 text-sm font-medium transition-colors",
+                            inboxSourceFilter === item.id
+                              ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                              : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                          )}
+                        >
+                          {item.label}
+                          <span className="ml-1 text-xs opacity-70">{item.count}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="flex shrink-0 items-center gap-1">
                         <Button
                           variant={messengerWebhookStatus === "ready" ? "secondary" : "outline"}
                           size="sm"
-                          className="h-8 gap-1.5 rounded-full px-3"
+                          className="h-8 gap-1.5 rounded-full px-3 text-xs"
                           title="Enable Messenger webhooks for the selected Page"
                           onClick={() => void subscribeMessengerWebhooks()}
                           disabled={!selectedPage?.id || messengerSubscribing || /^p-\d+$/.test(selectedPage?.id || "")}
@@ -3252,48 +3831,28 @@ export default function PageManagerPage() {
                           title="Sync Inbox"
                           onClick={async () => {
                             await subscribeMessengerWebhooks()
-                            await Promise.allSettled([syncComments(), syncMessenger()])
+                            await Promise.allSettled([syncMessenger(), syncComments()])
                           }}
                           disabled={commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing}
                         >
                           <IconRefresh className={cn("size-4", (commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing) && "animate-spin")} />
                         </Button>
-                        <Button variant="ghost" size="icon" className="size-8 rounded-full">
-                          <IconDots className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="size-8 rounded-full">
-                          <IconPlus className="size-4" />
-                        </Button>
                       </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center gap-2">
-                      <div className="relative min-w-0 flex-1">
-                        <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input placeholder="Search Messenger" className="h-11 rounded-full pl-9" />
-                      </div>
-                      <Button variant="outline" size="icon" className="size-11 rounded-full">
-                        <IconFilter className="size-4" />
+                      <Button variant="ghost" size="icon" className="size-8 rounded-full" title="More inbox actions">
+                        <IconDots className="size-4" />
                       </Button>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      {["All", "Unread", "Groups", "More"].map(label => (
-                        <Button
-                          key={label}
-                          variant={label === "All" ? "default" : "outline"}
-                          size="sm"
-                          className={cn("rounded-full", label === "All" && "bg-primary text-primary-foreground")}
-                        >
-                          {label}
-                        </Button>
-                      ))}
+                      <Button variant="ghost" size="icon" className="size-8 rounded-full" title="New conversation">
+                        <IconCirclePlus className="size-4" />
+                      </Button>
                     </div>
                   </CardHeader>
 
                   <CardContent className="p-0">
-                    <ScrollArea className="h-[calc(100vh-360px)] min-h-[520px]">
-                      <div className="p-3 space-y-2">
+                    <div
+                      className="h-[calc(100vh-420px)] min-h-[500px] overflow-y-auto overflow-x-hidden"
+                      onScroll={event => setInboxListScrollTop(event.currentTarget.scrollTop)}
+                    >
+                      <div className="max-w-full overflow-x-hidden p-2">
                         {pageThreads.length === 0 ? (
                           <div className="rounded-2xl border border-dashed bg-muted/20 px-4 py-8 text-center">
                             <p className="text-sm font-medium">No inbox items for this Page</p>
@@ -3312,7 +3871,7 @@ export default function PageManagerPage() {
                                 disabled={!selectedPage?.id || messengerSubscribing || /^p-\d+$/.test(selectedPage?.id || "")}
                               >
                                 {messengerSubscribing ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconCheck className="size-3.5" />}
-                                {messengerWebhookStatus === "ready" ? "Webhooks enabled" : "Enable webhooks"}
+                                {messengerWebhookStatus === "ready" ? "Connected" : "Connect"}
                               </Button>
                               <Button
                                 variant="outline"
@@ -3320,7 +3879,7 @@ export default function PageManagerPage() {
                                 className="gap-1.5 rounded-full"
                                 onClick={async () => {
                                   await subscribeMessengerWebhooks()
-                                  await Promise.allSettled([syncComments(), syncMessenger()])
+                                  await Promise.allSettled([syncMessenger(), syncComments()])
                                 }}
                                 disabled={commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing}
                               >
@@ -3330,8 +3889,10 @@ export default function PageManagerPage() {
                             </div>
                           </div>
                         ) : null}
-                        {pageThreads.map(thread => {
-                          const initial = thread.name.charAt(0).toUpperCase()
+                        {pageThreads.length > 0 ? (
+                          <div className="relative" style={{ height: virtualizedPageThreads.totalHeight }}>
+                            <div className="absolute inset-x-0 top-0 space-y-1" style={{ transform: `translateY(${virtualizedPageThreads.offsetTop}px)` }}>
+                        {virtualizedPageThreads.visibleThreads.map(thread => {
                           const isActive = selectedThread.id === thread.id
 
                           return (
@@ -3339,37 +3900,35 @@ export default function PageManagerPage() {
                               key={thread.id}
                               onClick={() => setSelectedThreadId(thread.id)}
                               className={cn(
-                                "flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors",
-                                isActive ? "border-primary bg-primary/5" : "border-transparent hover:bg-muted/60"
+                                "grid h-[92px] w-full min-w-0 grid-cols-[48px_minmax(0,1fr)] items-center gap-2.5 overflow-hidden rounded-2xl px-3 py-2 text-left transition-colors",
+                                isActive ? "bg-[#E7F3FF] dark:bg-primary/15" : "hover:bg-[#F0F2F5] dark:hover:bg-muted/70"
                               )}
                             >
-                              <div className="relative size-12 shrink-0 overflow-hidden rounded-full bg-gradient-to-br from-primary/20 to-primary/10">
-                                {thread.id === "thread-1" ? (
-                                  <img src={selectedPage.picture || "/applogo.webp"} alt="" className="size-full object-cover" />
-                                ) : (
-                                  <div className="flex size-full items-center justify-center text-sm font-semibold text-primary">{initial}</div>
-                                )}
-                                {thread.unread > 0 && (
-                                  <span className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full border-2 border-background bg-emerald-500" />
-                                )}
-                              </div>
+                              <InboxAvatar
+                                name={thread.name}
+                                src={thread.customerProfilePic || (thread.id === "thread-1" ? selectedPage?.picture || "/applogo.webp" : null)}
+                                online={thread.unread > 0 || thread.responseStatus === "pending"}
+                              />
 
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center justify-between gap-2">
-                                  <p className={cn("truncate text-sm", thread.responseStatus === "pending" ? "font-semibold" : "font-medium")}>{thread.name}</p>
-                                  <span className="text-[11px] text-muted-foreground">{thread.latestAt}</span>
+                              <div className="min-w-0 max-w-full overflow-hidden">
+                                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                                  <p className={cn("min-w-0 max-w-full truncate text-sm text-[#050505] dark:text-foreground", thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold" : "font-medium")}>{thread.name}</p>
+                                  <span className="max-w-[84px] truncate text-[11px] text-[#65676B]">{thread.latestAt}</span>
                                 </div>
-                                <p className={cn(
-                                  "mt-1 truncate text-sm",
-                                  thread.responseStatus === "pending" ? "font-medium text-foreground" : "text-muted-foreground"
-                                )}>
-                                  {thread.latestMessage}
-                                </p>
-                                <div className="mt-2 flex items-center gap-2">
+                                <div className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+                                  <p className={cn(
+                                    "min-w-0 max-w-full truncate text-xs leading-5",
+                                    thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold text-[#050505] dark:text-foreground" : "text-[#65676B]"
+                                  )}>
+                                    {thread.latestMessage}
+                                  </p>
+                                  {thread.unread > 0 ? <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0084FF] text-[11px] font-bold text-white">{thread.unread}</span> : null}
+                                </div>
+                                <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-1 overflow-hidden">
                                   <Badge
                                     variant="outline"
                                     className={cn(
-                                      "h-6 rounded-full px-2 text-[10px]",
+                                      "h-5 max-w-[90px] truncate rounded-full px-2 text-[10px]",
                                       thread.sourceType === "ad_comment"
                                         ? "border-violet-200 bg-violet-50 text-violet-700"
                                         : "border-blue-200 bg-blue-50 text-blue-700"
@@ -3380,7 +3939,7 @@ export default function PageManagerPage() {
                                   <Badge
                                     variant="outline"
                                     className={cn(
-                                      "h-6 rounded-full px-2 text-[10px]",
+                                      "h-5 max-w-[80px] truncate rounded-full px-2 text-[10px]",
                                       thread.responseStatus === "replied" && "border-emerald-200 bg-emerald-50 text-emerald-700",
                                       thread.responseStatus === "pending" && "border-amber-200 bg-amber-50 text-amber-700",
                                       thread.responseStatus === "hidden" && "border-slate-200 bg-slate-100 text-slate-700",
@@ -3389,55 +3948,36 @@ export default function PageManagerPage() {
                                   >
                                     {thread.responseStatus === "replied" ? "Replied" : thread.responseStatus === "pending" ? "Pending" : thread.responseStatus === "hidden" ? "Hidden" : "Open"}
                                   </Badge>
-                                  {thread.tags.map(tag => (
-                                    <Badge key={tag} variant="outline" className="h-6 rounded-full border-border/70 px-2 text-[10px]">
-                                      {tag}
-                                    </Badge>
-                                  ))}
-                                  <Badge variant="outline" className="h-6 rounded-full border-border/70 px-2 text-[10px]">
-                                    {thread.sentiment}
-                                  </Badge>
-                                  {thread.unread > 0 && <Badge className="h-6 rounded-full px-2 text-[10px]">{thread.unread}</Badge>}
-                                  {inboxAutoReplies[thread.id] ? (
-                                    <Badge variant="outline" className="h-6 rounded-full bg-violet-50 px-2 text-[10px] text-violet-700">
-                                      AI replied
-                                    </Badge>
-                                  ) : inboxAiProcessedThreads[thread.id] ? (
-                                    <Badge variant="outline" className="h-6 rounded-full bg-slate-50 px-2 text-[10px] text-slate-600">
-                                      AI checked
-                                    </Badge>
-                                  ) : null}
                                 </div>
-                                <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-                                  {pageManagerSettings.conversations.showAssignedStaff ? <span>{thread.assignedTo}</span> : null}
-                                  {pageManagerSettings.conversations.showAssignedStaff ? <span>-</span> : null}
-                                  <span>{thread.status}</span>
-                                  {pageManagerSettings.conversations.taskManagementEnabled ? <span>- task {thread.taskState}</span> : null}
+                                <div className="mt-1 flex max-w-full items-center gap-1 overflow-hidden text-[11px] text-[#65676B]">
+                                  {thread.assignedTo && thread.assignedTo !== "Unassigned" ? <span className="truncate">{thread.assignedTo}</span> : <span>Unassigned</span>}
                                 </div>
                               </div>
                             </button>
                           )
                         })}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
-                    </ScrollArea>
+                    </div>
                   </CardContent>
                 </Card>
 
-                <Card className="border-border/70 overflow-hidden shadow-none">
-                  <CardHeader className="border-b pb-4">
+                <Card className="overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
+                  <CardHeader className="border-b border-[#E4E6EB] px-4 py-3 dark:border-border">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-3">
-                        <div className="size-11 shrink-0 overflow-hidden rounded-full bg-muted">
-                          <img
-                            src={selectedPage.picture || "/applogo.webp"}
-                            alt={selectedThread.name}
-                            className="size-full object-cover"
-                          />
-                        </div>
+                        <InboxAvatar
+                          name={selectedThread.name}
+                          src={selectedThread.customerProfilePic || (selectedThread.sourceType === "ad_comment" ? selectedPage?.picture : null)}
+                          online={selectedThread.responseStatus === "pending" || selectedThread.unread > 0}
+                        />
                         <div className="min-w-0">
-                          <CardTitle className="truncate text-sm">{selectedThread.name}</CardTitle>
-                          <CardDescription className="truncate">
-                            {selectedThread.sourceLabel} - {selectedThread.label} queue - sentiment: {selectedThread.sentiment}
+                          <CardTitle className="truncate text-sm font-semibold text-[#050505] dark:text-foreground">{selectedThread.name}</CardTitle>
+                          <CardDescription className="truncate text-xs text-[#65676B]">
+                            {selectedThread.sourceLabel}
+                            {selectedThread.assignedTo && selectedThread.assignedTo !== "Unassigned" ? ` - Assigned to ${selectedThread.assignedTo}` : ""}
                           </CardDescription>
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <Badge
@@ -3451,22 +3991,12 @@ export default function PageManagerPage() {
                             >
                               {selectedThread.sourceLabel}
                             </Badge>
-                            {selectedThreadMeta.tags.map(tag => (
-                              <Badge key={tag} variant="outline" className="rounded-full text-[10px]">
-                                {tag}
-                              </Badge>
-                            ))}
                             <Badge variant="outline" className="rounded-full text-[10px]">
                               {selectedThreadMeta.responseStatus === "replied" ? "Replied" : selectedThreadMeta.responseStatus === "pending" ? "Pending" : selectedThreadMeta.status}
                             </Badge>
                             {pageManagerSettings.conversations.showAssignedStaff ? (
                               <Badge variant="outline" className="rounded-full text-[10px]">
                                 Assigned: {selectedThreadMeta.assignedTo}
-                              </Badge>
-                            ) : null}
-                            {pageManagerSettings.conversations.showViewerPresence ? (
-                              <Badge variant="outline" className="rounded-full bg-emerald-50 text-[10px] text-emerald-700">
-                                You are viewing
                               </Badge>
                             ) : null}
                           </div>
@@ -3480,12 +4010,19 @@ export default function PageManagerPage() {
                             size="sm"
                             className="mr-1 rounded-full"
                             onClick={() => {
+                              const nextTaskState = selectedThreadMeta.taskState === "closed" ? "open" : "closed"
                               setInboxTaskState(prev => ({
                                 ...prev,
-                                [selectedThread.id]: selectedThreadMeta.taskState === "closed" ? "open" : "closed",
+                                [selectedThread.id]: nextTaskState,
                               }))
                               if (selectedThreadMeta.taskState !== "closed") {
                                 setInboxHandledThreads(prev => ({ ...prev, [selectedThread.id]: true }))
+                              }
+                              if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
+                                void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
+                                  status: nextTaskState === "closed" ? "closed" : "open",
+                                  unread_count: nextTaskState === "closed" ? 0 : selectedThread.unread,
+                                })
                               }
                             }}
                           >
@@ -3497,7 +4034,14 @@ export default function PageManagerPage() {
                             variant="outline"
                             size="sm"
                             className="mr-1 rounded-full"
-                            onClick={() => setInboxAssignments(prev => ({ ...prev, [selectedThread.id]: "Me" }))}
+                            onClick={() => {
+                              setInboxAssignments(prev => ({ ...prev, [selectedThread.id]: "Me" }))
+                              if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
+                                void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
+                                  assigned_to: "Me",
+                                })
+                              }
+                            }}
                           >
                             Self assign
                           </Button>
@@ -3521,31 +4065,42 @@ export default function PageManagerPage() {
                           </Button>
                         ) : null}
                         <Button
-                          variant="outline"
+                          variant="secondary"
                           size="sm"
-                          className="mr-2 gap-1.5 rounded-full"
+                            className="mr-2 h-8 gap-1.5 rounded-full bg-[#F0F2F5] text-xs text-[#050505] hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground"
                           onClick={() => void runInboxAiAutoReply()}
                           disabled={inboxAiLoading || !selectedThread?.lastMessage || selectedThread.id === "empty-inbox"}
                         >
                           {inboxAiLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSparkles className="size-3.5" />}
                           AI Auto Reply
                         </Button>
-                        <Button variant="ghost" size="icon" className="size-9 rounded-full">
-                          <IconPhone className="size-4 text-violet-600" />
+                        <Button variant="ghost" size="icon" className="size-9 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                          <IconPhone className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="size-9 rounded-full">
-                          <IconVideo className="size-4 text-violet-600" />
+                        <Button variant="ghost" size="icon" className="size-9 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                          <IconVideo className="size-4" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="size-9 rounded-full">
-                          <IconInfoCircle className="size-4 text-violet-600" />
+                        <Button variant="ghost" size="icon" className="size-9 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                          <IconInfoCircle className="size-4" />
                         </Button>
                       </div>
                     </div>
                   </CardHeader>
 
-                  <CardContent className="p-0">
-                    <ScrollArea className="h-[calc(100vh-360px)] min-h-[520px]">
-                      <div className="flex min-h-full flex-col p-4">
+                  <CardContent className="flex h-[calc(100vh-230px)] min-h-[620px] flex-col p-0">
+                    <ScrollArea className="min-h-0 flex-1">
+                      <div className="space-y-3 p-5 pb-6">
+                        {selectedThread.id !== "empty-inbox" ? (
+                          <div className="mb-20 mt-4 flex flex-col items-center text-center">
+                            <InboxAvatar
+                              name={selectedThread.name}
+                              src={selectedThread.customerProfilePic || selectedPage?.picture}
+                              size="lg"
+                            />
+                            <p className="mt-3 text-base font-semibold text-[#050505] dark:text-foreground">{selectedThread.name}</p>
+                            <p className="text-xs text-[#65676B]">{selectedThread.sourceLabel}</p>
+                          </div>
+                        ) : null}
                         <div className="space-y-3">
                           {selectedThread.sourceType === "ad_comment" ? (
                             <div className="rounded-2xl border bg-violet-50/60 p-3 text-sm">
@@ -3570,41 +4125,41 @@ export default function PageManagerPage() {
                               <div
                                 key={message.id}
                                 className={cn(
-                                  "max-w-[76%] rounded-2xl px-4 py-3 text-sm shadow-sm",
+                                  "max-w-[78%] rounded-[18px] px-3.5 py-2 text-sm leading-5 shadow-sm",
                                   message.direction === "outbound"
-                                    ? "ml-auto bg-primary text-primary-foreground"
-                                    : "bg-muted/70 text-foreground"
+                                    ? "ml-auto bg-[#0084FF] text-white"
+                                    : "bg-[#F0F2F5] text-[#050505] dark:bg-muted dark:text-foreground"
                                 )}
                               >
-                                <p className="whitespace-pre-wrap">{message.message || "[Attachment]"}</p>
+                                <MessengerAttachmentContent message={message} />
                                 <p className={cn(
                                   "mt-1 text-[11px]",
-                                  message.direction === "outbound" ? "text-primary-foreground/75" : "text-muted-foreground"
+                                  message.direction === "outbound" ? "text-white/75" : "text-[#65676B]"
                                 )}>
                                   {message.fb_created_time ? postDate(message.fb_created_time) : postDate(message.created_at)}
                                 </p>
                               </div>
                             ))
                           ) : (
-                            <div className="max-w-[70%] rounded-2xl bg-muted/70 px-4 py-3">
-                              <p className="text-sm">{selectedThread.lastMessage}</p>
-                              <p className="mt-1 text-[11px] text-muted-foreground">{selectedThread.updatedAt}</p>
+                            <div className="max-w-[78%] rounded-[18px] bg-[#F0F2F5] px-3.5 py-2 text-[#050505] dark:bg-muted dark:text-foreground">
+                              <p className="text-sm leading-5">{selectedThread.lastMessage}</p>
+                              <p className="mt-1 text-[11px] text-[#65676B]">{selectedThread.updatedAt}</p>
                             </div>
                           )}
 
                           {selectedThreadAutoReply ? (
-                            <div className="ml-auto max-w-[76%] rounded-2xl bg-primary px-4 py-3 text-primary-foreground shadow-sm">
-                              <p className="whitespace-pre-wrap text-sm">{selectedThreadAutoReply.text}</p>
-                              <p className="mt-1 text-[11px] text-primary-foreground/75">
+                            <div className="ml-auto max-w-[78%] rounded-[18px] bg-[#0084FF] px-3.5 py-2 text-white shadow-sm">
+                              <p className="whitespace-pre-wrap text-sm leading-5">{selectedThreadAutoReply.text}</p>
+                              <p className="mt-1 text-[11px] text-white/75">
                                 {selectedThreadAutoReply.action === "auto_sent_preview" ? "AI auto reply preview" : "Reply"} - {selectedThreadAutoReply.at}
                               </p>
                             </div>
                           ) : null}
 
                           {selectedThread.sourceType === "messenger" && !selectedThread.conversation ? (
-                            <div className="max-w-[70%] rounded-2xl bg-muted/70 px-4 py-3">
-                              <p className="text-sm">Let me know if you want a quick bundle recommendation too.</p>
-                              <p className="mt-1 text-[11px] text-muted-foreground">Suggested follow-up</p>
+                            <div className="max-w-[78%] rounded-[18px] bg-[#F0F2F5] px-3.5 py-2 text-[#050505] dark:bg-muted dark:text-foreground">
+                              <p className="text-sm leading-5">Let me know if you want a quick bundle recommendation too.</p>
+                              <p className="mt-1 text-[11px] text-[#65676B]">Suggested follow-up</p>
                             </div>
                           ) : null}
                         </div>
@@ -3667,15 +4222,27 @@ export default function PageManagerPage() {
                           </div>
                         </div>
 
-                        <div className="mt-auto pt-4">
-                          <div className="rounded-2xl border bg-background p-3 shadow-sm">
+                      </div>
+                    </ScrollArea>
+
+                    <div className="border-t border-[#E4E6EB] bg-white p-3 dark:border-border dark:bg-background">
+                          <div className="rounded-[20px] border border-[#E4E6EB] bg-white p-3 shadow-sm dark:border-border dark:bg-background">
                             <Textarea
                               placeholder="Aa"
                               value={inboxReplyText}
                               onChange={event => setInboxReplyText(event.target.value)}
-                              className="min-h-24 resize-none border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+                              className="min-h-14 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
                             />
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                              <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                                <IconMicrophone className="size-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                                <IconPhoto className="size-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                                <IconGif className="size-4" />
+                              </Button>
                               <Popover open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
                                 <PopoverTrigger asChild>
                                   <Button
@@ -3721,10 +4288,18 @@ export default function PageManagerPage() {
                                 variant="outline"
                                 size="sm"
                                 className="gap-1.5 rounded-full"
-                                onClick={() => setInboxAssignments(prev => ({
-                                  ...prev,
-                                  [selectedThread.id]: pageManagerSettings.assignmentRules.defaultTeam || "Sales",
-                                }))}
+                                onClick={() => {
+                                  const assignee = pageManagerSettings.assignmentRules.defaultTeam || "Sales"
+                                  setInboxAssignments(prev => ({
+                                    ...prev,
+                                    [selectedThread.id]: assignee,
+                                  }))
+                                  if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
+                                    void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
+                                      assigned_to: assignee,
+                                    })
+                                  }
+                                }}
                                 disabled={!pageManagerSettings.assignmentRules.enabled}
                               >
                                 <IconUsers className="size-3.5" />
@@ -3734,8 +4309,11 @@ export default function PageManagerPage() {
                                 <IconClock className="size-3.5" />
                                 Schedule
                               </Button>
+                              <Button variant="ghost" size="icon" className="ml-auto size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                                <IconMoodSmile className="size-4" />
+                              </Button>
                               <Button
-                                className="ml-auto gap-1.5 rounded-full"
+                                className="gap-1.5 rounded-full bg-[#0084FF] text-white hover:bg-[#0077E6]"
                                 disabled={!inboxReplyText.trim() || commentActionLoading || messengerLoading || selectedThread.id === "empty-inbox"}
                                 onClick={() => void handleReplyInboxThread()}
                               >
@@ -3744,11 +4322,93 @@ export default function PageManagerPage() {
                               </Button>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    </ScrollArea>
+                    </div>
                   </CardContent>
                 </Card>
+
+                <aside className="hidden overflow-hidden bg-white xl:block dark:bg-background">
+                  <ScrollArea className="h-[calc(100vh-230px)] min-h-[620px]">
+                    <div className="p-5">
+                      <div className="flex flex-col items-center text-center">
+                        <InboxAvatar
+                          name={selectedThread.name}
+                          src={selectedThread.customerProfilePic || selectedPage?.picture || "/applogo.webp"}
+                          size="lg"
+                          online={selectedThread.responseStatus === "pending" || selectedThread.unread > 0}
+                        />
+                        <h3 className="mt-3 max-w-full truncate text-base font-semibold text-[#050505] dark:text-foreground">{selectedThread.name}</h3>
+                        <p className="mt-1 text-xs text-[#65676B]">{selectedThread.sourceLabel}</p>
+                      </div>
+
+                      <div className="mt-5 grid grid-cols-3 gap-2">
+                        {[
+                          { label: "Profile", icon: IconInfoCircle },
+                          { label: "Search", icon: IconSearch },
+                          { label: "Notify", icon: IconBell },
+                        ].map(action => {
+                          const ActionIcon = action.icon
+                          return (
+                            <button key={action.label} type="button" className="flex flex-col items-center gap-1.5 rounded-2xl p-2 text-xs font-medium text-[#050505] transition-colors hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted">
+                              <span className="flex size-9 items-center justify-center rounded-full bg-[#F0F2F5] dark:bg-muted">
+                                <ActionIcon className="size-4" />
+                              </span>
+                              <span className="max-w-full truncate">{action.label}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      <Separator className="my-5 bg-[#E4E6EB] dark:bg-border" />
+
+                      <div className="space-y-2">
+                        {[
+                          {
+                            title: "Media, Files & Links",
+                            content: selectedThread.sourceType === "messenger" && selectedThread.conversation?.messages?.some(message => (message.attachments || []).length > 0)
+                              ? "Attachments detected in this thread."
+                              : "No media shared yet.",
+                          },
+                          {
+                            title: "Customer Information",
+                            content: `${selectedThread.name} - ${selectedThread.sourceLabel}`,
+                          },
+                          {
+                            title: "Conversation Details",
+                            content: `Status: ${selectedThreadMeta.responseStatus} - Updated: ${selectedThread.latestAt}`,
+                          },
+                          {
+                            title: "Assigned User",
+                            content: selectedThreadMeta.assignedTo,
+                          },
+                          {
+                            title: "Tags",
+                            content: selectedThread.sourceType === "ad_comment" ? "Ad comment, Lead, Neutral" : "Messenger, Lead, Neutral",
+                          },
+                          {
+                            title: "Lead Information",
+                            content: selectedThreadMeta.status === "closed" ? "Closed lead task" : "Lead queue",
+                          },
+                          {
+                            title: "AI Insights",
+                            content: inboxAiResult?.reason || inboxAiResult?.draftReply || "Run AI Auto Reply to generate summary and intent.",
+                          },
+                          {
+                            title: "Activity History",
+                            content: selectedThread.updatedAt,
+                          },
+                        ].map(section => (
+                          <div key={section.title} className="rounded-2xl border border-transparent">
+                            <button type="button" className="flex w-full items-center justify-between rounded-2xl px-2 py-2.5 text-left text-sm font-semibold text-[#050505] transition-colors hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted">
+                              <span>{section.title}</span>
+                              <IconChevronDown className="size-4 text-[#65676B]" />
+                            </button>
+                            <p className="px-2 pb-3 text-xs leading-5 text-[#65676B]">{section.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </ScrollArea>
+                </aside>
               </div>
             </div>
           )}

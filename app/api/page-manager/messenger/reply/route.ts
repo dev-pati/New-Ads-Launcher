@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
+import { insertMessengerMessage } from "@/lib/messenger-storage"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
       ? String(metaData.message_id)
       : `out:${conversation.id}:${Date.now()}`
 
-    await supabase.from("page_messages").insert({
+    await insertMessengerMessage(supabase, {
       org_id: ctx.orgId,
       conversation_id: conversation.id,
       page_id,

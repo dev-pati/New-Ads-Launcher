@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getMessengerUserPicture, getMessengerUserProfile } from "@/lib/facebook"
+import { insertMessengerMessage, messengerMessageExists } from "@/lib/messenger-storage"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createHmac, timingSafeEqual } from "crypto"
 
@@ -57,7 +59,7 @@ function eventText(event: MessengerEvent) {
   return ""
 }
 
-function eventType(event: MessengerEvent) {
+function eventType(event: MessengerEvent): "text" | "postback" | "attachment" | "unknown" {
   if (event.postback) return "postback"
   if (event.message?.attachments?.length && !event.message?.text) return "attachment"
   if (event.message?.text) return "text"
@@ -68,7 +70,7 @@ async function storeMessengerEvent(page: any, event: MessengerEvent) {
   const isEcho = Boolean(event.message?.is_echo)
   const pageId = isEcho ? event.sender?.id || page.fb_page_id : event.recipient?.id || page.fb_page_id
   const customerPsid = isEcho ? event.recipient?.id : event.sender?.id
-  const direction = isEcho ? "outbound" : "inbound"
+  const direction: "outbound" | "inbound" = isEcho ? "outbound" : "inbound"
   const text = eventText(event)
   const timestamp = eventTime(event.timestamp)
   const fbMessageId = event.message?.mid || event.postback?.mid || null
@@ -76,6 +78,20 @@ async function storeMessengerEvent(page: any, event: MessengerEvent) {
   if (!pageId || !customerPsid || !text) return
 
   const supabase = createAdminClient()
+  if (fbMessageId && await messengerMessageExists(supabase, page.org_id, fbMessageId)) {
+    return
+  }
+
+  const customerProfile = page.page_access_token
+    ? await getMessengerUserProfile(customerPsid, page.page_access_token)
+    : null
+  const customerProfilePic = page.page_access_token
+    ? customerProfile?.profile_pic || await getMessengerUserPicture(customerPsid, page.page_access_token)
+    : null
+  const profileName = [customerProfile?.first_name, customerProfile?.last_name].filter(Boolean).join(" ")
+  const customerName = profileName
+    || customerPsid
+
   const { data: existingConversation } = await supabase
     .from("page_conversations")
     .select("id, unread_count")
@@ -96,7 +112,8 @@ async function storeMessengerEvent(page: any, event: MessengerEvent) {
         page_id: pageId,
         page_name: page.name,
         customer_psid: customerPsid,
-        customer_name: customerPsid,
+        customer_name: customerName,
+        customer_profile_pic: customerProfilePic || undefined,
         status: direction === "inbound" ? "pending" : "replied",
         unread_count: nextUnreadCount,
         last_message: text,
@@ -128,13 +145,7 @@ async function storeMessengerEvent(page: any, event: MessengerEvent) {
     fb_created_time: timestamp,
   }
 
-  if (fbMessageId) {
-    await supabase
-      .from("page_messages")
-      .upsert(messageRow, { onConflict: "org_id,fb_message_id", ignoreDuplicates: true })
-  } else {
-    await supabase.from("page_messages").insert(messageRow)
-  }
+  await insertMessengerMessage(supabase, messageRow)
 }
 
 export async function GET(request: NextRequest) {
@@ -171,7 +182,7 @@ export async function POST(request: NextRequest) {
 
       const { data: pages } = await supabase
         .from("pages")
-        .select("org_id, fb_page_id, name")
+        .select("org_id, fb_page_id, name, page_access_token")
         .eq("fb_page_id", pageId)
 
       if (!pages?.length) continue

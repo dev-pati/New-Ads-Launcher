@@ -95,12 +95,93 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({
-      conversations: (conversations || []).map((conversation: any) => ({
-        ...conversation,
-        messages: messagesByConversation.get(conversation.id) || [],
-      })),
+      conversations: (conversations || []).map((conversation: any) => {
+        const conversationMessages = messagesByConversation.get(conversation.id) || []
+        const latestMessage = conversationMessages[conversationMessages.length - 1]
+        const latestMessageTime = latestMessage?.fb_created_time
+          ? new Date(latestMessage.fb_created_time).getTime()
+          : latestMessage?.created_at
+            ? new Date(latestMessage.created_at).getTime()
+            : 0
+        const conversationLastTime = conversation.last_message_at
+          ? new Date(conversation.last_message_at).getTime()
+          : 0
+
+        if (
+          conversation.last_message &&
+          conversationLastTime > latestMessageTime &&
+          conversationLastTime - latestMessageTime > 1000
+        ) {
+          conversationMessages.push({
+            id: `conversation-last:${conversation.id}`,
+            org_id: conversation.org_id,
+            conversation_id: conversation.id,
+            page_id: conversation.page_id,
+            customer_psid: conversation.customer_psid,
+            fb_message_id: null,
+            direction: conversation.last_outbound_at === conversation.last_message_at ? "outbound" : "inbound",
+            message_type: conversation.last_message === "[Attachment]" ? "attachment" : "text",
+            message: conversation.last_message,
+            attachments: [],
+            raw_event: { synthetic_from_conversation: true },
+            fb_created_time: conversation.last_message_at,
+            created_at: conversation.updated_at || conversation.last_message_at,
+          })
+        }
+
+        return {
+          ...conversation,
+          messages: conversationMessages,
+        }
+      }),
     })
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unable to load Messenger inbox." }, { status: 500 })
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const ctx = await getAuthContext()
+    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const body = await request.json()
+    const conversationId = String(body.conversation_id || "")
+    const pageId = String(body.page_id || "")
+    if (!conversationId || !pageId) {
+      return NextResponse.json({ error: "conversation_id and page_id required" }, { status: 400 })
+    }
+
+    const updates: Record<string, unknown> = {}
+    if (typeof body.unread_count === "number") {
+      updates.unread_count = Math.max(0, Math.floor(body.unread_count))
+    }
+    if (typeof body.status === "string" && ["open", "pending", "replied", "closed", "archived"].includes(body.status)) {
+      updates.status = body.status
+    }
+    if (typeof body.assigned_to === "string") {
+      updates.assigned_to = body.assigned_to.trim() || null
+    }
+    if (!Object.keys(updates).length) {
+      return NextResponse.json({ error: "No valid updates" }, { status: 400 })
+    }
+    updates.updated_at = new Date().toISOString()
+
+    const supabase = createAdminClient()
+    const { data, error } = await supabase
+      .from("page_conversations")
+      .update(updates)
+      .eq("id", conversationId)
+      .eq("org_id", ctx.orgId)
+      .eq("page_id", pageId)
+      .select("*")
+      .maybeSingle()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!data) return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+
+    return NextResponse.json({ conversation: data })
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Unable to update conversation." }, { status: 500 })
   }
 }

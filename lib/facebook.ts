@@ -1,10 +1,20 @@
 import { buildMetaHeaders, extractTokenFromUrl, secureMetaFetch } from "@/lib/meta-secure-fetch"
+import { createHmac } from "crypto"
 
 const GRAPH_API_VERSION = "v25.0"
 export const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`
 
 // Error codes Meta returns for rate limits (HTTP 200 body OR non-OK status).
 const META_RATE_LIMIT_CODES = new Set([4, 17, 32, 613])
+
+function graphTokenParams(accessToken: string) {
+  const params = new URLSearchParams({ access_token: accessToken })
+  const appSecret = process.env.FACEBOOK_APP_SECRET || ""
+  if (appSecret) {
+    params.set("appsecret_proof", createHmac("sha256", appSecret).update(accessToken).digest("hex"))
+  }
+  return params
+}
 
 function throwMetaError(data: any, fallback: string): never {
   const code: number = data?.error?.code ?? 0
@@ -49,6 +59,7 @@ export const FB_PERMISSIONS = [
   "business_management",
   "pages_show_list",
   "pages_read_engagement",
+  "pages_manage_engagement",
   "pages_messaging",
   "pages_manage_metadata",
   "ads_read",
@@ -129,6 +140,39 @@ export interface InstagramAccount {
   profile_pic?: string
 }
 
+export interface MessengerUserProfile {
+  id: string
+  first_name?: string
+  last_name?: string
+  profile_pic?: string
+}
+
+export async function getMessengerUserProfile(psid: string, pageAccessToken: string): Promise<MessengerUserProfile | null> {
+  const fields = "id,first_name,last_name,profile_pic"
+  const params = graphTokenParams(pageAccessToken)
+  params.set("fields", fields)
+  const res = await fetch(`${GRAPH_API_BASE}/${encodeURIComponent(psid)}?${params.toString()}`)
+  const data = await res.json().catch(() => null)
+  if (!res.ok || data?.error) {
+    console.warn("[messenger-profile] unable to fetch customer profile", data?.error || res.status)
+    return null
+  }
+  return data
+}
+
+export async function getMessengerUserPicture(psid: string, pageAccessToken: string): Promise<string | null> {
+  const params = graphTokenParams(pageAccessToken)
+  params.set("redirect", "false")
+  params.set("type", "large")
+  const res = await fetch(`${GRAPH_API_BASE}/${encodeURIComponent(psid)}/picture?${params.toString()}`)
+  const data = await res.json().catch(() => null)
+  if (!res.ok || data?.error) {
+    console.warn("[messenger-profile] unable to fetch customer picture", data?.error || res.status)
+    return null
+  }
+  return data?.data?.url || null
+}
+
 export interface FacebookPage {
   id: string
   name: string
@@ -139,6 +183,21 @@ export interface FacebookPage {
 }
 
 function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)) }
+
+async function fetchAllMetaPages<T>(initialUrl: string, fallbackMessage: string): Promise<T[]> {
+  const rows: T[] = []
+  let url: string | null = initialUrl
+
+  while (url) {
+    const res: Response = await fetch(url)
+    const data: any = await res.json()
+    if (data?.error || !res.ok) throwMetaError(data, fallbackMessage)
+    rows.push(...(data.data || []))
+    url = data.paging?.next || null
+  }
+
+  return rows
+}
 
 export async function getFacebookPages(accessToken: string): Promise<FacebookPage[]> {
   const url = `${GRAPH_API_BASE}/me/accounts?fields=id,name,access_token,category,picture&access_token=${accessToken}`
@@ -323,6 +382,7 @@ export interface CampaignInsight {
   cpm?: string
   ctr?: string
   actions?: { action_type: string; value: string }[]
+  action_values?: { action_type: string; value: string }[]
   cost_per_action_type?: { action_type: string; value: string }[]
   date_start: string
   date_stop: string
@@ -354,8 +414,8 @@ export async function getCampaigns(
   timeRange?: string
 ): Promise<Campaign[]> {
   const insightsParam = timeRange
-    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
-    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
+    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
+    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
   const fields = [
     "id", "name", "status", "effective_status", "objective",
     "daily_budget", "lifetime_budget", "budget_remaining", "spend_cap", "bid_strategy",
@@ -364,12 +424,10 @@ export async function getCampaigns(
     "adsets.limit(0).summary(true)",
   ].join(",")
 
-  const res  = await fetch(
-    `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
+  return fetchAllMetaPages<Campaign>(
+    `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`,
+    "Failed to get campaigns"
   )
-  const data = await res.json()
-  if (data?.error || !res.ok) throwMetaError(data, "Failed to get campaigns")
-  return data.data || []
 }
 
 // Ad Set interfaces and functions
@@ -407,8 +465,8 @@ export async function getAdSets(
   timeRange?: string
 ): Promise<AdSet[]> {
   const insightsParam = timeRange
-    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
-    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
+    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
+    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
   const fields = [
     "id", "name", "status", "effective_status", "campaign_id", "campaign{name}",
     "daily_budget", "lifetime_budget", "budget_remaining",
@@ -417,17 +475,15 @@ export async function getAdSets(
     insightsParam,
   ].join(",")
 
-  let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
+  let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
   if (campaignId) {
-    url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
+    url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
   }
 
-  const res  = await fetch(url)
-  const data = await res.json()
-  if (data?.error || !res.ok) throwMetaError(data, "Failed to get ad sets")
+  const data = await fetchAllMetaPages<any>(url, "Failed to get ad sets")
 
   // Flatten campaign.name → campaign_name for convenience
-  return (data.data || []).map((a: any) => ({
+  return data.map((a: any) => ({
     ...a,
     campaign_name: a.campaign?.name ?? a.campaign_name ?? null,
   }))
@@ -460,8 +516,8 @@ export async function getAds(
   timeRange?: string
 ): Promise<Ad[]> {
   const insightsParam = timeRange
-    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
-    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,cost_per_action_type}`
+    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
+    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
   const fields = [
     "id", "name", "status", "effective_status", "adset_id", "campaign_id",
     "creative{id,name,title,body,image_url,thumbnail_url}",
@@ -469,15 +525,12 @@ export async function getAds(
     insightsParam,
   ].join(",")
 
-  let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
+  let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
   if (adSetId) {
-    url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=100&access_token=${accessToken}`
+    url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
   }
 
-  const res  = await fetch(url)
-  const data = await res.json()
-  if (data?.error || !res.ok) throwMetaError(data, "Failed to get ads")
-  return data.data || []
+  return fetchAllMetaPages<Ad>(url, "Failed to get ads")
 }
 
 // Business Manager interfaces and functions

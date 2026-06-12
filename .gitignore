@@ -43,4 +43,5 @@ handover-private/
 *.tsbuildinfo
 next-env.d.ts
 screenshots/
+scratch/
 .vercel

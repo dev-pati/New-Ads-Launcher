@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
+import { getMessengerUserPicture, getMessengerUserProfile } from "@/lib/facebook"
 import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
+import { normalizeMetaError } from "@/lib/meta-error"
+import { insertMessengerMessages } from "@/lib/messenger-storage"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -8,13 +11,37 @@ export const dynamic = "force-dynamic"
 export const maxDuration = 60
 
 const GRAPH = "https://graph.facebook.com/v25.0"
+const CONVERSATION_SYNC_LIMIT = 50
+const MESSAGE_PAGE_LIMIT = 100
+const MAX_MESSAGES_PER_CONVERSATION = 500
+
+async function fetchConversationMessages(conversationId: string, pageToken: string) {
+  const messages: any[] = []
+  const fields = "id,message,created_time,from,to,attachments{type,payload,mime_type,name,file_url,image_data,video_data}"
+  let url = `${GRAPH}/${conversationId}/messages?fields=${encodeURIComponent(fields)}&limit=${MESSAGE_PAGE_LIMIT}&access_token=${encodeURIComponent(pageToken)}`
+
+  while (url && messages.length < MAX_MESSAGES_PER_CONVERSATION) {
+    const res = await fetch(url)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || data.error) {
+      throw data
+    }
+
+    if (Array.isArray(data.data)) messages.push(...data.data)
+
+    const next = data.paging?.next
+    url = typeof next === "string" && next ? next : ""
+  }
+
+  return messages.slice(0, MAX_MESSAGES_PER_CONVERSATION)
+}
 
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { page_id } = await request.json()
+    const { page_id, full_history } = await request.json()
     if (!page_id) return NextResponse.json({ error: "page_id required" }, { status: 400 })
 
     // Skip sync for demo page IDs
@@ -31,16 +58,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. Fetch conversations from Facebook API
-    const convUrl = `${GRAPH}/${page_id}/conversations?fields=id,updated_time,unread_count,participants&limit=15&access_token=${pageToken.token}`
+    const conversationLimit = full_history ? CONVERSATION_SYNC_LIMIT : 15
+    const convUrl = `${GRAPH}/${page_id}/conversations?fields=id,updated_time,unread_count,participants&limit=${conversationLimit}&access_token=${pageToken.token}`
     const convRes = await fetch(convUrl)
     const convData = await convRes.json()
 
-    if (convData.error) {
-      return NextResponse.json({
-        error: convData.error.message,
-        code: convData.error.code,
-        subcode: convData.error.error_subcode,
-      }, { status: 400 })
+    if (!convRes.ok || convData.error) {
+      return NextResponse.json(
+        normalizeMetaError(convData, "Unable to sync Messenger.", { pageId: page_id, permission: "pages_messaging" }),
+        { status: 400 }
+      )
     }
 
     const fbConversations = convData.data || []
@@ -50,16 +77,25 @@ export async function POST(request: NextRequest) {
       const participants = thread.participants?.data || []
       const customer = participants.find((p: any) => p.id !== page_id) || participants[0] || {}
       const customerPsid = customer.id
-      const customerName = customer.name || "Messenger User"
 
       if (!customerPsid) continue
 
-      // 2. Fetch recent messages for this conversation thread
-      const msgUrl = `${GRAPH}/${thread.id}/messages?fields=id,message,created_time,from,to,attachments&limit=25&access_token=${pageToken.token}`
-      const msgRes = await fetch(msgUrl)
-      const msgData = await msgRes.json()
+      const customerProfile = await getMessengerUserProfile(customerPsid, pageToken.token)
+      const customerProfilePic = customerProfile?.profile_pic
+        || await getMessengerUserPicture(customerPsid, pageToken.token)
+      const profileName = [customerProfile?.first_name, customerProfile?.last_name].filter(Boolean).join(" ")
+      const customerName = profileName
+        || customer.name
+        || "Messenger User"
 
-      const fbMessages = msgData.data || []
+      // 2. Fetch message history for this conversation thread.
+      let fbMessages: any[] = []
+      try {
+        fbMessages = await fetchConversationMessages(thread.id, pageToken.token)
+      } catch (msgData: any) {
+        console.error("[messenger/sync] failed to fetch conversation messages:", msgData?.error || msgData)
+        continue
+      }
       if (!fbMessages.length) continue
 
       // Sort chronological ascending
@@ -99,6 +135,7 @@ export async function POST(request: NextRequest) {
             page_name: pageToken.pageName || page_id,
             customer_psid: customerPsid,
             customer_name: customerName,
+            customer_profile_pic: customerProfilePic || null,
             status,
             unread_count: thread.unread_count || 0,
             last_message: lastText.slice(0, 500),
@@ -119,8 +156,8 @@ export async function POST(request: NextRequest) {
 
       // Upsert messages in batch
       const messagesToInsert = fbMessages.map((m: any) => {
-        const direction = m.from?.id === page_id ? "outbound" : "inbound"
-        let msgType = "text"
+        const direction: "outbound" | "inbound" = m.from?.id === page_id ? "outbound" : "inbound"
+        let msgType: "text" | "attachment" = "text"
         if (m.attachments?.data?.length) msgType = "attachment"
 
         return {
@@ -139,9 +176,7 @@ export async function POST(request: NextRequest) {
       })
 
       if (messagesToInsert.length) {
-        const { error: msgInsertError } = await supabase
-          .from("page_messages")
-          .upsert(messagesToInsert, { onConflict: "org_id,fb_message_id", ignoreDuplicates: true })
+        const { error: msgInsertError } = await insertMessengerMessages(supabase, messagesToInsert)
 
         if (msgInsertError) {
           console.error("[messenger/sync] failed to insert messages:", msgInsertError)
@@ -151,7 +186,12 @@ export async function POST(request: NextRequest) {
       importedCount++
     }
 
-    return NextResponse.json({ success: true, count: importedCount })
+    return NextResponse.json({
+      success: true,
+      count: importedCount,
+      conversation_limit: conversationLimit,
+      message_limit_per_conversation: MAX_MESSAGES_PER_CONVERSATION,
+    })
   } catch (err: any) {
     console.error("[messenger/sync] error:", err)
     return NextResponse.json({ error: err.message }, { status: 500 })

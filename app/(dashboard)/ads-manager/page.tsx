@@ -35,6 +35,7 @@ interface Insight {
   clicks: string
   reach?: string
   actions?: { action_type: string; value: string }[]
+  action_values?: { action_type: string; value: string }[]
   cost_per_action_type?: { action_type: string; value: string }[]
 }
 
@@ -99,6 +100,14 @@ const OBJECTIVE_RESULT: Record<string, { type: string; actionType: string }> = {
   OUTCOME_AWARENESS: { type: "Reach", actionType: "reach" },
 }
 
+const ACTION_ALIASES: Record<string, string[]> = {
+  omni_purchase: ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase", "onsite_conversion.purchase"],
+  purchase: ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase", "onsite_conversion.purchase"],
+  lead: ["lead", "omni_lead", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped", "onsite_conversion.lead"],
+  link_click: ["link_click", "omni_link_click"],
+  add_to_cart: ["omni_add_to_cart", "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart", "onsite_conversion.add_to_cart"],
+}
+
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -136,8 +145,36 @@ function fmtDate(iso?: string) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
 }
 
+function formatMetaDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
 function getInsight(item: Campaign | AdSet | Ad): Insight | null {
   return item.insights?.data?.[0] || null
+}
+
+function getMetricValue(items: { action_type: string; value: string }[] | undefined, actionType: string): number {
+  if (!items?.length) return 0
+  const aliases = ACTION_ALIASES[actionType] || [actionType]
+  return aliases.reduce((sum, alias) => {
+    const item = items.find(entry => entry.action_type === alias)
+    return sum + (parseFloat(item?.value || "0") || 0)
+  }, 0)
+}
+
+function getActionCount(ins: Insight | null, actionType: string): number {
+  return getMetricValue(ins?.actions, actionType)
+}
+
+function getActionValueAmount(ins: Insight | null, actionType: string): number {
+  return getMetricValue(ins?.action_values, actionType)
+}
+
+function formatMoneyAmount(value: number): string {
+  return Number.isFinite(value) && value > 0 ? `$${value.toFixed(2)}` : "—"
 }
 
 function getSpend(item: Campaign | AdSet | Ad) {
@@ -151,18 +188,23 @@ function getResults(item: Campaign | AdSet | Ad, objective?: string) {
   if (!ins?.actions) return { count: 0, type: "Results" }
   const obj = OBJECTIVE_RESULT[objective || ""]
   if (!obj) return { count: parseInt(ins.actions[0]?.value || "0"), type: "Actions" }
-  const action = ins.actions.find(a => a.action_type === obj.actionType)
-  return { count: parseInt(action?.value || "0"), type: obj.type }
+  return { count: getActionCount(ins, obj.actionType), type: obj.type }
 }
 
 function getCostPerResult(item: Campaign | AdSet | Ad, objective?: string) {
   const ins = getInsight(item)
-  if (!ins?.cost_per_action_type) return null
+  const spend = getSpend(item)
   const obj = OBJECTIVE_RESULT[objective || ""]
   if (!obj) return null
-  const cpa = ins.cost_per_action_type.find(a => a.action_type === obj.actionType)
-  if (!cpa) return null
-  return `$${parseFloat(cpa.value).toFixed(2)}`
+  const cpa = ins?.cost_per_action_type?.find(a => (ACTION_ALIASES[obj.actionType] || [obj.actionType]).includes(a.action_type))
+  if (!cpa) {
+    const count = getActionCount(ins, obj.actionType)
+    return count > 0 ? `$${(spend / count).toFixed(2)}` : null
+  }
+  const value = parseFloat(cpa.value)
+  if (Number.isFinite(value)) return `$${value.toFixed(2)}`
+  const count = getActionCount(ins, obj.actionType)
+  return count > 0 ? `$${(spend / count).toFixed(2)}` : null
 }
 
 // ─── Status Toggle ────────────────────────────────────────────────────────────
@@ -371,8 +413,8 @@ export default function AdsManagerPage() {
   const buildDateParam = useCallback(() => {
     return datePreset === "custom" && customDateRange
       ? `time_range=${encodeURIComponent(JSON.stringify({
-          since: customDateRange.start.toISOString().split("T")[0],
-          until: customDateRange.end.toISOString().split("T")[0],
+          since: formatMetaDate(customDateRange.start),
+          until: formatMetaDate(customDateRange.end),
         }))}`
       : `date_preset=${datePreset}`
   }, [datePreset, customDateRange])
@@ -457,6 +499,7 @@ export default function AdsManagerPage() {
               clicks: item.clicks || "0",
               reach: item.reach,
               actions: item.actions,
+              action_values: item.action_values,
               cost_per_action_type: item.cost_per_action_type,
             } as Insight,
           }))
@@ -755,8 +798,7 @@ export default function AdsManagerPage() {
   // ─── Config-driven cell renderer ─────────────────────────────────────────────
 
   function getActionValue(ins: Insight | null, actionType: string): number {
-    if (!ins?.actions) return 0
-    return parseInt(ins.actions.find(a => a.action_type === actionType)?.value || "0")
+    return getActionCount(ins, actionType)
   }
 
   function renderCellContent(colId: string, row: Campaign | AdSet | Ad) {
@@ -846,21 +888,21 @@ export default function AdsManagerPage() {
         return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "omni_purchase") : "—"}</span>
 
       case "purchase_value": {
-        const val = ins?.actions?.find(a => a.action_type === "omni_purchase_roas" || a.action_type === "purchase_roas")?.value
-        return <span className="text-[13px] tabular-nums">{val ? `$${parseFloat(val).toFixed(2)}` : "—"}</span>
+        const value = getActionValueAmount(ins, "omni_purchase")
+        return <span className="text-[13px] tabular-nums">{formatMoneyAmount(value)}</span>
       }
 
       case "avg_order_value": {
         const purchasesN = getActionValue(ins, "omni_purchase")
-        const pv = ins?.actions?.find(a => a.action_type === "omni_purchase_roas")
-        if (!ins || purchasesN === 0 || !pv) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">${(parseFloat(pv.value) / purchasesN).toFixed(2)}</span>
+        const purchaseValue = getActionValueAmount(ins, "omni_purchase")
+        if (!ins || purchasesN === 0 || purchaseValue === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">${(purchaseValue / purchasesN).toFixed(2)}</span>
       }
 
       case "roas": {
-        const purchasesN = getActionValue(ins, "omni_purchase")
-        if (!ins || spend === 0 || purchasesN === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">{(purchasesN / spend).toFixed(2)}x</span>
+        const purchaseValue = getActionValueAmount(ins, "omni_purchase")
+        if (!ins || spend === 0 || purchaseValue === 0) return <span className="text-[13px]">—</span>
+        return <span className="text-[13px] tabular-nums">{(purchaseValue / spend).toFixed(2)}x</span>
       }
 
       case "cost_per_purchase": {
@@ -917,23 +959,25 @@ export default function AdsManagerPage() {
 
   function renderBreakdownCell(colId: string, ins: Insight, objective?: string) {
     const spend = parseFloat(ins.spend || "0")
-    const getVal = (type: string) => parseInt(ins.actions?.find(a => a.action_type === type)?.value || "0")
+    const getVal = (type: string) => getActionCount(ins, type)
+    const getValue = (type: string) => getActionValueAmount(ins, type)
     switch (colId) {
       case "spend":
         return <span className="text-[13px] tabular-nums">{ins.spend ? `$${spend.toFixed(2)}` : "—"}</span>
       case "results": {
         const obj = OBJECTIVE_RESULT[objective || ""]
         if (!obj) return <span className="text-[13px]">—</span>
-        const action = ins.actions?.find(a => a.action_type === obj.actionType)
-        const count = parseInt(action?.value || "0")
+        const count = getVal(obj.actionType)
         return <><span className="text-[13px] tabular-nums">{count || "—"}</span>{count > 0 && <p className="text-[11px] text-[#65676b]">{obj.type}</p>}</>
       }
       case "cost_per_result": {
         const obj = OBJECTIVE_RESULT[objective || ""]
         if (!obj) return <span className="text-[13px]">—</span>
-        const cpa = ins.cost_per_action_type?.find(a => a.action_type === obj.actionType)
-        if (!cpa) return <span className="text-[13px]">—</span>
-        return <><span className="text-[13px] tabular-nums">${parseFloat(cpa.value).toFixed(2)}</span><p className="text-[11px] text-[#65676b]">Per {obj.type}</p></>
+        const cpa = ins.cost_per_action_type?.find(a => (ACTION_ALIASES[obj.actionType] || [obj.actionType]).includes(a.action_type))
+        const count = getVal(obj.actionType)
+        const value = cpa ? parseFloat(cpa.value) : (count > 0 ? spend / count : NaN)
+        if (!Number.isFinite(value)) return <span className="text-[13px]">—</span>
+        return <><span className="text-[13px] tabular-nums">${value.toFixed(2)}</span><p className="text-[11px] text-[#65676b]">Per {obj.type}</p></>
       }
       case "impressions": return <span className="text-[13px] tabular-nums">{ins.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
       case "clicks":      return <span className="text-[13px] tabular-nums">{ins.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
@@ -951,6 +995,9 @@ export default function AdsManagerPage() {
         return <span className="text-[13px] tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
       }
       case "purchases":        { const p = getVal("omni_purchase"); return <span className="text-[13px] tabular-nums">{p || "—"}</span> }
+      case "purchase_value":   { const value = getValue("omni_purchase"); return <span className="text-[13px] tabular-nums">{formatMoneyAmount(value)}</span> }
+      case "avg_order_value":  { const p = getVal("omni_purchase"); const value = getValue("omni_purchase"); return <span className="text-[13px] tabular-nums">{p && value ? `$${(value / p).toFixed(2)}` : "—"}</span> }
+      case "roas":             { const value = getValue("omni_purchase"); return <span className="text-[13px] tabular-nums">{spend && value ? `${(value / spend).toFixed(2)}x` : "—"}</span> }
       case "cost_per_purchase":{ const p = getVal("omni_purchase"); return <span className="text-[13px] tabular-nums">{p ? `$${(spend/p).toFixed(2)}` : "—"}</span> }
       case "leads":            { const l = getVal("lead"); return <span className="text-[13px] tabular-nums">{l || "—"}</span> }
       case "cost_per_lead":    { const l = getVal("lead"); return <span className="text-[13px] tabular-nums">{l ? `$${(spend/l).toFixed(2)}` : "—"}</span> }

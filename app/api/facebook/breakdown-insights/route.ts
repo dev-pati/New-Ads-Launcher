@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       const fields = [
         idField, "date_start", "date_stop",
         "spend", "impressions", "clicks", "reach",
-        "actions", "cost_per_action_type",
+        "actions", "action_values", "cost_per_action_type",
       ].join(",")
 
       const params = new URLSearchParams({
@@ -56,11 +56,16 @@ export async function GET(request: NextRequest) {
       if (breakdowns)    params.set("breakdowns", breakdowns)
       if (timeIncrement) params.set("time_increment", timeIncrement)
 
-      const result = await metaFetch(
-        `https://graph.facebook.com/v25.0/${adAccountId}/insights?${params}`,
-        { caller: "breakdown-insights" }
-      )
-      return { data: result.data || [], paging: result.paging }
+      const rows: any[] = []
+      let nextUrl: string | null = `https://graph.facebook.com/v25.0/${adAccountId}/insights?${params}`
+
+      while (nextUrl) {
+        const result = await metaFetch(nextUrl, { caller: "breakdown-insights" })
+        rows.push(...(result.data || []))
+        nextUrl = result.paging?.next || null
+      }
+
+      return { data: rows }
     })
 
     return NextResponse.json(data)

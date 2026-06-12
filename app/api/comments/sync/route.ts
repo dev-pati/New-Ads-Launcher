@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext } from "@/lib/auth"
+import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getDarkPostAds } from "@/lib/facebook"
 import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
+import { normalizeMetaError } from "@/lib/meta-error"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,6 +12,18 @@ export const maxDuration = 60
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+const MAX_POSTS_TO_SCAN = 25
+const MAX_COMMENTS_PER_POST = 100
+const MAX_ADS_TO_SCAN = 100
+
+async function fetchMetaJson(url: string, fallback: string, context: { pageId: string; permission: string }) {
+  const res = await fetch(url)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok || data.error) {
+    throw normalizeMetaError(data, fallback, context)
+  }
+  return data
+}
 
 async function batchSentiment(messages: string[], apiKey: string): Promise<Array<{ sentiment: string; score: number; themes: string[] }>> {
   if (!messages.length) return []
@@ -140,7 +155,7 @@ export async function POST(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { page_id } = await request.json()
+    const { page_id, ad_account_id } = await request.json()
     if (!page_id) return NextResponse.json({ error: "page_id required" }, { status: 400 })
 
     // Reject mock/demo page IDs early
@@ -161,21 +176,99 @@ export async function POST(request: NextRequest) {
 
     const accessToken = pageToken.token
     const apiKey  = process.env.GEMINI_API_KEY
-    const fields  = "id,message,story,created_time,comments{id,message,from,created_time,can_hide,is_hidden,like_count,comment_count}"
+    const postFields = "id,message,story,created_time,permalink_url"
+    const commentFields = "id,message,from,created_time,can_hide,is_hidden,like_count,comment_count"
 
-    const feedRes = await fetch(
-      `${GRAPH}/${page_id}/posts?fields=${fields}&limit=10&access_token=${accessToken}`
-    )
-    const feedData = await feedRes.json()
-    if (feedData.error) return NextResponse.json({ error: feedData.error.message }, { status: 400 })
+    const postsById = new Map<string, any>()
+    try {
+      const postsUrl = `${GRAPH}/${page_id}/posts?fields=${encodeURIComponent(postFields)}&limit=${MAX_POSTS_TO_SCAN}&access_token=${encodeURIComponent(accessToken)}`
+      const postsData = await fetchMetaJson(postsUrl, "Unable to load Page posts.", {
+        pageId: page_id,
+        permission: "pages_read_engagement",
+      })
+      for (const post of Array.isArray(postsData.data) ? postsData.data : []) {
+        if (post?.id) postsById.set(post.id, { ...post, source: "page_posts" })
+      }
+    } catch (err: any) {
+      return NextResponse.json(err?.error ? err : normalizeMetaError(err, "Unable to load Page posts.", {
+        pageId: page_id,
+        permission: "pages_read_engagement",
+      }), { status: 400 })
+    }
 
-    const posts: any[] = feedData.data || []
+    let adsScanned = 0
+    let adPostsFound = 0
+    if (ad_account_id) {
+      const connection = await getFacebookConnection(ctx.orgId)
+      if (!connection?.access_token) {
+        return NextResponse.json({
+          error: "Facebook connection not found. Reconnect Facebook to scan ad post comments.",
+          needsReconnect: true,
+          type: "token",
+        }, { status: 400 })
+      }
+
+      const allowed = await adAccountBelongsToOrg(ctx.orgId, ad_account_id, connection.access_token)
+      if (!allowed) {
+        return NextResponse.json({ error: "Ad account is not available for the connected Meta user." }, { status: 403 })
+      }
+
+      try {
+        const darkAds = await getDarkPostAds(ad_account_id, connection.access_token, { limit: MAX_ADS_TO_SCAN })
+        adsScanned = darkAds.ads.length
+        for (const ad of darkAds.ads) {
+          if (!ad.post_id) continue
+          const adPageId = ad.page_id || (ad.post_id.includes("_") ? ad.post_id.split("_")[0] : "")
+          if (adPageId && adPageId !== page_id) continue
+          postsById.set(ad.post_id, {
+            id: ad.post_id,
+            message: ad.primaryText || ad.headline || ad.description || ad.name || "",
+            story: ad.name || "",
+            created_time: ad.date_created || null,
+            permalink_url: ad.post_url || null,
+            source: "ad_creative",
+            ad_id: ad.id,
+            ad_name: ad.name,
+          })
+          adPostsFound++
+        }
+      } catch (err: any) {
+        return NextResponse.json(
+          normalizeMetaError(err, "Unable to resolve ad post IDs from the selected ad account.", {
+            pageId: page_id,
+            permission: "ads_read",
+          }),
+          { status: 400 }
+        )
+      }
+    }
+
+    const posts = Array.from(postsById.values())
 
     // Collect all raw comments
     const rawComments: any[] = []
     for (const post of posts) {
       const postMessage = (post.message || post.story || "").slice(0, 100)
-      for (const c of post.comments?.data || []) {
+      let commentsForPost: any[] = []
+
+      try {
+        const commentsUrl = `${GRAPH}/${post.id}/comments?fields=${encodeURIComponent(commentFields)}&filter=stream&limit=${MAX_COMMENTS_PER_POST}&access_token=${encodeURIComponent(accessToken)}`
+        const commentsData = await fetchMetaJson(commentsUrl, "Unable to load Page post comments.", {
+          pageId: page_id,
+          permission: "pages_read_engagement",
+        })
+        commentsForPost = Array.isArray(commentsData.data) ? commentsData.data : []
+      } catch (err: any) {
+        return NextResponse.json(err?.error ? {
+          ...err,
+          postId: post.id,
+        } : normalizeMetaError(err, "Unable to load Page post comments.", {
+          pageId: page_id,
+          permission: "pages_read_engagement",
+        }), { status: 400 })
+      }
+
+      for (const c of commentsForPost) {
         rawComments.push({
           fb_comment_id:   c.id,
           fb_post_id:      post.id,
@@ -204,7 +297,15 @@ export async function POST(request: NextRequest) {
     const existingIds = new Set((existing || []).map((e: any) => e.fb_comment_id))
     const newRaw = rawComments.filter(c => !existingIds.has(c.fb_comment_id))
 
-    if (!newRaw.length) return NextResponse.json({ new_count: 0, total_fetched: rawComments.length })
+    if (!newRaw.length) {
+      return NextResponse.json({
+        new_count: 0,
+        total_fetched: rawComments.length,
+        posts_scanned: posts.length,
+        ads_scanned: adsScanned,
+        ad_posts_found: adPostsFound,
+      })
+    }
 
     // Batch sentiment analysis
     const sentiments = apiKey
@@ -231,7 +332,13 @@ export async function POST(request: NextRequest) {
       await runAutomations(ctx.orgId, inserted, accessToken, supabase, apiKey)
     }
 
-    return NextResponse.json({ new_count: inserted?.length || 0, total_fetched: rawComments.length })
+    return NextResponse.json({
+      new_count: inserted?.length || 0,
+      total_fetched: rawComments.length,
+      posts_scanned: posts.length,
+      ads_scanned: adsScanned,
+      ad_posts_found: adPostsFound,
+    })
   } catch (err: any) {
     console.error("[comments/sync]", err)
     return NextResponse.json({ error: err.message }, { status: 500 })

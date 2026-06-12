@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
+import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
+import { normalizeMetaError } from "@/lib/meta-error"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
@@ -25,28 +27,37 @@ export async function POST(request: NextRequest) {
     if (!post_id) return NextResponse.json({ error: "post_id required" }, { status: 400 })
 
     const supabase = createAdminClient()
-    const { data: page } = await supabase
-      .from("pages")
-      .select("fb_page_id, name, page_access_token")
-      .eq("org_id", ctx.orgId)
-      .eq("fb_page_id", page_id)
-      .single()
-
-    if (!page?.page_access_token) {
-      return NextResponse.json({ error: "Page not found or no access token" }, { status: 400 })
+    const pageToken = await resolveOrgPageAccessToken(supabase, ctx.orgId, ctx.user.id, page_id)
+    if (!pageToken?.token) {
+      return NextResponse.json({ error: "Page token not found. Please reconnect Facebook and select this Page again." }, { status: 400 })
     }
 
-    const fields = "id,message,story,created_time,comments.limit(50){id,message,from,created_time,can_hide,is_hidden,like_count,comment_count}"
-    const postRes = await fetch(`${GRAPH}/${post_id}?fields=${encodeURIComponent(fields)}&access_token=${page.page_access_token}`)
+    const postFields = "id,message,story,created_time"
+    const postRes = await fetch(`${GRAPH}/${post_id}?fields=${encodeURIComponent(postFields)}&access_token=${encodeURIComponent(pageToken.token)}`)
     const postData = await postRes.json()
-    if (postData.error) return NextResponse.json({ error: postData.error.message }, { status: 400 })
+    if (!postRes.ok || postData.error) {
+      return NextResponse.json(
+        normalizeMetaError(postData, "Unable to load Page post.", { pageId: page_id, permission: "pages_read_engagement" }),
+        { status: 400 }
+      )
+    }
 
-    const rawComments = (postData.comments?.data || []).map((comment: any) => ({
+    const commentFields = "id,message,from,created_time,can_hide,is_hidden,like_count,comment_count"
+    const commentsRes = await fetch(`${GRAPH}/${post_id}/comments?fields=${encodeURIComponent(commentFields)}&filter=stream&limit=100&access_token=${encodeURIComponent(pageToken.token)}`)
+    const commentsData = await commentsRes.json()
+    if (!commentsRes.ok || commentsData.error) {
+      return NextResponse.json(
+        normalizeMetaError(commentsData, "Unable to load Page post comments.", { pageId: page_id, permission: "pages_read_engagement" }),
+        { status: 400 }
+      )
+    }
+
+    const rawComments = (commentsData.data || []).map((comment: any) => ({
       fb_comment_id: comment.id,
       fb_post_id: postData.id || post_id,
       fb_post_message: (postData.message || postData.story || "").slice(0, 160),
       page_id,
-      page_name: page.name,
+      page_name: pageToken.pageName || null,
       message: comment.message || "",
       from_name: comment.from?.name || "Unknown",
       from_id: comment.from?.id || "",
