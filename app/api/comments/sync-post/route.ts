@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Page token not found. Please reconnect Facebook and select this Page again." }, { status: 400 })
     }
 
-    const postFields = "id,message,story,created_time"
+    const postFields = "id,message,story,created_time,permalink_url,full_picture,reactions.summary(true),comments.summary(true),shares"
     const postRes = await fetch(`${GRAPH}/${post_id}?fields=${encodeURIComponent(postFields)}&access_token=${encodeURIComponent(pageToken.token)}`)
     const postData = await postRes.json()
     if (!postRes.ok || postData.error) {
@@ -52,10 +52,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const postReactions = postData.reactions?.summary?.total_count ?? 0
+    const postComments = postData.comments?.summary?.total_count ?? 0
+    const postShares = postData.shares?.count ?? 0
+
     const rawComments = (commentsData.data || []).map((comment: any) => ({
       fb_comment_id: comment.id,
       fb_post_id: postData.id || post_id,
       fb_post_message: (postData.message || postData.story || "").slice(0, 160),
+      fb_post_permalink: postData.permalink_url || null,
+      fb_post_full_picture: postData.full_picture || null,
+      fb_post_reactions: postReactions,
+      fb_post_comments: postComments,
+      fb_post_shares: postShares,
       page_id,
       page_name: pageToken.pageName || null,
       message: comment.message || "",

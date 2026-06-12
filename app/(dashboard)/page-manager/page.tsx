@@ -42,17 +42,16 @@ import {
   IconBrandFacebook,
   IconBrandInstagram,
   IconArrowBackUp,
-  IconBell,
   IconCheck,
   IconChevronDown,
   IconCirclePlus,
   IconDots,
-  IconEdit,
   IconClock,
   IconGif,
   IconInfoCircle,
   IconEye,
   IconEyeOff,
+  IconExternalLink,
   IconFilter,
   IconMessage,
   IconMicrophone,
@@ -60,7 +59,6 @@ import {
   IconPhoto,
   IconPlayerPlay,
   IconPlus,
-  IconPhone,
   IconLoader2,
   IconRefresh,
   IconSearch,
@@ -117,7 +115,7 @@ type ThreadItem = {
 
 type UnifiedInboxThread = {
   id: string
-  sourceType: "messenger" | "ad_comment"
+  sourceType: "messenger" | "facebook_comment" | "instagram_comment" | "instagram_dm"
   sourceLabel: string
   pageId: string
   name: string
@@ -333,6 +331,11 @@ type ManagedComment = {
   fb_comment_id: string
   fb_post_id: string | null
   fb_post_message: string | null
+  fb_post_permalink?: string | null
+  fb_post_full_picture?: string | null
+  fb_post_reactions?: number | null
+  fb_post_comments?: number | null
+  fb_post_shares?: number | null
   page_id: string
   page_name?: string | null
   message: string
@@ -380,6 +383,29 @@ type MessengerAttachmentPreview = {
   type: string
   url: string
   title: string
+}
+
+type InboxSourceType = UnifiedInboxThread["sourceType"]
+
+type FacebookPostContext = {
+  url: string
+  storyFbid?: string | null
+  pageId?: string | null
+  commentId?: string | null
+}
+
+type FacebookPostPreview = {
+  pageName: string
+  pagePicture?: string | null
+  message: string
+  createdAt?: string | null
+  mediaUrl?: string | null
+  mediaType: "image" | "video"
+  permalink?: string | null
+  commentId?: string | null
+  reactions?: number | null
+  comments?: number | null
+  shares?: number | null
 }
 
 type CommentAutomation = {
@@ -847,6 +873,137 @@ function MessengerAttachmentContent({ message }: { message: MessengerMessage }) 
   )
 }
 
+function isFacebookCommentBridgeMessage(message?: string | null) {
+  const text = String(message || "")
+  return /facebook created this chat because .* commented on your post/i.test(text) ||
+    (/commented on your post/i.test(text) && /comment_id=|story_fbid=|facebook\.com\/story\.php/i.test(text))
+}
+
+function inferConversationSourceType(conversation: MessengerConversation): InboxSourceType {
+  const messages = conversation.messages || []
+  if (messages.some(message => isFacebookCommentBridgeMessage(message.message))) return "facebook_comment"
+  return "messenger"
+}
+
+function cleanFacebookCommentBridgeMessage(message?: string | null) {
+  if (isFacebookCommentBridgeMessage(message)) {
+    return "This conversation was created from a Facebook post comment."
+  }
+
+  const cleaned = String(message || "")
+    .replace(/^Facebook created this chat because\s+/i, "")
+    .replace(/\s+You can reply.*$/i, "")
+    .replace(/\s*comment\([^)]*\)\s*/i, " ")
+    .replace(/\s*https?:\/\/\S+\s*/gi, " ")
+    .trim()
+
+  if (!cleaned || /story_fbid=|comment_id=|facebook\.com\/story\.php/i.test(cleaned)) {
+    return "This conversation was created from a Facebook post comment."
+  }
+
+  return cleaned
+}
+
+function extractFacebookPostContext(message?: string | null): FacebookPostContext | null {
+  const text = String(message || "")
+  const directUrl = text.match(/https?:\/\/(?:www\.)?facebook\.com\/story\.php\?[^)\s]+/i)?.[0]
+  const storyFbid = text.match(/[?&]story_fbid=([^&)\s]+)/i)?.[1]
+  const pageId = text.match(/[?&]id=([^&)\s]+)/i)?.[1]
+  const commentId = text.match(/[?&]comment_id=([^&)\s]+)/i)?.[1]
+
+  if (directUrl) {
+    return {
+      url: directUrl.replace("facebook.com", "www.facebook.com"),
+      storyFbid: storyFbid ? decodeURIComponent(storyFbid) : null,
+      pageId: pageId ? decodeURIComponent(pageId) : null,
+      commentId: commentId ? decodeURIComponent(commentId) : null,
+    }
+  }
+
+  if (!storyFbid || !pageId) return null
+
+  const params = new URLSearchParams({
+    story_fbid: decodeURIComponent(storyFbid),
+    id: decodeURIComponent(pageId),
+  })
+  if (commentId) params.set("comment_id", decodeURIComponent(commentId))
+
+  return {
+    url: `https://www.facebook.com/story.php?${params.toString()}`,
+    storyFbid: decodeURIComponent(storyFbid),
+    pageId: decodeURIComponent(pageId),
+    commentId: commentId ? decodeURIComponent(commentId) : null,
+  }
+}
+
+function getFacebookPostContext(thread: UnifiedInboxThread): FacebookPostContext | null {
+  const bridgeContext = extractFacebookPostContext(getFacebookCommentContextMessage(thread)?.message)
+  if (bridgeContext) return bridgeContext
+  if (thread.postId) return { url: `https://www.facebook.com/${thread.postId}` }
+  return null
+}
+
+function normalizeFacebookObjectId(value?: string | null) {
+  return decodeURIComponent(String(value || ""))
+    .replace(/^https?:\/\/(?:www\.)?facebook\.com\//i, "")
+    .replace(/^story\.php\?/i, "")
+    .trim()
+}
+
+function facebookObjectIdsMatch(left?: string | null, right?: string | null) {
+  const a = normalizeFacebookObjectId(left)
+  const b = normalizeFacebookObjectId(right)
+  if (!a || !b) return false
+  return a === b || a.endsWith(`_${b}`) || b.endsWith(`_${a}`)
+}
+
+function findFacebookPostForThread(thread: UnifiedInboxThread, posts: PostDetailItem[]) {
+  const context = getFacebookPostContext(thread)
+  const targetIds = [thread.postId, context?.storyFbid, context?.url].filter(Boolean) as string[]
+  if (!targetIds.length) return null
+
+  return posts.find(post => {
+    const candidateIds = [post.postId, post.permalink, post.key].filter(Boolean) as string[]
+    return targetIds.some(target => candidateIds.some(candidate => facebookObjectIdsMatch(candidate, target) || String(candidate).includes(target)))
+  }) || null
+}
+
+function buildFacebookPostPreview(thread: UnifiedInboxThread, page: PageOption | null | undefined, posts: PostDetailItem[]): FacebookPostPreview {
+  const context = getFacebookPostContext(thread)
+  const matchedPost = findFacebookPostForThread(thread, posts)
+
+  return {
+    pageName: page?.name || "Facebook Page",
+    pagePicture: page?.picture || null,
+    message: matchedPost?.message || matchedPost?.title || thread.postMessage || "Open the original post/comment on Facebook.",
+    createdAt: matchedPost?.time || thread.comment?.fb_created_time || null,
+    mediaUrl: matchedPost?.imageUrl || thread.comment?.fb_post_full_picture || null,
+    mediaType: matchedPost?.mediaType || "image",
+    permalink: matchedPost?.permalink || thread.comment?.fb_post_permalink || context?.url || null,
+    commentId: context?.commentId || thread.comment?.fb_comment_id || thread.commentId || null,
+    reactions: matchedPost?.reactions ?? thread.comment?.fb_post_reactions ?? null,
+    comments: matchedPost?.comments ?? thread.comment?.fb_post_comments ?? null,
+    shares: matchedPost?.shares ?? thread.comment?.fb_post_shares ?? null,
+  }
+}
+
+function facebookPostPreviewNeedsHydration(preview: FacebookPostPreview | null) {
+  if (!preview) return false
+  const hasOriginalText = preview.message && preview.message !== "Open the original post/comment on Facebook."
+  const hasMetrics = preview.reactions != null || preview.comments != null || preview.shares != null
+  return !hasOriginalText || (!preview.mediaUrl && !hasMetrics)
+}
+
+function getConversationDisplayMessages(thread: UnifiedInboxThread) {
+  const messages = thread.conversation?.messages || []
+  if (thread.sourceType !== "facebook_comment") return messages
+  return messages.filter(message => !isFacebookCommentBridgeMessage(message.message))
+}
+
+function getFacebookCommentContextMessage(thread: UnifiedInboxThread) {
+  return thread.conversation?.messages?.find(message => isFacebookCommentBridgeMessage(message.message)) || null
+}
+
 function InboxAvatar({
   name,
   src,
@@ -877,6 +1034,79 @@ function PreviewImage({ src, alt, mediaType }: { src: string; alt: string; media
         {mediaType === "video" ? <IconPlayerPlay className="size-3" /> : <IconPhoto className="size-3" />}
         {mediaType === "video" ? "Video" : "Image"}
       </div>
+    </div>
+  )
+}
+
+function FacebookPostPreviewCard({ preview }: { preview: FacebookPostPreview }) {
+  return (
+    <div className="rounded-[22px] border border-[#E4E6EB] bg-white shadow-sm dark:bg-background">
+      <div className="flex items-start justify-between gap-3 p-3">
+        <div className="flex min-w-0 items-start gap-2.5">
+          <InboxAvatar name={preview.pageName} src={preview.pagePicture} size="sm" online />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-[#050505] dark:text-foreground">{preview.pageName}</p>
+            <p className="text-[11px] text-[#65676B]">
+              {preview.createdAt ? postDate(preview.createdAt) : "Facebook post"} · Sponsored
+            </p>
+          </div>
+        </div>
+        {preview.permalink ? (
+          <a
+            href={preview.permalink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#E4E6EB] px-2.5 py-1.5 text-xs font-medium text-[#0084FF] hover:bg-[#F0F2F5]"
+          >
+            Open
+            <IconExternalLink className="size-3.5" />
+          </a>
+        ) : null}
+      </div>
+
+      <div className="px-3 pb-3">
+        <p className="whitespace-pre-wrap text-sm leading-5 text-[#050505] dark:text-foreground">{preview.message}</p>
+      </div>
+
+      {preview.mediaUrl ? (
+        <div className="border-y border-[#E4E6EB] bg-black">
+          <div className="relative mx-auto max-h-[420px] overflow-hidden bg-black">
+            <img src={preview.mediaUrl} alt="" className="max-h-[420px] w-full object-contain" loading="lazy" />
+            {preview.mediaType === "video" ? (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="flex size-12 items-center justify-center rounded-full bg-black/55 text-white">
+                  <IconPlayerPlay className="size-6" />
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-[#65676B]">
+        <div className="flex items-center gap-1.5">
+          <span className="flex size-5 items-center justify-center rounded-full bg-[#1877F2] text-white">
+            <IconThumbUp className="size-3" />
+          </span>
+          <span>{compactNumber(preview.reactions)}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="inline-flex items-center gap-1">
+            <IconMessage className="size-3.5" />
+            {compactNumber(preview.comments)} comments
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <IconArrowBackUp className="size-3.5" />
+            {compactNumber(preview.shares)} shares
+          </span>
+        </div>
+      </div>
+
+      {preview.commentId ? (
+        <div className="border-t border-[#E4E6EB] px-3 py-2 text-[11px] text-[#65676B]">
+          Comment ID: {preview.commentId}
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -1092,6 +1322,8 @@ export default function PageManagerPage() {
   const [commentsSyncing, setCommentsSyncing] = useState(false)
   const [commentsAnalytics, setCommentsAnalytics] = useState<CommentAnalytics | null>(null)
   const [commentsAnalyticsLoading, setCommentsAnalyticsLoading] = useState(false)
+  const [postPreviewOverrides, setPostPreviewOverrides] = useState<Record<string, Partial<FacebookPostPreview>>>({})
+  const [postPreviewHydrationAttempts, setPostPreviewHydrationAttempts] = useState<Record<string, boolean>>({})
   const [commentAutomations, setCommentAutomations] = useState<CommentAutomation[]>([])
   const [selectedCommentId, setSelectedCommentId] = useState("")
   const [replyText, setReplyText] = useState("")
@@ -1555,16 +1787,22 @@ export default function PageManagerPage() {
     const realMessengerThreads: UnifiedInboxThread[] = messengerConversations
       .filter(conversation => conversation.page_id === selectedPage?.id)
       .map(conversation => {
-        const id = `messenger:${conversation.id}`
+        const sourceType = inferConversationSourceType(conversation)
+        const sourceLabel = sourceType === "facebook_comment" ? "Facebook Comment" : "Messenger"
+        const id = `${sourceType}:${conversation.id}`
         const reply = inboxAutoReplies[id]
         const replied = Boolean(reply || conversation.status === "replied")
         const closed = conversation.status === "closed" || inboxTaskState[id] === "closed"
         const pending = !replied && !closed && (conversation.status === "pending" || (conversation.unread_count || 0) > 0)
+        const displayMessages = sourceType === "facebook_comment"
+          ? conversation.messages.filter(message => !isFacebookCommentBridgeMessage(message.message))
+          : conversation.messages
+        const lastDisplayMessage = displayMessages[displayMessages.length - 1]
         const baseThread: ThreadItem = {
           id,
           pageId: conversation.page_id,
           name: conversation.customer_name || conversation.customer_psid || "Messenger user",
-          lastMessage: conversation.last_message || "Messenger interaction",
+          lastMessage: lastDisplayMessage?.message || conversation.last_message || `${sourceLabel} interaction`,
           updatedAt: conversation.last_message_at ? postDate(conversation.last_message_at) : "No timestamp",
           unread: conversation.unread_count || 0,
           label: "Lead",
@@ -1574,8 +1812,8 @@ export default function PageManagerPage() {
 
         return {
           ...baseThread,
-          sourceType: "messenger",
-          sourceLabel: "Messenger",
+          sourceType,
+          sourceLabel,
           conversation,
           conversationId: conversation.id,
           customerPsid: conversation.customer_psid,
@@ -1587,7 +1825,7 @@ export default function PageManagerPage() {
           status: replied ? "replied" : closed ? "closed" : pending ? "pending" : conversation.status || settings.defaultStatus,
           taskState: inboxTaskState[id] || (conversation.status === "closed" ? "closed" : "open"),
           assignedTo: inboxAssignments[id] || conversation.assigned_to || getThreadAssignment(baseThread),
-          tags: Array.from(new Set(["Messenger", ...getThreadTags(baseThread)])).slice(0, 4),
+          tags: Array.from(new Set([sourceLabel, ...getThreadTags(baseThread)])).slice(0, 4),
         } satisfies UnifiedInboxThread
       })
 
@@ -1635,7 +1873,7 @@ export default function PageManagerPage() {
           sentiment: comment.sentiment,
         }
         const tags = Array.from(new Set([
-          "Ad Comment",
+          "Facebook Comment",
           ...getThreadTags(baseThread),
           ...(comment.themes || []).slice(0, 1),
           ...(comment.is_hidden ? ["Hidden"] : []),
@@ -1644,8 +1882,8 @@ export default function PageManagerPage() {
 
         return {
           ...baseThread,
-          sourceType: "ad_comment",
-          sourceLabel: "Ad Comment",
+          sourceType: "facebook_comment",
+          sourceLabel: "Facebook Comment",
           comment,
           commentId: comment.id,
           postId: comment.fb_post_id,
@@ -1691,7 +1929,7 @@ export default function PageManagerPage() {
       }
       if (inboxSourceFilter === "unread") return thread.unread > 0 || thread.responseStatus === "pending"
       if (inboxSourceFilter === "messenger") return thread.sourceType === "messenger"
-      if (inboxSourceFilter === "comments") return thread.sourceType === "ad_comment"
+      if (inboxSourceFilter === "comments") return thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment"
       return true
     })
   }, [allPageThreads, inboxSearchQuery, inboxSourceFilter])
@@ -1738,6 +1976,16 @@ export default function PageManagerPage() {
     [pageManagerSettings.conversations.defaultStatus, pageThreads, selectedPage?.id, selectedThreadId]
   )
   const selectedThreadAutoReply = selectedThread ? inboxAutoReplies[selectedThread.id] : null
+  const shouldShowSelectedThreadAutoReply = Boolean(
+    selectedThreadAutoReply &&
+    !(
+      (selectedThread.sourceType === "messenger" || selectedThread.sourceType === "facebook_comment") &&
+      selectedThread.conversation?.messages?.some(message =>
+        message.direction === "outbound" &&
+        (message.message || "").trim() === selectedThreadAutoReply.text.trim()
+      )
+    )
+  )
   const selectedThreadMeta = useMemo(() => {
     const thread = selectedThread as ThreadItem & Partial<{
       assignedTo: string
@@ -1789,7 +2037,7 @@ export default function PageManagerPage() {
             `Customer: ${thread.name}`,
             `Queue: ${thread.label}`,
             `Sentiment: ${thread.sentiment}`,
-            thread.sourceType === "ad_comment" && thread.postMessage ? `Ad post context: ${thread.postMessage}` : "",
+            thread.sourceType === "facebook_comment" && thread.postMessage ? `Facebook comment context: ${thread.postMessage}` : "",
             aiReplyContext,
           ].filter(Boolean).join("\n"),
           customer_name: thread.name,
@@ -1802,17 +2050,46 @@ export default function PageManagerPage() {
       if (isSelectedThread) setInboxAiResult(result)
 
       if (result.action === "send") {
-        const repliedAt = Date.now()
-        setInboxAutoReplies(prev => ({
-          ...prev,
-          [thread.id]: {
-            text: result.draftReply,
-            action: "auto_sent_preview",
-            at: new Date(repliedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            timestamp: repliedAt,
-            responder: "ai",
-          },
-        }))
+        if (thread.sourceType === "facebook_comment" && thread.commentId) {
+          const replyRes = await fetch(`/api/comments/${thread.commentId}/reply`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: result.draftReply, page_id: selectedPage.id }),
+          })
+          const replyData = await replyRes.json().catch(() => ({}))
+          if (!replyRes.ok || replyData.error) throw new Error(replyData.error || "Unable to send AI comment reply.")
+          try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch {}
+          setComments(prev => prev.map(comment => (
+            comment.id === thread.commentId
+              ? { ...comment, is_replied: true, draft_reply: result.draftReply }
+              : comment
+          )))
+        } else if ((thread.sourceType === "messenger" || thread.sourceType === "facebook_comment") && thread.conversationId) {
+          const replyRes = await fetch("/api/page-manager/messenger/reply", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              page_id: selectedPage.id,
+              conversation_id: thread.conversationId,
+              message: result.draftReply,
+            }),
+          })
+          const replyData = await replyRes.json().catch(() => ({}))
+          if (!replyRes.ok || replyData.error) throw new Error(replyData.error || "Unable to send AI Messenger reply.")
+          await loadMessengerInbox()
+        } else {
+          const repliedAt = Date.now()
+          setInboxAutoReplies(prev => ({
+            ...prev,
+            [thread.id]: {
+              text: result.draftReply,
+              action: "auto_sent_preview",
+              at: new Date(repliedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              timestamp: repliedAt,
+              responder: "ai",
+            },
+          }))
+        }
         if (pageManagerSettings.conversations.autoMarkRead) {
           setInboxHandledThreads(prev => ({ ...prev, [thread.id]: true }))
         }
@@ -1838,7 +2115,7 @@ export default function PageManagerPage() {
     } finally {
       if (!options?.silent || isSelectedThread) setInboxAiLoading(false)
     }
-  }, [aiReplyContext, pageManagerSettings, selectedPage?.id, selectedPage?.name, selectedThread?.id])
+  }, [aiReplyContext, loadMessengerInbox, pageManagerSettings, selectedPage?.id, selectedPage?.name, selectedThread?.id])
 
   const runInboxAiAutoReply = useCallback(async () => {
     if (!selectedThread) return
@@ -1864,7 +2141,7 @@ export default function PageManagerPage() {
       })
     }
 
-    setInboxReplyText(prev => prev ? `${prev}\n${body}` : body)
+    setInboxReplyText(body)
     setTemplatePickerOpen(false)
   }, [pageManagerSettings.quickReplyTemplates.spinSyntaxEnabled, pageManagerSettings.quickReplyTemplates.variablesEnabled, selectedThread])
 
@@ -1894,8 +2171,9 @@ export default function PageManagerPage() {
     if (!message) return
 
     setInboxAiError("")
+    let persistedReply = false
 
-    if (selectedThread.sourceType === "ad_comment" && selectedThread.commentId) {
+    if (selectedThread.sourceType === "facebook_comment" && selectedThread.commentId) {
       setCommentActionLoading(true)
       try {
         const res = await fetch(`/api/comments/${selectedThread.commentId}/reply`, {
@@ -1911,6 +2189,7 @@ export default function PageManagerPage() {
             ? { ...comment, is_replied: true, draft_reply: message }
             : comment
         )))
+        persistedReply = true
       } catch (err: any) {
         setInboxAiError(err?.message || "Unable to reply to comment.")
         setCommentActionLoading(false)
@@ -1920,7 +2199,7 @@ export default function PageManagerPage() {
       }
     }
 
-    if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
+    if ((selectedThread.sourceType === "messenger" || selectedThread.sourceType === "facebook_comment") && selectedThread.conversationId) {
       setMessengerLoading(true)
       try {
         const res = await fetch("/api/page-manager/messenger/reply", {
@@ -1934,7 +2213,9 @@ export default function PageManagerPage() {
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok || data.error) throw new Error(data.error || "Unable to send Messenger reply.")
+        setInboxReplyText("")
         await loadMessengerInbox()
+        persistedReply = true
       } catch (err: any) {
         setInboxAiError(err?.message || "Unable to send Messenger reply.")
         setMessengerLoading(false)
@@ -1944,7 +2225,9 @@ export default function PageManagerPage() {
       }
     }
 
-    markInboxThreadReplied(selectedThread.id, message, "agent")
+    if (!persistedReply) {
+      markInboxThreadReplied(selectedThread.id, message, "agent")
+    }
     setInboxReplyText("")
   }, [inboxReplyText, loadMessengerInbox, markInboxThreadReplied, selectedPage?.id, selectedThread])
 
@@ -1985,7 +2268,7 @@ export default function PageManagerPage() {
 
   useEffect(() => {
     if (tab !== "inbox") return
-    if (selectedThread?.sourceType !== "messenger") return
+    if (selectedThread?.sourceType !== "messenger" && selectedThread?.sourceType !== "facebook_comment") return
     if (!selectedThread.conversationId || !selectedThread.pageId || selectedThread.unread <= 0) return
 
     void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
@@ -2688,6 +2971,15 @@ export default function PageManagerPage() {
     if (postScope === "dark") return darkPostDetailItems
     return [...publicPostDetailItems, ...darkPostDetailItems]
   }, [darkPostDetailItems, postScope, publicPostDetailItems])
+  const selectedThreadPostPreview = useMemo(
+    () => {
+      if (selectedThread.sourceType !== "facebook_comment") return null
+      const preview = buildFacebookPostPreview(selectedThread, selectedPage, postDetailItems)
+      const override = postPreviewOverrides[selectedThread.id]
+      return override ? { ...preview, ...override } : preview
+    },
+    [postDetailItems, postPreviewOverrides, selectedPage, selectedThread]
+  )
   const selectedPost = useMemo(
     () => postDetailItems.find(item => item.key === selectedPostKey) || postDetailItems[0] || null,
     [postDetailItems, selectedPostKey]
@@ -2695,6 +2987,60 @@ export default function PageManagerPage() {
   const selectedDarkInsight = selectedPost?.adId ? darkPostInsights[selectedPost.adId] : undefined
   const featuredPublicPost = visiblePublicPosts[0]
   const secondaryPublicPosts = visiblePublicPosts.slice(1, 6)
+
+  useEffect(() => {
+    if (selectedThread.sourceType !== "facebook_comment") return
+    if (!selectedPage?.id || selectedThread.id === "empty-inbox") return
+    if (!facebookPostPreviewNeedsHydration(selectedThreadPostPreview)) return
+    if (postPreviewHydrationAttempts[selectedThread.id]) return
+
+    const context = getFacebookPostContext(selectedThread)
+    const postId = selectedThread.postId || context?.storyFbid
+    if (!postId) return
+
+    const commentId = selectedThread.comment?.fb_comment_id || context?.commentId || null
+    setPostPreviewHydrationAttempts(prev => ({ ...prev, [selectedThread.id]: true }))
+
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch("/api/comments/post-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page_id: selectedPage.id, post_id: postId, comment_id: commentId }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.preview || cancelled) return
+
+        setPostPreviewOverrides(prev => ({
+          ...prev,
+          [selectedThread.id]: {
+            message: data.preview.message || undefined,
+            createdAt: data.preview.createdAt || undefined,
+            mediaUrl: data.preview.mediaUrl || undefined,
+            mediaType: data.preview.mediaType === "video" ? "video" : "image",
+            permalink: data.preview.permalink || undefined,
+            reactions: data.preview.reactions ?? null,
+            comments: data.preview.comments ?? null,
+            shares: data.preview.shares ?? null,
+          },
+        }))
+
+        if (data.comment?.id) {
+          setComments(prev => prev.map(comment => comment.id === data.comment.id ? { ...comment, ...data.comment } : comment))
+        }
+      } catch (err) {
+        console.error("[page-manager] failed to hydrate Facebook post preview", err)
+      }
+    })()
+
+    return () => { cancelled = true }
+  }, [
+    postPreviewHydrationAttempts,
+    selectedPage?.id,
+    selectedThread,
+    selectedThreadPostPreview,
+  ])
   const publicPostCount = visiblePublicPosts.length
   const darkPostCount = darkPosts.length
   const totalPostCount = publicPostCount + darkPostCount
@@ -3752,47 +4098,17 @@ export default function PageManagerPage() {
                 </Card>
               ) : null}
               <div className={cn(
-                "grid min-h-[calc(100vh-230px)] overflow-hidden rounded-2xl border border-[#E4E6EB] bg-[#F0F2F5] shadow-sm lg:grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[372px_minmax(0,1fr)_320px] dark:border-border dark:bg-muted/30",
+                "grid min-h-[calc(100vh-230px)] overflow-hidden rounded-2xl border border-[#E4E6EB] bg-[#F0F2F5] shadow-sm lg:grid-cols-[360px_minmax(0,1fr)] dark:border-border dark:bg-muted/30",
                 !selectedPage && "hidden"
               )}>
                 <Card className="overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
-                  <CardHeader className="border-b border-[#E4E6EB] p-4 dark:border-border">
-                    <div className="flex items-center justify-between gap-3">
-                      <CardTitle className="text-xl font-semibold tracking-normal text-[#050505] dark:text-foreground">Chats</CardTitle>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <Button variant="secondary" size="icon" className="size-9 rounded-full bg-[#E4E6EB] text-[#050505] hover:bg-[#D8DADF] dark:bg-muted dark:text-foreground">
-                          <IconDots className="size-4" />
-                        </Button>
-                        <Button variant="secondary" size="icon" className="size-9 rounded-full bg-[#E4E6EB] text-[#050505] hover:bg-[#D8DADF] dark:bg-muted dark:text-foreground">
-                          <IconEdit className="size-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-center gap-2">
-                      <div className="relative min-w-0 flex-1">
-                        <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#65676B]" />
-                        <Input
-                          placeholder="Search Messenger"
-                          value={inboxSearchQuery}
-                          onChange={event => {
-                            setInboxSearchQuery(event.target.value)
-                            setInboxListScrollTop(0)
-                          }}
-                          className="h-10 rounded-full border-0 bg-[#F0F2F5] pl-9 text-sm shadow-none focus-visible:ring-1 focus-visible:ring-[#0084FF] dark:bg-muted"
-                        />
-                      </div>
-                      <Button variant="secondary" size="icon" className="size-10 shrink-0 rounded-full bg-[#F0F2F5] text-[#050505] hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground">
-                        <IconFilter className="size-4" />
-                      </Button>
-                    </div>
-
-                    <div className="mt-3 flex items-center gap-1.5 overflow-x-auto pb-1">
+                  <CardHeader className="border-b border-[#E4E6EB] p-3 dark:border-border">
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                       {[
                         { id: "all", label: "All", count: allPageThreads.length },
                         { id: "unread", label: "Unread", count: allPageThreads.filter(thread => thread.unread > 0 || thread.responseStatus === "pending").length },
                         { id: "messenger", label: "Messenger", count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
-                        { id: "comments", label: "Comments", count: allPageThreads.filter(thread => thread.sourceType === "ad_comment").length },
+                        { id: "comments", label: "Comments", count: allPageThreads.filter(thread => thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment").length },
                       ].map(item => (
                         <button
                           key={item.id}
@@ -3929,7 +4245,7 @@ export default function PageManagerPage() {
                                     variant="outline"
                                     className={cn(
                                       "h-5 max-w-[90px] truncate rounded-full px-2 text-[10px]",
-                                      thread.sourceType === "ad_comment"
+                                      thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment"
                                         ? "border-violet-200 bg-violet-50 text-violet-700"
                                         : "border-blue-200 bg-blue-50 text-blue-700"
                                     )}
@@ -3970,7 +4286,7 @@ export default function PageManagerPage() {
                       <div className="flex min-w-0 items-center gap-3">
                         <InboxAvatar
                           name={selectedThread.name}
-                          src={selectedThread.customerProfilePic || (selectedThread.sourceType === "ad_comment" ? selectedPage?.picture : null)}
+                          src={selectedThread.customerProfilePic || (selectedThread.sourceType === "facebook_comment" ? selectedPage?.picture : null)}
                           online={selectedThread.responseStatus === "pending" || selectedThread.unread > 0}
                         />
                         <div className="min-w-0">
@@ -3984,7 +4300,7 @@ export default function PageManagerPage() {
                               variant="outline"
                               className={cn(
                                 "rounded-full text-[10px]",
-                                selectedThread.sourceType === "ad_comment"
+                                selectedThread.sourceType === "facebook_comment" || selectedThread.sourceType === "instagram_comment"
                                   ? "bg-violet-50 text-violet-700"
                                   : "bg-blue-50 text-blue-700"
                               )}
@@ -4046,7 +4362,7 @@ export default function PageManagerPage() {
                             Self assign
                           </Button>
                         ) : null}
-                        {selectedThread.sourceType === "ad_comment" && selectedThread.comment ? (
+                        {selectedThread.sourceType === "facebook_comment" && selectedThread.comment ? (
                           <Button
                             variant="outline"
                             size="sm"
@@ -4074,15 +4390,6 @@ export default function PageManagerPage() {
                           {inboxAiLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSparkles className="size-3.5" />}
                           AI Auto Reply
                         </Button>
-                        <Button variant="ghost" size="icon" className="size-9 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                          <IconPhone className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="size-9 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                          <IconVideo className="size-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="size-9 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                          <IconInfoCircle className="size-4" />
-                        </Button>
                       </div>
                     </div>
                   </CardHeader>
@@ -4102,26 +4409,26 @@ export default function PageManagerPage() {
                           </div>
                         ) : null}
                         <div className="space-y-3">
-                          {selectedThread.sourceType === "ad_comment" ? (
+                          {selectedThread.sourceType === "facebook_comment" ? (
                             <div className="rounded-2xl border bg-violet-50/60 p-3 text-sm">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="outline" className="rounded-full bg-white text-violet-700">
-                                  Ad comment
+                                  Facebook Comment
                                 </Badge>
                                 {selectedThread.postId ? (
                                   <span className="text-xs text-muted-foreground">Post ID: {selectedThread.postId}</span>
                                 ) : null}
                               </div>
-                              {selectedThread.postMessage ? (
-                                <p className="mt-2 line-clamp-2 text-muted-foreground">{selectedThread.postMessage}</p>
-                              ) : (
-                                <p className="mt-2 text-muted-foreground">Comment from an ad post in this Page workflow.</p>
-                              )}
+                              {selectedThreadPostPreview ? (
+                                <div className="mt-2">
+                                  <FacebookPostPreviewCard preview={selectedThreadPostPreview} />
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
 
-                          {selectedThread.sourceType === "messenger" && selectedThread.conversation?.messages?.length ? (
-                            selectedThread.conversation.messages.map(message => (
+                          {(selectedThread.sourceType === "messenger" || selectedThread.sourceType === "facebook_comment") && getConversationDisplayMessages(selectedThread).length ? (
+                            getConversationDisplayMessages(selectedThread).map(message => (
                               <div
                                 key={message.id}
                                 className={cn(
@@ -4147,7 +4454,14 @@ export default function PageManagerPage() {
                             </div>
                           )}
 
-                          {selectedThreadAutoReply ? (
+                          {selectedThread.sourceType === "facebook_comment" && selectedThread.comment?.draft_reply ? (
+                            <div className="ml-auto max-w-[78%] rounded-[18px] bg-[#0084FF] px-3.5 py-2 text-white shadow-sm">
+                              <p className="whitespace-pre-wrap text-sm leading-5">{selectedThread.comment.draft_reply}</p>
+                              <p className="mt-1 text-[11px] text-white/75">Reply</p>
+                            </div>
+                          ) : null}
+
+                          {shouldShowSelectedThreadAutoReply && selectedThreadAutoReply ? (
                             <div className="ml-auto max-w-[78%] rounded-[18px] bg-[#0084FF] px-3.5 py-2 text-white shadow-sm">
                               <p className="whitespace-pre-wrap text-sm leading-5">{selectedThreadAutoReply.text}</p>
                               <p className="mt-1 text-[11px] text-white/75">
@@ -4214,7 +4528,7 @@ export default function PageManagerPage() {
                         <div className="mt-6 rounded-2xl border border-dashed bg-background p-3">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <IconAlertTriangle className="size-3.5" />
-                            {selectedThread.sourceType === "ad_comment"
+                            {selectedThread.sourceType === "facebook_comment"
                               ? "Comment replies and hide/unhide use Page comment APIs when the Page has the required permissions."
                               : selectedThread.conversation
                                 ? "Messenger messages are loaded from webhook storage. Replies are sent with the selected Page token."
@@ -4325,90 +4639,6 @@ export default function PageManagerPage() {
                     </div>
                   </CardContent>
                 </Card>
-
-                <aside className="hidden overflow-hidden bg-white xl:block dark:bg-background">
-                  <ScrollArea className="h-[calc(100vh-230px)] min-h-[620px]">
-                    <div className="p-5">
-                      <div className="flex flex-col items-center text-center">
-                        <InboxAvatar
-                          name={selectedThread.name}
-                          src={selectedThread.customerProfilePic || selectedPage?.picture || "/applogo.webp"}
-                          size="lg"
-                          online={selectedThread.responseStatus === "pending" || selectedThread.unread > 0}
-                        />
-                        <h3 className="mt-3 max-w-full truncate text-base font-semibold text-[#050505] dark:text-foreground">{selectedThread.name}</h3>
-                        <p className="mt-1 text-xs text-[#65676B]">{selectedThread.sourceLabel}</p>
-                      </div>
-
-                      <div className="mt-5 grid grid-cols-3 gap-2">
-                        {[
-                          { label: "Profile", icon: IconInfoCircle },
-                          { label: "Search", icon: IconSearch },
-                          { label: "Notify", icon: IconBell },
-                        ].map(action => {
-                          const ActionIcon = action.icon
-                          return (
-                            <button key={action.label} type="button" className="flex flex-col items-center gap-1.5 rounded-2xl p-2 text-xs font-medium text-[#050505] transition-colors hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted">
-                              <span className="flex size-9 items-center justify-center rounded-full bg-[#F0F2F5] dark:bg-muted">
-                                <ActionIcon className="size-4" />
-                              </span>
-                              <span className="max-w-full truncate">{action.label}</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-
-                      <Separator className="my-5 bg-[#E4E6EB] dark:bg-border" />
-
-                      <div className="space-y-2">
-                        {[
-                          {
-                            title: "Media, Files & Links",
-                            content: selectedThread.sourceType === "messenger" && selectedThread.conversation?.messages?.some(message => (message.attachments || []).length > 0)
-                              ? "Attachments detected in this thread."
-                              : "No media shared yet.",
-                          },
-                          {
-                            title: "Customer Information",
-                            content: `${selectedThread.name} - ${selectedThread.sourceLabel}`,
-                          },
-                          {
-                            title: "Conversation Details",
-                            content: `Status: ${selectedThreadMeta.responseStatus} - Updated: ${selectedThread.latestAt}`,
-                          },
-                          {
-                            title: "Assigned User",
-                            content: selectedThreadMeta.assignedTo,
-                          },
-                          {
-                            title: "Tags",
-                            content: selectedThread.sourceType === "ad_comment" ? "Ad comment, Lead, Neutral" : "Messenger, Lead, Neutral",
-                          },
-                          {
-                            title: "Lead Information",
-                            content: selectedThreadMeta.status === "closed" ? "Closed lead task" : "Lead queue",
-                          },
-                          {
-                            title: "AI Insights",
-                            content: inboxAiResult?.reason || inboxAiResult?.draftReply || "Run AI Auto Reply to generate summary and intent.",
-                          },
-                          {
-                            title: "Activity History",
-                            content: selectedThread.updatedAt,
-                          },
-                        ].map(section => (
-                          <div key={section.title} className="rounded-2xl border border-transparent">
-                            <button type="button" className="flex w-full items-center justify-between rounded-2xl px-2 py-2.5 text-left text-sm font-semibold text-[#050505] transition-colors hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted">
-                              <span>{section.title}</span>
-                              <IconChevronDown className="size-4 text-[#65676B]" />
-                            </button>
-                            <p className="px-2 pb-3 text-xs leading-5 text-[#65676B]">{section.content}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </ScrollArea>
-                </aside>
               </div>
             </div>
           )}

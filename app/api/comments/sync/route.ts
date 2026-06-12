@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
 
     const accessToken = pageToken.token
     const apiKey  = process.env.GEMINI_API_KEY
-    const postFields = "id,message,story,created_time,permalink_url"
+    const postFields = "id,message,story,created_time,permalink_url,full_picture,reactions.summary(true),comments.summary(true),shares"
     const commentFields = "id,message,from,created_time,can_hide,is_hidden,like_count,comment_count"
 
     const postsById = new Map<string, any>()
@@ -226,6 +226,10 @@ export async function POST(request: NextRequest) {
             story: ad.name || "",
             created_time: ad.date_created || null,
             permalink_url: ad.post_url || null,
+            full_picture: ad.thumb_url || (ad as any).thumbnail_url || (ad as any).image_url || null,
+            reactions: { summary: { total_count: 0 } },
+            comments: { summary: { total_count: 0 } },
+            shares: { count: 0 },
             source: "ad_creative",
             ad_id: ad.id,
             ad_name: ad.name,
@@ -249,6 +253,9 @@ export async function POST(request: NextRequest) {
     const rawComments: any[] = []
     for (const post of posts) {
       const postMessage = (post.message || post.story || "").slice(0, 100)
+      const postReactions = post.reactions?.summary?.total_count ?? 0
+      const postComments = post.comments?.summary?.total_count ?? 0
+      const postShares = post.shares?.count ?? 0
       let commentsForPost: any[] = []
 
       try {
@@ -273,6 +280,11 @@ export async function POST(request: NextRequest) {
           fb_comment_id:   c.id,
           fb_post_id:      post.id,
           fb_post_message: postMessage,
+          fb_post_permalink: post.permalink_url || null,
+          fb_post_full_picture: post.full_picture || null,
+          fb_post_reactions: postReactions,
+          fb_post_comments: postComments,
+          fb_post_shares: postShares,
           page_id:         page_id,
           page_name:       pageToken.pageName ?? null,
           message:         c.message || "",
