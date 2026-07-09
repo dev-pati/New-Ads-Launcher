@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { fetchAllAds } from "@/lib/facebook-launch"
+import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 
 const GRAPH_API_BASE = "https://graph.facebook.com/v25.0"
 
@@ -25,6 +27,28 @@ export async function POST(
 
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
+
+    // Ownership check (IDOR protection)
+    try {
+      const srcRes = await fetch(`${GRAPH_API_BASE}/${id}?fields=account_id&access_token=${connection.access_token}`)
+      if (!srcRes.ok) {
+        const srcErr = await srcRes.json().catch(() => ({}))
+        return NextResponse.json({ error: srcErr.error?.message || "Source campaign not found or inaccessible" }, { status: 404 })
+      }
+      const srcData = await srcRes.json()
+      const adAccountId = srcData.account_id
+      if (!adAccountId) {
+        return NextResponse.json({ error: "Could not retrieve ad account ID for source campaign" }, { status: 500 })
+      }
+
+      const belongs = await adAccountBelongsToOrg(ctx.orgId, adAccountId, connection.access_token)
+      if (!belongs) {
+        return NextResponse.json({ error: "Ad account not found or not authorized" }, { status: 403 })
+      }
+    } catch (err: any) {
+      console.error("[duplicate campaign] IDOR validation error:", err)
+      return NextResponse.json({ error: "Ownership validation failed: " + (err.message || "Unknown error") }, { status: 500 })
+    }
 
     const results: any[] = []
     const warnings: string[] = []
@@ -131,7 +155,8 @@ export async function POST(
                 })
               } catch {}
             }
-            adSets.push({ id: newAdSetId, name: (cfg.customName || "Ad Set") + aSuffix })
+            const ads = cfg.deepCopy ? await fetchAllAds(newAdSetId, connection.access_token) : []
+            adSets.push({ id: newAdSetId, name: (cfg.customName || "Ad Set") + aSuffix, ads })
           }
         }
       }

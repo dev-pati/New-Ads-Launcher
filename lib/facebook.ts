@@ -206,7 +206,7 @@ export async function getFacebookPages(accessToken: string): Promise<FacebookPag
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) await sleep(1000 * Math.pow(2, attempt - 1)) // 1s → 2s → 4s
 
-    const res  = await fetch(url)
+    const res  = await secureMetaFetch(url)
     const data = await res.json()
 
     if (data?.error) {
@@ -232,7 +232,7 @@ export async function getAdAccountPages(adAccountId: string, userToken: string):
   const allPages = await getFacebookPages(userToken)
 
   try {
-    const accountRes = await fetch(
+    const accountRes = await secureMetaFetch(
       `${GRAPH_API_BASE}/${adAccountId}?fields=business&access_token=${userToken}`
     )
     if (!accountRes.ok) return allPages
@@ -240,7 +240,7 @@ export async function getAdAccountPages(adAccountId: string, userToken: string):
     const businessId = accountData.business?.id
     if (!businessId) return allPages
 
-    const bizRes = await fetch(
+    const bizRes = await secureMetaFetch(
       `${GRAPH_API_BASE}/${businessId}/pages?fields=id&limit=500&access_token=${userToken}`
     )
     if (!bizRes.ok) return allPages
@@ -257,7 +257,7 @@ export async function getAdAccountPages(adAccountId: string, userToken: string):
 // Fetch instagram accounts for a specific page using the page's own access token
 export async function getPageInstagramAccounts(pageId: string, pageAccessToken: string): Promise<InstagramAccount[]> {
   try {
-    const res = await fetch(
+    const res = await secureMetaFetch(
       `${GRAPH_API_BASE}/${pageId}?fields=instagram_accounts{id,username,profile_pic}&access_token=${pageAccessToken}`
     )
     if (!res.ok) return []
@@ -868,7 +868,7 @@ export async function copyAdSet(
   accessToken: string,
   sourceAdsetId: string,
   params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string; status?: string }
-): Promise<{ id: string }> {
+): Promise<{ id: string; overrideWarning?: string }> {
   const body = new URLSearchParams({
     campaign_id: params.campaign_id,
     deep_copy: "false",
@@ -890,7 +890,17 @@ export async function copyAdSet(
   const patch = new URLSearchParams({ name: params.name, access_token: accessToken })
   if (params.daily_budget) patch.set("daily_budget", String(Math.round(params.daily_budget * 100)))
   if (params.start_time) patch.set("start_time", params.start_time)
-  await secureMetaFetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch })
+  const patchRes = await secureMetaFetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch })
+  if (!patchRes.ok) {
+    let overrideWarning = "Ad set copied, but name/budget override failed"
+    try {
+      const error = await patchRes.json()
+      const fb = error.error
+      const detail = fb?.error_user_msg || fb?.error_user_title || fb?.message
+      if (detail) overrideWarning = `${overrideWarning}: ${detail}`
+    } catch {}
+    return { id: newId, overrideWarning }
+  }
 
   return { id: newId }
 }
@@ -899,7 +909,7 @@ export async function copyAdSet(
 // Single call fetching both thumbnails and picture — prefers highest-res thumbnail.
 export async function getVideoThumbnail(videoId: string, accessToken: string): Promise<string | null> {
   try {
-    const res = await fetch(
+    const res = await secureMetaFetch(
       `${GRAPH_API_BASE}/${videoId}?fields=thumbnails{uri,width,height,is_preferred},picture&access_token=${accessToken}`
     )
     if (!res.ok) return null
@@ -964,7 +974,7 @@ export async function pollVideoReady(
 
   while (Date.now() - start < maxWaitMs) {
     try {
-      const res = await fetch(
+      const res = await secureMetaFetch(
         `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`
       )
       if (res.ok) {
@@ -1003,7 +1013,7 @@ export async function checkVideoStatus(
   accessToken: string
 ): Promise<{ ready: boolean; status: string; errorMsg?: string }> {
   try {
-    const res = await fetch(
+    const res = await secureMetaFetch(
       `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`
     )
     if (!res.ok) {
@@ -1030,7 +1040,7 @@ export async function checkVideoStatus(
 // Fetch a video's playable source URL from Facebook
 export async function getVideoSource(videoId: string, accessToken: string): Promise<string | null> {
   try {
-    const res = await fetch(
+    const res = await secureMetaFetch(
       `${GRAPH_API_BASE}/${videoId}?fields=source&access_token=${accessToken}`
     )
     if (!res.ok) return null
@@ -1047,7 +1057,7 @@ export async function getVideoReadyData(
   accessToken: string
 ): Promise<{ ready: boolean; status: string; thumbnailUrl: string | null; sourceUrl: string | null; errorMsg?: string }> {
   try {
-    const res = await fetch(
+    const res = await secureMetaFetch(
       `${GRAPH_API_BASE}/${videoId}?fields=status,thumbnails{uri,width,height,is_preferred},picture,source&access_token=${accessToken}`
     )
     if (!res.ok) return { ready: false, status: "unknown", thumbnailUrl: null, sourceUrl: null }
@@ -1389,14 +1399,26 @@ export async function createAd(
     const ca = params.collection_ads
     creativeSpec.product_set_id = ca.productSetId
     // Override description with IE headline if provided (shown inside the Instant Experience)
-    if (ca.ieHeadline && creativeSpec.link_data) {
-      creativeSpec.link_data.description = ca.ieHeadline
+    if (ca.ieHeadline) {
+      if (creativeSpec.link_data) {
+        creativeSpec.link_data.description = ca.ieHeadline
+      } else if (creativeSpec.video_data) {
+        creativeSpec.video_data.link_description = ca.ieHeadline
+      }
     }
     // Override the destination URL for the "See more" button inside the IE
-    if (ca.destinationUrl && creativeSpec.link_data) {
-      creativeSpec.link_data.link = ca.destinationUrl
-      if (creativeSpec.link_data.call_to_action?.value) {
-        creativeSpec.link_data.call_to_action.value.link = ca.destinationUrl
+    if (ca.destinationUrl) {
+      if (creativeSpec.link_data) {
+        creativeSpec.link_data.link = ca.destinationUrl
+        if (creativeSpec.link_data.call_to_action?.value) {
+          creativeSpec.link_data.call_to_action.value.link = ca.destinationUrl
+        }
+      } else if (creativeSpec.video_data) {
+        if (!creativeSpec.video_data.call_to_action) {
+          creativeSpec.video_data.call_to_action = { type: params.cta }
+        }
+        creativeSpec.video_data.call_to_action.value = creativeSpec.video_data.call_to_action.value || {}
+        creativeSpec.video_data.call_to_action.value.link = ca.destinationUrl
       }
     }
   }

@@ -36,25 +36,32 @@ import {
   IconClock, IconPencil, IconInfoCircle, IconArrowsUpDown,
   IconSelector, IconChevronUp, IconFolderOpen, IconDeviceFloppy,
   IconFileDescription, IconBuildingStore, IconShoppingBag, IconBox,
-  IconBrandGoogleDrive, IconClipboard, IconDots, IconBrandMeta as IconMetaBadge,
+  IconBrandGoogleDrive, IconClipboard, IconDots,
   IconArrowsSort,
   IconBrandTiktok, IconBrandSnapchat, IconBrandReddit, IconBrandLinkedin,
   IconDownload, IconThumbUp, IconMessageCircle, IconShare3,
   IconArrowLeft, IconArrowRight,
-  IconHeart, IconBookmark as IconBookmarkOutline, IconSend, IconArrowUp, IconArrowDown,
-  IconHome, IconUser, IconBrandFacebook as IconFb,
+  IconHeart, IconSend, IconArrowUp, IconArrowDown,
+  IconHome, IconUser,
   IconVolumeOff, IconMaximize, IconPlayerPause, IconPlus as IconPlusFollow,
   IconCurrencyDollar, IconTarget, IconTrendingUp,
   IconFilter, IconWorldPin,
   IconChevronLeft, IconChevronRight,
   IconSparkles,
 } from "@tabler/icons-react"
+
+// Alias duplicate imports to prevent Turbopack compilation issues
+const IconMetaBadge = IconBrandMeta
+const IconFb = IconBrandFacebook
+const IconBookmarkOutline = IconBookmark
+const SCHEDULE_DISABLED_MESSAGE = "Hệ thống tự động kích hoạt hiện đang tắt trên Production. Vui lòng chọn chạy ngay (Launch now)."
 import { CreativeCardMedia } from "@/components/creative-card-media"
 import { SheetsImportDialog, type ImportedRow } from "@/components/sheets-import-dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface AdSet { id: string; name: string; status: string; effective_status: string; campaign_id: string; campaign_name?: string; daily_budget?: string }
+interface AdSet { id: string; name: string; status: string; effective_status: string; campaign_id: string; campaign_name?: string; daily_budget?: string; ads?: any[] }
 interface Creative { id: string; file_name: string; file_url: string; media_type: "image" | "video"; headline?: string; primary_text?: string; cta?: string; link_url?: string; fb_image_url?: string; fb_thumbnail_url?: string; fb_image_hash?: string; fb_video_id?: string; created_at?: string; transcript?: string; tags?: string[]; status?: "pending" | "processing" | "ready" | "error" }
 interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "image" | "video"; duration?: number | null; width?: number; height?: number; dimensions?: string | null; date_added?: string; status?: string | null; thumbnail_url?: string; fb_video_id?: string; fb_image_hash?: string; fb_image_url?: string }
 interface DriveFileItem { id: string; name: string; mimeType: string; thumbnailLink?: string; iconLink?: string; size?: string; modifiedTime?: string }
@@ -62,7 +69,7 @@ interface IgAccount { id: string; username?: string; profile_pic?: string }
 interface FacebookPage { id: string; name: string; picture?: { data: { url: string } }; instagram_accounts?: { data: IgAccount[] } }
 interface AdAccountItem { id: string; name: string; account_id?: string }
 interface SitelinkItem { title: string; url: string }
-interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string; sitelinks?: SitelinkItem[]; partnership?: PartnershipState; multilanguage?: MultilanguageState; catalog?: CatalogAdsState; schedule?: { start: string; end?: string } }
+interface TableRow { id: string; creative: Creative | null; adName: string; primaryText: string; headline: string; description: string; adSetIds: string[]; primaryTextVariations?: string[]; headlineVariations?: string[]; descriptionVariations?: string[]; cta?: string; webLink?: string; urlTags?: string; promoCode?: string; launchAsActive?: boolean; pageId?: string; igId?: string; sitelinks?: SitelinkItem[]; partnership?: PartnershipState; multilanguage?: MultilanguageState; catalog?: CatalogAdsState; schedule?: { start: string; end?: string }; launchMode?: "existing" | "new_campaign"; newCampaignConfig?: { campaignName: string; adSetName: string; dailyBudget: string; budgetLevel: "campaign" | "adset"; templateAdId: string } }
 interface CreatedAd { adId: string; adSetId: string; adSetName: string; creativeId?: string; fileName?: string; thumbnailUrl?: string | null; mediaType?: "image" | "video"; mode?: string; multiGroup?: string; flexibleAd?: string; carousel?: string }
 interface LaunchMeta { cta: string; webLink: string; headline: string; primaryText: string; pageId: string; pageName?: string; adAccountId: string; adAccountName: string; timestamp: string }
 interface LaunchResult { created: number; failed: number; durationMs: number; errors: { adSetId: string; fileName: string; error: string }[]; scheduled?: { at: string; end: string | null } | null; createdAds: CreatedAd[]; batchId?: string | null; launchMeta?: LaunchMeta }
@@ -396,86 +403,81 @@ function AdAccountDropdown({ accounts, selectedId, onSelect }: {
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
-  const ref = useRef<HTMLDivElement>(null)
   const selected = accounts.find(a => a.id === selectedId)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [])
 
   const filtered = accounts.filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase()) || a.id.includes(search)
   )
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="h-8 flex items-center gap-1.5 px-3 rounded-lg border bg-background hover:bg-muted/40 transition-colors min-w-[180px] max-w-[240px] text-sm"
-      >
-        <IconBrandMeta className="size-3.5 text-[#0064E0] shrink-0" />
-        <span className="truncate flex-1 text-left">{selected?.name || "Select account..."}</span>
-        <IconChevronDown className="size-3.5 text-muted-foreground shrink-0" />
-      </button>
-
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-popover border rounded-xl shadow-lg z-50 overflow-hidden">
-          {/* Search */}
-          <div className="px-3 pt-3 pb-2">
-            <div className="relative">
-              <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-              <input
-                autoFocus
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search account..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-              />
-            </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors min-w-[140px] max-w-[200px] text-left"
+        >
+          <div className="size-5 rounded-full bg-[#0064E0]/10 flex items-center justify-center shrink-0 border border-[#0064E0]/20">
+            <IconBrandMeta className="size-3 text-[#0064E0]" />
           </div>
+          <span className="text-xs truncate flex-1 font-medium text-left">
+            {selected?.name || "Select account..."}
+          </span>
+          <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-1 gap-0 animate-in fade-in-50 zoom-in-95 duration-100" align="start" sideOffset={4} onOpenAutoFocus={e => e.preventDefault()}>
+        {/* Search */}
+        <div className="px-2 py-2 border-b">
+          <div className="relative">
+            <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search account..."
+              className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+            />
+          </div>
+        </div>
 
-          {/* Account list */}
-          <div className="max-h-52 overflow-y-auto">
-            {filtered.map(a => {
+        {/* Account list */}
+        <div className="max-h-52 overflow-y-auto py-1">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-muted-foreground text-center">No accounts found</div>
+          ) : (
+            filtered.map(a => {
               const isSelected = a.id === selectedId
               return (
                 <button
                   key={a.id}
                   onClick={() => { onSelect(a.id); setOpen(false); setSearch("") }}
                   className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent transition-colors text-left",
-                    isSelected && "bg-primary/5"
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium mt-0.5",
+                    isSelected && "bg-primary/5 text-primary"
                   )}
                 >
-                  <div className="size-4 shrink-0">
-                    {isSelected && <IconCheck className="size-4 text-primary" />}
-                  </div>
-                  <div className="size-5 rounded-full bg-[#0064E0]/10 flex items-center justify-center shrink-0">
+                  <div className="size-5 rounded-full bg-[#0064E0]/10 flex items-center justify-center shrink-0 border border-[#0064E0]/15">
                     <IconBrandMeta className="size-3 text-[#0064E0]" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{a.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{a.id}</p>
+                    <p className="truncate text-[11px] font-medium leading-tight">{a.name}</p>
+                    <p className="text-[9px] text-muted-foreground leading-none mt-0.5">{a.id}</p>
                   </div>
+                  {isSelected && <IconCheck className="size-3 text-primary shrink-0" />}
                 </button>
               )
-            })}
-          </div>
-
-          {/* Footer */}
-          <div className="border-t">
-            <button className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-              <IconPlus className="size-3.5" />
-              Add or edit ad accounts
-            </button>
-          </div>
+            })
+          )}
         </div>
-      )}
-    </div>
+
+        {/* Footer */}
+        <div className="border-t mt-1">
+          <button className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+            <IconPlus className="size-3.5" />
+            Add or edit ad accounts
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -3544,7 +3546,7 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
   }
 
   return (
-    <div className="w-full max-w-[340px] bg-background border rounded-xl overflow-hidden shadow-sm">
+    <div className="w-full max-w-[440px] bg-background border rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-center gap-2.5 px-3 py-2.5">
         {page?.picture?.data?.url
           ? <img src={page.picture.data.url} className="size-9 rounded-full shrink-0 object-cover border" alt="" />
@@ -3651,7 +3653,7 @@ function InstagramMockup({ page, creative, thumb, isVideo, primaryText, ctaLabel
   }
 
   return (
-    <div className="w-full max-w-[340px] bg-background border rounded-xl overflow-hidden shadow-sm">
+    <div className="w-full max-w-[440px] bg-background border rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-2">
           {page?.picture?.data?.url
@@ -3787,7 +3789,7 @@ function AdManageMockup({ creative, thumb, isVideo }: MockupProps) {
 function LoomMockup({ creative, thumb, isVideo, webLink, ctaLabel }: MockupProps) {
   const duration = (creative as any).duration || "0:52"
   return (
-    <div className="w-full max-w-[400px] bg-background border rounded-xl overflow-hidden shadow-sm">
+    <div className="w-full max-w-[440px] bg-background border rounded-xl overflow-hidden shadow-sm">
       <MediaArea thumb={thumb} creative={creative} isVideo={isVideo} aspect="aspect-video" />
       <div className="bg-black/95 text-white px-3 py-2 flex items-center gap-2 text-xs">
         <IconPlayerPlay className="size-4" />
@@ -3809,7 +3811,7 @@ function LoomMockup({ creative, thumb, isVideo, webLink, ctaLabel }: MockupProps
 // ── REDDIT ──
 function RedditMockup({ page, creative, thumb, isVideo, headline, webLink, ctaLabel }: MockupProps) {
   return (
-    <div className="w-full max-w-[400px] bg-background border rounded-xl overflow-hidden shadow-sm">
+    <div className="w-full max-w-[440px] bg-background border rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-center gap-2 px-3 py-2.5">
         {page?.picture?.data?.url
           ? <img src={page.picture.data.url} className="size-8 rounded-full object-cover" alt="" />
@@ -3837,7 +3839,7 @@ function RedditMockup({ page, creative, thumb, isVideo, headline, webLink, ctaLa
 // ── LINKEDIN ──
 function LinkedInMockup({ page, creative, thumb, isVideo, primaryText, headline, webLink, ctaLabel, primaryExpanded, setPrimaryExpanded }: MockupProps) {
   return (
-    <div className="w-full max-w-[400px] bg-background border rounded-xl overflow-hidden shadow-sm">
+    <div className="w-full max-w-[440px] bg-background border rounded-xl overflow-hidden shadow-sm">
       <div className="flex items-start gap-2.5 px-3 py-3">
         {page?.picture?.data?.url
           ? <img src={page.picture.data.url} className="size-12 rounded-full object-cover" alt="" />
@@ -3972,11 +3974,10 @@ function PreviewModal({
     if (!file || uploadingThumb) return
     setUploadingThumb(true)
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      const res = await fetch(`/api/creatives/${creative.id}/custom-thumbnail`, {
+      const res = await fetch(`/api/creatives/${creative.id}/save-thumbnail`, {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": file.type || "image/jpeg" },
+        body: file,
       })
       const data = await res.json()
       if (data.thumbnail_url) {
@@ -4009,7 +4010,7 @@ function PreviewModal({
       <DialogContent className="max-w-5xl !h-[92vh] !max-h-[92vh] p-0 gap-0 overflow-hidden flex flex-row">
         {/* LEFT: Mockup area — scrolls independently, mockup centered */}
         <div className="flex-1 min-w-0 h-full overflow-y-auto bg-[#F0F2F5] dark:bg-zinc-900/60 flex flex-col items-center justify-center px-6 py-6">
-          <div className="flex flex-col items-center gap-2 w-full max-w-[380px]">
+          <div className="flex flex-col items-center gap-2 w-full max-w-[480px]">
             {/* Carousel nav for multiple ads */}
             {creatives.length > 1 && (
               <div className="flex items-center gap-2 self-start">
@@ -6287,7 +6288,7 @@ function DuplicateAdSetModal({
   open: boolean
   onClose: () => void
   allAdSets: AdSet[]
-  onDuplicated: (newAdSets: AdSet[]) => void
+  onDuplicated: (newAdSets: AdSet[], ads: any[]) => void
 }) {
   const [search, setSearch] = useState("")
   const [selectedSourceId, setSelectedSourceId] = useState("")
@@ -6437,7 +6438,24 @@ function DuplicateAdSetModal({
         }
         newAdSets.push(data.adSet)
       }
-      if (newAdSets.length > 0) onDuplicated(newAdSets)
+      if (newAdSets.length > 0) {
+        const duplicatedAds: any[] = []
+        newAdSets.forEach(a => {
+          if (Array.isArray(a.ads)) {
+            a.ads.forEach((ad: any) => {
+              duplicatedAds.push({
+                id: ad.id,
+                name: ad.name,
+                adSetName: a.name,
+                creativeId: ad.creative?.id,
+                creativeName: ad.creative?.name || "Original Creative",
+                thumbnailUrl: ad.creative?.thumbnail_url || undefined
+              })
+            })
+          }
+        })
+        onDuplicated(newAdSets, duplicatedAds)
+      }
       if (errors.length > 0) {
         setError(`${newAdSets.length}/${count} duplicated. Errors: ${errors[0]}`)
         if (newAdSets.length === 0) {
@@ -6454,12 +6472,9 @@ function DuplicateAdSetModal({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg p-0 max-h-[92vh] overflow-y-auto">
-        <div className="px-5 py-4 border-b flex items-center gap-2">
-          <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center">
-            <IconCopy className="size-4 text-primary" />
-          </div>
-          <DialogTitle className="text-base font-semibold flex-1 text-center">Duplicate existing ad sets</DialogTitle>
+      <DialogContent className="max-w-[490px] w-full p-0 max-h-[92vh] overflow-y-auto">
+        <div className="px-5 py-4 border-b flex items-center justify-center">
+          <DialogTitle className="text-base font-semibold text-center">Duplicate existing ad sets</DialogTitle>
         </div>
 
         <div className="px-5 py-4 space-y-3">
@@ -6486,7 +6501,6 @@ function DuplicateAdSetModal({
                     </span>
                   ) : (
                     <input
-                      autoFocus
                       value={search}
                       onChange={e => { setSearch(e.target.value); setSearchOpen(true) }}
                       onFocus={() => setSearchOpen(true)}
@@ -6812,13 +6826,15 @@ function DuplicateAdSetModal({
                             placeholder="0.00"
                             className="flex-1 px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
                           />
-                          <Select value={budgetType} onValueChange={v => setBudgetType(v as any)}>
-                            <SelectTrigger className="w-28 h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="daily">Daily</SelectItem>
-                              <SelectItem value="lifetime">Lifetime</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <CustomSelect
+                            value={budgetType}
+                            onChange={v => setBudgetType(v as any)}
+                            options={[
+                              { value: "daily", label: "Daily" },
+                              { value: "lifetime", label: "Lifetime" }
+                            ]}
+                            className="w-28 h-9 bg-background"
+                          />
                         </div>
                       </div>
 
@@ -7329,7 +7345,7 @@ function DuplicateCampaignModal({
   open: boolean
   onClose: () => void
   adAccountId: string
-  onDuplicated: (newAdSets: AdSet[]) => void
+  onDuplicated: (newAdSets: AdSet[], ads: any[]) => void
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1)
   // Step 1
@@ -7517,7 +7533,15 @@ function DuplicateCampaignModal({
     setCreating(true)
     setError("")
     try {
-      const adSetConfigsArr = Array.from(selectedAdSetIds).map(id => adSetConfigs[id]).filter(Boolean)
+      const adSetConfigsArr = Array.from(selectedAdSetIds).map(id => {
+        const cfg = adSetConfigs[id]
+        if (!cfg) return null
+        const copyAll = cfg.deepCopy && (!cfg.adsLoaded || cfg.selectedAdIds.length === cfg.adsList.length)
+        return {
+          ...cfg,
+          selectedAdIds: copyAll ? null : cfg.selectedAdIds,
+        }
+      }).filter(Boolean)
       const res = await fetch(`/api/facebook/campaigns/duplicate-adsets`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -7556,7 +7580,25 @@ function DuplicateCampaignModal({
           })
         }
       }
-      onDuplicated(allNewAdSets)
+      const duplicatedAds: any[] = []
+      for (const cmp of enriched) {
+        for (const a of (cmp.adSets || [])) {
+          if (Array.isArray(a.ads)) {
+            a.ads.forEach((ad: any) => {
+              duplicatedAds.push({
+                id: ad.id,
+                name: ad.name,
+                adSetName: a.name,
+                campaignName: cmp.name,
+                creativeId: ad.creative?.id,
+                creativeName: ad.creative?.name || "Original Creative",
+                thumbnailUrl: ad.creative?.thumbnail_url || undefined
+              })
+            })
+          }
+        }
+      }
+      onDuplicated(allNewAdSets, duplicatedAds)
       setStep(3)
     } catch (e: any) {
       setError(e.message)
@@ -7607,45 +7649,74 @@ function DuplicateCampaignModal({
         {/* STEP 1 — Duplicate Campaign */}
         {step === 1 && (
           <div className="px-5 py-4 space-y-3">
-            {/* Filter */}
-            <Select value={filterValue} onValueChange={setFilterValue}>
-              <SelectTrigger className="h-10 text-sm">
-                <div className="flex items-center gap-2">
-                  <IconFilter className="size-3.5 text-muted-foreground" />
-                  <SelectValue placeholder="Filter Campaigns" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Campaigns</SelectItem>
-                <SelectItem value="active">Active only</SelectItem>
-                <SelectItem value="paused">Paused only</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Filter pill → custom dropdown */}
+            <div className="flex gap-2 items-center">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors text-left"
+                  >
+                    <IconFilter className="size-3 text-muted-foreground shrink-0" />
+                    <span className="text-xs truncate font-medium">
+                      {(() => {
+                        if (filterValue === "active") return "Active only"
+                        if (filterValue === "paused") return "Paused only"
+                        return "All Campaigns"
+                      })()}
+                    </span>
+                    <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-44 p-1 gap-0" align="start" sideOffset={4}>
+                  {([
+                    { value: "all", label: "All Campaigns" },
+                    { value: "active", label: "Active only" },
+                    { value: "paused", label: "Paused only" },
+                  ] as const).map(opt => {
+                    const isSelected = opt.value === filterValue
+                    return (
+                      <button
+                        key={opt.value}
+                        onClick={() => setFilterValue(opt.value)}
+                        className={cn(
+                          "w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium",
+                          isSelected && "bg-primary/5 text-primary"
+                        )}
+                      >
+                        <span>{opt.label}</span>
+                        {isSelected && <IconCheck className="size-3 text-primary shrink-0" />}
+                      </button>
+                    )
+                  })}
+                </PopoverContent>
+              </Popover>
+            </div>
 
             {/* Campaign selector */}
-            <div className="flex gap-2 items-start">
-              <div className="flex-1 space-y-1">
-                <button
-                  onClick={() => setCampaignDropdownOpen(v => !v)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/30 text-left"
-                >
-                  {sourceCampaign ? (
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <IconBrandMeta className="size-4 text-[#0064E0] shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold truncate">{sourceCampaign.name}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {sourceCampaign._adset_count ?? "—"} ad sets | {(sourceCampaign.objective || "").replace(/_/g, " ")} | spend: ${(sourceCampaign._spend || 0).toFixed(0)}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">Select a campaign...</span>
-                  )}
-                  <IconSelector className="size-4 text-muted-foreground shrink-0 ml-2" />
-                </button>
-                {campaignDropdownOpen && (
-                  <div className="border rounded-lg bg-background overflow-hidden shadow-sm">
+            <div className="flex gap-2 items-start relative min-w-0 w-full">
+              <div className="flex-1 min-w-0 relative">
+                <Popover open={campaignDropdownOpen} onOpenChange={setCampaignDropdownOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      className="w-full flex items-center justify-between px-3 py-2.5 border rounded-lg bg-background hover:bg-muted/30 text-left min-w-0"
+                    >
+                      {sourceCampaign ? (
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <IconBrandMeta className="size-4 text-[#0064E0] shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold truncate">{sourceCampaign.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              {sourceCampaign._adset_count ?? "—"} ad sets | {(sourceCampaign.objective || "").replace(/_/g, " ")} | spend: ${(sourceCampaign._spend || 0).toFixed(0)}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Select a campaign...</span>
+                      )}
+                      <IconSelector className="size-3.5 text-muted-foreground shrink-0 ml-2" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 gap-0" align="start" sideOffset={4}>
                     <div className="p-2 border-b">
                       <div className="relative">
                         <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
@@ -7654,11 +7725,11 @@ function DuplicateCampaignModal({
                           value={campaignSearch}
                           onChange={e => setCampaignSearch(e.target.value)}
                           placeholder="Search campaigns..."
-                          className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
                         />
                       </div>
                     </div>
-                    <div className="max-h-56 overflow-y-auto">
+                    <div className="max-h-48 overflow-y-auto">
                       {campaignsLoading ? (
                         <div className="px-3 py-3 text-xs text-muted-foreground flex items-center gap-2">
                           <IconLoader2 className="size-3 animate-spin" />Loading...
@@ -7670,25 +7741,25 @@ function DuplicateCampaignModal({
                           key={c.id}
                           onClick={() => selectCampaign(c)}
                           className={cn(
-                            "w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-accent border-b last:border-b-0",
+                            "w-full flex items-start gap-2 px-3 py-2 text-left hover:bg-accent border-b last:border-b-0 min-w-0",
                             selectedCampaignId === c.id && "bg-primary/5"
                           )}
                         >
-                          <div className="size-4 shrink-0 mt-0.5">
-                            {selectedCampaignId === c.id && <IconCheck className="size-4 text-primary" />}
+                          <div className="size-3.5 shrink-0 mt-0.5">
+                            {selectedCampaignId === c.id && <IconCheck className="size-3.5 text-primary" />}
                           </div>
-                          <IconBrandMeta className="size-4 text-[#0064E0] shrink-0 mt-0.5" />
+                          <IconBrandMeta className="size-3.5 text-[#0064E0] shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold truncate">{c.name}</p>
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-xs font-semibold truncate">{c.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">
                               Ad Sets: {c._adset_count ?? "—"} | {(c.objective || "").replace(/_/g, " ")} | spend: ${(c._spend || 0).toFixed(0)}
                             </p>
                           </div>
                         </button>
                       ))}
                     </div>
-                  </div>
-                )}
+                  </PopoverContent>
+                </Popover>
               </div>
               <button onClick={() => fetchCampaigns(true)} className="size-10 border rounded-lg flex items-center justify-center hover:bg-muted/30 shrink-0">
                 <IconRefresh className={cn("size-4 text-muted-foreground", campaignsLoading && "animate-spin")} />
@@ -7700,12 +7771,12 @@ function DuplicateCampaignModal({
                 {/* Duplicating from card */}
                 <div className="border rounded-xl p-3 bg-muted/20">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">DUPLICATING FROM</p>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <IconBrandFacebook className="size-4 text-[#1877F2]" />
-                    <span className="text-sm font-bold flex-1 truncate">{sourceCampaign.name}</span>
-                    <IconExternalLink className="size-3.5 text-muted-foreground" />
+                  <div className="flex items-center gap-2 mb-1.5 min-w-0 w-full">
+                    <IconBrandFacebook className="size-4 text-[#1877F2] shrink-0" />
+                    <span className="text-xs font-bold flex-1 truncate">{sourceCampaign.name}</span>
+                    <IconExternalLink className="size-3.5 text-muted-foreground shrink-0" />
                   </div>
-                  <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+                  <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-background border">
                       <IconPlus className="size-3" />{sourceCampaign._adset_count || 0} ad set{(sourceCampaign._adset_count || 0) !== 1 ? "s" : ""}
                     </span>
@@ -7747,10 +7818,10 @@ function DuplicateCampaignModal({
                   <input
                     value={campaignName}
                     onChange={e => setCampaignName(e.target.value)}
-                    className="w-full px-3 py-2.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full px-3 py-2 text-xs bg-muted/20 border rounded-lg outline-none focus:ring-1 focus:ring-ring font-medium"
                   />
-                  <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1">
-                    <IconInfoCircle className="size-3" />Ad sets will be configured in the next step
+                  <p className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                    <IconInfoCircle className="size-3.5 shrink-0 text-muted-foreground/60" />Ad sets will be configured in the next step
                   </p>
                 </div>
 
@@ -7767,9 +7838,9 @@ function DuplicateCampaignModal({
                     <div className="border-t p-3 space-y-3">
                       <div>
                         <label className="text-sm font-bold block mb-1.5">Budget Type</label>
-                        <Select
+                        <CustomSelect
                           value={budgetType}
-                          onValueChange={v => {
+                          onChange={v => {
                             const t = v as "daily" | "lifetime"
                             setBudgetType(t)
                             // Re-inherit from source when switching type
@@ -7777,13 +7848,12 @@ function DuplicateCampaignModal({
                             const src = t === "daily" ? sc?.daily_budget : sc?.lifetime_budget
                             setBudgetAmount(src ? (parseInt(src) / 100).toFixed(2) : "")
                           }}
-                        >
-                          <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="daily">Daily Budget</SelectItem>
-                            <SelectItem value="lifetime">Lifetime Budget</SelectItem>
-                          </SelectContent>
-                        </Select>
+                          options={[
+                            { value: "daily", label: "Daily Budget" },
+                            { value: "lifetime", label: "Lifetime Budget" }
+                          ]}
+                          className="w-40 h-9 bg-background"
+                        />
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
@@ -7840,15 +7910,17 @@ function DuplicateCampaignModal({
                     <p className="text-sm font-bold">Campaign bid strategy</p>
                     <p className="text-[11px] text-muted-foreground">Override the copied campaign's bid strategy</p>
                   </div>
-                  <Select value={bidStrategy} onValueChange={setBidStrategy}>
-                    <SelectTrigger className="w-36 h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">Keep original</SelectItem>
-                      <SelectItem value="LOWEST_COST_WITHOUT_CAP">Lowest cost (no cap)</SelectItem>
-                      <SelectItem value="LOWEST_COST_WITH_BID_CAP">Bid cap</SelectItem>
-                      <SelectItem value="COST_CAP">Cost cap</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <CustomSelect
+                    value={bidStrategy}
+                    onChange={setBidStrategy}
+                    options={[
+                      { value: "inherit", label: "Keep original" },
+                      { value: "LOWEST_COST_WITHOUT_CAP", label: "Lowest cost (no cap)" },
+                      { value: "LOWEST_COST_WITH_BID_CAP", label: "Bid cap" },
+                      { value: "COST_CAP", label: "Cost cap" }
+                    ]}
+                    className="w-44 h-8 bg-background"
+                  />
                 </div>
 
                 {/* Launch as Active */}
@@ -8418,11 +8490,11 @@ function DuplicateCampaignModal({
                   <Button
                     onClick={createCampaignsAndContinue}
                     disabled={!selectedCampaignId || !campaignName.trim() || creating}
-                    className="min-w-[200px]"
+                    className="min-w-[140px]"
                   >
                     {creating
-                      ? <><IconLoader2 className="size-4 animate-spin mr-1" />Creating...</>
-                      : <>Create {campaignCount} Campaign{campaignCount > 1 ? "s" : ""} & Continue<IconArrowRight className="size-3.5 ml-1" /></>
+                      ? <><IconLoader2 className="size-4 animate-spin mr-1" />Continuing...</>
+                      : <>Continue<IconArrowRight className="size-3.5 ml-1" /></>
                     }
                   </Button>
                 ) : (
@@ -8439,11 +8511,240 @@ function DuplicateCampaignModal({
   )
 }
 
+function CustomSelect({
+  value,
+  onChange,
+  options,
+  placeholder = "Select...",
+  className,
+}: {
+  value: string
+  onChange: (val: string) => void
+  options: { value: string; label: string }[]
+  placeholder?: string
+  className?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const searchRef = useRef<HTMLInputElement>(null)
+  const selectedRef = useRef<HTMLButtonElement>(null)
+
+  const selected = options.find(o => o.value === value)
+
+  const filtered = useMemo(() => {
+    if (!search) return options
+    const q = search.toLowerCase()
+    return options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
+  }, [options, search])
+
+  const showSearch = options.length > 10
+
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => {
+        selectedRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" })
+      }, 80)
+    }
+  }, [open])
+
+  return (
+    <Popover open={open} onOpenChange={v => {
+      setOpen(v)
+      if (!v) setSearch("")
+      if (v && showSearch) setTimeout(() => searchRef.current?.focus(), 50)
+    }}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            "h-9 flex items-center justify-between w-full px-3 text-xs bg-muted/20 border rounded-lg outline-none hover:bg-muted/30 hover:border-border transition-all text-left",
+            className
+          )}
+        >
+          <span className="truncate flex-1">{selected ? selected.label : placeholder}</span>
+          <IconChevronDown className="size-3.5 text-muted-foreground ml-2 shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-1 gap-0" align="start" side="bottom" sideOffset={4}>
+        {showSearch && (
+          <div className="px-2 py-2 border-b">
+            <div className="flex items-center gap-1.5 px-2 h-8 rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring/50">
+              <IconSearch className="size-3.5 text-muted-foreground shrink-0" />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search..."
+                className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+              />
+            </div>
+          </div>
+        )}
+        <div className="max-h-60 overflow-y-auto py-1">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-xs text-muted-foreground text-center">No options found</div>
+          ) : (
+            filtered.map(opt => {
+              const isSelected = opt.value === value
+              return (
+                <button
+                  key={opt.value}
+                  ref={isSelected ? selectedRef : undefined}
+                  onClick={() => {
+                    onChange(opt.value)
+                    setOpen(false)
+                  }}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium",
+                    isSelected && "bg-primary/5 text-primary"
+                  )}
+                >
+                  <span className="truncate flex-1">{opt.label}</span>
+                  {isSelected && <IconCheck className="size-3 text-primary shrink-0" />}
+                </button>
+              )
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function TemplateAdPicker({
+  adAccountId,
+  value,
+  onChange,
+}: {
+  adAccountId: string
+  value: string
+  onChange: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const [ads, setAds] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!open || !adAccountId || ads.length > 0) return
+    setLoading(true)
+    fetch(`/api/facebook/existing-ads?ad_account_id=${encodeURIComponent(adAccountId)}&active_only=1&limit=150`)
+      .then(r => r.json())
+      .then(d => setAds(d.ads || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [open, adAccountId, ads.length])
+
+  useEffect(() => {
+    setAds([])
+  }, [adAccountId])
+
+  const filtered = useMemo(() => {
+    if (!search) return ads
+    const q = search.toLowerCase()
+    return ads.filter(a =>
+      a.name?.toLowerCase().includes(q) ||
+      a.campaign?.name?.toLowerCase().includes(q) ||
+      a.adset?.name?.toLowerCase().includes(q)
+    )
+  }, [ads, search])
+
+  const selectedAd = ads.find(a => a.id === value)
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground font-medium flex items-center gap-0.5">
+        Template Ad <span className="text-destructive">*</span>
+      </span>
+      <Popover open={open} onOpenChange={v => {
+        setOpen(v)
+        if (v) setTimeout(() => searchRef.current?.focus(), 50)
+        else setSearch("")
+      }}>
+        <PopoverTrigger asChild>
+          <button className="flex items-center justify-between w-full h-9 px-3 text-xs bg-muted/20 border rounded-lg outline-none hover:bg-muted/30 hover:border-border transition-all text-left">
+            <span className="truncate flex-1">
+              {selectedAd ? `${selectedAd.name} (${selectedAd.campaign?.name || "No campaign"})` : "Select template ad for targeting..."}
+            </span>
+            <IconChevronDown className="size-3.5 text-muted-foreground ml-2 shrink-0" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-96 p-0 gap-0" align="start" sideOffset={4}>
+          <div className="px-2 py-2 border-b">
+            <div className="flex items-center gap-1.5 px-2 h-8 rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring/50">
+              <IconSearch className="size-3.5 text-muted-foreground shrink-0" />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search by ad name, campaign..."
+                className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+              />
+              {search && (
+                <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground shrink-0">
+                  <IconX className="size-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="max-h-60 overflow-y-auto py-1">
+            {loading ? (
+              <div className="flex items-center justify-center py-8 text-xs text-muted-foreground gap-1.5">
+                <IconLoader2 className="size-3.5 animate-spin" />Loading ads...
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="px-3 py-5 text-xs text-muted-foreground text-center">No ads found</div>
+            ) : (
+              filtered.map(a => {
+                const isSelected = a.id === value
+                return (
+                  <button
+                    key={a.id}
+                    onClick={() => { onChange(a.id); setOpen(false) }}
+                    className={cn(
+                      "w-full flex flex-col gap-0.5 px-3 py-2 text-left transition-colors border-b border-border/40 last:border-0",
+                      isSelected ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/50"
+                    )}
+                  >
+                    <span className={cn("text-xs font-medium truncate", isSelected ? "text-primary font-semibold" : "text-foreground")}>
+                      {a.name}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground truncate">
+                      Camp: {a.campaign?.name || "No campaign"} • Adset: {a.adset?.name || "No adset"}
+                    </span>
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
+
 // ─── Ad Sets Panel ────────────────────────────────────────────────────────────
 
-function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
-  adAccountId: string; selectedAdSets: AdSet[]
-  onSelect: (a: AdSet) => void; onRemove: (id: string) => void
+function AdSetsPanel({
+  adAccountId,
+  selectedAdSets,
+  onSelect,
+  onRemove,
+  launchMode,
+  setLaunchMode,
+  newCampaignConfig,
+  setNewCampaignConfig,
+  onDuplicated,
+}: {
+  adAccountId: string
+  selectedAdSets: AdSet[]
+  onSelect: (a: AdSet) => void
+  onRemove: (id: string) => void
+  launchMode: "existing" | "new_campaign"
+  setLaunchMode: (m: "existing" | "new_campaign") => void
+  newCampaignConfig: { campaignName: string; adSetName: string; dailyBudget: string; budgetLevel: "campaign" | "adset"; templateAdId: string }
+  setNewCampaignConfig: (cfg: any) => void
+  onDuplicated: (newAdSets: AdSet[], ads: any[]) => void
 }) {
   const [search, setSearch] = useState("")
   const [allAdSets, setAllAdSets] = useState<AdSet[]>([])
@@ -8478,70 +8779,152 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
         open={duplicateModalOpen}
         onClose={() => setDuplicateModalOpen(false)}
         allAdSets={allAdSets}
-        onDuplicated={(newAdSets) => {
+        onDuplicated={(newAdSets, ads) => {
           setAllAdSets(prev => [...newAdSets, ...prev])
           newAdSets.forEach(a => onSelect(a))
           fetchAdSets(true)
+          onDuplicated(newAdSets, ads)
         }}
       />
       <DuplicateCampaignModal
         open={duplicateCampaignOpen}
         onClose={() => setDuplicateCampaignOpen(false)}
         adAccountId={adAccountId}
-        onDuplicated={(newAdSets) => {
+        onDuplicated={(newAdSets, ads) => {
           setAllAdSets(prev => [...newAdSets, ...prev])
           newAdSets.forEach(a => onSelect(a))
           fetchAdSets(true)
+          onDuplicated(newAdSets, ads)
         }}
       />
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold">Ad Sets</span>
-          <span className="text-destructive text-xs font-bold">*</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={() => setDuplicateModalOpen(true)}
-            disabled={allAdSets.length === 0}
-          >
-            <IconCopy className="size-3" />Duplicate Ad Set
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={() => setDuplicateCampaignOpen(true)}
-            disabled={!adAccountId}
-          >
-            <IconCopy className="size-3" />Duplicate Campaign
-          </Button>
-        </div>
+
+      <div className="flex border-b border-border/60">
+        <button
+          onClick={() => setLaunchMode("existing")}
+          className={cn(
+            "flex-1 py-2.5 text-xs font-semibold text-center transition-colors border-r border-border/60",
+            launchMode === "existing"
+              ? "bg-muted/40 text-primary border-b-2 border-b-primary font-bold"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
+          )}
+        >
+          Select Existing Ad Set
+        </button>
+        <button
+          onClick={() => setLaunchMode("new_campaign")}
+          className={cn(
+            "flex-1 py-2.5 text-xs font-semibold text-center transition-colors",
+            launchMode === "new_campaign"
+              ? "bg-muted/40 text-primary border-b-2 border-b-primary font-bold"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
+          )}
+        >
+          Create New Campaign
+        </button>
       </div>
 
-      <div className="p-3 space-y-2">
-        {selectedAdSets.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {selectedAdSets.map(a => (
-              <span key={a.id} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium border border-primary/20">
-                {a.name}
-                <button onClick={() => onRemove(a.id)} className="hover:text-destructive rounded-full p-0.5">
-                  <IconX className="size-3" />
-                </button>
-              </span>
-            ))}
+      {launchMode === "new_campaign" ? (
+        <div className="p-4 space-y-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground font-medium">Campaign Name *</span>
+            <input
+              value={newCampaignConfig.campaignName}
+              onChange={e => setNewCampaignConfig((prev: any) => ({ ...prev, campaignName: e.target.value }))}
+              placeholder="New campaign name..."
+              className="h-9 px-3 text-xs bg-muted/20 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+            />
           </div>
-        )}
 
-        <div className="relative">
-          <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            onFocus={() => setShowDropdown(true)}
-            onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-            placeholder="Search by Ad Set name or ID"
-            className="w-full pl-9 pr-16 py-2 text-sm bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50" />
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground font-medium">Ad Set Name *</span>
+            <input
+              value={newCampaignConfig.adSetName}
+              onChange={e => setNewCampaignConfig((prev: any) => ({ ...prev, adSetName: e.target.value }))}
+              placeholder="New ad set name..."
+              className="h-9 px-3 text-xs bg-muted/20 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground font-medium">Daily Budget *</span>
+              <input
+                type="number"
+                value={newCampaignConfig.dailyBudget}
+                onChange={e => setNewCampaignConfig((prev: any) => ({ ...prev, dailyBudget: e.target.value }))}
+                placeholder="e.g. 20"
+                className="h-9 px-3 text-xs bg-muted/20 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs text-muted-foreground font-medium">Budget Level *</span>
+              <CustomSelect
+                value={newCampaignConfig.budgetLevel}
+                onChange={val => setNewCampaignConfig((prev: any) => ({ ...prev, budgetLevel: val }))}
+                options={[
+                  { value: "adset", label: "Ad Set (non-CBO)" },
+                  { value: "campaign", label: "Campaign (CBO)" }
+                ]}
+              />
+            </div>
+          </div>
+
+          <TemplateAdPicker
+            adAccountId={adAccountId}
+            value={newCampaignConfig.templateAdId}
+            onChange={id => setNewCampaignConfig((prev: any) => ({ ...prev, templateAdId: id }))}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between px-4 py-3 border-b">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-semibold">Ad Sets</span>
+              <span className="text-destructive text-xs font-bold">*</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => setDuplicateModalOpen(true)}
+                disabled={allAdSets.length === 0}
+              >
+                <IconCopy className="size-3" />Duplicate Ad Set
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => setDuplicateCampaignOpen(true)}
+                disabled={!adAccountId}
+              >
+                <IconCopy className="size-3" />Duplicate Campaign
+              </Button>
+            </div>
+          </div>
+
+          <div className="p-3 space-y-2">
+            {selectedAdSets.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {selectedAdSets.map(a => (
+                  <span key={a.id} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium border border-primary/20">
+                    {a.name}
+                    <button onClick={() => onRemove(a.id)} className="hover:text-destructive rounded-full p-0.5">
+                      <IconX className="size-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="relative">
+              <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                onFocus={() => setShowDropdown(true)}
+                onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+                placeholder="Search by Ad Set name or ID"
+                className="w-full pl-9 pr-16 py-2 text-sm bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50" />
           <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground/40 font-mono">Ctrl+K</span>
 
           {showDropdown && (
@@ -8581,6 +8964,8 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
           <IconRefresh className={cn("size-3", loading && "animate-spin")} />Ad Set Refresh
         </Button>
       </div>
+      </>
+      )}
     </div>
   )
 }
@@ -8899,8 +9284,10 @@ function SettingsModal({
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
                 className={cn(
-                  "w-full text-left px-4 py-2.5 text-sm transition-colors",
-                  activeTab === t.key ? "bg-muted/60 font-bold border-l-2 border-primary" : "text-muted-foreground hover:bg-muted/30"
+                  "w-full text-left px-4 py-2.5 text-sm transition-colors cursor-pointer",
+                  activeTab === t.key
+                    ? "bg-muted/60 font-bold border-l-2 border-primary text-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                 )}
               >
                 {t.label}
@@ -10097,6 +10484,18 @@ function AdSetupPanel({
   selectedCreatives,
   adSourceMode, setAdSourceMode,
   adSourceIds, setAdSourceIds,
+  adNameOverrides, setAdNameOverrides,
+  partnership, setPartnership,
+  multilanguage, setMultilanguage,
+  sitelinks, setSitelinks,
+  promoCode, setPromoCode,
+  scheduledStart, setScheduledStart,
+  scheduledEnd, setScheduledEnd,
+  schedulingEnabled,
+  setLaunchType,
+  pages,
+  selectedIgPageId,
+  igAccountCache,
 }: {
   primaryTexts: string[]; setPrimaryTexts: (v: string[]) => void
   headlines: string[]; setHeadlines: (v: string[]) => void
@@ -10114,6 +10513,18 @@ function AdSetupPanel({
   setAdSourceMode: (v: AdSourceMode) => void
   adSourceIds: Record<string, string>
   setAdSourceIds: (v: Record<string, string>) => void
+  adNameOverrides: Record<string, string>; setAdNameOverrides: (v: Record<string, string>) => void
+  partnership: PartnershipState; setPartnership: (v: PartnershipState) => void
+  multilanguage: MultilanguageState; setMultilanguage: (v: MultilanguageState) => void
+  sitelinks: SitelinkItem[]; setSitelinks: (v: SitelinkItem[]) => void
+  promoCode: string; setPromoCode: (v: string) => void
+  scheduledStart: string | null; setScheduledStart: (v: string | null) => void
+  scheduledEnd: string | null; setScheduledEnd: (v: string | null) => void
+  schedulingEnabled: boolean
+  setLaunchType: (v: "now" | "schedule" | "recurring") => void
+  pages: FacebookPage[]
+  selectedIgPageId: string
+  igAccountCache: Record<string, IgAccount[]>
 }) {
   const [showDesc, setShowDesc] = useState(() => !!description)
   useEffect(() => { if (description) setShowDesc(true) }, [description])
@@ -10125,6 +10536,48 @@ function AdSetupPanel({
   const [aiVariationsError, setAiVariationsError] = useState<string | null>(null)
   const [addedVariations, setAddedVariations] = useState<Set<number>>(new Set())
 
+  // Inline Advanced panels states
+  const [showPartnerPanel, setShowPartnerPanel] = useState(false)
+  const [showLangPanel, setShowLangPanel] = useState(false)
+  const [showSitePanel, setShowSitePanel] = useState(false)
+  const [showUrlPanel, setShowUrlPanel] = useState(false)
+  const [showPromoPanel, setShowPromoPanel] = useState(false)
+
+  // Inline Schedule state
+  const [showScheduleInline, setShowScheduleInline] = useState(!!scheduledStart)
+  const todayStr = new Date().toISOString().split("T")[0]
+  const [inlineDate, setInlineDate] = useState(() => {
+    if (scheduledStart) return scheduledStart.split("T")[0]
+    return todayStr
+  })
+  const [inlineTime, setInlineTime] = useState(() => {
+    if (scheduledStart) {
+      const t = scheduledStart.split("T")[1]
+      return t ? t.slice(0, 5) : "09:00"
+    }
+    return "09:00"
+  })
+
+  // Sync inline schedule to global state
+  useEffect(() => {
+    if (!schedulingEnabled) {
+      setShowScheduleInline(false)
+      setScheduledStart(null)
+      setScheduledEnd(null)
+      setLaunchType("now")
+      return
+    }
+    if (showScheduleInline && inlineDate) {
+      const start = getUtcDateInTimezone(`${inlineDate}T${inlineTime}:00`, "America/Los_Angeles").toISOString()
+      setScheduledStart(start)
+      setLaunchType("schedule")
+    } else if (!showScheduleInline) {
+      setScheduledStart(null)
+      setScheduledEnd(null)
+      setLaunchType("now")
+    }
+  }, [schedulingEnabled, showScheduleInline, inlineDate, inlineTime, setScheduledStart, setScheduledEnd, setLaunchType])
+
   // Generate from URL/Video state
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [genMode, setGenMode] = useState<"url" | "video">("url") // kept for compat, unused
@@ -10133,6 +10586,135 @@ function AdSetupPanel({
   const [generatingCopy, setGeneratingCopy] = useState(false)
   const [generateCopyStep, setGenerateCopyStep] = useState("")
   const [generateCopyError, setGenerateCopyError] = useState<string | null>(null)
+
+  // AI Fill state & handler
+  const [loadingAiFill, setLoadingAiFill] = useState(false)
+  const [aiFillError, setAiFillError] = useState<string | null>(null)
+
+  const handleAiFill = async () => {
+    setLoadingAiFill(true)
+    setAiFillError(null)
+    try {
+      // 1. Check AI Key configured
+      const keysRes = await fetch("/api/settings/ai-keys")
+      if (!keysRes.ok) throw new Error("Failed to check AI Key configuration.")
+      const keys = await keysRes.json()
+      if (!keys.gemini_api_key && !keys.openai_api_key) {
+        setAiFillError("Thiếu AI API Key. Vui lòng cấu hình tại Settings.")
+        setLoadingAiFill(false)
+        return
+      }
+
+      // 2. Validate inputs
+      const hasUrl = !!webLink.trim()
+      const videoCreative = selectedCreatives.find(c => c.media_type === "video")
+      const hasVideo = !!videoCreative
+
+      if (!hasUrl && !hasVideo) {
+        setAiFillError("Vui lòng nhập Destination Link hoặc chọn ít nhất 1 video creative để phân tích.")
+        setLoadingAiFill(false)
+        return
+      }
+
+      // 3. Generate Copy
+      let generatePromise: Promise<any> = Promise.resolve(null)
+      let body: Record<string, string> = {}
+      if (hasUrl && hasVideo) {
+        body = { type: "both", url: webLink.trim(), videoUrl: videoCreative.file_url }
+      } else if (hasUrl) {
+        body = { type: "url", url: webLink.trim() }
+      } else if (hasVideo) {
+        body = { type: "video", url: videoCreative.file_url }
+      }
+
+      if (Object.keys(body).length > 0) {
+        generatePromise = fetch("/api/inspo/ai/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }).then(async res => {
+          const d = await res.json()
+          if (!res.ok) throw new Error(d.error || "Failed to generate copy")
+          return d
+        })
+      }
+
+      // 4. Generate Ad Names using Schema
+      let namingPromise: Promise<any> = Promise.resolve(null)
+      const schemaRes = await fetch("/api/naming-schema")
+      if (schemaRes.ok) {
+        const schemaData = await schemaRes.json()
+        const categories = schemaData.categories || []
+        const aiCategories = categories.filter((c: any) => c.isAI)
+
+        if (selectedCreatives.length > 0) {
+          namingPromise = Promise.all(
+            selectedCreatives.map(async (creative) => {
+              try {
+                const nameRes = await fetch("/api/naming/generate", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ filename: creative.file_name, aiCategories }),
+                })
+                if (!nameRes.ok) return null
+                const nameData = await nameRes.json()
+                const aiValues = nameData.values || {}
+
+                const parts = categories.map((cat: any) => {
+                  if (cat.autoDetect && cat.name === "OriginalFilename") {
+                    const dotIdx = creative.file_name.lastIndexOf(".")
+                    return dotIdx > 0 ? creative.file_name.slice(0, dotIdx) : creative.file_name
+                  }
+                  if (cat.autoDetect && cat.name === "Dimensions") return "NonStandard"
+                  if (cat.autoDetect && cat.name === "Length") return "n/a"
+                  if (cat.isAI) return aiValues[cat.name] || `[${cat.name}]`
+                  return cat.options[0]?.value || `[${cat.name}]`
+                })
+                return { id: creative.id, name: parts.join("_") }
+              } catch {
+                return null
+              }
+            })
+          ).then(results => results.filter(Boolean)) as any
+        }
+      }
+
+      const [copyResult, namingResults] = await Promise.all([generatePromise, namingPromise])
+
+      // 5. Update Copy State
+      if (copyResult && copyResult.generated) {
+        const g = copyResult.generated
+        if (g.primary_texts?.length) {
+          setPrimaryTexts(g.primary_texts.map((p: any) => p.text))
+        }
+        if (g.headlines?.length) {
+          setHeadlines(g.headlines)
+        }
+        if (g.descriptions?.[0]) {
+          setDescription(g.descriptions[0])
+        }
+        if (g.cta) {
+          setCta(g.cta)
+        }
+      }
+
+      // 6. Update Ad Names State
+      if (namingResults && namingResults.length > 0) {
+        const nextOverrides = { ...adNameOverrides }
+        namingResults.forEach((r: any) => {
+          if (r) {
+            nextOverrides[r.id] = r.name
+          }
+        })
+        setAdNameOverrides(nextOverrides)
+      }
+
+    } catch (err: any) {
+      setAiFillError(err.message || "AI Fill failed. Please try again.")
+    } finally {
+      setLoadingAiFill(false)
+    }
+  }
 
   const updateText = (idx: number, val: string) => {
     const next = [...primaryTexts]; next[idx] = val; setPrimaryTexts(next)
@@ -10430,17 +11012,30 @@ function AdSetupPanel({
           <span className="text-destructive text-xs font-bold">*</span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5" onClick={openGenerateModal}>
-            <IconSparkles className="size-3" />Generate
+          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5 disabled:opacity-50" onClick={handleAiFill} disabled={loadingAiFill}>
+            {loadingAiFill ? <IconLoader2 className="size-3 animate-spin" /> : <IconSparkles className="size-3" />}
+            {loadingAiFill ? "Generating..." : "Generate"}
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setSettingsOpen(true)}>
-            <IconSettings className="size-3" />Settings<IconChevronDown className="size-3" />
+            <IconSettings className="size-3" />Settings
           </Button>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCopyTemplateOpen(true)}>
-            <IconTextCaption className="size-3" />Load Copy
+            <IconFileDescription className="size-3" />Load Copy
           </Button>
         </div>
       </div>
+      {aiFillError && (
+        <div className="mx-4 mt-2 p-2 bg-destructive/10 border border-destructive/20 text-xs text-destructive rounded-lg flex items-center gap-1.5">
+          <IconAlertCircle className="size-3.5 shrink-0" />
+          {aiFillError.includes("Settings") ? (
+            <>
+              {aiFillError.split("Settings")[0]}
+              <a href="/settings" className="underline font-medium hover:text-destructive/80">Settings</a>
+              {aiFillError.split("Settings")[1]}
+            </>
+          ) : aiFillError}
+        </div>
+      )}
 
       <div className="p-4 space-y-4">
         {/* Primary Texts */}
@@ -10518,35 +11113,74 @@ function AdSetupPanel({
           )}
         </div>
 
-        {/* CTA + Active toggle */}
+        {/* CTA & Web Link */}
         <div className="flex items-end gap-3">
-          <div className="flex-1">
+          <div className="w-40 shrink-0">
             <label className="text-xs font-medium text-muted-foreground block mb-1.5">Call to Action</label>
-            <Select value={cta} onValueChange={setCta}>
-              <SelectTrigger className="h-9 text-sm bg-muted/30"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <CustomSelect
+              value={cta}
+              onChange={setCta}
+              options={CTA_OPTIONS}
+              className="h-9 bg-muted/20"
+            />
           </div>
-          <div className="flex items-center gap-2 pb-1">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Launch ads as</span>
-            <button onClick={() => setLaunchAsActive(!launchAsActive)}
-              className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-                launchAsActive ? "bg-primary" : "bg-muted-foreground/30")}>
-              <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
-                launchAsActive ? "translate-x-4" : "translate-x-0.5")} />
-            </button>
-            <span className="text-xs font-medium">{launchAsActive ? "Active" : "Paused"}</span>
+          <div className="flex-1">
+            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Web Link</label>
+            <input
+              type="text"
+              value={webLink}
+              onChange={e => setWebLink(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 h-9"
+            />
           </div>
         </div>
 
-        {/* Web Link */}
-        <WebLinkSection
-          webLink={webLink} setWebLink={setWebLink}
-          utmParams={utmParams} setUtmParams={setUtmParams}
-          displayLink={displayLink} setDisplayLink={setDisplayLink}
-        />
+        {/* Launch Status Selector */}
+        <div className="p-3 border rounded-xl bg-muted/20 flex items-center justify-between gap-4 mt-2">
+          <div>
+            <b className="text-xs font-bold block">
+              {launchAsActive ? "Active" : "Paused"}
+            </b>
+            <small className="text-[10px] text-muted-foreground block mt-0.5 leading-tight">
+              {launchAsActive
+                ? "Ad will be active immediately on Meta. Be careful!"
+                : "Ad created on Meta but paused. Activate manually after review."}
+            </small>
+          </div>
+          <div className="flex items-center bg-muted/60 p-0.5 rounded-lg border text-[11px] font-bold">
+            <button
+              onClick={() => setLaunchAsActive(false)}
+              className={cn(
+                "group px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 cursor-pointer",
+                !launchAsActive
+                  ? "bg-green-500/10 text-green-500 shadow-sm"
+                  : "text-muted-foreground hover:bg-green-500/10 hover:text-green-500"
+              )}
+            >
+              <span className={cn(
+                "size-1.5 rounded-full transition-colors",
+                !launchAsActive ? "bg-green-500" : "bg-muted-foreground group-hover:bg-green-500"
+              )} />
+              Paused
+            </button>
+            <button
+              onClick={() => setLaunchAsActive(true)}
+              className={cn(
+                "group px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 cursor-pointer",
+                launchAsActive
+                  ? "bg-amber-500/10 text-amber-500 shadow-sm"
+                  : "text-muted-foreground hover:bg-amber-500/10 hover:text-amber-500"
+              )}
+            >
+              <span className={cn(
+                "size-1.5 rounded-full transition-colors",
+                launchAsActive ? "bg-amber-500" : "bg-muted-foreground group-hover:bg-amber-500"
+              )} />
+              Active
+            </button>
+          </div>
+        </div>
 
         {/* Ad Source — shown when media is loaded */}
         {selectedCreatives.length > 0 && (() => {
@@ -10682,6 +11316,58 @@ function AdSetupPanel({
             <Button variant="outline" size="sm" className="flex-1 h-9 text-xs text-muted-foreground">Select Storefront</Button>
             <Button variant="outline" size="sm" className="flex-1 h-9 text-xs text-muted-foreground">Select from Catalog</Button>
           </div>
+        </div>
+
+        {/* Inline Scheduling Switch Toggle */}
+        <div className="space-y-3 pt-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 font-medium text-xs text-muted-foreground w-fit">
+                  <button
+                    type="button"
+                    disabled={!schedulingEnabled}
+                    aria-disabled={!schedulingEnabled}
+                    onClick={() => schedulingEnabled && setShowScheduleInline(!showScheduleInline)}
+                    className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 shrink-0",
+                      schedulingEnabled ? "cursor-pointer" : "cursor-not-allowed opacity-50",
+                      showScheduleInline && schedulingEnabled ? "bg-primary" : "bg-muted-foreground/30"
+                    )}
+                  >
+                    <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform duration-200",
+                      showScheduleInline && schedulingEnabled ? "translate-x-4" : "translate-x-0.5"
+                    )} />
+                  </button>
+                  <span className={cn(!schedulingEnabled && "opacity-60")}>Schedule launch (optional)</span>
+                </div>
+              </TooltipTrigger>
+              {!schedulingEnabled && <TooltipContent>{SCHEDULE_DISABLED_MESSAGE}</TooltipContent>}
+            </Tooltip>
+          </TooltipProvider>
+
+          {showScheduleInline && (
+            <div className="grid grid-cols-2 gap-3 p-3 border rounded-xl bg-muted/20 animate-in fade-in-0 duration-200">
+              <div>
+                <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Start Date</label>
+                <input
+                  type="date"
+                  value={inlineDate}
+                  min={todayStr}
+                  onChange={e => setInlineDate(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-muted/40 border rounded-md outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] text-muted-foreground font-medium mb-1 block">Start Time</label>
+                <input
+                  type="time"
+                  value={inlineTime}
+                  onChange={e => setInlineTime(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-muted/40 border rounded-md outline-none"
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -11096,9 +11782,11 @@ function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
         </td>
         <td className="px-2 py-1.5 w-40">
           <div className="flex items-center gap-1">
-            <span className="font-mono text-[10px] text-muted-foreground">{ad.adId.slice(0, 15)}…</span>
-            <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(ad.adId) }} className="text-muted-foreground hover:text-foreground"><IconCopy className="size-3" /></button>
-            <a href={metaUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-500 hover:text-blue-600"><IconExternalLink className="size-3" /></a>
+            <span className="font-mono text-[10px] text-muted-foreground">{ad.adId ? `${ad.adId.slice(0, 15)}…` : "N/A"}</span>
+            <button onClick={e => { e.stopPropagation(); if (ad.adId) navigator.clipboard.writeText(ad.adId) }} className="text-muted-foreground hover:text-foreground"><IconCopy className="size-3" /></button>
+            {ad.adId ? (
+              <a href={metaUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-500 hover:text-blue-600"><IconExternalLink className="size-3" /></a>
+            ) : null}
           </div>
         </td>
         <td className="px-2 py-1.5 text-xs text-muted-foreground truncate max-w-[120px]" title={ad.adSetName}>{ad.adSetName}</td>
@@ -11124,7 +11812,7 @@ function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
   )
 }
 
-function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose: () => void }) {
+function LaunchResultModal({ result, onClose, onSavePreset }: { result: LaunchResult; onClose: () => void; onSavePreset?: (name: string) => void }) {
   const [tab, setTab] = useState<"launched" | "performance">("launched")
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [adStatuses, setAdStatuses] = useState<Record<string, string>>({})
@@ -11133,6 +11821,11 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
   const [loadingInsights, setLoadingInsights] = useState(false)
   const [datePreset, setDatePreset] = useState("last_30d")
   const [fetchMs, setFetchMs] = useState<number | null>(null)
+
+  // Preset state
+  const [showSavePresetForm, setShowSavePresetForm] = useState(false)
+  const [presetName, setPresetName] = useState("")
+  const [presetSaved, setPresetSaved] = useState(false)
 
   const isSuccess = result.failed === 0
   const isPartial = result.created > 0 && result.failed > 0
@@ -11402,14 +12095,65 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-5 py-3 border-t shrink-0">
+        <div className="flex items-center justify-between px-5 py-3 border-t shrink-0 flex-wrap gap-2">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <IconClock className="size-3.5" />Completed in {formatDuration(result.durationMs)}
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs">Load as Draft</Button>
+          <div className="flex items-center gap-2">
+            {presetSaved ? (
+              <span className="text-xs text-green-600 font-medium">Preset saved ✓</span>
+            ) : showSavePresetForm ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  placeholder="Preset name..."
+                  value={presetName}
+                  onChange={e => setPresetName(e.target.value)}
+                  className="h-7 px-2.5 text-xs border rounded-md outline-none bg-muted/30 focus:ring-1 focus:ring-ring w-36"
+                  onKeyDown={e => {
+                    if (e.key === "Enter" && onSavePreset) {
+                      onSavePreset(presetName)
+                      setPresetSaved(true)
+                      setShowSavePresetForm(false)
+                    }
+                  }}
+                />
+                <Button
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => {
+                    if (onSavePreset) {
+                      onSavePreset(presetName)
+                      setPresetSaved(true)
+                      setShowSavePresetForm(false)
+                    }
+                  }}
+                >
+                  Save
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs px-2"
+                  onClick={() => setShowSavePresetForm(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => setShowSavePresetForm(true)}
+              >
+                <IconBookmark className="size-3" />Save as Preset
+              </Button>
+            )}
+
+            <Button variant="outline" size="sm" className="h-7 text-xs">Load as Draft</Button>
             <a href={`https://adsmanager.facebook.com/adsmanager/manage/ads?act=${actId}`} target="_blank" rel="noopener noreferrer">
-              <Button size="sm" className="text-xs gap-1.5 bg-[#1877F2] hover:bg-[#1877F2]/90">
+              <Button size="sm" className="h-7 text-xs gap-1.5 bg-[#1877F2] hover:bg-[#1877F2]/90">
                 View Meta Ads Manager<IconBrandMeta className="size-3.5" />
               </Button>
             </a>
@@ -11625,12 +12369,13 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
 
 interface DraftRecord { id: string; name: string; ad_account_id: string; ad_account_name: string; row_count: number; creative_thumbs: string[]; user_name: string; created_at: string }
 
-function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverride, pages = [] }: {
+function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverride, pages = [], onSavePreset }: {
   reloadTrigger: number
   onRelaunch: (b: LaunchBatch) => void
   onLoadDraft?: (draftId: string) => void
   tabOverride?: "launches" | "drafts" | "scheduled" | null
   pages?: any[]
+  onSavePreset?: (name: string) => void
 }) {
   const [tab, setTab] = useState<"launches" | "drafts" | "scheduled">("launches")
   const [batches, setBatches] = useState<LaunchBatch[]>([])
@@ -11737,7 +12482,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
 
   return (
     <div className="border-t flex flex-col">
-      {resultModal && <LaunchResultModal result={resultModal} onClose={() => setResultModal(null)} />}
+      {resultModal && <LaunchResultModal result={resultModal} onClose={() => setResultModal(null)} onSavePreset={onSavePreset} />}
       <div className="flex items-center border-b px-4 shrink-0 gap-0">
         {TABS.map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setTab(key)}
@@ -11753,13 +12498,46 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
               placeholder="Search by ad set, ad name or batch..."
               className="pl-7 pr-3 py-1.5 text-xs bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring w-52 placeholder:text-muted-foreground/50" />
           </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
-            className="h-7 px-2 text-xs border rounded-lg bg-background outline-none">
-            <option value="all">All Status</option>
-            <option value="success">Success</option>
-            <option value="partial">Partial</option>
-            <option value="failed">Failed</option>
-          </select>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors text-left"
+              >
+                <span className="text-xs truncate font-medium">
+                  {(() => {
+                    if (statusFilter === "success") return "Success"
+                    if (statusFilter === "partial") return "Partial"
+                    if (statusFilter === "failed") return "Failed"
+                    return "All Status"
+                  })()}
+                </span>
+                <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-36 p-1 gap-0" align="start" sideOffset={4}>
+              {([
+                { value: "all", label: "All Status" },
+                { value: "success", label: "Success" },
+                { value: "partial", label: "Partial" },
+                { value: "failed", label: "Failed" },
+              ] as const).map(opt => {
+                const isSelected = opt.value === statusFilter
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => setStatusFilter(opt.value)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium",
+                      isSelected && "bg-primary/5 text-primary"
+                    )}
+                  >
+                    <span>{opt.label}</span>
+                    {isSelected && <IconCheck className="size-3 text-primary shrink-0" />}
+                  </button>
+                )
+              })}
+            </PopoverContent>
+          </Popover>
           <Button variant="ghost" size="icon" className="size-7" onClick={load}>
             <IconRefresh className={cn("size-3.5 text-muted-foreground", loading && "animate-spin")} />
           </Button>
@@ -12035,10 +12813,24 @@ const DEFAULT_CATALOG: CatalogAdsState = { enabled: false, formatMode: "automati
 
 type RowModalType = "partnership" | "multilanguage" | "catalog" | "schedule" | "sitelinks"
 
-function AdSetPickerCell({ selectedIds, adSets, onUpdate }: {
+function AdSetPickerCell({
+  selectedIds,
+  adSets,
+  onUpdate,
+  launchMode = "existing",
+  newCampaignConfig = { campaignName: "", adSetName: "", dailyBudget: "", budgetLevel: "adset", templateAdId: "" },
+  onUpdateMode,
+  onUpdateNewCampaign,
+  adAccountId,
+}: {
   selectedIds: string[]
   adSets: AdSet[]
   onUpdate: (ids: string[]) => void
+  launchMode?: "existing" | "new_campaign"
+  newCampaignConfig?: { campaignName: string; adSetName: string; dailyBudget: string; budgetLevel: "campaign" | "adset"; templateAdId: string }
+  onUpdateMode?: (mode: "existing" | "new_campaign") => void
+  onUpdateNewCampaign?: (cfg: any) => void
+  adAccountId: string
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -12055,26 +12847,36 @@ function AdSetPickerCell({ selectedIds, adSets, onUpdate }: {
     )
   }
 
+  const isNewCampaign = launchMode === "new_campaign"
+
   return (
     <div className="flex flex-col gap-1.5">
-      {selectedIds.length > 0 && (
+      {isNewCampaign ? (
         <div className="flex flex-wrap gap-1">
-          {selectedIds.map(id => {
-            const as = adSets.find(a => a.id === id)
-            if (!as) return null
-            return (
-              <span key={id} className="inline-flex items-center gap-0.5 text-[10px] bg-muted/80 border border-border/50 px-1.5 py-0.5 rounded-full max-w-full">
-                <span className="truncate max-w-[110px]">{as.name}</span>
-                <button
-                  onClick={e => { e.stopPropagation(); toggle(id) }}
-                  className="text-muted-foreground hover:text-foreground ml-0.5 shrink-0"
-                >
-                  <IconX className="size-2.5" />
-                </button>
-              </span>
-            )
-          })}
+          <span className="inline-flex items-center gap-1.5 text-[10px] bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 px-2 py-0.5 rounded-full max-w-full font-medium">
+            <span>New Campaign: {newCampaignConfig.campaignName || "Unnamed"}</span>
+          </span>
         </div>
+      ) : (
+        selectedIds.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {selectedIds.map(id => {
+              const as = adSets.find(a => a.id === id)
+              if (!as) return null
+              return (
+                <span key={id} className="inline-flex items-center gap-0.5 text-[10px] bg-muted/80 border border-border/50 px-1.5 py-0.5 rounded-full max-w-full">
+                  <span className="truncate max-w-[110px]">{as.name}</span>
+                  <button
+                    onClick={e => { e.stopPropagation(); toggle(id) }}
+                    className="text-muted-foreground hover:text-foreground ml-0.5 shrink-0"
+                  >
+                    <IconX className="size-2.5" />
+                  </button>
+                </span>
+              )
+            })}
+          </div>
+        )
       )}
       <Popover open={open} onOpenChange={v => {
         setOpen(v)
@@ -12084,75 +12886,157 @@ function AdSetPickerCell({ selectedIds, adSets, onUpdate }: {
         <PopoverTrigger asChild>
           <button className="h-7 px-2 text-[11px] border border-dashed border-border/60 rounded-md flex items-center gap-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors w-full justify-center">
             <IconPlus className="size-3 shrink-0" />
-            {selectedIds.length === 0 ? "Add ad set" : "Add more"}
+            {isNewCampaign ? "Edit Campaign" : (selectedIds.length === 0 ? "Add ad set" : "Add more")}
           </button>
         </PopoverTrigger>
-        <PopoverContent className="w-72 p-0 gap-0" align="start" sideOffset={4}>
-          {/* Search */}
-          <div className="px-2 py-2 border-b">
-            <div className="flex items-center gap-1.5 px-2 h-7 rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring/50">
-              <IconSearch className="size-3 text-muted-foreground shrink-0" />
-              <input
-                ref={searchRef}
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search ad sets…"
-                className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
-                onKeyDown={e => e.stopPropagation()}
-              />
-              {search && (
-                <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground shrink-0">
-                  <IconX className="size-3" />
-                </button>
+        <PopoverContent className="w-80 p-0 gap-0" align="start" sideOffset={4}>
+          <div className="flex border-b border-border/60">
+            <button
+              onClick={() => onUpdateMode?.("existing")}
+              className={cn(
+                "flex-1 py-2 text-[10px] font-semibold text-center transition-colors border-r border-border/60",
+                !isNewCampaign
+                  ? "bg-muted/40 text-primary border-b border-b-primary font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
               )}
-            </div>
+            >
+              Existing Ad Sets
+            </button>
+            <button
+              onClick={() => onUpdateMode?.("new_campaign")}
+              className={cn(
+                "flex-1 py-2 text-[10px] font-semibold text-center transition-colors",
+                isNewCampaign
+                  ? "bg-muted/40 text-primary border-b border-b-primary font-bold"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/20"
+              )}
+            >
+              New Campaign
+            </button>
           </div>
 
-          {/* List */}
-          <div className="max-h-60 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <div className="px-3 py-5 text-xs text-muted-foreground text-center">No ad sets found</div>
-            ) : filtered.map(a => {
-              const isSelected = selectedIds.includes(a.id)
-              const isActive = a.effective_status === "ACTIVE"
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => toggle(a.id)}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors",
-                    isSelected ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/50"
+          {isNewCampaign ? (
+            <div className="p-3 space-y-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-muted-foreground font-medium">Campaign Name *</span>
+                <input
+                  value={newCampaignConfig.campaignName}
+                  onChange={e => onUpdateNewCampaign?.({ ...newCampaignConfig, campaignName: e.target.value })}
+                  placeholder="New campaign name..."
+                  className="h-8 px-2 text-xs bg-muted/20 border rounded outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[10px] text-muted-foreground font-medium">Ad Set Name *</span>
+                <input
+                  value={newCampaignConfig.adSetName}
+                  onChange={e => onUpdateNewCampaign?.({ ...newCampaignConfig, adSetName: e.target.value })}
+                  placeholder="New ad set name..."
+                  className="h-8 px-2 text-xs bg-muted/20 border rounded outline-none focus:ring-1 focus:ring-ring"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground font-medium">Daily Budget ($) *</span>
+                  <input
+                    type="number"
+                    value={newCampaignConfig.dailyBudget}
+                    onChange={e => onUpdateNewCampaign?.({ ...newCampaignConfig, dailyBudget: e.target.value })}
+                    placeholder="e.g. 20"
+                    className="h-8 px-2 text-xs bg-muted/20 border rounded outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground font-medium">Budget Level *</span>
+                  <CustomSelect
+                    value={newCampaignConfig.budgetLevel}
+                    onChange={val => onUpdateNewCampaign?.({ ...newCampaignConfig, budgetLevel: val })}
+                    options={[
+                      { value: "adset", label: "Ad Set" },
+                      { value: "campaign", label: "Campaign" }
+                    ]}
+                    className="h-8"
+                  />
+                </div>
+              </div>
+
+              <TemplateAdPicker
+                adAccountId={adAccountId}
+                value={newCampaignConfig.templateAdId}
+                onChange={id => onUpdateNewCampaign?.({ ...newCampaignConfig, templateAdId: id })}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Search */}
+              <div className="px-2 py-2 border-b">
+                <div className="flex items-center gap-1.5 px-2 h-7 rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring/50">
+                  <IconSearch className="size-3 text-muted-foreground shrink-0" />
+                  <input
+                    ref={searchRef}
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search ad sets…"
+                    className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                    onKeyDown={e => e.stopPropagation()}
+                  />
+                  {search && (
+                    <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground shrink-0">
+                      <IconX className="size-3" />
+                    </button>
                   )}
-                >
-                  <div className={cn(
-                    "size-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                    isSelected ? "bg-primary border-primary" : "border-border/60"
-                  )}>
-                    {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
-                  </div>
-                  <span className={cn("flex-1 truncate", isSelected && "font-medium text-primary")}>{a.name}</span>
-                  <span className={cn(
-                    "text-[9px] px-1.5 py-0.5 rounded-sm font-semibold shrink-0",
-                    isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"
-                  )}>
-                    {isActive ? "Active" : "Paused"}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
+                </div>
+              </div>
 
-          {/* Footer */}
-          {selectedIds.length > 0 && (
-            <div className="border-t px-3 py-1.5 flex items-center justify-between bg-muted/20">
-              <span className="text-[11px] text-muted-foreground">{selectedIds.length} selected</span>
-              <button
-                onClick={() => { onUpdate([]); setOpen(false) }}
-                className="text-[11px] text-destructive hover:underline"
-              >
-                Clear all
-              </button>
-            </div>
+              {/* List */}
+              <div className="max-h-60 overflow-y-auto py-1">
+                {filtered.length === 0 ? (
+                  <div className="px-3 py-5 text-xs text-muted-foreground text-center">No ad sets found</div>
+                ) : filtered.map(a => {
+                  const isSelected = selectedIds.includes(a.id)
+                  const isActive = a.effective_status === "ACTIVE"
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => toggle(a.id)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors",
+                        isSelected ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/50"
+                      )}
+                    >
+                      <div className={cn(
+                        "size-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                        isSelected ? "bg-primary border-primary" : "border-border/60"
+                      )}>
+                        {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
+                      </div>
+                      <span className={cn("flex-1 truncate", isSelected && "font-medium text-primary")}>{a.name}</span>
+                      <span className={cn(
+                        "text-[9px] px-1.5 py-0.5 rounded-sm font-semibold shrink-0",
+                        isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"
+                      )}>
+                        {isActive ? "Active" : "Paused"}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Footer */}
+              {selectedIds.length > 0 && (
+                <div className="border-t px-3 py-1.5 flex items-center justify-between bg-muted/20">
+                  <span className="text-[11px] text-muted-foreground">{selectedIds.length} selected</span>
+                  <button
+                    onClick={() => { onUpdate([]); setOpen(false) }}
+                    className="text-[11px] text-destructive hover:underline"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </PopoverContent>
       </Popover>
@@ -12681,6 +13565,11 @@ function TableMode({
                       selectedIds={row.adSetIds}
                       adSets={adSets}
                       onUpdate={ids => onUpdateRow(row.id, "adSetIds", ids)}
+                      launchMode={row.launchMode}
+                      newCampaignConfig={row.newCampaignConfig}
+                      onUpdateMode={m => onUpdateRow(row.id, "launchMode", m)}
+                      onUpdateNewCampaign={cfg => onUpdateRow(row.id, "newCampaignConfig", cfg)}
+                      adAccountId={selectedAccountId}
                     />
                   </td>
 
@@ -13094,13 +13983,38 @@ function TableMode({
   )
 }
 
+function getUtcDateInTimezone(dateStr: string, timeZone: string): Date {
+  const parts = dateStr.match(/(\d+)-(\d+)-(\d+)T(\d+):(\d+):(\d+)/)
+  if (!parts) return new Date(dateStr)
+  const [, yr, mo, dy, hr, min, sec] = parts.map(Number)
+  const utcApprox = Date.UTC(yr, mo - 1, dy, hr, min, sec)
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "numeric", second: "numeric",
+    hour12: false
+  })
+  const testDate = new Date(utcApprox)
+  const formatted = formatter.format(testDate)
+  const fParts = formatted.match(/(\d+)\/(\d+)\/(\d+),\s+(\d+):(\d+):(\d+)/)
+  if (!fParts) return testDate
+  const [, fMo, fDy, fYr, fHr, fMin, fSec] = fParts.map(Number)
+  const formattedUtc = Date.UTC(fYr, fMo - 1, fDy, fHr, fMin, fSec)
+  const diff = utcApprox - formattedUtc
+  return new Date(utcApprox + diff)
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function LaunchPage() {
   const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
   const { activeOrgId } = useOrg()
+  const schedulingEnabled = process.env.NEXT_PUBLIC_SCHEDULING_ENABLED === "true"
 
   const [mode, setMode] = useState<"gallery" | "table">("gallery")
+  const [launchType, setLaunchType] = useState<"now" | "schedule" | "recurring">("now")
+  const [scheduledStart, setScheduledStart] = useState<string | null>(null)
+  const [scheduledEnd, setScheduledEnd] = useState<string | null>(null)
 
   const [pages, setPages] = useState<FacebookPage[]>([])
   const [selectedPageId, setSelectedPageId] = useState("")
@@ -13130,6 +14044,14 @@ export default function LaunchPage() {
   }
 
   const [selectedAdSets, setSelectedAdSets] = useState<AdSet[]>([])
+  const [launchMode, setLaunchMode] = useState<"existing" | "new_campaign">("existing")
+  const [newCampaignConfig, setNewCampaignConfig] = useState({
+    campaignName: "",
+    adSetName: "",
+    dailyBudget: "",
+    budgetLevel: "adset" as "campaign" | "adset",
+    templateAdId: "",
+  })
   const [primaryTexts, setPrimaryTexts] = useState<string[]>([""])
   const [headlines, setHeadlines] = useState<string[]>([""])
   const [description, setDescription] = useState("")
@@ -13140,9 +14062,45 @@ export default function LaunchPage() {
   const [adSourceIds, setAdSourceIds] = useState<Record<string, string>>({})
   const [utmParams, setUtmParams] = useState("")
   const [displayLink, setDisplayLink] = useState("")
+  const [sitelinks, setSitelinks] = useState<SitelinkItem[]>([])
+  const [promoCode, setPromoCode] = useState("")
   const [selectedMediaIds, setSelectedMediaIds] = useState<Set<string>>(new Set())
   const [selectedCreatives, setSelectedCreatives] = useState<Creative[]>([])
   const [adNameOverrides, setAdNameOverrides] = useState<Record<string, string>>({})
+  const [currentPreset, setCurrentPreset] = useState<any | null>(null)
+  const [launchPresets, setLaunchPresets] = useState<any[]>([])
+  const [adsForSwap, setAdsForSwap] = useState<any[]>([])
+  const [swapModalOpen, setSwapModalOpen] = useState(false)
+  const [selectedPixelId, setSelectedPixelId] = useState("")
+  const [selectedPixelEvent, setSelectedPixelEvent] = useState("PURCHASE")
+  const [pixels, setPixels] = useState<any[]>([])
+  const [pixelsLoading, setPixelsLoading] = useState(false)
+  const [pixelSearch, setPixelSearch] = useState("")
+
+  const filteredPixels = useMemo(() => {
+    if (!pixelSearch) return pixels
+    const q = pixelSearch.toLowerCase()
+    return pixels.filter(p => p.name?.toLowerCase().includes(q) || p.id?.includes(q))
+  }, [pixels, pixelSearch])
+
+  useEffect(() => {
+    if (!selectedAccountId) return
+    setPixelsLoading(true)
+    fetch(`/api/facebook/pixels?ad_account_id=${encodeURIComponent(selectedAccountId)}`)
+      .then(r => r.json())
+      .then(d => {
+        const list = d.pixels || []
+        setPixels(list)
+        if (list.length > 0) {
+          setSelectedPixelId(list[0].id)
+        } else {
+          setSelectedPixelId("")
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPixelsLoading(false))
+  }, [selectedAccountId])
+
   const thumbRetryCounts = useRef<Map<string, number>>(new Map())
 
   // ─── Persistence: save selected creative IDs per ad account in localStorage ───
@@ -13174,25 +14132,87 @@ export default function LaunchPage() {
     } catch {}
   }, [selectedAccountId])
 
-  // Load Default Ad Settings when account changes → pre-fill empty form fields
+  // Load and apply Launch Presets (server-side, with local migration fallback)
   useEffect(() => {
     if (!selectedAccountId) return
-    try {
-      const raw = localStorage.getItem(`default_ad_settings_${selectedAccountId}`)
-      if (!raw) return
-      const s: DefaultAdSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) }
-      // Pre-fill ad copy only when fields are empty (don't overwrite user input)
-      if (!primaryTexts[0]?.trim() && s.adCopy.primaryText) setPrimaryTexts([s.adCopy.primaryText])
-      if (!headlines[0]?.trim() && s.adCopy.headline) setHeadlines([s.adCopy.headline])
-      if (!description && s.adCopy.description) setDescription(s.adCopy.description)
-      if (s.adCopy.cta) setCta(s.adCopy.cta)
-      // Pre-fill web/app links
-      if (!webLink && s.links.webLink) setWebLink(s.links.webLink)
-      if (!utmParams && s.links.utmParameters) setUtmParams(s.links.utmParameters)
-      if (!displayLink && s.links.displayLink) setDisplayLink(s.links.displayLink)
-      // Apply launch defaults
-      setLaunchAsActive(!s.launch.launchAsPaused)
-    } catch {}
+    let cancelled = false
+
+    const normalizePreset = (preset: any) => ({
+      id: preset.id,
+      name: preset.name,
+      adAccountId: preset.ad_account_id || preset.adAccountId,
+      lastUsedAt: preset.last_used_at || preset.lastUsedAt,
+      launchDefaults: preset.launch_defaults || preset.launchDefaults || {},
+    })
+
+    const applyPreset = (preset: any) => {
+      const normalized = normalizePreset(preset)
+      setCurrentPreset(normalized)
+      const d = normalized.launchDefaults
+      if (d.pageId) setSelectedPageId(d.pageId)
+      if (d.igId) setSelectedIgPageId(d.igId)
+      if (d.cta) setCta(d.cta)
+      if (d.utmParams) setUtmParams(d.utmParams)
+      if (d.displayLink) setDisplayLink(d.displayLink)
+      if (d.adCopyDefaults) {
+        if (d.adCopyDefaults.primaryText) setPrimaryTexts([d.adCopyDefaults.primaryText])
+        if (d.adCopyDefaults.headline) setHeadlines([d.adCopyDefaults.headline])
+        if (d.adCopyDefaults.description) setDescription(d.adCopyDefaults.description)
+      }
+    }
+
+    const migrateLocalPreset = () => {
+      const prefs = getPagePrefs()
+      const oldPref = prefs[selectedAccountId]
+      let oldSettings: any = null
+      try {
+        const raw = localStorage.getItem(`default_ad_settings_${selectedAccountId}`)
+        if (raw) oldSettings = JSON.parse(raw)
+      } catch {}
+
+      if (!oldPref && !oldSettings) {
+        setCurrentPreset(null)
+        return
+      }
+
+      const migratedPreset = {
+        id: crypto.randomUUID(),
+        name: "Default Prefs (Migrated)",
+        adAccountId: selectedAccountId,
+        lastUsedAt: new Date().toISOString(),
+        launchDefaults: {
+          pageId: oldPref?.pageId || "",
+          igId: oldPref?.igId || "",
+          cta: oldSettings?.adCopy?.cta || "LEARN_MORE",
+          utmParams: oldSettings?.links?.utmParameters || "",
+          displayLink: oldSettings?.links?.displayLink || "",
+          enhancements: {},
+          namingPattern: "",
+          adCopyDefaults: {
+            primaryText: oldSettings?.adCopy?.primaryText || "",
+            headline: oldSettings?.adCopy?.headline || "",
+            description: oldSettings?.adCopy?.description || "",
+          },
+        },
+      }
+      setLaunchPresets([migratedPreset])
+      applyPreset(migratedPreset)
+    }
+
+    fetch(`/api/presets?type=launch&ad_account_id=${encodeURIComponent(selectedAccountId)}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => {
+        if (cancelled) return
+        const presets = (d.presets || []).map(normalizePreset)
+        setLaunchPresets(presets)
+        if (presets.length > 0) applyPreset(presets[0])
+        else migrateLocalPreset()
+      })
+      .catch(() => {
+        if (!cancelled) migrateLocalPreset()
+      })
+
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId])
 
@@ -14042,16 +15062,26 @@ export default function LaunchPage() {
 
 
   const validate = () => {
-    if (selectedAdSets.length === 0) { setError("Chưa chọn Ad Set — vui lòng chọn ít nhất 1 ad set"); return false }
-    if (selectedMediaIds.size === 0) { setError("Chưa chọn creative — vui lòng chọn ít nhất 1 ảnh/video"); return false }
+    if (launchMode === "new_campaign") {
+      if (!newCampaignConfig.campaignName.trim()) { setError("Campaign name is required"); return false }
+      if (!newCampaignConfig.adSetName.trim()) { setError("Ad set name is required"); return false }
+      if (!newCampaignConfig.dailyBudget || Number(newCampaignConfig.dailyBudget) <= 0) {
+        setError("Daily budget must be greater than 0");
+        return false
+      }
+      if (!newCampaignConfig.templateAdId) { setError("Template ad is required"); return false }
+    } else {
+      if (selectedAdSets.length === 0) { setError("Select at least one ad set"); return false }
+    }
+    if (selectedMediaIds.size === 0) { setError("Select at least one creative"); return false }
     const pendingVideos = selectedCreatives.filter(c => c.media_type === "video" && c.status === "pending")
     if (pendingVideos.length > 0) {
-      setError(`${pendingVideos.length} video đang chờ upload lên Meta (~2 phút) — vui lòng đợi rồi thử lại`)
+      setError(`${pendingVideos.length} video(s) still uploading to Meta (~2 min) — please wait and retry`)
       return false
     }
-    if (!webLink.trim()) { setError("Chưa nhập URL đích — bắt buộc khi dùng CTA có link"); return false }
-    if (!/^https?:\/\//.test(webLink.trim())) { setError("URL phải bắt đầu bằng http:// hoặc https://"); return false }
-    if (!selectedPageId) { setError("Chưa chọn Facebook Page"); return false }
+    if (!webLink.trim()) { setError("Destination URL is required"); return false }
+    if (!/^https?:\/\//.test(webLink.trim())) { setError("URL must start with http:// or https://"); return false }
+    if (!selectedPageId) { setError("Select a Facebook Page"); return false }
     setError("")
     return true
   }
@@ -14156,8 +15186,8 @@ export default function LaunchPage() {
         body: JSON.stringify({
           adAccountId: selectedAccountId,
           adAccountName: selectedAccount?.name || selectedAccountId,
-          adSetIds: selectedAdSets.map(a => a.id),
-          adSetNames: selectedAdSets.map(a => a.name),
+          adSetIds: launchMode === "new_campaign" ? [] : selectedAdSets.map(a => a.id),
+          adSetNames: launchMode === "new_campaign" ? [] : selectedAdSets.map(a => a.name),
           creativeIds: Array.from(selectedMediaIds),
           pageId: selectedPageId,
           headline: headline.trim(),
@@ -14171,6 +15201,10 @@ export default function LaunchPage() {
           createPaused: !launchAsActive,
           startTime: scheduledTime,
           endTime: scheduleEndTime,
+          launchMode,
+          newCampaignConfig: launchMode === "new_campaign" ? newCampaignConfig : undefined,
+          pixelId: selectedPixelId || undefined,
+          pixelEvent: selectedPixelId ? selectedPixelEvent : undefined,
           partnerPageId: partnership.enabled && partnership.partnerPageId ? partnership.partnerPageId : undefined,
           partnershipDisplayMode: partnership.enabled && partnership.partnerPageId ? partnership.displayMode : undefined,
           multilanguage: multilanguage.enabled && multilanguage.translations.length > 0
@@ -14231,11 +15265,24 @@ export default function LaunchPage() {
                 productDescriptionChips: collectionAds.productDescriptionChips,
               }
             : undefined,
+          sitelinks: sitelinks && sitelinks.length > 0 ? sitelinks : undefined,
+          promoCode: promoCode || undefined,
         }),
       })
       const data = await res.json()
 
-      if (!res.ok) { setError(data.error || "Launch failed"); return }
+      if (!res.ok) {
+        if (data.orphanCampaignId) {
+          setError(`Tạo Campaign thành công nhưng không tạo được Ad Set. ID Campaign mồ côi: ${data.orphanCampaignId}. Vui lòng xóa thủ công trên Ads Manager.`);
+        } else {
+          setError(data.error || "Launch failed");
+        }
+        return
+      }
+
+      if (data.warnings && data.warnings.length > 0) {
+        setError(`Warning: ${data.warnings.join(", ")}`);
+      }
 
       const result: LaunchResult = {
         created: data.created?.length ?? 0,
@@ -14358,12 +15405,14 @@ export default function LaunchPage() {
 
   // Table mode: launch each row individually using per-row settings
   const doTableLaunch = useCallback(async (scheduledTime?: string, scheduleEndTime?: string) => {
-    const validRows = tableRows.filter(r => r.creative?.id && r.adSetIds.length > 0)
+    const validRows = tableRows.filter(r =>
+      r.creative?.id &&
+      (r.launchMode === "new_campaign"
+        ? (r.newCampaignConfig?.campaignName?.trim() && r.newCampaignConfig?.adSetName?.trim() && r.newCampaignConfig?.dailyBudget && r.newCampaignConfig?.templateAdId)
+        : (r.adSetIds && r.adSetIds.length > 0))
+    )
     if (!validRows.length) {
-      const missing: string[] = []
-      if (!tableRows.some(r => r.creative?.id)) missing.push("creative")
-      if (!tableRows.some(r => r.adSetIds.length > 0)) missing.push("ad set")
-      setError(`Mỗi row cần có ${missing.join(" và ")} trước khi launch`)
+      setError("Each row must have a creative and configured ad sets (or new campaign settings) before launching")
       return
     }
 
@@ -14375,16 +15424,16 @@ export default function LaunchPage() {
       const pageId = row.pageId || selectedPageId
 
       if (!pageId) {
-        rowErrors.push(`"${label}": Chưa chọn Facebook Page`)
+        rowErrors.push(`"${label}": Facebook Page is required`)
       }
       if (!rowLink) {
-        rowErrors.push(`"${label}": Chưa nhập URL đích (destination URL)`)
+        rowErrors.push(`"${label}": Destination URL is required`)
       } else if (!rowLink.startsWith("http")) {
-        rowErrors.push(`"${label}": URL phải bắt đầu bằng http:// hoặc https://`)
+        rowErrors.push(`"${label}": URL must start with http:// or https://`)
       }
       if (row.creative && !row.creative.fb_image_hash && !row.creative.fb_video_id) {
         const isPending = row.creative.status === "pending"
-        rowErrors.push(`"${label}": ${isPending ? "Video đang chờ upload lên Meta (~2 phút) — vui lòng đợi rồi thử lại" : "Creative chưa upload lên Meta (hãy đợi upload hoàn tất)"}`)
+        rowErrors.push(`"${label}": ${isPending ? "Video still uploading to Meta (~2 min) — please wait and retry" : "Creative not yet uploaded to Meta"}`)
       }
     }
     if (rowErrors.length > 0) {
@@ -14421,8 +15470,8 @@ export default function LaunchPage() {
       const rowUtm = (row.urlTags || utmParams).trim()
       const rowWebLink = rowUtm ? `${rowLink}${rowLink.includes("?") ? "&" : "?"}${rowUtm}` : rowLink
       return {
-        adSetIds: row.adSetIds,
-        adSetNames: row.adSetIds.map(id => allAdSets.find(a => a.id === id)?.name || id),
+        adSetIds: row.launchMode === "new_campaign" ? [] : row.adSetIds,
+        adSetNames: row.launchMode === "new_campaign" ? [] : row.adSetIds.map(id => allAdSets.find(a => a.id === id)?.name || id),
         creativeIds: [row.creative!.id],
         adName: row.adName.trim() || undefined,
         pageId: row.pageId || selectedPageId,
@@ -14436,6 +15485,8 @@ export default function LaunchPage() {
         cta: row.cta || cta,
         webLink: rowWebLink,
         createPaused: row.launchAsActive !== undefined ? !row.launchAsActive : !launchAsActive,
+        launchMode: row.launchMode,
+        newCampaignConfig: row.launchMode === "new_campaign" ? row.newCampaignConfig : undefined,
         partnerPageId: row.partnership?.enabled && row.partnership.partnerPageId ? row.partnership.partnerPageId : undefined,
         partnershipDisplayMode: row.partnership?.enabled && row.partnership.partnerPageId ? row.partnership.displayMode : undefined,
         multilanguage: row.multilanguage?.enabled && row.multilanguage.translations.length > 0
@@ -14505,6 +15556,267 @@ export default function LaunchPage() {
     setHistoryReload(n => n + 1)
     setLaunching(false)
   }, [tableRows, selectedAccountId, selectedAccount, selectedPageId, primaryTexts, headlines, cta, webLink, utmParams, launchAsActive, allAdSets, pages])
+
+  const renderLaunchBar = () => {
+    return (
+      <div className="flex items-center justify-between py-3 px-4 border-t shrink-0 bg-background flex-wrap gap-2">
+        {/* Left: Steps indicator */}
+        <div className="flex items-center gap-6">
+          {/* Step 1: Creatives */}
+          {(() => {
+            const completed = selectedCreatives.length > 0
+            return (
+              <button
+                onClick={() => document.getElementById("panel-creatives")?.scrollIntoView({ behavior: "smooth" })}
+                className="flex items-center gap-2 text-xs font-medium hover:opacity-80 transition-opacity"
+              >
+                <span className={cn(
+                  "size-5 rounded-full flex items-center justify-center border text-[10px] font-bold transition-colors",
+                  completed ? "bg-green-500 border-green-500 text-white" : "bg-muted border-border text-muted-foreground"
+                )}>
+                  {completed ? <IconCheck className="size-3" /> : "1"}
+                </span>
+                <span className={completed ? "text-foreground font-semibold" : "text-muted-foreground"}>
+                  Creatives ({selectedCreatives.length})
+                </span>
+              </button>
+            )
+          })()}
+
+          <IconChevronRight className="size-3 text-muted-foreground/30" />
+
+          {/* Step 2: Destination */}
+          {(() => {
+            const completed = !!(selectedPageId && (webLink || "").trim().startsWith("http"))
+            return (
+              <button
+                onClick={() => document.getElementById("panel-destination")?.scrollIntoView({ behavior: "smooth" })}
+                className="flex items-center gap-2 text-xs font-medium hover:opacity-80 transition-opacity"
+              >
+                <span className={cn(
+                  "size-5 rounded-full flex items-center justify-center border text-[10px] font-bold transition-colors",
+                  completed ? "bg-green-500 border-green-500 text-white" : "bg-muted border-border text-muted-foreground"
+                )}>
+                  {completed ? <IconCheck className="size-3" /> : "2"}
+                </span>
+                <span className={completed ? "text-foreground font-semibold" : "text-muted-foreground"}>
+                  Destination
+                </span>
+              </button>
+            )
+          })()}
+
+          <IconChevronRight className="size-3 text-muted-foreground/30" />
+
+          {/* Step 3: Copy */}
+          {(() => {
+            const completed = primaryTexts.some(t => t && t.trim()) && headlines.some(h => h && h.trim())
+            return (
+              <button
+                onClick={() => document.getElementById("panel-copy")?.scrollIntoView({ behavior: "smooth" })}
+                className="flex items-center gap-2 text-xs font-medium hover:opacity-80 transition-opacity"
+              >
+                <span className={cn(
+                  "size-5 rounded-full flex items-center justify-center border text-[10px] font-bold transition-colors",
+                  completed ? "bg-green-500 border-green-500 text-white" : "bg-muted border-border text-muted-foreground"
+                )}>
+                  {completed ? <IconCheck className="size-3" /> : "3"}
+                </span>
+                <span className={completed ? "text-foreground font-semibold" : "text-muted-foreground"}>
+                  Ad Copy
+                </span>
+              </button>
+            )
+          })()}
+        </div>        {/* Preset Selector */}
+        <div className="flex items-center gap-1.5 border-l pl-4">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                className={cn(
+                  "h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors text-xs text-left",
+                  currentPreset ? "border-primary/30 text-primary bg-primary/5" : "text-muted-foreground"
+                )}
+              >
+                <IconBookmark className="size-3.5 shrink-0" />
+                <span className="max-w-[120px] truncate font-medium">
+                  {currentPreset ? currentPreset.name : "Select Preset..."}
+                </span>
+                <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-1 gap-0" align="start" sideOffset={4}>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Launch Presets</p>
+              {launchPresets.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-muted-foreground text-center">No presets saved yet</div>
+              ) : launchPresets.map((preset: any) => {
+                const isSelected = currentPreset?.id === preset.id
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => {
+                      setCurrentPreset(preset)
+                      const d = preset.launchDefaults || {}
+                      if (d.pageId) setSelectedPageId(d.pageId)
+                      if (d.igId) setSelectedIgPageId(d.igId)
+                      if (d.cta) setCta(d.cta)
+                      if (d.utmParams) setUtmParams(d.utmParams)
+                      if (d.displayLink) setDisplayLink(d.displayLink)
+                      if (d.adCopyDefaults) {
+                        if (d.adCopyDefaults.primaryText) setPrimaryTexts([d.adCopyDefaults.primaryText])
+                        if (d.adCopyDefaults.headline) setHeadlines([d.adCopyDefaults.headline])
+                        if (d.adCopyDefaults.description) setDescription(d.adCopyDefaults.description)
+                      }
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium mt-0.5",
+                      isSelected && "bg-primary/5 text-primary"
+                    )}
+                  >
+                    <span className="truncate">{preset.name}</span>
+                    {isSelected && <IconCheck className="size-3 text-primary shrink-0" />}
+                  </button>
+                )
+              })}
+            </PopoverContent>
+          </Popover>
+
+          {currentPreset && (
+            <button
+              onClick={() => setCurrentPreset(null)}
+              className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-0.5 hover:underline transition-all"
+              title="Remove preset settings"
+            >
+              <IconX className="size-3" />Gỡ
+            </button>
+          )}
+        </div>
+
+        {/* Right: Actions */}
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" className="gap-1.5 text-xs h-9" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}>
+            <IconEye className="size-3.5" />Preview
+          </Button>
+
+          {mode === "table" && (
+            <Button
+              variant="outline" size="sm"
+              className="gap-1.5 text-xs h-9"
+              onClick={saveDraft}
+              disabled={savingDraft || tableRows.length === 0}
+            >
+              {savingDraft ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBookmark className="size-3.5" />}
+              {savingDraft ? "Saving..." : "Save Draft"}
+            </Button>
+          )}
+
+          {(() => {
+            const step1 = selectedCreatives.length > 0
+            const step2 = !!(selectedPageId && (webLink || "").trim().startsWith("http"))
+            const step3 = primaryTexts.some(t => t && t.trim()) && headlines.some(h => h && h.trim())
+            const isReady = step1 && step2 && step3
+
+            const reasons = []
+            if (!step1) reasons.push("Select at least 1 Creative")
+            if (!step2) reasons.push("Select Page & fill valid Destination Link")
+            if (!step3) reasons.push("Enter ad copy (Primary text & Headline)")
+
+            const handleLaunchClick = () => {
+              if (!schedulingEnabled && launchType === "schedule") {
+                setError(SCHEDULE_DISABLED_MESSAGE)
+                setLaunchType("now")
+                setScheduledStart(null)
+                setScheduledEnd(null)
+                return
+              }
+              const start = launchType === "schedule" ? (scheduledStart || undefined) : undefined
+              const end = launchType === "schedule" ? (scheduledEnd || undefined) : undefined
+              if (mode === "table") {
+                const hasRowCreatives = tableRows.some(r => r.creative?.id && r.adSetIds.length > 0)
+                hasRowCreatives ? doTableLaunch(start, end) : doLaunch(start, end)
+              } else {
+                doLaunch(start, end)
+              }
+            }
+
+            if (isReady) {
+              return (
+                <Button className="gap-2 h-9 px-4 font-semibold shadow-sm" onClick={handleLaunchClick} disabled={launching}>
+                  {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
+                  {launching ? "Launching..." : "Launch Ads"}
+                </Button>
+              )
+            }
+
+            return (
+              <Button
+                className="gap-2 h-9 px-4 font-semibold opacity-50 cursor-not-allowed"
+                disabled
+                title={`Cannot Launch Ads yet:\n${reasons.map(r => `- ${r}`).join("\n")}`}
+              >
+                <IconRocket className="size-4" />Launch Ads
+              </Button>
+            )
+          })()}
+        </div>
+      </div>
+    )
+  }
+
+  const handleSavePreset = useCallback(async (name: string) => {
+    if (!selectedAccountId) return
+
+    const launchDefaults = {
+      pageId: selectedPageId,
+      igId: selectedIgPageId,
+      cta,
+      utmParams: utmParams || "",
+      displayLink,
+      enhancements: {},
+      namingPattern: "",
+      adCopyDefaults: {
+        primaryText: primaryTexts[0] || "",
+        headline: headlines[0] || "",
+        description,
+      },
+    }
+
+    const fallbackPreset = {
+      id: crypto.randomUUID(),
+      name: name.trim() || `Preset - ${new Date().toLocaleDateString()}`,
+      adAccountId: selectedAccountId,
+      lastUsedAt: new Date().toISOString(),
+      launchDefaults,
+    }
+
+    try {
+      const res = await fetch("/api/presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "launch",
+          name: fallbackPreset.name,
+          adAccountId: selectedAccountId,
+          launchDefaults,
+        }),
+      })
+      const data = await res.json()
+      const saved = data.preset
+        ? {
+            id: data.preset.id,
+            name: data.preset.name,
+            adAccountId: data.preset.ad_account_id,
+            lastUsedAt: data.preset.last_used_at,
+            launchDefaults: data.preset.launch_defaults,
+          }
+        : fallbackPreset
+      setLaunchPresets(prev => [saved, ...prev])
+      setCurrentPreset(saved)
+    } catch {
+      setLaunchPresets(prev => [fallbackPreset, ...prev])
+      setCurrentPreset(fallbackPreset)
+    }
+  }, [selectedAccountId, selectedPageId, selectedIgPageId, cta, utmParams, displayLink, primaryTexts, headlines, description])
 
   const handleSheetsImport = useCallback((rows: ImportedRow[]) => {
     const newRows = rows.map(r => {
@@ -14676,10 +15988,14 @@ export default function LaunchPage() {
           }
           setCreativePickerRowId(null)
         }} />
-      <ScheduleModal open={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)}
-        onConfirm={(start, end) => mode === "table" ? doTableLaunch(start, end) : doLaunch(start, end)} />
+      <ScheduleModal open={scheduleModalOpen} onClose={() => { setScheduleModalOpen(false); if (!scheduledStart) setLaunchType("now") }}
+        onConfirm={(start, end) => {
+          setScheduledStart(start)
+          setScheduledEnd(end || null)
+          setLaunchType("schedule")
+        }} />
       {mode === "table" && launchResult && (
-        <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} />
+        <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} onSavePreset={handleSavePreset} />
       )}
       <AdProfilesModal
         open={adProfilesOpen}
@@ -14778,10 +16094,10 @@ export default function LaunchPage() {
 
       <div className="flex flex-col">
         {/* ── Top bar ─────────────────────────────────────────────── */}
-        <div className="flex items-end gap-4 px-4 pt-2 pb-2.5 border-b shrink-0 bg-background sticky top-0 z-[30]">
+        <div id="panel-destination" className="flex items-end gap-4 px-4 pt-2 pb-2.5 border-b shrink-0 bg-background sticky top-0 z-[30] overflow-x-auto scrollbar-none max-w-full">
 
           {/* Ad Account custom dropdown */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 shrink-0">
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-muted-foreground font-medium tracking-wide">Ad Account •</span>
               <PlatformStatusPopover />
@@ -14794,10 +16110,10 @@ export default function LaunchPage() {
           </div>
 
           {/* Divider */}
-          <div className="w-px bg-border mb-1" style={{ height: 32 }} />
+          <div className="w-px bg-border mb-1 shrink-0" style={{ height: 32 }} />
 
           {/* Facebook page pill → opens Ad Profiles modal */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 shrink-0">
             <div className="flex items-center gap-1">
               <IconBrandFacebook className="size-3 text-[#1877F2]" />
               <span className="text-[10px] text-muted-foreground">Facebook</span>
@@ -14833,47 +16149,217 @@ export default function LaunchPage() {
             </button>
           </div>
 
-          {/* Instagram pill → same Ad Profiles modal */}
-          <div className="flex flex-col gap-1">
+          {/* Instagram pill → custom dropdown */}
+          <div className="flex flex-col gap-1 shrink-0">
             <div className="flex items-center gap-1">
               <IconBrandInstagram className="size-3 text-[#E1306C]" />
               <span className="text-[10px] text-muted-foreground">Instagram</span>
             </div>
-            <button
-              onClick={() => setAdProfilesOpen(true)}
-              className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors min-w-[140px] max-w-[200px]"
-            >
-              {(() => {
-                const isFbActor = selectedIgPageId.startsWith("fb_")
-                if (isFbActor && selectedPage?.picture?.data?.url) {
-                  return <img src={selectedPage.picture.data.url} className="size-5 rounded-full shrink-0 object-cover" alt="" />
-                }
-                const igAccount = Object.values(igAccountCache).flat().find(ig => ig.id === selectedIgPageId)
-                if (igAccount?.profile_pic) {
-                  return <img src={igAccount.profile_pic} className="size-5 rounded-full shrink-0 object-cover" alt="" />
-                }
-                return (
-                  <div className="size-5 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
-                    <span className="text-[9px] font-bold text-purple-400">I</span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors min-w-[140px] max-w-[200px] text-left"
+                >
+                  {(() => {
+                    const isFbActor = selectedIgPageId.startsWith("fb_")
+                    if (isFbActor && selectedPage?.picture?.data?.url) {
+                      return <img src={selectedPage.picture.data.url} className="size-5 rounded-full shrink-0 object-cover" alt="" />
+                    }
+                    const igAccount = Object.values(igAccountCache).flat().find(ig => ig.id === selectedIgPageId)
+                    if (igAccount?.profile_pic) {
+                      return <img src={igAccount.profile_pic} className="size-5 rounded-full shrink-0 object-cover" alt="" />
+                    }
+                    return (
+                      <div className="size-5 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
+                        <span className="text-[9px] font-bold text-purple-400">I</span>
+                      </div>
+                    )
+                  })()}
+                  <span className="text-xs truncate flex-1 font-medium">
+                    {(() => {
+                      const isFbActor = selectedIgPageId.startsWith("fb_")
+                      if (isFbActor) return "Use Facebook Page"
+                      const igAccount = Object.values(igAccountCache).flat().find(ig => ig.id === selectedIgPageId)
+                      if (igAccount?.username) return `@${igAccount.username}`
+                      if (selectedIgPageId) return selectedIgPageId
+                      return "Select account..."
+                    })()}
+                  </span>
+                  <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-52 p-1 gap-0" align="start" sideOffset={4}>
+                <button
+                  onClick={() => {
+                    const val = `fb_${selectedPageId}`
+                    setSelectedIgPageId(val)
+                    if (selectedAccountId) savePagePref(selectedAccountId, selectedPageId, val)
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium",
+                    selectedIgPageId === `fb_${selectedPageId}` && "bg-primary/5 text-primary"
+                  )}
+                >
+                  {selectedPage?.picture?.data?.url ? (
+                    <img src={selectedPage.picture.data.url} className="size-5 rounded-full shrink-0 object-cover" alt="" />
+                  ) : (
+                    <div className="size-5 rounded-full bg-blue-100 flex items-center justify-center shrink-0" />
+                  )}
+                  <span className="truncate">Use Facebook Page</span>
+                </button>
+                {(igAccountCache[selectedPageId] || []).map(ig => {
+                  const isSelected = ig.id === selectedIgPageId
+                  return (
+                    <button
+                      key={ig.id}
+                      onClick={() => {
+                        setSelectedIgPageId(ig.id)
+                        if (selectedAccountId) savePagePref(selectedAccountId, selectedPageId, ig.id)
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium mt-0.5",
+                        isSelected && "bg-primary/5 text-primary"
+                      )}
+                    >
+                      {ig.profile_pic ? (
+                        <img src={ig.profile_pic} className="size-5 rounded-full shrink-0 object-cover" alt="" />
+                      ) : (
+                        <div className="size-5 rounded-full bg-purple-100 flex items-center justify-center shrink-0" />
+                      )}
+                      <span className="truncate">@{ig.username}</span>
+                    </button>
+                  )
+                })}
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Divider */}
+          <div className="w-px bg-border mb-1 shrink-0" style={{ height: 32 }} />
+
+          {/* Pixel pill → custom dropdown */}
+          <div className="flex flex-col gap-1 shrink-0">
+            <div className="flex items-center gap-1">
+              <IconWorld className="size-3 text-[#1877F2] shrink-0" />
+              <span className="text-[10px] text-muted-foreground">Pixel</span>
+            </div>
+            <Popover onOpenChange={v => !v && setPixelSearch("")}>
+              <PopoverTrigger asChild>
+                <button
+                  className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors min-w-[140px] max-w-[200px] text-left"
+                >
+                  <div className="size-5 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                    <IconWorld className="size-3 text-blue-600" />
                   </div>
-                )
-              })()}
-              <span className="text-sm truncate flex-1 text-left">
-                {(() => {
-                  const isFbActor = selectedIgPageId.startsWith("fb_")
-                  if (isFbActor) return "Use Facebook Page"
-                  const igAccount = Object.values(igAccountCache).flat().find(ig => ig.id === selectedIgPageId)
-                  if (igAccount?.username) return `@${igAccount.username}`
-                  if (selectedIgPageId) return selectedIgPageId
-                  return "Select account..."
-                })()}
-              </span>
-              <IconChevronDown className="size-3.5 text-muted-foreground shrink-0" />
-            </button>
+                  <span className="text-xs truncate flex-1 font-medium">
+                    {(() => {
+                      if (pixelsLoading) return "Loading..."
+                      const matched = pixels.find(p => p.id === selectedPixelId)
+                      return matched ? matched.name : "Select Pixel..."
+                    })()}
+                  </span>
+                  <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-1 gap-0" align="start" sideOffset={4}>
+                {pixels.length > 10 && (
+                  <div className="px-2 py-2 border-b">
+                    <div className="flex items-center gap-1.5 px-2 h-7 rounded-md border bg-muted/30 focus-within:ring-1 focus-within:ring-ring/50">
+                      <IconSearch className="size-3 text-muted-foreground shrink-0" />
+                      <input
+                        value={pixelSearch}
+                        onChange={e => setPixelSearch(e.target.value)}
+                        placeholder="Search Pixel..."
+                        className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div className="max-h-60 overflow-y-auto py-1">
+                  {filteredPixels.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground text-center">No pixels found</div>
+                  ) : (
+                    filteredPixels.map(p => {
+                      const isSelected = p.id === selectedPixelId
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => setSelectedPixelId(p.id)}
+                          className={cn(
+                            "w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium",
+                            isSelected && "bg-primary/5 text-primary"
+                          )}
+                        >
+                          <IconWorld className="size-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate flex-1 text-left">{p.name}</span>
+                          {isSelected && <IconCheck className="size-3 text-primary shrink-0" />}
+                        </button>
+                      )
+                    })
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Conversion Event pill → custom dropdown */}
+          <div className="flex flex-col gap-1 shrink-0">
+            <div className="flex items-center gap-1">
+              <IconSparkles className="size-3 text-amber-500 shrink-0" />
+              <span className="text-[10px] text-muted-foreground">Event</span>
+            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors min-w-[120px] max-w-[180px] text-left"
+                >
+                  <div className="size-5 rounded-full bg-amber-50 dark:bg-amber-950/30 flex items-center justify-center shrink-0">
+                    <IconSparkles className="size-3 text-amber-500" />
+                  </div>
+                  <span className="text-xs truncate flex-1 font-medium">
+                    {(() => {
+                      const options: Record<string, string> = {
+                        PURCHASE: "Purchase",
+                        LEAD: "Lead",
+                        COMPLETE_REGISTRATION: "Registration",
+                        ADD_TO_CART: "Add to Cart",
+                        INITIATE_CHECKOUT: "Checkout",
+                      }
+                      return options[selectedPixelEvent] || "Select Event"
+                    })()}
+                  </span>
+                  <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-1 gap-0" align="start" sideOffset={4}>
+                {([
+                  { value: "PURCHASE", label: "Purchase" },
+                  { value: "LEAD", label: "Lead" },
+                  { value: "COMPLETE_REGISTRATION", label: "Registration" },
+                  { value: "ADD_TO_CART", label: "Add to Cart" },
+                  { value: "INITIATE_CHECKOUT", label: "Checkout" },
+                ] as const).map(opt => {
+                  const isSelected = opt.value === selectedPixelEvent
+                  return (
+                    <button
+                      key={opt.value}
+                      onClick={() => setSelectedPixelEvent(opt.value)}
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-accent transition-colors text-left text-xs font-medium",
+                        isSelected && "bg-primary/5 text-primary"
+                      )}
+                    >
+                      <span>{opt.label}</span>
+                      {isSelected && <IconCheck className="size-3 text-primary shrink-0" />}
+                    </button>
+                  )
+                })}
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Right: mode toggle */}
-          <div className="ml-auto">
+          <div className="ml-auto shrink-0">
             <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs"
               onClick={() => {
                 if (mode === "gallery") {
@@ -14930,27 +16416,51 @@ export default function LaunchPage() {
                 selectedAdSets={selectedAdSets}
                 onSelect={a => setSelectedAdSets(prev => [...prev, a])}
                 onRemove={id => setSelectedAdSets(prev => prev.filter(a => a.id !== id))}
+                launchMode={launchMode}
+                setLaunchMode={setLaunchMode}
+                newCampaignConfig={newCampaignConfig}
+                setNewCampaignConfig={setNewCampaignConfig}
+                onDuplicated={(newAdSets, ads) => {
+                  if (ads && ads.length > 0) {
+                    setAdsForSwap(ads)
+                    setSwapModalOpen(true)
+                  }
+                }}
               />
-              <AdSetupPanel
-                primaryTexts={primaryTexts} setPrimaryTexts={setPrimaryTexts}
-                headlines={headlines} setHeadlines={setHeadlines}
-                description={description} setDescription={setDescription}
-                cta={cta} setCta={setCta}
-                webLink={webLink} setWebLink={setWebLink}
-                launchAsActive={launchAsActive} setLaunchAsActive={setLaunchAsActive}
-                utmParams={utmParams} setUtmParams={setUtmParams}
-                displayLink={displayLink} setDisplayLink={setDisplayLink}
-                adAccountId={selectedAccountId}
-                adAccountName={selectedAccount?.name || selectedAccountId}
-                orgName="tuanquang269"
-                selectedCreatives={selectedCreatives}
-                adSourceMode={adSourceMode} setAdSourceMode={setAdSourceMode}
-                adSourceIds={adSourceIds} setAdSourceIds={setAdSourceIds}
-              />
+              <div id="panel-copy">
+                <AdSetupPanel
+                  primaryTexts={primaryTexts} setPrimaryTexts={setPrimaryTexts}
+                  headlines={headlines} setHeadlines={setHeadlines}
+                  description={description} setDescription={setDescription}
+                  cta={cta} setCta={setCta}
+                  webLink={webLink} setWebLink={setWebLink}
+                  launchAsActive={launchAsActive} setLaunchAsActive={setLaunchAsActive}
+                  utmParams={utmParams} setUtmParams={setUtmParams}
+                  displayLink={displayLink} setDisplayLink={setDisplayLink}
+                  adAccountId={selectedAccountId}
+                  adAccountName={selectedAccount?.name || selectedAccountId}
+                  orgName="tuanquang269"
+                  selectedCreatives={selectedCreatives}
+                  adSourceMode={adSourceMode} setAdSourceMode={setAdSourceMode}
+                  adSourceIds={adSourceIds} setAdSourceIds={setAdSourceIds}
+                  adNameOverrides={adNameOverrides} setAdNameOverrides={setAdNameOverrides}
+                  partnership={partnership} setPartnership={setPartnership}
+                  multilanguage={multilanguage} setMultilanguage={setMultilanguage}
+                  sitelinks={sitelinks} setSitelinks={setSitelinks}
+                  promoCode={promoCode} setPromoCode={setPromoCode}
+                  scheduledStart={scheduledStart} setScheduledStart={setScheduledStart}
+                  scheduledEnd={scheduledEnd} setScheduledEnd={setScheduledEnd}
+                  schedulingEnabled={schedulingEnabled}
+                  setLaunchType={setLaunchType}
+                  pages={pages}
+                  selectedIgPageId={selectedIgPageId}
+                  igAccountCache={igAccountCache}
+                />
+              </div>
             </div>
 
             {/* Right panel */}
-            <div className="flex-1 flex flex-col min-w-0 border-l overflow-hidden" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+            <div id="panel-creatives" className="flex-1 flex flex-col min-w-0 border-l overflow-hidden" style={{ maxHeight: 'calc(100vh - 80px)' }}>
               <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
                 <span className="text-sm font-semibold">Ads {selectedCreatives.length > 0 && <span className="text-muted-foreground font-normal">({selectedCreatives.length})</span>}</span>
                 {selectedCreatives.length > 0 && (
@@ -15054,7 +16564,7 @@ export default function LaunchPage() {
               </div>
 
               {launchResult && (
-                <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} />
+                <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} onSavePreset={handleSavePreset} />
               )}
 
               <GalleryMediaPanel
@@ -15078,19 +16588,7 @@ export default function LaunchPage() {
                   <IconAlertCircle className="size-3.5 shrink-0" />{error}
                 </div>
               )}
-
-              <div className="flex items-center gap-2 px-4 py-3 border-t shrink-0">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview</Button>
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs"><IconBookmark className="size-3.5" />Save</Button>
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs"
-                  onClick={() => { if (validate()) setScheduleModalOpen(true) }}>
-                  <IconCalendar className="size-3.5" />Schedule
-                </Button>
-                <Button className="flex-1 gap-2 font-medium" onClick={() => doLaunch()} disabled={launching}>
-                  {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
-                  {launching ? "Launching..." : "Launch Ads"}
-                </Button>
-              </div>
+              {renderLaunchBar()}
             </div>
             </div>
             {relaunchBanner && (
@@ -15105,6 +16603,7 @@ export default function LaunchPage() {
               onLoadDraft={handleLoadDraft}
               tabOverride={historyTabOverride}
               pages={pages}
+              onSavePreset={handleSavePreset}
             />
           </div>
         ) : (
@@ -15300,34 +16799,7 @@ export default function LaunchPage() {
                 <IconAlertCircle className="size-3.5" />{error}
               </div>
             )}
-
-            <div className="flex items-center gap-2 px-4 py-3 border-t shrink-0">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview Ads</Button>
-              <Button
-                variant="outline" size="sm"
-                className="gap-1.5 text-xs"
-                onClick={saveDraft}
-                disabled={savingDraft || tableRows.length === 0}
-                title="Save current rows as draft — no ads created yet"
-              >
-                {savingDraft ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBookmark className="size-3.5" />}
-                {savingDraft ? "Saving..." : "Save Draft"}
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setScheduleModalOpen(true)}>
-                <IconCalendar className="size-3.5" />Schedule
-              </Button>
-              <Button
-                className="flex-1 gap-2 font-medium"
-                onClick={() => {
-                  const hasRowCreatives = tableRows.some(r => r.creative?.id && r.adSetIds.length > 0)
-                  hasRowCreatives ? doTableLaunch() : doLaunch()
-                }}
-                disabled={launching}
-              >
-                {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
-                {launching ? "Launching..." : "Launch Ads"}
-              </Button>
-            </div>
+            {renderLaunchBar()}
           </div>
           {tableHistoryOpen && (
             <LaunchHistorySection
@@ -15336,6 +16808,7 @@ export default function LaunchPage() {
               onLoadDraft={handleLoadDraft}
               tabOverride={historyTabOverride}
               pages={pages}
+              onSavePreset={handleSavePreset}
             />
           )}
           </>
@@ -15348,6 +16821,147 @@ export default function LaunchPage() {
         onOpenChange={setSheetsImportOpen}
         adAccountId={selectedAccountId || ""}
         onImport={handleSheetsImport}
+      />
+
+      <SwapCreativeModal
+        open={swapModalOpen}
+        onClose={() => setSwapModalOpen(false)}
+        adAccountId={selectedAccountId}
+        adAccounts={adAccounts}
+        ads={adsForSwap}
+      />
+    </>
+  )
+}
+
+function SwapCreativeModal({
+  open,
+  onClose,
+  adAccountId,
+  adAccounts,
+  ads,
+}: {
+  open: boolean
+  onClose: () => void
+  adAccountId: string
+  adAccounts: any[]
+  ads: any[]
+}) {
+  const [adsList, setAdsList] = useState<any[]>([])
+  const [selectedAdIdForSwap, setSelectedAdIdForSwap] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      setAdsList(ads.map(a => ({ ...a, swapping: false, error: null })))
+    }
+  }, [open, ads])
+
+  const handleSwapCreative = async (adId: string, newCreativeId: string, newCreative: any) => {
+    setAdsList(prev => prev.map(a => a.id === adId ? { ...a, swapping: true, error: null } : a))
+    try {
+      const res = await fetch("/api/facebook/ads/swap-creative", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adAccountId,
+          adIds: [adId],
+          newCreativeId,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to swap creative")
+
+      const resItem = data.results?.find((r: any) => r.adId === adId)
+      if (resItem && !resItem.success) throw new Error(resItem.error || "Failed to swap creative")
+
+      setAdsList(prev => prev.map(a => a.id === adId ? {
+        ...a,
+        swapping: false,
+        creativeId: newCreativeId,
+        creativeName: newCreative.file_name || "New Creative",
+        thumbnailUrl: newCreative.fb_thumbnail_url || newCreative.fb_image_url || newCreative.file_url || a.thumbnailUrl,
+      } : a))
+    } catch (err: any) {
+      setAdsList(prev => prev.map(a => a.id === adId ? { ...a, swapping: false, error: err.message } : a))
+    }
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={v => !v && onClose()}>
+        <DialogContent className="max-w-2xl w-full p-0 flex flex-col overflow-hidden max-h-[85vh]">
+          <div className="px-5 py-4 border-b shrink-0">
+            <DialogTitle className="text-base font-semibold">Swap Creatives for Duplicated Ads</DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Select new creatives for your recently duplicated ads below. Meta API will update them instantly.
+            </p>
+          </div>
+
+          <div className="p-4 overflow-y-auto space-y-3 flex-1 min-h-[200px]">
+            {adsList.length === 0 ? (
+              <div className="text-center py-8 text-xs text-muted-foreground">No ads found. Make sure you duplicated with copy ads option.</div>
+            ) : (
+              adsList.map(ad => (
+                <div key={ad.id} className="flex items-center justify-between border rounded-xl p-3 bg-muted/20 hover:bg-muted/30 transition-all gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="size-12 rounded border bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+                      {ad.thumbnailUrl ? (
+                        <img src={ad.thumbnailUrl} className="w-full h-full object-cover" alt="" />
+                      ) : (
+                        <IconPhoto className="size-5 text-muted-foreground/40" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate">{ad.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        Ad Set: {ad.adSetName} {ad.campaignName && `• Campaign: ${ad.campaignName}`}
+                      </p>
+                      <p className="text-[10px] text-primary mt-0.5 truncate font-medium">
+                        Creative: {ad.creativeName}
+                      </p>
+                      {ad.error && (
+                        <p className="text-[9px] text-destructive mt-0.5 truncate font-mono">{ad.error}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs shrink-0"
+                    disabled={ad.swapping}
+                    onClick={() => setSelectedAdIdForSwap(ad.id)}
+                  >
+                    {ad.swapping ? (
+                      <IconLoader2 className="size-3.5 animate-spin mr-1.5" />
+                    ) : (
+                      <IconRefresh className="size-3.5 mr-1.5" />
+                    )}
+                    Swap Creative
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="px-5 py-3 border-t shrink-0 flex justify-end bg-muted/20">
+            <Button size="sm" onClick={onClose}>Done</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <LoadMediaModal
+        open={selectedAdIdForSwap !== null}
+        onClose={() => setSelectedAdIdForSwap(null)}
+        adAccountId={adAccountId}
+        adAccounts={adAccounts}
+        alreadySelected={new Set()}
+        onConfirm={(ids, creatives) => {
+          if (creatives.length > 0 && selectedAdIdForSwap) {
+            handleSwapCreative(selectedAdIdForSwap, creatives[0].id, creatives[0])
+          }
+          setSelectedAdIdForSwap(null)
+        }}
       />
     </>
   )

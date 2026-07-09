@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createAd, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
+import { createAd, createCampaign, getAdDetails, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
+import { buildAdset } from "@/lib/facebook-launch"
 import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 
 // Table Mode batch launch: accepts all rows in one request.
@@ -31,6 +32,13 @@ export async function POST(request: NextRequest) {
     // Validate ad account once for all rows
     const belongs = await adAccountBelongsToOrg(ctx.orgId, adAccountId, token)
     if (!belongs) return NextResponse.json({ error: "Ad account not found or not authorized" }, { status: 403 })
+
+    if (rows.some((r: any) => r.launchMode === "new_campaign")) {
+      const expiresAt = connection.token_expires_at ? new Date(connection.token_expires_at).getTime() : null
+      if (expiresAt && expiresAt < Date.now()) {
+        return NextResponse.json({ error: "Facebook token expired — reconnect" }, { status: 400 })
+      }
+    }
 
     // Fetch all creatives in one DB query
     const allCreativeIds = [...new Set(rows.flatMap((r: any) => r.creativeIds || []))] as string[]
@@ -75,18 +83,17 @@ export async function POST(request: NextRequest) {
     for (const row of rows) {
       const rowStart = Date.now()
       const {
-        adSetIds, adSetNames, creativeIds,
+        creativeIds,
         adName: rowAdName, pageId, instagramAccountId,
         headline, headlineVariations, primaryText, primaryTextVariations,
         description, descriptionVariations, cta, webLink,
         createPaused, startTime: scheduledStart, endTime: scheduledEnd,
         partnerPageId, partnershipDisplayMode, multilanguage, catalogAds,
         collectionAds, sitelinks, adSourceMode, adSourceIds, enhancements,
+        launchMode, newCampaignConfig,
       } = row
+      let { adSetIds, adSetNames } = row
 
-      const adSetNameMap = new Map<string, string>(
-        (adSetIds || []).map((id: string, i: number) => [id, (adSetNames || [])[i] || id])
-      )
       const adStatus = scheduledStart ? "PAUSED" : (createPaused === false ? "ACTIVE" : "PAUSED")
       const degreesOfFreedom: Record<string, any> | undefined = enhancements
         ? { creative_features_spec: { standard_enhancements: { enroll_status: enhancements.metaCreativeEnhancements ? "OPT_IN" : "OPT_OUT" } } }
@@ -95,6 +102,72 @@ export async function POST(request: NextRequest) {
       const rowCreatives = (creativeIds || []).map((id: string) => creativeMap.get(id)).filter(Boolean)
       const created: any[] = []
       const errors: any[] = []
+      const warnings: string[] = []
+      let newCampaignMeta: { campaignId: string; campaignName: string; adSetId?: string; adSetName: string } | null = null
+
+      if (launchMode === "new_campaign") {
+        if (!newCampaignConfig?.templateAdId || !newCampaignConfig?.campaignName?.trim() || !newCampaignConfig?.adSetName?.trim() || !newCampaignConfig?.dailyBudget) {
+          errors.push({ error: "New campaign launch requires templateAdId, campaignName, adSetName, and dailyBudget" })
+          rowResults.push({ created, errors, warnings, totalAds: 0, durationMs: Date.now() - rowStart, scheduledStart, scheduledEnd })
+          continue
+        }
+
+        const template = await getAdDetails(newCampaignConfig.templateAdId, token)
+        const objectiveMap: Record<string, string> = {
+          PAGE_LIKES: "OUTCOME_ENGAGEMENT",
+          POST_ENGAGEMENT: "OUTCOME_ENGAGEMENT",
+          EVENT_RESPONSES: "OUTCOME_ENGAGEMENT",
+          VIDEO_VIEWS: "OUTCOME_ENGAGEMENT",
+          MESSAGES: "OUTCOME_ENGAGEMENT",
+          REACH: "OUTCOME_AWARENESS",
+          BRAND_AWARENESS: "OUTCOME_AWARENESS",
+          LINK_CLICKS: "OUTCOME_TRAFFIC",
+          LEAD_GENERATION: "OUTCOME_LEADS",
+          CONVERSIONS: "OUTCOME_SALES",
+          PRODUCT_CATALOG_SALES: "OUTCOME_SALES",
+          CATALOG_SALES: "OUTCOME_SALES",
+          STORE_TRAFFIC: "OUTCOME_SALES",
+          APP_INSTALLS: "OUTCOME_APP_PROMOTION",
+        }
+        const resolvedObjective = objectiveMap[template.campaign.objective] ?? template.campaign.objective
+        const campaignName = newCampaignConfig.campaignName.trim()
+        const adSetName = newCampaignConfig.adSetName.trim()
+        const budget = Number(newCampaignConfig.dailyBudget)
+        const budgetLevel = newCampaignConfig.budgetLevel || "adset"
+        const campaign = await createCampaign(adAccountId, token, {
+          name: campaignName,
+          objective: resolvedObjective,
+          special_ad_categories: template.campaign.special_ad_categories || [],
+          status: adStatus,
+          daily_budget: budgetLevel === "campaign" ? budget : undefined,
+          bid_strategy: budgetLevel === "campaign" ? (template.campaign.bid_strategy || "LOWEST_COST_WITHOUT_CAP") : undefined,
+        })
+        newCampaignMeta = { campaignId: campaign.id, campaignName, adSetName }
+
+        try {
+          const adset = await buildAdset(
+            adAccountId, token, template, campaign.id, adSetName,
+            budgetLevel === "adset" ? budget : undefined,
+            undefined, pageId, resolvedObjective, undefined, undefined, adStatus
+          )
+          if (adset.overrideWarning) warnings.push(adset.overrideWarning)
+          adSetIds = [adset.id]
+          adSetNames = [adSetName]
+          newCampaignMeta.adSetId = adset.id
+        } catch (err: any) {
+          errors.push({ error: err.message || "Failed to create ad set", orphanCampaignId: campaign.id })
+          rowResults.push({ created, errors, warnings, newCampaign: newCampaignMeta, totalAds: 0, durationMs: Date.now() - rowStart, scheduledStart, scheduledEnd })
+          continue
+        }
+      } else if (!adSetIds?.length) {
+        errors.push({ error: "Select at least one ad set" })
+        rowResults.push({ created, errors, warnings, totalAds: 0, durationMs: Date.now() - rowStart, scheduledStart, scheduledEnd })
+        continue
+      }
+
+      const adSetNameMap = new Map<string, string>(
+        (adSetIds || []).map((id: string, i: number) => [id, (adSetNames || [])[i] || id])
+      )
 
       for (const adSetId of (adSetIds || [])) {
         for (const creative of rowCreatives) {
@@ -191,7 +264,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      rowResults.push({ created, errors, totalAds: created.length, durationMs: Date.now() - rowStart, scheduledStart, scheduledEnd })
+      rowResults.push({ created: newCampaignMeta ? created.map((c: any) => ({ ...c, newCampaign: newCampaignMeta })) : created, errors, warnings, newCampaign: newCampaignMeta, totalAds: created.length, durationMs: Date.now() - rowStart, scheduledStart, scheduledEnd })
     }
 
     // Aggregate all rows → ONE batch record
@@ -200,8 +273,8 @@ export async function POST(request: NextRequest) {
     const totalCreated = allCreated.length
     const totalFailed  = allErrors.length
 
-    const allAdSetIds    = [...new Set(rows.flatMap((r: any) => r.adSetIds   || []))] as string[]
-    const allAdSetNames  = [...new Set(rows.flatMap((r: any) => r.adSetNames || []))] as string[]
+    const allAdSetIds    = [...new Set(allCreated.map((c: any) => c.adSetId).filter(Boolean))] as string[]
+    const allAdSetNames  = [...new Set(allCreated.map((c: any) => c.adSetName).filter(Boolean))] as string[]
     const allThumbs      = [...new Set(
       [...creativeMap.values()].map((c: any) => c.fb_thumbnail_url || c.fb_image_url || c.file_url || null).filter(Boolean)
     )] as string[]

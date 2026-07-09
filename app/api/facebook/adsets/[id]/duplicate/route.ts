@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { fetchAllAds } from "@/lib/facebook-launch"
+import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 
 // POST /api/facebook/adsets/[id]/duplicate
 // Creates a copy of the source ad set via Meta's /copies endpoint
@@ -26,6 +28,28 @@ export async function POST(
 
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
+
+    // Ownership check (IDOR protection)
+    try {
+      const srcRes = await fetch(`${GRAPH_API_BASE}/${id}?fields=account_id&access_token=${connection.access_token}`)
+      if (!srcRes.ok) {
+        const srcErr = await srcRes.json().catch(() => ({}))
+        return NextResponse.json({ error: srcErr.error?.message || "Source ad set not found or inaccessible" }, { status: 404 })
+      }
+      const srcData = await srcRes.json()
+      const adAccountId = srcData.account_id
+      if (!adAccountId) {
+        return NextResponse.json({ error: "Could not retrieve ad account ID for source ad set" }, { status: 500 })
+      }
+
+      const belongs = await adAccountBelongsToOrg(ctx.orgId, adAccountId, connection.access_token)
+      if (!belongs) {
+        return NextResponse.json({ error: "Ad account not found or not authorized" }, { status: 403 })
+      }
+    } catch (err: any) {
+      console.error("[duplicate adset] IDOR validation error:", err)
+      return NextResponse.json({ error: "Ownership validation failed: " + (err.message || "Unknown error") }, { status: 500 })
+    }
 
     // Call Meta /copies endpoint
     const renameOptions: any = {}
@@ -65,6 +89,8 @@ export async function POST(
     if (body.optimizationGoal) updates.optimization_goal = body.optimizationGoal
     if (body.bidStrategy) updates.bid_strategy = body.bidStrategy
 
+    const warnings: string[] = []
+
     // Targeting override — must fetch existing targeting first, then merge only the changed fields.
     // Sending a partial targeting object to Meta replaces the full targeting, destroying interests,
     // custom audiences, placement settings, etc.
@@ -73,15 +99,20 @@ export async function POST(
         const tRes = await fetch(
           `${GRAPH_API_BASE}/${newAdSetId}?fields=targeting&access_token=${connection.access_token}`
         )
+        if (!tRes.ok) {
+          const errData = await tRes.json().catch(() => ({}))
+          throw new Error(errData.error?.message || `HTTP ${tRes.status}`)
+        }
         const tData = await tRes.json()
         const merged = tData.targeting ? { ...tData.targeting } : {}
         if (body.geoCountries?.length) merged.geo_locations = { countries: body.geoCountries }
         if (body.ageMin) merged.age_min = body.ageMin
         if (body.ageMax) merged.age_max = body.ageMax
         updates.targeting = JSON.stringify(merged)
-      } catch {
+      } catch (e: any) {
         // Skip targeting override if fetch fails — safer than destroying existing targeting
-        console.warn("[duplicate adset] failed to fetch existing targeting — skipping geo/age override")
+        warnings.push(`Geo/age override skipped: failed to fetch source targeting (${e.message || e})`)
+        console.warn("[duplicate adset] failed to fetch existing targeting — skipping geo/age override:", e)
       }
     }
 
@@ -94,10 +125,13 @@ export async function POST(
         )
         if (!patchRes.ok) {
           const e = await patchRes.json().catch(() => ({}))
-          console.warn("[duplicate adset] patch failed but copy created:", e.error?.message)
+          const errorMsg = e.error?.message || `HTTP ${patchRes.status}`
+          console.warn("[duplicate adset] patch failed but copy created:", errorMsg)
+          warnings.push(`Ad set duplicated, but some overrides failed to apply: ${errorMsg}`)
         }
-      } catch (e) {
+      } catch (e: any) {
         console.warn("[duplicate adset] patch error:", e)
+        warnings.push(`Ad set duplicated, but override network error occurred: ${e.message || e}`)
       }
     }
 
@@ -105,11 +139,25 @@ export async function POST(
     const detailRes = await fetch(
       `${GRAPH_API_BASE}/${newAdSetId}?fields=id,name,status,effective_status,campaign_id,daily_budget&access_token=${connection.access_token}`
     )
-    const detail = await detailRes.json()
+    const detail = (await detailRes.json()) as Record<string, unknown>
     if (!detailRes.ok) {
-      return NextResponse.json({ adSet: { id: newAdSetId, name: customName || "Copy", status: statusOption } })
+      const fallbackAdSet: Record<string, unknown> = { id: newAdSetId, name: customName || "Copy", status: statusOption }
+      if (deepCopy) {
+        fallbackAdSet.ads = await fetchAllAds(newAdSetId, connection.access_token)
+      }
+      if (warnings.length > 0) {
+        return NextResponse.json({ adSet: fallbackAdSet, warnings }, { status: 207 })
+      }
+      return NextResponse.json({ adSet: fallbackAdSet })
     }
 
+    if (deepCopy) {
+      detail.ads = await fetchAllAds(newAdSetId, connection.access_token)
+    }
+
+    if (warnings.length > 0) {
+      return NextResponse.json({ adSet: detail, warnings }, { status: 207 })
+    }
     return NextResponse.json({ adSet: detail })
   } catch (err: any) {
     console.error("[duplicate adset] error:", err)

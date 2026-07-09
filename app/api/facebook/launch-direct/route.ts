@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createAd, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
+import { createAd, createCampaign, getAdDetails, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
+import { buildAdset } from "@/lib/facebook-launch"
 import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 
 // Simple launch: create ads directly in existing ad sets.
@@ -24,8 +25,6 @@ export async function POST(request: NextRequest) {
     const {
       adAccountId,
       adAccountName,
-      adSetIds,
-      adSetNames,
       creativeIds,
       adName: rowAdName,
       pageId,
@@ -54,7 +53,10 @@ export async function POST(request: NextRequest) {
       launchSettings, // DefaultAdSettings["launch"] | undefined
       collectionAds, // CollectionAds config | undefined
       sitelinks,     // SitelinkItem[] | undefined
+      launchMode,
+      newCampaignConfig,
     } = body
+    let { adSetIds, adSetNames } = body
 
     // Build degrees_of_freedom_spec from Creative Enhancement settings.
     // metaCreativeEnhancements master toggle maps to standard_enhancements enroll_status.
@@ -68,8 +70,13 @@ export async function POST(request: NextRequest) {
         }
       : undefined
 
+    const isNewCampaignLaunch = launchMode === "new_campaign"
     if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
-    if (!adSetIds?.length) return NextResponse.json({ error: "Select at least one ad set" }, { status: 400 })
+    if (!isNewCampaignLaunch && !adSetIds?.length) return NextResponse.json({ error: "Select at least one ad set" }, { status: 400 })
+    if (isNewCampaignLaunch && !newCampaignConfig?.templateAdId) return NextResponse.json({ error: "Template ad required" }, { status: 400 })
+    if (isNewCampaignLaunch && !newCampaignConfig?.campaignName?.trim()) return NextResponse.json({ error: "Campaign name is required" }, { status: 400 })
+    if (isNewCampaignLaunch && !newCampaignConfig?.adSetName?.trim()) return NextResponse.json({ error: "Ad set name is required" }, { status: 400 })
+    if (isNewCampaignLaunch && !newCampaignConfig?.dailyBudget) return NextResponse.json({ error: "Daily budget is required" }, { status: 400 })
     if (!creativeIds?.length) return NextResponse.json({ error: "Select at least one creative" }, { status: 400 })
     if (!pageId) return NextResponse.json({ error: "Select a Facebook Page" }, { status: 400 })
     if (!webLink) return NextResponse.json({ error: "Web link (URL) is required" }, { status: 400 })
@@ -96,6 +103,79 @@ export async function POST(request: NextRequest) {
     const adStatus = scheduledStart ? "PAUSED" : (createPaused === false ? "ACTIVE" : "PAUSED")
     const created: any[] = []
     const errors: any[] = []
+    const warnings: string[] = []
+    let newCampaignMeta: { campaignId: string; campaignName: string; adSetId?: string; adSetName: string } | null = null
+
+    if (isNewCampaignLaunch) {
+      const expiresAt = connection.token_expires_at ? new Date(connection.token_expires_at).getTime() : null
+      if (expiresAt && expiresAt < Date.now()) {
+        return NextResponse.json({ error: "Facebook token expired — reconnect" }, { status: 400 })
+      }
+
+      const template = await getAdDetails(newCampaignConfig.templateAdId, token)
+      const objectiveMap: Record<string, string> = {
+        PAGE_LIKES: "OUTCOME_ENGAGEMENT",
+        POST_ENGAGEMENT: "OUTCOME_ENGAGEMENT",
+        EVENT_RESPONSES: "OUTCOME_ENGAGEMENT",
+        VIDEO_VIEWS: "OUTCOME_ENGAGEMENT",
+        MESSAGES: "OUTCOME_ENGAGEMENT",
+        REACH: "OUTCOME_AWARENESS",
+        BRAND_AWARENESS: "OUTCOME_AWARENESS",
+        LINK_CLICKS: "OUTCOME_TRAFFIC",
+        LEAD_GENERATION: "OUTCOME_LEADS",
+        CONVERSIONS: "OUTCOME_SALES",
+        PRODUCT_CATALOG_SALES: "OUTCOME_SALES",
+        CATALOG_SALES: "OUTCOME_SALES",
+        STORE_TRAFFIC: "OUTCOME_SALES",
+        APP_INSTALLS: "OUTCOME_APP_PROMOTION",
+      }
+      const resolvedObjective = objectiveMap[template.campaign.objective] ?? template.campaign.objective
+      const campaignName = newCampaignConfig.campaignName.trim()
+      const adSetName = newCampaignConfig.adSetName.trim()
+      const budget = Number(newCampaignConfig.dailyBudget)
+      const budgetLevel = newCampaignConfig.budgetLevel || "adset"
+      const campaign = await createCampaign(adAccountId, token, {
+        name: campaignName,
+        objective: resolvedObjective,
+        special_ad_categories: template.campaign.special_ad_categories || [],
+        status: adStatus,
+        daily_budget: budgetLevel === "campaign" ? budget : undefined,
+        bid_strategy: budgetLevel === "campaign" ? (template.campaign.bid_strategy || "LOWEST_COST_WITHOUT_CAP") : undefined,
+      })
+      newCampaignMeta = { campaignId: campaign.id, campaignName, adSetName }
+
+      try {
+        const adset = await buildAdset(
+          adAccountId, token, template, campaign.id, adSetName,
+          budgetLevel === "adset" ? budget : undefined,
+          undefined, pageId, resolvedObjective, undefined, undefined, adStatus
+        )
+        if (adset.overrideWarning) warnings.push(adset.overrideWarning)
+        adSetIds = [adset.id]
+        adSetNames = [adSetName]
+        newCampaignMeta.adSetId = adset.id
+      } catch (err: any) {
+        await supabase.from("launch_batches").insert({
+          org_id: ctx.orgId,
+          user_id: ctx.user.id,
+          user_name: ctx.user.full_name || ctx.user.email?.split("@")[0] || "Unknown",
+          ad_account_id: adAccountId,
+          ad_account_name: adAccountName || adAccountId,
+          adset_ids: [],
+          adset_names: [],
+          creative_ids: creativeIds,
+          creative_thumbs: [],
+          page_id: pageId || null,
+          status: "failed",
+          total_ads: 0,
+          failed_ads: creativeIds?.length || 0,
+          duration_ms: Date.now() - startTime,
+          errors: [{ error: err.message || "Failed to create ad set", orphanCampaignId: campaign.id }],
+          created_ads: [{ campaignId: campaign.id, campaignName, orphanCampaignId: campaign.id }],
+        })
+        return NextResponse.json({ error: err.message || "Failed to create ad set", orphanCampaignId: campaign.id }, { status: 500 })
+      }
+    }
 
     // Quick lookup: adSetId → adSetName (for enriching created[] entries)
     const adSetNameMap = new Map<string, string>(
@@ -508,7 +588,7 @@ export async function POST(request: NextRequest) {
       failed_ads: errors.length,
       duration_ms: durationMs,
       errors: errors,
-      created_ads: created,
+      created_ads: newCampaignMeta ? created.map((c: any) => ({ ...c, newCampaign: newCampaignMeta })) : created,
     }).select("id").single()
     if (batchErr) {
       console.error("[launch-direct] Failed to save launch batch:", batchErr)
@@ -551,6 +631,7 @@ export async function POST(request: NextRequest) {
       batchId,
       created,
       errors,
+      warnings,
       totalAds: created.length,
       durationMs,
       scheduled: scheduledStart ? { at: scheduledStart, end: scheduledEnd || null } : null,

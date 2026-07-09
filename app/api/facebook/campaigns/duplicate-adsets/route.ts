@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { fetchAllAds } from "@/lib/facebook-launch"
 
 const GRAPH_API_BASE = "https://graph.facebook.com/v25.0"
 
@@ -145,11 +146,15 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // Fetch all ads inside the new adset if deepCopy is enabled
+          const ads = wantDeepCopy ? await fetchAllAds(newAdSetId, connection.access_token) : []
+
           adSets.push({
             id: newAdSetId,
             name: (cfg.customName || "Ad Set") + aSuffix,
             copiedAdIds,
             usedDeepCopy: useDeepCopyFlag,
+            ads,
           })
         }
       }

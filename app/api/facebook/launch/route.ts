@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail } from "@/lib/facebook"
+import { getAdDetails, createCampaign, createAd, getVideoThumbnail } from "@/lib/facebook"
+import { buildAdset } from "@/lib/facebook-launch"
 
 function applyPattern(pattern: string, ctx: { filename?: string; index?: number; date: string; shortDate: string }) {
   let r = pattern
@@ -12,104 +13,6 @@ function applyPattern(pattern: string, ctx: { filename?: string; index?: number;
     r = r.replace(/\{index\}/g, String(ctx.index))
   }
   return r
-}
-
-async function buildAdset(
-  adAccountId: string, token: string, template: any,
-  campaignId: string, name: string, dailyBudget?: number, startTime?: string,
-  pageId?: string, resolvedObjective?: string,
-  pixelId?: string, pixelEvent?: string,
-  status = "PAUSED"
-) {
-  // Safe optimization goal per objective for adset-level budget (non-CBO) campaigns.
-  // ENGAGED_USERS is CBO-only; for adset budgets, OUTCOME_ENGAGEMENT requires POST_ENGAGEMENT.
-  const OBJECTIVE_SAFE_GOAL: Record<string, string> = {
-    OUTCOME_ENGAGEMENT:    "POST_ENGAGEMENT",
-    OUTCOME_AWARENESS:     "REACH",
-    OUTCOME_TRAFFIC:       "LINK_CLICKS",
-    OUTCOME_LEADS:         "LEAD_GENERATION",
-    OUTCOME_SALES:         "OFFSITE_CONVERSIONS",
-    OUTCOME_APP_PROMOTION: "APP_INSTALLS",
-  }
-  // Valid adset-level goals per objective (non-CBO)
-  const OBJECTIVE_VALID_GOALS: Record<string, Set<string>> = {
-    OUTCOME_ENGAGEMENT:    new Set(["POST_ENGAGEMENT", "PAGE_LIKES", "EVENT_RESPONSES", "REACH"]),
-    OUTCOME_AWARENESS:     new Set(["REACH", "AD_RECALL_LIFT", "THRU_PLAYS", "IMPRESSIONS"]),
-    OUTCOME_TRAFFIC:       new Set(["LINK_CLICKS", "LANDING_PAGE_VIEWS", "IMPRESSIONS", "REACH"]),
-    OUTCOME_LEADS:         new Set(["LEAD_GENERATION", "QUALITY_LEAD", "LINK_CLICKS", "LANDING_PAGE_VIEWS"]),
-    OUTCOME_SALES:         new Set(["OFFSITE_CONVERSIONS", "LINK_CLICKS", "LANDING_PAGE_VIEWS", "REACH"]),
-    OUTCOME_APP_PROMOTION: new Set(["APP_INSTALLS", "LINK_CLICKS", "REACH"]),
-  }
-  // Remap legacy or CBO-only goals to their adset-budget equivalents
-  const GOAL_REMAP: Record<string, string> = {
-    ENGAGED_USERS:   "POST_ENGAGEMENT",   // CBO-only → adset equivalent
-    OFFER_CLAIMS:    "POST_ENGAGEMENT",
-    VALUE:           "OFFSITE_CONVERSIONS",
-  }
-  const campaignObjective: string = resolvedObjective || template.campaign?.objective || ""
-  const rawGoal: string = template.adset.optimization_goal || ""
-  const remappedGoal = GOAL_REMAP[rawGoal] ?? rawGoal
-  const validForObjective = OBJECTIVE_VALID_GOALS[campaignObjective]
-  const optimizationGoal =
-    (remappedGoal && validForObjective?.has(remappedGoal))
-      ? remappedGoal
-      : (OBJECTIVE_SAFE_GOAL[campaignObjective] ?? "POST_ENGAGEMENT")
-
-  const billingEvent = optimizationGoal === "THRU_PLAYS" ? "THRU_PLAYS" : "IMPRESSIONS"
-
-  // OUTCOME_ENGAGEMENT requires destination_type so Facebook knows what kind of engagement to optimize for
-  const destinationType = campaignObjective === "OUTCOME_ENGAGEMENT" ? "ON_POST" : undefined
-  // promoted_object: only attach pixel+event for objectives that support conversion tracking
-  const PIXEL_COMPATIBLE_OBJECTIVES = new Set(["OUTCOME_SALES", "OUTCOME_LEADS"])
-  const promotedObject = pixelId && PIXEL_COMPATIBLE_OBJECTIVES.has(campaignObjective)
-    ? { pixel_id: pixelId, custom_event_type: pixelEvent || "PURCHASE" }
-    : (template.adset.promoted_object || undefined)
-  // Keep only standard targeting fields to avoid v25 conflicts
-  const rawTargeting = template.adset.targeting || {}
-  const safeTargeting: Record<string, any> = {}
-  if (rawTargeting.geo_locations) {
-    // Strip location_types — deprecated in v25, causes validation errors
-    const { location_types: _lt, ...geoRest } = rawTargeting.geo_locations
-    safeTargeting.geo_locations = geoRest
-  }
-  if (rawTargeting.age_min) safeTargeting.age_min = rawTargeting.age_min
-  if (rawTargeting.age_max) safeTargeting.age_max = rawTargeting.age_max
-  if (rawTargeting.genders) safeTargeting.genders = rawTargeting.genders
-  // flexible_spec (interest targeting) intentionally excluded — causes v25 API conflicts
-
-  // Budget priority: explicit user input → template adset budget → undefined (will fail FB validation)
-  let budgetCents: string | undefined
-  if (dailyBudget && dailyBudget > 0) {
-    budgetCents = String(Math.round(dailyBudget * 100))
-  } else if (template.adset.daily_budget) {
-    budgetCents = template.adset.daily_budget // already in cents from Facebook API
-  }
-
-  // If we have a real template adset ID, copy it to preserve all settings (attribution model, etc.)
-  if (template.adset.id) {
-    return copyAdSet(token, template.adset.id, {
-      campaign_id: campaignId,
-      name,
-      daily_budget: dailyBudget,
-      start_time: startTime,
-      status,
-    })
-  }
-
-  return createAdSet(adAccountId, token, {
-    name,
-    campaign_id: campaignId,
-    targeting: safeTargeting,
-    optimization_goal: optimizationGoal,
-    billing_event: billingEvent,
-    bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-    daily_budget: budgetCents,
-    status,
-    start_time: startTime,
-    destination_type: destinationType,
-    promoted_object: promotedObject,
-    attribution_spec: template.adset.attribution_spec || undefined,
-  })
 }
 
 interface TextOverride {
