@@ -53,6 +53,8 @@ export async function getAuthContext() {
 
 /**
  * Get the Facebook access token for the org.
+ * OAuth connections only — via (manual_token) rows are resolved per ad account
+ * through getConnectionForAdAccount() and must never be returned here.
  */
 export async function getFacebookConnection(orgId: string) {
   const supabase = createAdminClient()
@@ -61,10 +63,105 @@ export async function getFacebookConnection(orgId: string) {
     .select("id, fb_user_id, fb_user_name, fb_picture_url, access_token, token_expires_at")
     .eq("org_id", orgId)
     .eq("is_active", true)
+    .eq("connection_type", "oauth")
     .order("updated_at", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle()
 
   return data
+}
+
+/**
+ * Via MECE resolver (decision 09/07/2026 — see project-docs/05-permission-system/VIA-MASTER.md).
+ * WRITE: via launch của account → OAuth của org → throw MissingViaError
+ * READ : via non-launch của account → OAuth của org → null (route rơi vào snapshot fallback)
+ */
+export type MetaPurpose = "write" | "read"
+
+export interface ResolvedConnection {
+  id: string
+  access_token: string
+  connection_type: "oauth" | "manual_token"
+  via_role: "launch" | "non_launch" | null
+  token_status: string
+  label: string | null
+  fb_user_id: string
+}
+
+export class MissingViaError extends Error {
+  purpose: MetaPurpose
+  constructor(purpose: MetaPurpose) {
+    super("Ad account này chưa có via launch. Thêm via launch trong Connect.")
+    this.name = "MissingViaError"
+    this.purpose = purpose
+  }
+}
+
+/** True when the connection carries a manual via token → Meta calls must skipProof. */
+export function isManual(conn: Pick<ResolvedConnection, "connection_type">): boolean {
+  return conn.connection_type === "manual_token"
+}
+
+const CONNECTION_FIELDS =
+  "id, fb_user_id, access_token, connection_type, via_role, token_status, label"
+
+async function getSlotConnection(
+  orgId: string,
+  fbAdAccountId: string,
+  slot: "launch_connection_id" | "read_connection_id"
+): Promise<ResolvedConnection | null> {
+  const supabase = createAdminClient()
+  // DB stores fb_ad_account_id as "act_<n>" (Meta id) and fb_account_id as "<n>"
+  const { data: account } = await supabase
+    .from("ad_accounts")
+    .select(slot)
+    .eq("org_id", orgId)
+    .or(`fb_ad_account_id.eq.act_${fbAdAccountId},fb_account_id.eq.${fbAdAccountId}`)
+    .maybeSingle()
+
+  const connectionId = (account as Record<string, string | null> | null)?.[slot]
+  if (!connectionId) return null
+
+  const { data: conn } = await supabase
+    .from("facebook_connections")
+    .select(CONNECTION_FIELDS)
+    .eq("id", connectionId)
+    .eq("is_active", true)
+    .eq("connection_type", "manual_token")
+    .maybeSingle()
+
+  return (conn as ResolvedConnection | null) ?? null
+}
+
+export async function getConnectionForAdAccount(
+  orgId: string,
+  adAccountId: string | null | undefined,
+  purpose: MetaPurpose
+): Promise<ResolvedConnection | null> {
+  // Ad account IDs arrive as "act_123..." or "123..." depending on the route
+  const fbAdAccountId = adAccountId?.replace(/^act_/, "")
+
+  if (fbAdAccountId) {
+    const slot = purpose === "write" ? "launch_connection_id" : "read_connection_id"
+    const via = await getSlotConnection(orgId, fbAdAccountId, slot)
+    if (via) return via
+  }
+
+  // Org-level routes (no adAccountId) and slot misses fall back to OAuth
+  const oauth = await getFacebookConnection(orgId)
+  if (oauth) {
+    return {
+      id: oauth.id,
+      access_token: oauth.access_token,
+      connection_type: "oauth",
+      via_role: null,
+      token_status: "valid",
+      label: null,
+      fb_user_id: oauth.fb_user_id,
+    }
+  }
+
+  if (purpose === "write") throw new MissingViaError(purpose)
+  return null // read degrades softly: caller falls through to snapshot fallback
 }

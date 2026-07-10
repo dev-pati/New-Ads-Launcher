@@ -245,9 +245,19 @@ CREATE TABLE facebook_connections (
   access_token TEXT NOT NULL,
   token_expires_at TIMESTAMPTZ,
   is_active BOOLEAN DEFAULT true,
+  -- Via MECE (20260710_via_role_connections.sql): oauth = toàn quyền, manual_token = via có role
+  connection_type TEXT NOT NULL DEFAULT 'oauth' CHECK (connection_type IN ('oauth', 'manual_token')),
+  via_role TEXT,
+  label TEXT,
+  token_status TEXT NOT NULL DEFAULT 'valid' CHECK (token_status IN ('valid', 'expired', 'invalid')),
+  last_checked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
-  UNIQUE (org_id, fb_user_id)
+  UNIQUE (org_id, fb_user_id),
+  CONSTRAINT facebook_connections_via_role_mece_check CHECK (
+    (connection_type = 'manual_token' AND via_role IN ('launch', 'non_launch'))
+    OR (connection_type = 'oauth' AND via_role IS NULL)
+  )
 );
 
 CREATE INDEX idx_facebook_connections_org ON facebook_connections(org_id);
@@ -300,19 +310,24 @@ CREATE TABLE ad_accounts (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  business_manager_id UUID NOT NULL REFERENCES business_managers(id) ON DELETE CASCADE,
+  business_manager_id UUID REFERENCES business_managers(id) ON DELETE CASCADE, -- nullable (20260710): via ad accounts có thể không thuộc BM đã sync
   fb_ad_account_id TEXT NOT NULL,
   fb_account_id TEXT NOT NULL,
   name TEXT,
   currency TEXT DEFAULT 'USD',
   account_status INT DEFAULT 1,
   is_active BOOLEAN DEFAULT true,
+  -- Via MECE slots (20260710): tối đa 1 via launch + 1 via non-launch mỗi account
+  launch_connection_id UUID REFERENCES facebook_connections(id) ON DELETE SET NULL,
+  read_connection_id UUID REFERENCES facebook_connections(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE (org_id, fb_ad_account_id)
 );
 
 CREATE INDEX idx_ad_accounts_org ON ad_accounts(org_id);
+CREATE INDEX idx_ad_accounts_launch_conn ON ad_accounts(launch_connection_id);
+CREATE INDEX idx_ad_accounts_read_conn ON ad_accounts(read_connection_id);
 
 -- ============================================================
 -- 10. META API CACHE

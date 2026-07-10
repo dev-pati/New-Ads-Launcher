@@ -30,10 +30,10 @@
 
 | # | Tên bảng | File định nghĩa |
 |---|----------|-----------------|
-| 8 | `facebook_connections` | `schema.sql` |
+| 8 | `facebook_connections` | `schema.sql` (+ `20260710_via_role_connections.sql`: `connection_type`, `via_role`, `label`, `token_status`, `last_checked_at` — mô hình via MECE) |
 | 9 | `business_managers` | `schema.sql` |
 | 10 | `pages` | `schema.sql` |
-| 11 | `ad_accounts` | `schema.sql` |
+| 11 | `ad_accounts` | `schema.sql` (+ `20260710_via_role_connections.sql`: 2 slot `launch_connection_id`, `read_connection_id`) |
 | 12 | `page_links` | `schema.sql` |
 | 13 | `meta_api_cache` | `20260526_meta_api_cache.sql` |
 
