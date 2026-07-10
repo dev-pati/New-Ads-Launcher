@@ -11,14 +11,22 @@ import { createHmac } from "crypto"
 
 const USER_AGENT = "AdLauncher/1.0 (+https://ads.patigroup.com)"
 
+export interface MetaFetchOpts {
+  /**
+   * Manual via tokens are issued by another Meta app, so a proof built from
+   * our FACEBOOK_APP_SECRET would be rejected — those calls must skip it.
+   */
+  skipProof?: boolean
+}
+
 /** Build secure headers for a Meta API call */
-export function buildMetaHeaders(accessToken: string): HeadersInit {
+export function buildMetaHeaders(accessToken: string, opts?: MetaFetchOpts): HeadersInit {
   const appSecret = process.env.FACEBOOK_APP_SECRET ?? ""
   const headers: Record<string, string> = {
     "Authorization": `Bearer ${accessToken}`,
     "User-Agent": USER_AGENT,
   }
-  if (appSecret) {
+  if (appSecret && !opts?.skipProof) {
     headers["appsecret_proof"] = createHmac("sha256", appSecret)
       .update(accessToken)
       .digest("hex")
@@ -45,10 +53,11 @@ export function extractTokenFromUrl(rawUrl: string): { cleanUrl: string; token: 
  */
 export async function secureMetaFetch(
   url: string,
-  init?: RequestInit
+  init?: RequestInit,
+  opts?: MetaFetchOpts
 ): Promise<Response> {
   const { cleanUrl, token } = extractTokenFromUrl(url)
-  const secureHeaders = token ? buildMetaHeaders(token) : { "User-Agent": USER_AGENT }
+  const secureHeaders = token ? buildMetaHeaders(token, opts) : { "User-Agent": USER_AGENT }
   return fetch(cleanUrl, {
     ...init,
     headers: {
