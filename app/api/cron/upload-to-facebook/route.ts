@@ -37,19 +37,16 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: true })
     .limit(50)
 
-  if (!pending || pending.length === 0) {
-    return NextResponse.json({ uploaded: 0, skipped: 0, errors: 0 })
-  }
+  if (pending && pending.length > 0) {
+    // Group by org_id
+    const byOrg = new Map<string, typeof pending>()
+    for (const row of pending) {
+      const list = byOrg.get(row.org_id) ?? []
+      list.push(row)
+      byOrg.set(row.org_id, list)
+    }
 
-  // Group by org_id
-  const byOrg = new Map<string, typeof pending>()
-  for (const row of pending) {
-    const list = byOrg.get(row.org_id) ?? []
-    list.push(row)
-    byOrg.set(row.org_id, list)
-  }
-
-  for (const [orgId, rows] of byOrg) {
+    for (const [orgId, rows] of byOrg) {
     let currentRatePct = 0
     const limit = Math.min(rows.length, MAX_VIDEOS_PER_ORG)
 
@@ -133,6 +130,7 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+  }
 
   // 2. Poll "processing" videos
   const { data: processing } = await db
