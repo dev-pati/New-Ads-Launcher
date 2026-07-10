@@ -86,7 +86,6 @@ export async function POST(request: NextRequest) {
       }
       fbAdAccountId = firstAccount.fb_ad_account_id
     }
-
     const { data: creative, error: insertError } = await supabase
       .from("creatives")
       .insert({

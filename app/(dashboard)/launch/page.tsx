@@ -4024,15 +4024,15 @@ function PreviewModal({
           <div className="flex flex-col items-center gap-2 w-full max-w-[380px]">
             {/* Carousel nav for multiple ads */}
             {creatives.length > 1 && (
-              <div className="flex items-center gap-2 self-start">
+              <div className="flex items-center gap-4 justify-center w-full mb-3">
                 <button onClick={() => setActiveIdx(i => Math.max(0, i - 1))} disabled={activeIdx === 0}
-                  className="size-7 rounded-full bg-background border flex items-center justify-center hover:bg-muted disabled:opacity-30">
-                  <IconArrowLeft className="size-3.5" />
+                  className="size-10 rounded-full bg-background border shadow-sm flex items-center justify-center hover:bg-muted disabled:opacity-30 transition-colors">
+                  <IconArrowLeft className="size-5" />
                 </button>
-                <span className="text-xs text-muted-foreground">{activeIdx + 1} / {creatives.length}</span>
+                <span className="text-sm font-semibold text-muted-foreground tabular-nums">{activeIdx + 1} / {creatives.length}</span>
                 <button onClick={() => setActiveIdx(i => Math.min(creatives.length - 1, i + 1))} disabled={activeIdx === creatives.length - 1}
-                  className="size-7 rounded-full bg-background border flex items-center justify-center hover:bg-muted disabled:opacity-30">
-                  <IconArrowRight className="size-3.5" />
+                  className="size-10 rounded-full bg-background border shadow-sm flex items-center justify-center hover:bg-muted disabled:opacity-30 transition-colors">
+                  <IconArrowRight className="size-5" />
                 </button>
               </div>
             )}
@@ -6294,8 +6294,9 @@ function ScheduleModal({ open, onClose, onConfirm }: {
 // ─── Duplicate Ad Set Modal ───────────────────────────────────────────────────
 
 function DuplicateAdSetModal({
-  open, onClose, allAdSets, onDuplicated,
+  adAccountId, open, onClose, allAdSets, onDuplicated,
 }: {
+  adAccountId: string
   open: boolean
   onClose: () => void
   allAdSets: AdSet[]
@@ -6420,10 +6421,11 @@ function DuplicateAdSetModal({
       const errors: string[] = []
       for (let i = 0; i < count; i++) {
         const suffix = count > 1 ? ` ${i + 1}` : ""
-        const res = await fetch(`/api/facebook/adsets/${selectedSourceId}/duplicate`, {
+        const res = await fetch(`/api/facebook/adsets/${selectedSourceId}/duplicate?ad_account_id=${encodeURIComponent(adAccountId)}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            adAccountId,
             renameSuffix: "",
             customName: newName + suffix,
             statusOption: launchAsActive ? "ACTIVE" : "PAUSED",
@@ -6442,7 +6444,9 @@ function DuplicateAdSetModal({
             ageMax: ageRange.max ? parseInt(ageRange.max) : undefined,
           }),
         })
-        const data = await res.json()
+        const text = await res.text()
+        let data: any = {}
+        try { data = text ? JSON.parse(text) : {} } catch { data = { error: `HTTP ${res.status}: ${text.slice(0, 120)}` } }
         if (!res.ok) {
           errors.push(data.error || `HTTP ${res.status}`)
           continue
@@ -8453,9 +8457,10 @@ function DuplicateCampaignModal({
 
 // ─── Ad Sets Panel ────────────────────────────────────────────────────────────
 
-function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
+function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove, invalid }: {
   adAccountId: string; selectedAdSets: AdSet[]
   onSelect: (a: AdSet) => void; onRemove: (id: string) => void
+  invalid?: boolean
 }) {
   const [search, setSearch] = useState("")
   const [allAdSets, setAllAdSets] = useState<AdSet[]>([])
@@ -8485,8 +8490,9 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
   }, [search, allAdSets])
 
   return (
-    <div className="border rounded-xl bg-card">
+    <div className={cn("border rounded-xl bg-card", invalid && "border-destructive")}>
       <DuplicateAdSetModal
+        adAccountId={adAccountId}
         open={duplicateModalOpen}
         onClose={() => setDuplicateModalOpen(false)}
         allAdSets={allAdSets}
@@ -9980,10 +9986,11 @@ const UTM_SUGGESTIONS = [
   },
 ]
 
-function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayLink, setDisplayLink }: {
+function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayLink, setDisplayLink, invalid }: {
   webLink: string; setWebLink: (v: string) => void
   utmParams: string; setUtmParams: (v: string) => void
   displayLink: string; setDisplayLink: (v: string) => void
+  invalid?: boolean
 }) {
   const [expanded, setExpanded] = useState(false)
   const [dynOpen, setDynOpen] = useState(false)
@@ -10008,7 +10015,7 @@ function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayL
           <IconWorld className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
           <input type="url" value={webLink} onChange={e => setWebLink(e.target.value)}
             placeholder="https://..."
-            className="w-full pl-8 pr-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50" />
+            className={cn("w-full pl-8 pr-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50", invalid && "border-destructive")} />
         </div>
         <Button
           variant="outline" size="icon"
@@ -10113,6 +10120,7 @@ function AdSetupPanel({
   selectedCreatives,
   adSourceMode, setAdSourceMode,
   adSourceIds, setAdSourceIds,
+  validationErrors,
 }: {
   primaryTexts: string[]; setPrimaryTexts: (v: string[]) => void
   headlines: string[]; setHeadlines: (v: string[]) => void
@@ -10130,6 +10138,7 @@ function AdSetupPanel({
   setAdSourceMode: (v: AdSourceMode) => void
   adSourceIds: Record<string, string>
   setAdSourceIds: (v: Record<string, string>) => void
+  validationErrors?: Record<string, boolean>
 }) {
   const [showDesc, setShowDesc] = useState(() => !!description)
   useEffect(() => { if (description) setShowDesc(true) }, [description])
@@ -10468,10 +10477,18 @@ function AdSetupPanel({
           <label className="text-xs font-medium text-muted-foreground block mb-1.5">Primary Text</label>
           {primaryTexts.map((text, idx) => (
             <div key={idx} className={cn("relative", idx > 0 && "mt-2")}>
-              <textarea value={text} onChange={e => updateText(idx, e.target.value)}
+              <textarea value={text}
+                onChange={e => {
+                  updateText(idx, e.target.value)
+                  const t = e.target as HTMLTextAreaElement
+                  t.style.height = "auto"
+                  t.style.height = t.scrollHeight + "px"
+                }}
                 placeholder="Write your primary ad text..."
-                rows={idx === 0 ? 4 : 2}
-                className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50 pr-8" />
+                rows={1}
+                className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50 pr-8 overflow-hidden"
+                style={{ height: "40px", minHeight: "40px" }}
+              />
               {primaryTexts.length > 1 && (
                 <button onClick={() => removeText(idx)}
                   className="absolute top-2 right-2 text-muted-foreground/40 hover:text-destructive transition-colors">
@@ -10538,35 +10555,38 @@ function AdSetupPanel({
           )}
         </div>
 
-        {/* CTA + Active toggle */}
-        <div className="flex items-end gap-3">
-          <div className="flex-1">
-            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Call to Action</label>
-            <Select value={cta} onValueChange={setCta}>
-              <SelectTrigger className="h-9 text-sm bg-muted/30"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-2 pb-1">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">Launch ads as</span>
-            <button onClick={() => setLaunchAsActive(!launchAsActive)}
-              className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-                launchAsActive ? "bg-primary" : "bg-muted-foreground/30")}>
-              <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
-                launchAsActive ? "translate-x-4" : "translate-x-0.5")} />
-            </button>
-            <span className="text-xs font-medium">{launchAsActive ? "Active" : "Paused"}</span>
-          </div>
-        </div>
-
         {/* Web Link */}
         <WebLinkSection
           webLink={webLink} setWebLink={setWebLink}
           utmParams={utmParams} setUtmParams={setUtmParams}
           displayLink={displayLink} setDisplayLink={setDisplayLink}
+          invalid={validationErrors?.webLink}
         />
+
+        {/* CTA + Active toggle */}
+        <div className="grid grid-cols-2 gap-3 items-end">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Call to Action</label>
+            <Select value={cta} onValueChange={setCta}>
+              <SelectTrigger className="h-9 w-full text-sm bg-muted/30"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1.5">Launch ads as</label>
+            <button onClick={() => setLaunchAsActive(!launchAsActive)}
+              className="h-9 w-full px-3 rounded-lg border bg-muted/30 flex items-center justify-between text-sm">
+              <span className="font-medium">{launchAsActive ? "Active" : "Paused"}</span>
+              <span className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                launchAsActive ? "bg-primary" : "bg-muted-foreground/30")}>
+                <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
+                  launchAsActive ? "translate-x-4" : "translate-x-0.5")} />
+              </span>
+            </button>
+          </div>
+        </div>
 
         {/* Ad Source — shown when media is loaded */}
         {selectedCreatives.length > 0 && (() => {
@@ -10695,14 +10715,6 @@ function AdSetupPanel({
           )
         })()}
 
-        {/* Shop & Catalog */}
-        <div>
-          <label className="text-xs font-medium text-muted-foreground block mb-1.5">Shop & Catalog Selector</label>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="flex-1 h-9 text-xs text-muted-foreground">Select Storefront</Button>
-            <Button variant="outline" size="sm" className="flex-1 h-9 text-xs text-muted-foreground">Select from Catalog</Button>
-          </div>
-        </div>
       </div>
     </div>
   )
@@ -13387,6 +13399,19 @@ export default function LaunchPage() {
   const [launchResult, setLaunchResult] = useState<LaunchResult | null>(null)
   const [historyReload, setHistoryReload] = useState(0)
   const [error, setError] = useState("")
+  const [validationErrors, setValidationErrors] = useState<Record<string, boolean>>({})
+  const clearValidationError = useCallback((field: string) => setValidationErrors(prev => {
+    if (!prev[field]) return prev
+    const next = { ...prev }
+    delete next[field]
+    if (Object.keys(next).length === 0) setError("")
+    return next
+  }), [])
+
+  useEffect(() => { if (selectedAdSets.length > 0) clearValidationError("adsets") }, [selectedAdSets.length, clearValidationError])
+  useEffect(() => { if (selectedMediaIds.size > 0) clearValidationError("creatives") }, [selectedMediaIds.size, clearValidationError])
+  useEffect(() => { if (/^https?:\/\//.test(webLink.trim())) clearValidationError("webLink") }, [webLink, clearValidationError])
+  useEffect(() => { if (selectedPageId) clearValidationError("page") }, [selectedPageId, clearValidationError])
   const [relaunchBanner, setRelaunchBanner] = useState("")
   const [savingDraft, setSavingDraft] = useState(false)
   const [historyTabOverride, setHistoryTabOverride] = useState<"launches" | "drafts" | "scheduled" | null>(null)
@@ -14062,17 +14087,22 @@ export default function LaunchPage() {
 
 
   const validate = () => {
-    if (selectedAdSets.length === 0) { setError("Chưa chọn Ad Set — vui lòng chọn ít nhất 1 ad set"); return false }
-    if (selectedMediaIds.size === 0) { setError("Chưa chọn creative — vui lòng chọn ít nhất 1 ảnh/video"); return false }
-    const pendingCreatives = selectedCreatives.filter(c => c.status !== "ready")
-    if (pendingCreatives.length > 0) {
-      setError(`${pendingCreatives.length} media đang chờ upload/xử lý trên Meta — vui lòng đợi đến khi hiển thị "ready" rồi thử lại`)
+    const fail = (message: string, fields: string[]) => {
+      setError(message)
+      setValidationErrors(Object.fromEntries(fields.map(f => [f, true])))
       return false
     }
-    if (!webLink.trim()) { setError("Chưa nhập URL đích — bắt buộc khi dùng CTA có link"); return false }
-    if (!/^https?:\/\//.test(webLink.trim())) { setError("URL phải bắt đầu bằng http:// hoặc https://"); return false }
-    if (!selectedPageId) { setError("Chưa chọn Facebook Page"); return false }
+    if (selectedAdSets.length === 0) return fail("Chưa chọn Ad Set — vui lòng chọn ít nhất 1 ad set", ["adsets"])
+    if (selectedMediaIds.size === 0) return fail("Chưa chọn creative — vui lòng chọn ít nhất 1 ảnh/video", ["creatives"])
+    const pendingCreatives = selectedCreatives.filter(c => c.status !== "ready")
+    if (pendingCreatives.length > 0) {
+      return fail(`${pendingCreatives.length} media đang chờ upload/xử lý trên Meta — vui lòng đợi đến khi hiển thị "ready" rồi thử lại`, ["creatives"])
+    }
+    if (!webLink.trim()) return fail("Destination URL is required when the CTA uses a link.", ["webLink"])
+    if (!/^https?:\/\//.test(webLink.trim())) return fail("URL must start with http:// or https://.", ["webLink"])
+    if (!selectedPageId) return fail("Select a Facebook Page.", ["page"])
     setError("")
+    setValidationErrors({})
     return true
   }
 
@@ -14383,7 +14413,7 @@ export default function LaunchPage() {
       const missing: string[] = []
       if (!tableRows.some(r => r.creative?.id)) missing.push("creative")
       if (!tableRows.some(r => r.adSetIds.length > 0)) missing.push("ad set")
-      setError(`Mỗi row cần có ${missing.join(" và ")} trước khi launch`)
+      setError(`Each row needs a ${missing.join(" and ")} before launching.`)
       return
     }
 
@@ -14395,16 +14425,16 @@ export default function LaunchPage() {
       const pageId = row.pageId || selectedPageId
 
       if (!pageId) {
-        rowErrors.push(`"${label}": Chưa chọn Facebook Page`)
+        rowErrors.push(`"${label}": select a Facebook Page`)
       }
       if (!rowLink) {
-        rowErrors.push(`"${label}": Chưa nhập URL đích (destination URL)`)
+        rowErrors.push(`"${label}": destination URL is required`)
       } else if (!rowLink.startsWith("http")) {
-        rowErrors.push(`"${label}": URL phải bắt đầu bằng http:// hoặc https://`)
+        rowErrors.push(`"${label}": URL must start with http:// or https://`)
       }
       if (row.creative && !row.creative.fb_image_hash && !row.creative.fb_video_id) {
         const isPending = row.creative.status === "pending"
-        rowErrors.push(`"${label}": ${isPending ? "Video đang chờ upload lên Meta (~2 phút) — vui lòng đợi rồi thử lại" : "Creative chưa upload lên Meta (hãy đợi upload hoàn tất)"}`)
+        rowErrors.push(`"${label}": ${isPending ? "video is still uploading to Meta (~2 minutes) — wait, then retry" : "creative not yet uploaded to Meta (wait for upload to finish)"}`)
       }
     }
     if (rowErrors.length > 0) {
@@ -14836,7 +14866,8 @@ export default function LaunchPage() {
               title={pagesError || (selectedPage?.name) || "Select Facebook page"}
               className={cn(
                 "h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors min-w-[140px] max-w-[200px]",
-                pagesError && "border-amber-300"
+                pagesError && "border-amber-300",
+                validationErrors.page && "border-destructive"
               )}
             >
               {selectedPage?.picture?.data?.url ? (
@@ -14950,6 +14981,7 @@ export default function LaunchPage() {
                 selectedAdSets={selectedAdSets}
                 onSelect={a => setSelectedAdSets(prev => [...prev, a])}
                 onRemove={id => setSelectedAdSets(prev => prev.filter(a => a.id !== id))}
+                invalid={validationErrors.adsets}
               />
               <AdSetupPanel
                 primaryTexts={primaryTexts} setPrimaryTexts={setPrimaryTexts}
@@ -14966,12 +14998,13 @@ export default function LaunchPage() {
                 selectedCreatives={selectedCreatives}
                 adSourceMode={adSourceMode} setAdSourceMode={setAdSourceMode}
                 adSourceIds={adSourceIds} setAdSourceIds={setAdSourceIds}
+                validationErrors={validationErrors}
               />
             </div>
 
             {/* Right panel */}
             <div className="flex-1 flex flex-col min-w-0 border-l overflow-hidden" style={{ maxHeight: 'calc(100vh - 80px)' }}>
-              <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
+              <div className={cn("flex items-center gap-2 px-4 py-2 border-b shrink-0", validationErrors.creatives && "border-b-destructive")}>
                 <span className="text-sm font-semibold">Ads {selectedCreatives.length > 0 && <span className="text-muted-foreground font-normal">({selectedCreatives.length})</span>}</span>
                 {selectedCreatives.length > 0 && (
                   <button

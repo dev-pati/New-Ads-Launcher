@@ -1,4 +1,4 @@
-import { buildMetaHeaders, extractTokenFromUrl, secureMetaFetch } from "@/lib/meta-secure-fetch"
+import { buildMetaHeaders, extractTokenFromUrl, secureMetaFetch, type MetaFetchOpts } from "@/lib/meta-secure-fetch"
 import { createHmac } from "crypto"
 
 const GRAPH_API_VERSION = "v25.0"
@@ -595,19 +595,19 @@ export async function uploadImageToMeta(
   adAccountId: string,
   accessToken: string,
   fileBuffer: ArrayBuffer,
-  fileName: string
+  fileName: string,
+  opts?: MetaFetchOpts
 ): Promise<{ hash: string; url: string; url_128: string; rateLimitPct: number }> {
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const base64 = Buffer.from(fileBuffer).toString("base64")
 
   const formData = new FormData()
-  formData.append("access_token", accessToken)
   formData.append("filename", fileName)
   formData.append("bytes", base64)
 
   const res = await fetch(
     `${GRAPH_API_BASE}/${normId}/adimages`,
-    { method: "POST", body: formData }
+    { method: "POST", body: formData, headers: buildMetaHeaders(accessToken, opts) }
   )
   const rateLimitPct = parseRateLimit(res)
   const resText = await res.text()
@@ -639,7 +639,8 @@ export async function uploadVideoToMeta(
   adAccountId: string,
   accessToken: string,
   fileBuffer: ArrayBuffer,
-  fileName: string
+  fileName: string,
+  opts?: MetaFetchOpts
 ): Promise<{ videoId: string; rateLimitPct: number }> {
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const fileSize = fileBuffer.byteLength
@@ -654,7 +655,7 @@ export async function uploadVideoToMeta(
   const startRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: startParams,
-  })
+  }, opts)
   
   const startText = await startRes.text()
   let startData: any = {}
@@ -693,7 +694,7 @@ export async function uploadVideoToMeta(
     const transferRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
       method: "POST",
       body: formData,
-    })
+    }, opts)
     
     const transferText = await transferRes.text()
     let transferData: any = {}
@@ -719,7 +720,7 @@ export async function uploadVideoToMeta(
   const finishRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: finishParams,
-  })
+  }, opts)
 
   const rateLimitPct = parseRateLimit(finishRes)
   const finishText = await finishRes.text()
@@ -765,13 +766,13 @@ export interface AdDetails {
   }
 }
 
-export async function getAdDetails(adId: string, accessToken: string): Promise<AdDetails> {
+export async function getAdDetails(adId: string, accessToken: string, opts?: { isManual?: boolean }): Promise<AdDetails> {
   const fields = [
     "id", "name", "status",
     "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget,promoted_object,attribution_spec}",
     "campaign{id,name,objective,special_ad_categories,daily_budget,lifetime_budget,bid_strategy}",
   ].join(",")
-  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adId}?fields=${fields}&access_token=${accessToken}`)
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adId}?fields=${fields}&access_token=${accessToken}`, undefined, { skipProof: opts?.isManual })
   if (!res.ok) {
     const error = await res.json()
     throw new Error(error.error?.message || "Failed to get ad details")
@@ -779,11 +780,19 @@ export async function getAdDetails(adId: string, accessToken: string): Promise<A
   return res.json()
 }
 
+export async function getResourceAccountId(resourceId: string, accessToken: string, opts?: { isManual?: boolean }): Promise<string | null> {
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${resourceId}?fields=account_id&access_token=${accessToken}`, undefined, { skipProof: opts?.isManual })
+  const data = await res.json()
+  if (!res.ok || data?.error) throw new Error(data?.error?.message || "Failed to validate Meta resource account")
+  return data.account_id ? String(data.account_id) : null
+}
+
 // Create a new campaign
 export async function createCampaign(
   adAccountId: string,
   accessToken: string,
-  params: { name: string; objective: string; special_ad_categories?: string[]; status?: string; daily_budget?: number; bid_strategy?: string; promoted_object?: Record<string, any> }
+  params: { name: string; objective: string; special_ad_categories?: string[]; status?: string; daily_budget?: number; bid_strategy?: string; promoted_object?: Record<string, any> },
+  opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
   const body = new URLSearchParams({
     name: params.name,
@@ -801,7 +810,7 @@ export async function createCampaign(
     body.set("is_adset_budget_sharing_enabled", "false")
   }
   if (params.promoted_object) body.set("promoted_object", JSON.stringify(params.promoted_object))
-  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adAccountId}/campaigns`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adAccountId}/campaigns`, { method: "POST", body }, { skipProof: opts?.isManual })
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error
@@ -830,7 +839,8 @@ export async function createAdSet(
     destination_type?: string
     promoted_object?: Record<string, any>
     attribution_spec?: any[]
-  }
+  },
+  opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
   const body: Record<string, string> = {
     name: params.name,
@@ -853,7 +863,7 @@ export async function createAdSet(
   const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adAccountId}/adsets`, {
     method: "POST",
     body: new URLSearchParams(body),
-  })
+  }, { skipProof: opts?.isManual })
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error
@@ -867,7 +877,8 @@ export async function createAdSet(
 export async function copyAdSet(
   accessToken: string,
   sourceAdsetId: string,
-  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string; status?: string }
+  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string; status?: string },
+  opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
   const body = new URLSearchParams({
     campaign_id: params.campaign_id,
@@ -876,7 +887,7 @@ export async function copyAdSet(
     name: params.name,
     access_token: accessToken,
   })
-  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${sourceAdsetId}/copies`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${sourceAdsetId}/copies`, { method: "POST", body }, { skipProof: opts?.isManual })
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error
@@ -890,17 +901,19 @@ export async function copyAdSet(
   const patch = new URLSearchParams({ name: params.name, access_token: accessToken })
   if (params.daily_budget) patch.set("daily_budget", String(Math.round(params.daily_budget * 100)))
   if (params.start_time) patch.set("start_time", params.start_time)
-  await secureMetaFetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch })
+  await secureMetaFetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch }, { skipProof: opts?.isManual })
 
   return { id: newId }
 }
 
 // Fetch a video's HD thumbnail URL from Facebook.
 // Single call fetching both thumbnails and picture — prefers highest-res thumbnail.
-export async function getVideoThumbnail(videoId: string, accessToken: string): Promise<string | null> {
+export async function getVideoThumbnail(videoId: string, accessToken: string, opts?: MetaFetchOpts): Promise<string | null> {
   try {
-    const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=thumbnails{uri,width,height,is_preferred},picture&access_token=${accessToken}`
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=thumbnails{uri,width,height,is_preferred},picture&access_token=${accessToken}`,
+      undefined,
+      opts
     )
     if (!res.ok) return null
     const data = await res.json()
@@ -924,7 +937,8 @@ export async function uploadVideoUrlToMeta(
   adAccountId: string,
   accessToken: string,
   fileUrl: string,
-  fileName: string
+  fileName: string,
+  opts?: MetaFetchOpts
 ): Promise<{ videoId: string; rateLimitPct: number }> {
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
 
@@ -937,7 +951,7 @@ export async function uploadVideoUrlToMeta(
   const res = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: params,
-  })
+  }, opts)
 
   const rateLimitPct = parseRateLimit(res)
   const data = await res.json()
@@ -955,7 +969,8 @@ export async function uploadVideoUrlToMeta(
 export async function pollVideoReady(
   videoId: string,
   accessToken: string,
-  maxWaitMs: number = 120_000
+  maxWaitMs: number = 120_000,
+  opts?: MetaFetchOpts
 ): Promise<{ ready: boolean; status: string; errorMsg?: string; waitedMs: number }> {
   const start = Date.now()
   // Tăng thời gian giãn cách để tránh cạn kiệt API Rate Limit (Quota)
@@ -964,8 +979,10 @@ export async function pollVideoReady(
 
   while (Date.now() - start < maxWaitMs) {
     try {
-      const res = await fetch(
-        `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`
+      const res = await secureMetaFetch(
+        `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`,
+        undefined,
+        opts
       )
       if (res.ok) {
         const data = await res.json()
@@ -1000,11 +1017,14 @@ export async function pollVideoReady(
 // Perform a single check of a video's status on Meta
 export async function checkVideoStatus(
   videoId: string,
-  accessToken: string
+  accessToken: string,
+  opts?: MetaFetchOpts
 ): Promise<{ ready: boolean; status: string; errorMsg?: string }> {
   try {
-    const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`,
+      undefined,
+      opts
     )
     if (!res.ok) {
       return { ready: false, status: "unknown", errorMsg: "Failed to fetch status from Meta" }
@@ -1028,10 +1048,12 @@ export async function checkVideoStatus(
 }
 
 // Fetch a video's playable source URL from Facebook
-export async function getVideoSource(videoId: string, accessToken: string): Promise<string | null> {
+export async function getVideoSource(videoId: string, accessToken: string, opts?: MetaFetchOpts): Promise<string | null> {
   try {
-    const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=source&access_token=${accessToken}`
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=source&access_token=${accessToken}`,
+      undefined,
+      opts
     )
     if (!res.ok) return null
     const data = await res.json()
@@ -1044,11 +1066,14 @@ export async function getVideoSource(videoId: string, accessToken: string): Prom
 // Single call combining status + thumbnail + source — replaces 3 separate API calls.
 export async function getVideoReadyData(
   videoId: string,
-  accessToken: string
+  accessToken: string,
+  opts?: MetaFetchOpts
 ): Promise<{ ready: boolean; status: string; thumbnailUrl: string | null; sourceUrl: string | null; errorMsg?: string }> {
   try {
-    const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=status,thumbnails{uri,width,height,is_preferred},picture,source&access_token=${accessToken}`
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=status,thumbnails{uri,width,height,is_preferred},picture,source&access_token=${accessToken}`,
+      undefined,
+      opts
     )
     if (!res.ok) return { ready: false, status: "unknown", thumbnailUrl: null, sourceUrl: null }
     const data = await res.json()
@@ -1160,7 +1185,8 @@ export async function createAd(
     sitelinks?: Array<{ title: string; url: string }>
     object_story_id?: string   // Post ID mode: reuse existing dark post (carries social proof)
     reuse_creative_id?: string // Creative ID mode: reuse existing Meta creative_id
-  }
+  },
+  opts?: { isManual?: boolean } // via token (app khác phát hành) → skip appsecret_proof
 ): Promise<{ id: string }> {
   // ── Post ID mode ─────────────────────────────────────────────────────────────
   // Reuse an existing Facebook dark post by its object_story_id.
@@ -1175,7 +1201,7 @@ export async function createAd(
       access_token: accessToken,
     })
     const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-    const r = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b })
+    const r = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b }, { skipProof: opts?.isManual })
     const rText = await r.text()
     let rData: any = {}
     try { rData = JSON.parse(rText) } catch {}
@@ -1200,7 +1226,7 @@ export async function createAd(
       access_token: accessToken,
     })
     const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-    const r = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b })
+    const r = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b }, { skipProof: opts?.isManual })
     const rText = await r.text()
     let rData: any = {}
     try { rData = JSON.parse(rText) } catch {}
@@ -1453,7 +1479,7 @@ export async function createAd(
   })
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   console.log(`[createAd] POST /${normId}/ads with creative spec:`, JSON.stringify(creativeJson, null, 2))
-  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body }, { skipProof: opts?.isManual })
   const respText = await res.text()
   let respData: any = {}
   try { respData = JSON.parse(respText) } catch {}
@@ -1471,7 +1497,7 @@ export async function createAd(
   if (respData.id) {
     try {
       const verifyFields = "id,status,effective_status,issues_info,recommendations,creative{id,object_story_id,object_type,thumbnail_url,effective_object_story_id,status}"
-      const vRes = await secureMetaFetch(`${GRAPH_API_BASE}/${respData.id}?fields=${verifyFields}&access_token=${accessToken}`)
+      const vRes = await secureMetaFetch(`${GRAPH_API_BASE}/${respData.id}?fields=${verifyFields}&access_token=${accessToken}`, undefined, { skipProof: opts?.isManual })
       const vData = await vRes.json()
       console.log(`[createAd] verify ${respData.id}:`, JSON.stringify(vData, null, 2))
       if (vData.issues_info && vData.issues_info.length > 0) {
@@ -1894,12 +1920,12 @@ export async function getCatalogProducts(catalogId: string, accessToken: string,
 }
 
 // Set a single ad's status (ACTIVE | PAUSED)
-export async function setAdStatus(adId: string, accessToken: string, status: "ACTIVE" | "PAUSED"): Promise<void> {
+export async function setAdStatus(adId: string, accessToken: string, status: "ACTIVE" | "PAUSED", opts?: { isManual?: boolean }): Promise<void> {
   const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status, access_token: accessToken }),
-  })
+  }, { skipProof: opts?.isManual })
   if (!res.ok) {
     const data = await res.json()
     throw new Error(data.error?.message || `Failed to set ad ${adId} to ${status}`)

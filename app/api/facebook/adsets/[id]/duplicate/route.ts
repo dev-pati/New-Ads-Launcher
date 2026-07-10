@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError } from "@/lib/auth"
+import { secureMetaFetch } from "@/lib/meta-secure-fetch"
 
 // POST /api/facebook/adsets/[id]/duplicate
 // Creates a copy of the source ad set via Meta's /copies endpoint
@@ -19,13 +20,23 @@ export async function POST(
     if (!id) return NextResponse.json({ error: "ad set id required" }, { status: 400 })
 
     const body = await request.json().catch(() => ({}))
+    const adAccountId = request.nextUrl.searchParams.get("ad_account_id") || body.adAccountId
+    if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
+
     const renameSuffix = body.renameSuffix ?? ""
     const customName = body.customName as string | undefined
     const statusOption = body.statusOption || "PAUSED"
     const deepCopy = !!body.deepCopy
 
-    const connection = await getFacebookConnection(ctx.orgId)
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, adAccountId, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      throw err
+    }
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
+    const tokenOpts = { isManual: isManual(connection) }
 
     // Call Meta /copies endpoint
     const renameOptions: any = {}
@@ -39,7 +50,7 @@ export async function POST(
     if (Object.keys(renameOptions).length > 0) copyQs.rename_options = JSON.stringify(renameOptions)
     const params_ = new URLSearchParams(copyQs)
 
-    const res = await fetch(`${GRAPH_API_BASE}/${id}/copies?${params_}`, { method: "POST" })
+    const res = await secureMetaFetch(`${GRAPH_API_BASE}/${id}/copies?${params_}`, { method: "POST" }, { skipProof: tokenOpts.isManual })
     const data = await res.json()
     if (!res.ok) {
       const msg = data.error?.message || "Failed to duplicate ad set"
@@ -70,8 +81,10 @@ export async function POST(
     // custom audiences, placement settings, etc.
     if (body.geoCountries?.length || body.ageMin || body.ageMax) {
       try {
-        const tRes = await fetch(
-          `${GRAPH_API_BASE}/${newAdSetId}?fields=targeting&access_token=${connection.access_token}`
+        const tRes = await secureMetaFetch(
+          `${GRAPH_API_BASE}/${newAdSetId}?fields=targeting&access_token=${connection.access_token}`,
+          undefined,
+          { skipProof: tokenOpts.isManual }
         )
         const tData = await tRes.json()
         const merged = tData.targeting ? { ...tData.targeting } : {}
@@ -88,9 +101,10 @@ export async function POST(
     if (Object.keys(updates).length > 0) {
       try {
         const patchBody = new URLSearchParams(updates)
-        const patchRes = await fetch(
+        const patchRes = await secureMetaFetch(
           `${GRAPH_API_BASE}/${newAdSetId}?access_token=${encodeURIComponent(connection.access_token)}`,
-          { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: patchBody.toString() }
+          { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: patchBody.toString() },
+          { skipProof: tokenOpts.isManual }
         )
         if (!patchRes.ok) {
           const e = await patchRes.json().catch(() => ({}))
@@ -102,11 +116,13 @@ export async function POST(
     }
 
     // Fetch the new ad set details
-    const detailRes = await fetch(
-      `${GRAPH_API_BASE}/${newAdSetId}?fields=id,name,status,effective_status,campaign_id,daily_budget&access_token=${connection.access_token}`
+    const detailRes = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${newAdSetId}?fields=id,name,status,effective_status,campaign_id,daily_budget&access_token=${connection.access_token}`,
+      undefined,
+      { skipProof: tokenOpts.isManual }
     )
-    const detail = await detailRes.json()
-    if (!detailRes.ok) {
+    const detail = await detailRes.json().catch(() => ({}))
+    if (!detailRes.ok || !detail.id) {
       return NextResponse.json({ adSet: { id: newAdSetId, name: customName || "Copy", status: statusOption } })
     }
 

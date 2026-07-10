@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { notifyOrgMembers } from "@/lib/notify-org"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createAd, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
-import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
+import { createAd, getVideoThumbnail, getResourceAccountId, pollVideoReady } from "@/lib/facebook"
+import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
 
 // Simple launch: create ads directly in existing ad sets.
 // N creatives × M ad sets = N×M ads. No campaign/adset creation needed.
@@ -13,11 +13,9 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
 
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
-
-    const token = connection.access_token
     const supabase = createAdminClient()
 
     const body = await request.json()
@@ -75,10 +73,35 @@ export async function POST(request: NextRequest) {
     if (!webLink) return NextResponse.json({ error: "Web link (URL) is required" }, { status: 400 })
     if (!webLink.startsWith("http")) return NextResponse.json({ error: "URL must start with http:// or https://" }, { status: 400 })
 
+    // Via MECE: launch = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, adAccountId, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) {
+        return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      }
+      throw err
+    }
+    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+
+    const token = connection.access_token
+    const tokenOpts = { isManual: isManual(connection) }
+
     // Verify ad account belongs to this org — checks DB first, falls back to live Meta API
     const belongs = await adAccountBelongsToOrg(ctx.orgId, adAccountId, token)
     if (!belongs) {
       return NextResponse.json({ error: "Ad account not found or not authorized" }, { status: 403 })
+    }
+
+    const wrongAccountAdSet = await Promise.all(
+      (adSetIds as string[]).map(async (adSetId) => {
+        const accountId = await getResourceAccountId(adSetId, token, tokenOpts)
+        return accountId && accountId !== normalizeAdAccountId(adAccountId) ? adSetId : null
+      })
+    ).then(ids => ids.find(Boolean))
+    if (wrongAccountAdSet) {
+      return NextResponse.json({ error: "Ad set không thuộc ad account đã chọn." }, { status: 400 })
     }
 
     // Fetch creatives from DB
@@ -120,7 +143,7 @@ export async function POST(request: NextRequest) {
       console.log(`[launch-direct] Polling ${videosToCheck.length} unprocessed video(s) for "ready" status (max 120s)…`)
       // Professional videos from Drive often need 45-90s to process. 120s is a safe expert-recommended limit.
       const readyResults = await Promise.all(
-        videosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000).then(r => ({ ...v, ...r })))
+        videosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000, { skipProof: tokenOpts.isManual }).then(r => ({ ...v, ...r })))
       )
       const stillNotReady = readyResults.filter(r => !r.ready)
       for (const nr of stillNotReady) {
@@ -152,7 +175,7 @@ export async function POST(request: NextRequest) {
           // Meta sometimes needs a few extra seconds to generate thumbnails even after video_status is "ready"
           let thumbUrl: string | null = null
           for (let attempt = 1; attempt <= 3; attempt++) {
-            thumbUrl = await getVideoThumbnail(r.videoId, token)
+            thumbUrl = await getVideoThumbnail(r.videoId, token, { skipProof: tokenOpts.isManual })
             if (thumbUrl) break
             console.log(`[launch-direct] Thumbnail not ready yet for ${r.videoId}, attempt ${attempt}/3. Waiting 3s...`)
             await new Promise(res => setTimeout(res, 3000))
@@ -237,7 +260,7 @@ export async function POST(request: NextRequest) {
                 videos,
                 customRules,
               },
-            })
+            }, tokenOpts)
             created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, multiGroup: grp.name, mediaCount: imageHashes.length + videos.length })
           } catch (err: any) {
             errors.push({ adSetId, multiGroup: grp.name, error: err.message || "Multi-placement ad failed" })
@@ -294,7 +317,7 @@ export async function POST(request: NextRequest) {
                 videos: allVideos,
                 group_asset_indices: groupAssetIndex,
               },
-            })
+            }, tokenOpts)
             created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, flexibleAd: fa.name, groups: fa.groups.length })
           } catch (err: any) {
             errors.push({ adSetId, flexibleAd: fa.name, error: err.message || "Flexible ad failed" })
@@ -342,7 +365,7 @@ export async function POST(request: NextRequest) {
               carousel_cards: childCards,
               carousel_show_collection_tiles: !!carousel.showAsCollectionTiles,
               carousel_show_single_media: !!carousel.showAsSingleMedia,
-            })
+            }, tokenOpts)
             created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, carousel: carousel.name, cards: childCards.length })
           } catch (err: any) {
             errors.push({ adSetId, carousel: carousel.name, error: err.message || "Carousel ad failed" })
@@ -377,7 +400,7 @@ export async function POST(request: NextRequest) {
               object_story_id: sourceId,
               title: "", body: "", cta: cta || "LEARN_MORE", link_url: webLink || "",
               status: adStatus,
-            })
+            }, tokenOpts)
             await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
             created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "post_id" })
           } catch (err: any) {
@@ -396,7 +419,7 @@ export async function POST(request: NextRequest) {
               reuse_creative_id: sourceId,
               title: "", body: "", cta: cta || "LEARN_MORE", link_url: webLink || "",
               status: adStatus,
-            })
+            }, tokenOpts)
             await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
             created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "creative_id" })
           } catch (err: any) {
@@ -414,7 +437,7 @@ export async function POST(request: NextRequest) {
           if (isMetaCdn(creative.fb_thumbnail_url)) {
             thumbnailUrl = creative.fb_thumbnail_url
           } else {
-            thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token)) || undefined
+            thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token, { skipProof: tokenOpts.isManual })) || undefined
             if (thumbnailUrl) {
               await supabase.from("creatives").update({ fb_thumbnail_url: thumbnailUrl }).eq("id", creative.id)
             }
@@ -457,7 +480,7 @@ export async function POST(request: NextRequest) {
             } : {}),
             sitelinks: sitelinks && sitelinks.length > 0 ? sitelinks : undefined,
             degrees_of_freedom_spec: degreesOfFreedom,
-          })
+          }, tokenOpts)
 
           await supabase
             .from("creatives")

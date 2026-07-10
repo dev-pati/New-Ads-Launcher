@@ -10,7 +10,7 @@ import {
   uploadImageToMeta,
   uploadVideoToMeta,
 } from "@/lib/facebook"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getOrgAdAccountInfo, normalizeAdAccountId } from "../_utils"
 
@@ -339,22 +339,23 @@ async function fetchRemoteMedia(mediaUrl: string, mediaType: MediaType) {
 async function uploadMediaFromUrl(
   adAccountId: string,
   token: string,
-  state: CreateCampaignState
+  state: CreateCampaignState,
+  opts?: { isManual?: boolean }
 ): Promise<{ imageHash?: string; videoId?: string; thumbnailUrl?: string }> {
   const buffer = await fetchRemoteMedia(state.mediaUrl, state.mediaType)
   const filename = mediaFileName(state.mediaUrl, state.mediaType)
 
   if (state.mediaType === "image") {
-    const image = await uploadImageToMeta(adAccountId, token, buffer, filename)
+    const image = await uploadImageToMeta(adAccountId, token, buffer, filename, { skipProof: opts?.isManual })
     return { imageHash: image.hash, thumbnailUrl: image.url_128 || image.url }
   }
 
-  const video = await uploadVideoToMeta(adAccountId, token, buffer, filename)
-  const ready = await pollVideoReady(video.videoId, token, 120_000)
+  const video = await uploadVideoToMeta(adAccountId, token, buffer, filename, { skipProof: opts?.isManual })
+  const ready = await pollVideoReady(video.videoId, token, 120_000, { skipProof: opts?.isManual })
   if (!ready.ready) {
     fail(400, ready.errorMsg || "Video is still processing on Meta. Try again in a minute.")
   }
-  const thumbnailUrl = (await getVideoThumbnail(video.videoId, token)) || undefined
+  const thumbnailUrl = (await getVideoThumbnail(video.videoId, token, { skipProof: opts?.isManual })) || undefined
   if (!thumbnailUrl) fail(400, "Meta did not return a thumbnail for this video")
   return { videoId: video.videoId, thumbnailUrl }
 }
@@ -375,7 +376,8 @@ async function resolveStoredCreativeMedia(
   orgId: string,
   adAccountId: string,
   token: string,
-  creativeId: string
+  creativeId: string,
+  opts?: { isManual?: boolean }
 ): Promise<{ imageHash?: string; videoId?: string; thumbnailUrl?: string }> {
   const supabase = createAdminClient()
   const { data: creative, error } = await supabase
@@ -405,14 +407,14 @@ async function resolveStoredCreativeMedia(
 
   if (!storedCreative.fb_video_id) fail(400, "Uploaded video is missing a Meta video id")
 
-  const ready = await pollVideoReady(storedCreative.fb_video_id, token, 120_000)
+  const ready = await pollVideoReady(storedCreative.fb_video_id, token, 120_000, { skipProof: opts?.isManual })
   if (!ready.ready) {
     fail(400, ready.errorMsg || "Uploaded video is still processing on Meta. Try again in a minute.")
   }
 
   let thumbnailUrl = storedCreative.fb_thumbnail_url || undefined
   if (!thumbnailUrl) {
-    thumbnailUrl = (await getVideoThumbnail(storedCreative.fb_video_id, token)) || undefined
+    thumbnailUrl = (await getVideoThumbnail(storedCreative.fb_video_id, token, { skipProof: opts?.isManual })) || undefined
     if (thumbnailUrl) {
       await supabase
         .from("creatives")
@@ -433,13 +435,14 @@ async function resolveMediaForAd(
   orgId: string,
   adAccountId: string,
   token: string,
-  state: CreateCampaignState
+  state: CreateCampaignState,
+  opts?: { isManual?: boolean }
 ) {
   if (state.creativeId) {
-    return resolveStoredCreativeMedia(orgId, adAccountId, token, state.creativeId)
+    return resolveStoredCreativeMedia(orgId, adAccountId, token, state.creativeId, opts)
   }
 
-  return uploadMediaFromUrl(adAccountId, token, state)
+  return uploadMediaFromUrl(adAccountId, token, state, opts)
 }
 
 async function assertAdAccountAllowed(orgId: string, adAccountId: string, token: string) {
@@ -594,18 +597,30 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
 
     const body = (await request.json()) as unknown
     if (!isRecord(body)) fail(400, "Invalid request body")
     const rawAdAccountId = asString(body.adAccountId)
     if (!rawAdAccountId) fail(400, "Ad account is required")
 
+    // Via MECE: create campaign = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, rawAdAccountId, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) {
+        return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      }
+      throw err
+    }
+    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+
     const state = parseState(body.state)
     const adAccountId = withActPrefix(rawAdAccountId)
     const token = connection.access_token
+    const tokenOpts = { isManual: isManual(connection) }
     rollbackToken = token
 
     const account = await assertAdAccountAllowed(ctx.orgId, adAccountId, token)
@@ -634,7 +649,7 @@ export async function POST(request: NextRequest) {
       status: "PAUSED",
       daily_budget: campaignBudget,
       bid_strategy: campaignBudget ? "LOWEST_COST_WITHOUT_CAP" : undefined,
-    })
+    }, tokenOpts)
     campaignId = campaign.id
 
     const adSet = await createAdSet(adAccountId, token, {
@@ -647,10 +662,10 @@ export async function POST(request: NextRequest) {
       status: "PAUSED",
       start_time: startTime,
       promoted_object: delivery.promotedObject,
-    })
+    }, tokenOpts)
     await patchAdSetEndTime(adSet.id, token, endTime)
 
-    const media = await resolveMediaForAd(ctx.orgId, adAccountId, token, state)
+    const media = await resolveMediaForAd(ctx.orgId, adAccountId, token, state, tokenOpts)
     const ad = await createSingleMediaAd(adAccountId, token, {
       adName: state.adName,
       adSetId: adSet.id,

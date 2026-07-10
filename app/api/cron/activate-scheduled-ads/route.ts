@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { setAdStatus } from "@/lib/facebook"
+import { getConnectionForAdAccount, isManual, MissingViaError } from "@/lib/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -30,17 +31,18 @@ export async function GET(request: NextRequest) {
 
   for (const row of pending || []) {
     try {
-      const { data: conn } = await db
-        .from("facebook_connections")
-        .select("access_token")
-        .eq("org_id", row.org_id)
-        .eq("is_active", true)
-        .single()
-
-      if (!conn?.access_token) throw new Error("No active Facebook connection")
+      let connection
+      try {
+        connection = await getConnectionForAdAccount(row.org_id, row.ad_account_id, "write")
+      } catch (err) {
+        if (err instanceof MissingViaError) throw new Error("No via connection with launch permissions assigned to this ad account")
+        throw err
+      }
+      if (!connection?.access_token) throw new Error("No active Facebook connection")
+      const tokenOpts = { isManual: isManual(connection) }
 
       await Promise.all(
-        (row.ad_ids as string[]).map(adId => setAdStatus(adId, conn.access_token, "ACTIVE"))
+        (row.ad_ids as string[]).map(adId => setAdStatus(adId, connection.access_token, "ACTIVE", tokenOpts))
       )
 
       await db.from("scheduled_activations").update({ status: "activated" }).eq("id", row.id)
@@ -55,24 +57,25 @@ export async function GET(request: NextRequest) {
   // ── 2. Pause activated ads whose end_time has passed ───────────────
   const { data: expiring } = await db
     .from("scheduled_activations")
-    .select("id, org_id, ad_ids")
+    .select("id, org_id, ad_account_id, ad_ids")
     .eq("status", "activated")
     .not("end_time", "is", null)
     .lte("end_time", now)
 
   for (const row of expiring || []) {
     try {
-      const { data: conn } = await db
-        .from("facebook_connections")
-        .select("access_token")
-        .eq("org_id", row.org_id)
-        .eq("is_active", true)
-        .single()
-
-      if (!conn?.access_token) throw new Error("No active Facebook connection")
+      let connection
+      try {
+        connection = await getConnectionForAdAccount(row.org_id, row.ad_account_id, "write")
+      } catch (err) {
+        if (err instanceof MissingViaError) throw new Error("No via connection with launch permissions assigned to this ad account")
+        throw err
+      }
+      if (!connection?.access_token) throw new Error("No active Facebook connection")
+      const tokenOpts = { isManual: isManual(connection) }
 
       await Promise.all(
-        (row.ad_ids as string[]).map(adId => setAdStatus(adId, conn.access_token, "PAUSED"))
+        (row.ad_ids as string[]).map(adId => setAdStatus(adId, connection.access_token, "PAUSED", tokenOpts))
       )
 
       await db.from("scheduled_activations").update({ status: "paused" }).eq("id", row.id)

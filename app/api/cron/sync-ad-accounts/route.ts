@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAdAccounts } from "@/lib/facebook"
 import { annotateAdAccounts, persistAdAccountMetrics } from "@/lib/sync-ad-accounts"
+import { fetchViaProfile, tokenStatusFromError } from "@/lib/via-connections"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -19,10 +20,13 @@ export async function GET(request: NextRequest) {
 
   const db = createAdminClient()
 
+  // Full sync chỉ chạy trên OAuth — via token (manual_token) không dùng cho sync org-level,
+  // chúng chỉ được health-check bên dưới.
   const { data: connections, error: connError } = await db
     .from("facebook_connections")
     .select("org_id, access_token")
     .eq("is_active", true)
+    .eq("connection_type", "oauth")
 
   if (connError) {
     console.error("[cron/sync-ad-accounts] failed to fetch connections:", connError.message)
@@ -74,5 +78,30 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({ results })
+  // Health check mọi via đang active: GET /me (skipProof) → cập nhật token_status
+  const healthResults: { id: string; token_status: string }[] = []
+  const { data: vias } = await db
+    .from("facebook_connections")
+    .select("id, access_token")
+    .eq("is_active", true)
+    .eq("connection_type", "manual_token")
+
+  for (const via of vias || []) {
+    let tokenStatus: "valid" | "expired" | "invalid" = "valid"
+    try {
+      await fetchViaProfile(via.access_token)
+    } catch (err) {
+      tokenStatus = tokenStatusFromError(err)
+    }
+    await db
+      .from("facebook_connections")
+      .update({ token_status: tokenStatus, last_checked_at: new Date().toISOString() })
+      .eq("id", via.id)
+    healthResults.push({ id: via.id, token_status: tokenStatus })
+    if (tokenStatus !== "valid") {
+      console.warn(`[cron/sync-ad-accounts] via ${via.id} token ${tokenStatus}`)
+    }
+  }
+
+  return NextResponse.json({ results, viaHealth: healthResults })
 }
