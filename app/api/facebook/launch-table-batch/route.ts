@@ -40,6 +40,14 @@ export async function POST(request: NextRequest) {
       .in("id", allCreativeIds)
       .eq("org_id", ctx.orgId)
 
+    const notReady = (allCreatives || []).filter((c: any) => c.status !== "ready")
+    if (notReady.length > 0) {
+      const names = notReady.map((c: any) => `"${c.file_name}" (${c.status})`).join(", ")
+      return NextResponse.json({
+        error: `Một số media chưa sẵn sàng để launch (đang upload hoặc xử lý trên Meta): ${names}. Vui lòng đợi hoàn tất rồi thử lại.`
+      }, { status: 400 })
+    }
+
     const creativeMap = new Map((allCreatives || []).map((c: any) => [c.id, c]))
 
     // Poll all unprocessed videos in parallel across all rows

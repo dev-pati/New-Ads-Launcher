@@ -377,6 +377,15 @@ export async function POST(request: NextRequest) {
     }
     const { data: creatives } = await supabase.from("creatives").select("*").in("id", creativeIds).eq("org_id", ctx.orgId)
     if (!creatives?.length) return NextResponse.json({ error: "No creatives found" }, { status: 400 })
+
+    const notReady = (creatives || []).filter((c: any) => c.status !== "ready")
+    if (notReady.length > 0) {
+      const names = notReady.map((c: any) => `"${c.file_name}" (${c.status})`).join(", ")
+      return NextResponse.json({
+        error: `Một số media chưa sẵn sàng để launch (đang upload hoặc xử lý trên Meta): ${names}. Vui lòng đợi hoàn tất rồi thử lại.`
+      }, { status: 400 })
+    }
+
     const launchCreatives = creatives as any[]
 
     const allResults: any[] = []

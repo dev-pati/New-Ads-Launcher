@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { useOrg } from "@/lib/org-context"
 import { cn, proxyFbImage } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,17 @@ import {
 } from "@tabler/icons-react"
 import { CreativeCardMedia } from "@/components/creative-card-media"
 import { SheetsImportDialog, type ImportedRow } from "@/components/sheets-import-dialog"
+
+const Tip = ({ text, children, className }: { text: string; children: ReactNode; className?: string }) => (
+  <Tooltip>
+    <TooltipTrigger asChild>
+      <span title={text} className={cn("inline-block pointer-events-auto", className)}>{children}</span>
+    </TooltipTrigger>
+    <TooltipContent side="top" align="center" className="text-xs font-normal">
+      {text}
+    </TooltipContent>
+  </Tooltip>
+)
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -8500,24 +8512,28 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove }: {
           <span className="text-destructive text-xs font-bold">*</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={() => setDuplicateModalOpen(true)}
-            disabled={allAdSets.length === 0}
-          >
-            <IconCopy className="size-3" />Duplicate Ad Set
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            onClick={() => setDuplicateCampaignOpen(true)}
-            disabled={!adAccountId}
-          >
-            <IconCopy className="size-3" />Duplicate Campaign
-          </Button>
+          <Tip text="Copy the selected ad set setup into a new ad set.">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setDuplicateModalOpen(true)}
+              disabled={allAdSets.length === 0}
+            >
+              <IconCopy className="size-3" />Duplicate Ad Set
+            </Button>
+          </Tip>
+          <Tip text="Copy the selected campaign structure and settings.">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              onClick={() => setDuplicateCampaignOpen(true)}
+              disabled={!adAccountId}
+            >
+              <IconCopy className="size-3" />Duplicate Campaign
+            </Button>
+          </Tip>
         </div>
       </div>
 
@@ -10430,15 +10446,19 @@ function AdSetupPanel({
           <span className="text-destructive text-xs font-bold">*</span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5" onClick={openGenerateModal}>
-            <IconSparkles className="size-3" />Generate
-          </Button>
+          <Tip text="Generate primary text, headline, and description with AI.">
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5" onClick={openGenerateModal}>
+              <IconSparkles className="size-3" />Generate
+            </Button>
+          </Tip>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setSettingsOpen(true)}>
             <IconSettings className="size-3" />Settings<IconChevronDown className="size-3" />
           </Button>
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCopyTemplateOpen(true)}>
-            <IconTextCaption className="size-3" />Load Copy
-          </Button>
+          <Tip text="Load saved copy or previous ad text into this setup.">
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setCopyTemplateOpen(true)}>
+              <IconTextCaption className="size-3" />Load Copy
+            </Button>
+          </Tip>
         </div>
       </div>
 
@@ -10654,7 +10674,7 @@ function AdSetupPanel({
               {adSourceMode === "new_ad" && (
                 <div className="px-3 pb-3 flex gap-2 flex-wrap">
                   {selectedCreatives.map(c => {
-                    const ready = c.media_type === "video" ? (!!c.fb_video_id && c.status === "ready") : !!c.fb_image_hash
+                    const ready = c.status === "ready"
                     return (
                       <div key={c.id} className="relative" title={c.file_name}>
                         <div className="size-10 rounded overflow-hidden bg-muted border">
@@ -14044,9 +14064,9 @@ export default function LaunchPage() {
   const validate = () => {
     if (selectedAdSets.length === 0) { setError("Chưa chọn Ad Set — vui lòng chọn ít nhất 1 ad set"); return false }
     if (selectedMediaIds.size === 0) { setError("Chưa chọn creative — vui lòng chọn ít nhất 1 ảnh/video"); return false }
-    const pendingVideos = selectedCreatives.filter(c => c.media_type === "video" && c.status === "pending")
-    if (pendingVideos.length > 0) {
-      setError(`${pendingVideos.length} video đang chờ upload lên Meta (~2 phút) — vui lòng đợi rồi thử lại`)
+    const pendingCreatives = selectedCreatives.filter(c => c.status !== "ready")
+    if (pendingCreatives.length > 0) {
+      setError(`${pendingCreatives.length} media đang chờ upload/xử lý trên Meta — vui lòng đợi đến khi hiển thị "ready" rồi thử lại`)
       return false
     }
     if (!webLink.trim()) { setError("Chưa nhập URL đích — bắt buộc khi dùng CTA có link"); return false }
@@ -15080,16 +15100,24 @@ export default function LaunchPage() {
               )}
 
               <div className="flex items-center gap-2 px-4 py-3 border-t shrink-0">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview</Button>
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs"><IconBookmark className="size-3.5" />Save</Button>
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs"
-                  onClick={() => { if (validate()) setScheduleModalOpen(true) }}>
-                  <IconCalendar className="size-3.5" />Schedule
-                </Button>
-                <Button className="flex-1 gap-2 font-medium" onClick={() => doLaunch()} disabled={launching}>
-                  {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
-                  {launching ? "Launching..." : "Launch Ads"}
-                </Button>
+                <Tip text="Preview the ad setup before launching.">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview</Button>
+                </Tip>
+                <Tip text="Save this launch setup as a draft.">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs"><IconBookmark className="size-3.5" />Save</Button>
+                </Tip>
+                <Tip text="Schedule ads to activate later.">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs"
+                    onClick={() => { if (validate()) setScheduleModalOpen(true) }}>
+                    <IconCalendar className="size-3.5" />Schedule
+                  </Button>
+                </Tip>
+                <Tip text="Create the ads in Meta with the current setup." className="flex-1">
+                  <Button className="w-full gap-2 font-medium" onClick={() => doLaunch()} disabled={launching}>
+                    {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
+                    {launching ? "Launching..." : "Launch Ads"}
+                  </Button>
+                </Tip>
               </div>
             </div>
             </div>
@@ -15302,31 +15330,38 @@ export default function LaunchPage() {
             )}
 
             <div className="flex items-center gap-2 px-4 py-3 border-t shrink-0">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview Ads</Button>
-              <Button
-                variant="outline" size="sm"
-                className="gap-1.5 text-xs"
-                onClick={saveDraft}
-                disabled={savingDraft || tableRows.length === 0}
-                title="Save current rows as draft — no ads created yet"
-              >
-                {savingDraft ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBookmark className="size-3.5" />}
-                {savingDraft ? "Saving..." : "Save Draft"}
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setScheduleModalOpen(true)}>
-                <IconCalendar className="size-3.5" />Schedule
-              </Button>
-              <Button
-                className="flex-1 gap-2 font-medium"
-                onClick={() => {
-                  const hasRowCreatives = tableRows.some(r => r.creative?.id && r.adSetIds.length > 0)
-                  hasRowCreatives ? doTableLaunch() : doLaunch()
-                }}
-                disabled={launching}
-              >
-                {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
-                {launching ? "Launching..." : "Launch Ads"}
-              </Button>
+              <Tip text="Preview the ad setup before launching.">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview Ads</Button>
+              </Tip>
+              <Tip text="Save this launch setup as a draft.">
+                <Button
+                  variant="outline" size="sm"
+                  className="gap-1.5 text-xs"
+                  onClick={saveDraft}
+                  disabled={savingDraft || tableRows.length === 0}
+                >
+                  {savingDraft ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBookmark className="size-3.5" />}
+                  {savingDraft ? "Saving..." : "Save Draft"}
+                </Button>
+              </Tip>
+              <Tip text="Schedule ads to activate later.">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setScheduleModalOpen(true)}>
+                  <IconCalendar className="size-3.5" />Schedule
+                </Button>
+              </Tip>
+              <Tip text="Create the ads in Meta with the current setup." className="flex-1">
+                <Button
+                  className="w-full gap-2 font-medium"
+                  onClick={() => {
+                    const hasRowCreatives = tableRows.some(r => r.creative?.id && r.adSetIds.length > 0)
+                    hasRowCreatives ? doTableLaunch() : doLaunch()
+                  }}
+                  disabled={launching}
+                >
+                  {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
+                  {launching ? "Launching..." : "Launch Ads"}
+                </Button>
+              </Tip>
             </div>
           </div>
           {tableHistoryOpen && (
