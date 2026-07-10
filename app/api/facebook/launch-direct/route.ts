@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
       console.log(`[launch-direct] Polling ${videosToCheck.length} unprocessed video(s) for "ready" status (max 120s)…`)
       // Professional videos from Drive often need 45-90s to process. 120s is a safe expert-recommended limit.
       const readyResults = await Promise.all(
-        videosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000).then(r => ({ ...v, ...r })))
+        videosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000, { skipProof: tokenOpts.isManual }).then(r => ({ ...v, ...r })))
       )
       const stillNotReady = readyResults.filter(r => !r.ready)
       for (const nr of stillNotReady) {
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
           // Meta sometimes needs a few extra seconds to generate thumbnails even after video_status is "ready"
           let thumbUrl: string | null = null
           for (let attempt = 1; attempt <= 3; attempt++) {
-            thumbUrl = await getVideoThumbnail(r.videoId, token)
+            thumbUrl = await getVideoThumbnail(r.videoId, token, { skipProof: tokenOpts.isManual })
             if (thumbUrl) break
             console.log(`[launch-direct] Thumbnail not ready yet for ${r.videoId}, attempt ${attempt}/3. Waiting 3s...`)
             await new Promise(res => setTimeout(res, 3000))
@@ -437,7 +437,7 @@ export async function POST(request: NextRequest) {
           if (isMetaCdn(creative.fb_thumbnail_url)) {
             thumbnailUrl = creative.fb_thumbnail_url
           } else {
-            thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token)) || undefined
+            thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token, { skipProof: tokenOpts.isManual })) || undefined
             if (thumbnailUrl) {
               await supabase.from("creatives").update({ fb_thumbnail_url: thumbnailUrl }).eq("id", creative.id)
             }

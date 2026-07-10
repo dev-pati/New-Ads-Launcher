@@ -181,7 +181,7 @@ async function createAdsInAdset(
       // Facebook v25 requires image_url in video_data — fetch thumbnail if not stored
       let thumbnailUrl: string | undefined = creative.fb_thumbnail_url || undefined
       if (creative.fb_video_id && !thumbnailUrl) {
-        thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token)) || undefined
+        thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token, { skipProof: tokenOpts?.isManual })) || undefined
       }
 
       const ad = await createAd(adAccountId, token, {

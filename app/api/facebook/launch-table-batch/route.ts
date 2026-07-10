@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     if (allVideosToCheck.length > 0) {
       const readyResults = await Promise.all(
-        allVideosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000).then(r => ({ ...v, ...r })))
+        allVideosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000, { skipProof: tokenOpts.isManual }).then(r => ({ ...v, ...r })))
       )
       await Promise.all(
         readyResults.filter(r => r.ready).map(async (r) => {
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
           if (!cr) return
           let thumbUrl: string | null = null
           for (let attempt = 1; attempt <= 3; attempt++) {
-            thumbUrl = await getVideoThumbnail(r.videoId, token)
+            thumbUrl = await getVideoThumbnail(r.videoId, token, { skipProof: tokenOpts.isManual })
             if (thumbUrl) break
             await new Promise(res => setTimeout(res, 3000))
           }
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
             if (isMetaCdn(creative.fb_thumbnail_url)) {
               thumbnailUrl = creative.fb_thumbnail_url
             } else {
-              thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token)) || undefined
+              thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token, { skipProof: tokenOpts.isManual })) || undefined
               if (thumbnailUrl) await supabase.from("creatives").update({ fb_thumbnail_url: thumbnailUrl }).eq("id", creative.id)
             }
           }

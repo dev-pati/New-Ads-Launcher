@@ -1,4 +1,4 @@
-import { buildMetaHeaders, extractTokenFromUrl, secureMetaFetch } from "@/lib/meta-secure-fetch"
+import { buildMetaHeaders, extractTokenFromUrl, secureMetaFetch, type MetaFetchOpts } from "@/lib/meta-secure-fetch"
 import { createHmac } from "crypto"
 
 const GRAPH_API_VERSION = "v25.0"
@@ -595,19 +595,19 @@ export async function uploadImageToMeta(
   adAccountId: string,
   accessToken: string,
   fileBuffer: ArrayBuffer,
-  fileName: string
+  fileName: string,
+  opts?: MetaFetchOpts
 ): Promise<{ hash: string; url: string; url_128: string; rateLimitPct: number }> {
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const base64 = Buffer.from(fileBuffer).toString("base64")
 
   const formData = new FormData()
-  formData.append("access_token", accessToken)
   formData.append("filename", fileName)
   formData.append("bytes", base64)
 
   const res = await fetch(
     `${GRAPH_API_BASE}/${normId}/adimages`,
-    { method: "POST", body: formData }
+    { method: "POST", body: formData, headers: buildMetaHeaders(accessToken, opts) }
   )
   const rateLimitPct = parseRateLimit(res)
   const resText = await res.text()
@@ -639,7 +639,8 @@ export async function uploadVideoToMeta(
   adAccountId: string,
   accessToken: string,
   fileBuffer: ArrayBuffer,
-  fileName: string
+  fileName: string,
+  opts?: MetaFetchOpts
 ): Promise<{ videoId: string; rateLimitPct: number }> {
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const fileSize = fileBuffer.byteLength
@@ -654,7 +655,7 @@ export async function uploadVideoToMeta(
   const startRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: startParams,
-  })
+  }, opts)
   
   const startText = await startRes.text()
   let startData: any = {}
@@ -693,7 +694,7 @@ export async function uploadVideoToMeta(
     const transferRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
       method: "POST",
       body: formData,
-    })
+    }, opts)
     
     const transferText = await transferRes.text()
     let transferData: any = {}
@@ -719,7 +720,7 @@ export async function uploadVideoToMeta(
   const finishRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: finishParams,
-  })
+  }, opts)
 
   const rateLimitPct = parseRateLimit(finishRes)
   const finishText = await finishRes.text()
@@ -907,10 +908,12 @@ export async function copyAdSet(
 
 // Fetch a video's HD thumbnail URL from Facebook.
 // Single call fetching both thumbnails and picture — prefers highest-res thumbnail.
-export async function getVideoThumbnail(videoId: string, accessToken: string): Promise<string | null> {
+export async function getVideoThumbnail(videoId: string, accessToken: string, opts?: MetaFetchOpts): Promise<string | null> {
   try {
-    const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=thumbnails{uri,width,height,is_preferred},picture&access_token=${accessToken}`
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=thumbnails{uri,width,height,is_preferred},picture&access_token=${accessToken}`,
+      undefined,
+      opts
     )
     if (!res.ok) return null
     const data = await res.json()
@@ -934,7 +937,8 @@ export async function uploadVideoUrlToMeta(
   adAccountId: string,
   accessToken: string,
   fileUrl: string,
-  fileName: string
+  fileName: string,
+  opts?: MetaFetchOpts
 ): Promise<{ videoId: string; rateLimitPct: number }> {
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
 
@@ -947,7 +951,7 @@ export async function uploadVideoUrlToMeta(
   const res = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
     method: "POST",
     body: params,
-  })
+  }, opts)
 
   const rateLimitPct = parseRateLimit(res)
   const data = await res.json()
@@ -965,7 +969,8 @@ export async function uploadVideoUrlToMeta(
 export async function pollVideoReady(
   videoId: string,
   accessToken: string,
-  maxWaitMs: number = 120_000
+  maxWaitMs: number = 120_000,
+  opts?: MetaFetchOpts
 ): Promise<{ ready: boolean; status: string; errorMsg?: string; waitedMs: number }> {
   const start = Date.now()
   // Tăng thời gian giãn cách để tránh cạn kiệt API Rate Limit (Quota)
@@ -974,8 +979,10 @@ export async function pollVideoReady(
 
   while (Date.now() - start < maxWaitMs) {
     try {
-      const res = await fetch(
-        `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`
+      const res = await secureMetaFetch(
+        `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`,
+        undefined,
+        opts
       )
       if (res.ok) {
         const data = await res.json()
@@ -1010,11 +1017,14 @@ export async function pollVideoReady(
 // Perform a single check of a video's status on Meta
 export async function checkVideoStatus(
   videoId: string,
-  accessToken: string
+  accessToken: string,
+  opts?: MetaFetchOpts
 ): Promise<{ ready: boolean; status: string; errorMsg?: string }> {
   try {
-    const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`,
+      undefined,
+      opts
     )
     if (!res.ok) {
       return { ready: false, status: "unknown", errorMsg: "Failed to fetch status from Meta" }
@@ -1038,10 +1048,12 @@ export async function checkVideoStatus(
 }
 
 // Fetch a video's playable source URL from Facebook
-export async function getVideoSource(videoId: string, accessToken: string): Promise<string | null> {
+export async function getVideoSource(videoId: string, accessToken: string, opts?: MetaFetchOpts): Promise<string | null> {
   try {
-    const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=source&access_token=${accessToken}`
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=source&access_token=${accessToken}`,
+      undefined,
+      opts
     )
     if (!res.ok) return null
     const data = await res.json()
@@ -1054,11 +1066,14 @@ export async function getVideoSource(videoId: string, accessToken: string): Prom
 // Single call combining status + thumbnail + source — replaces 3 separate API calls.
 export async function getVideoReadyData(
   videoId: string,
-  accessToken: string
+  accessToken: string,
+  opts?: MetaFetchOpts
 ): Promise<{ ready: boolean; status: string; thumbnailUrl: string | null; sourceUrl: string | null; errorMsg?: string }> {
   try {
-    const res = await fetch(
-      `${GRAPH_API_BASE}/${videoId}?fields=status,thumbnails{uri,width,height,is_preferred},picture,source&access_token=${accessToken}`
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=status,thumbnails{uri,width,height,is_preferred},picture,source&access_token=${accessToken}`,
+      undefined,
+      opts
     )
     if (!res.ok) return { ready: false, status: "unknown", thumbnailUrl: null, sourceUrl: null }
     const data = await res.json()
