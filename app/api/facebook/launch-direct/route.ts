@@ -115,6 +115,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Creatives not found" }, { status: 400 })
     }
 
+    const notReady = (creatives || []).filter((c: any) => c.status !== "ready")
+    if (notReady.length > 0) {
+      const names = notReady.map((c: any) => `"${c.file_name}" (${c.status})`).join(", ")
+      return NextResponse.json({
+        error: `Một số media chưa sẵn sàng để launch (đang upload hoặc xử lý trên Meta): ${names}. Vui lòng đợi hoàn tất rồi thử lại.`
+      }, { status: 400 })
+    }
+
     // Scheduled ads must start PAUSED — cron job activates them at scheduled_at
     const adStatus = scheduledStart ? "PAUSED" : (createPaused === false ? "ACTIVE" : "PAUSED")
     const created: any[] = []
@@ -137,8 +145,8 @@ export async function POST(request: NextRequest) {
       const readyResults = await Promise.all(
         videosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000).then(r => ({ ...v, ...r })))
       )
-      const notReady = readyResults.filter(r => !r.ready)
-      for (const nr of notReady) {
+      const stillNotReady = readyResults.filter(r => !r.ready)
+      for (const nr of stillNotReady) {
         errors.push({
           creativeId: nr.creativeId,
           fileName: nr.fileName,
@@ -147,12 +155,12 @@ export async function POST(request: NextRequest) {
         const idx = creatives.findIndex((c: any) => c.id === nr.creativeId)
         if (idx >= 0) creatives.splice(idx, 1)
       }
-      if (notReady.length === videosToCheck.length && creatives.length === 0) {
+      if (stillNotReady.length === videosToCheck.length && creatives.length === 0) {
         return NextResponse.json({
           success: false,
           errors,
           totalAds: 0,
-          summary: `All ${notReady.length} video(s) still processing. Upload finishes uploading first → Meta processes for ~10-30s → then launch.`,
+          summary: `All ${stillNotReady.length} video(s) still processing. Upload finishes uploading first → Meta processes for ~10-30s → then launch.`,
         }, { status: 400 })
       }
       const ready = readyResults.filter(r => r.ready)
