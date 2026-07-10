@@ -56,7 +56,7 @@ import { SheetsImportDialog, type ImportedRow } from "@/components/sheets-import
 const Tip = ({ text, children, className }: { text: string; children: ReactNode; className?: string }) => (
   <Tooltip>
     <TooltipTrigger asChild>
-      <span className={cn("inline-flex", className)}>{children}</span>
+      <span title={text} className={cn("inline-block pointer-events-auto", className)}>{children}</span>
     </TooltipTrigger>
     <TooltipContent side="top" align="center" className="text-xs font-normal">
       {text}
