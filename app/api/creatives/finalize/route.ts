@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { uploadImageToMeta } from "@/lib/facebook"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { notifyOrgMembers } from "@/lib/notify-org"
-import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
 import { checkCreativeDup, getActorName } from "@/lib/upload-utils"
 import { fireMediaUploadedTriggers }      from "@/lib/media-trigger-checker"
 
 // Lightweight finalize endpoint — file is already in Supabase Storage (uploaded directly by client).
-// Videos: dedup check → DB insert (status=pending) → background cron uploads to Meta later.
-// Images: dedup check → Meta API (sync, small file) → DB insert.
+// Both image and video: dedup check → DB insert (status=pending) → background cron uploads to Meta later.
 // No file body passes through here, so there is no Payload Too Large risk.
 export const runtime = "nodejs"
 export const maxDuration = 60
@@ -90,37 +87,6 @@ export async function POST(request: NextRequest) {
       fbAdAccountId = firstAccount.fb_ad_account_id
     }
 
-    let fbImageHash: string | null = null
-    let fbImageUrl: string | null = null
-    let fbThumbnailUrl: string | null = null
-    let rateLimitPct = 0
-
-    if (isImage) {
-      // Validate account ownership before calling Meta
-      const connection = await getFacebookConnection(ctx.orgId)
-      if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
-
-      const account = await getOrgAdAccountInfo(ctx.orgId, fbAdAccountId, connection.access_token)
-      if (!account) {
-        return NextResponse.json({ error: `Ad account ${fbAdAccountId} not found` }, { status: 403 })
-      }
-      fbAdAccountId = account.id
-
-      const imgRes = await fetch(publicUrl)
-      if (!imgRes.ok) {
-        return NextResponse.json(
-          { error: `Failed to fetch uploaded image from storage (${imgRes.status})` },
-          { status: 500 }
-        )
-      }
-      const imgBuffer = await imgRes.arrayBuffer()
-      const uploadedImage = await uploadImageToMeta(fbAdAccountId, connection.access_token, imgBuffer, filename)
-      fbImageHash = uploadedImage.hash
-      fbImageUrl = uploadedImage.url
-      fbThumbnailUrl = uploadedImage.url_128
-      rateLimitPct = uploadedImage.rateLimitPct
-    }
-
     const { data: creative, error: insertError } = await supabase
       .from("creatives")
       .insert({
@@ -137,12 +103,12 @@ export async function POST(request: NextRequest) {
         description,
         link_url: linkUrl,
         cta: ctaParam,
-        fb_image_hash: fbImageHash,
-        fb_image_url: fbImageUrl,
-        fb_thumbnail_url: fbThumbnailUrl,
+        fb_image_hash: null,
+        fb_image_url: null,
+        fb_thumbnail_url: null,
         fb_video_id: null,
-        // Videos wait for background cron to upload to Meta; images are already uploaded above.
-        status: isVideo ? "pending" : "ready",
+        // Both images and videos start as pending and get processed asynchronously via cron
+        status: "pending",
       })
       .select()
       .single()
@@ -152,9 +118,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save creative" }, { status: 500 })
     }
 
-    // Fire-and-forget: trigger cron worker immediately so video uploads within seconds,
-    // not waiting for the next 2-minute pg_cron tick. No await — response returns right away.
-    if (isVideo && process.env.CRON_SECRET) {
+    // Fire-and-forget: trigger cron worker immediately so media uploads within seconds
+    if (process.env.CRON_SECRET) {
       const appUrl = process.env.APP_URL
         || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
         || process.env.NEXT_PUBLIC_APP_URL
@@ -187,7 +152,7 @@ export async function POST(request: NextRequest) {
       link: "/assets",
     })
 
-    return NextResponse.json({ creative: mapCreativeForClient(creative), rateLimitPct }, { status: 201 })
+    return NextResponse.json({ creative: mapCreativeForClient(creative), rateLimitPct: 0 }, { status: 201 })
   } catch (err) {
     console.error("[finalize] error:", err)
     return NextResponse.json(
