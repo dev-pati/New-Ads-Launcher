@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadVideoUrlToMeta, uploadImageToMeta, getVideoReadyData } from "@/lib/facebook"
 import { parseRateLimit } from "@/lib/facebook"
-import { getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
+import { getConnectionForAdAccount, MissingViaError, isManual } from "@/lib/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -85,7 +85,8 @@ export async function GET(request: NextRequest) {
               normAccountId,
               conn.access_token,
               row.file_url,
-              row.file_name
+              row.file_name,
+              { skipProof: isManual(conn) }
             )
             currentRatePct = result.rateLimitPct
 
@@ -101,7 +102,8 @@ export async function GET(request: NextRequest) {
               normAccountId,
               conn.access_token,
               imgBuffer,
-              row.file_name
+              row.file_name,
+              { skipProof: isManual(conn) }
             )
             currentRatePct = result.rateLimitPct
 
@@ -135,7 +137,7 @@ export async function GET(request: NextRequest) {
   // 2. Poll "processing" videos
   const { data: processing } = await db
     .from("creatives")
-    .select("id, org_id, fb_video_id, file_url, fb_thumbnail_url")
+    .select("id, org_id, ad_account_id, fb_video_id, file_url, fb_thumbnail_url")
     .eq("status", "processing")
     .eq("media_type", "video")
     .not("fb_video_id", "is", null)
@@ -151,18 +153,20 @@ export async function GET(request: NextRequest) {
     }
 
     for (const [orgId, rows] of byOrg) {
-      const { data: conn } = await db
-        .from("facebook_connections")
-        .select("access_token")
-        .eq("org_id", orgId)
-        .eq("is_active", true)
-        .single()
-
-      if (!conn?.access_token) continue
-
       for (const row of rows) {
+        // Via MECE: video was uploaded through the write connection for this ad
+        // account — poll status through the same one, skip if it's gone.
+        let conn
         try {
-          const videoData = await getVideoReadyData(row.fb_video_id!, conn.access_token)
+          conn = await getConnectionForAdAccount(orgId, row.ad_account_id, "write")
+        } catch (err) {
+          if (err instanceof MissingViaError) continue
+          throw err
+        }
+        if (!conn?.access_token) continue
+
+        try {
+          const videoData = await getVideoReadyData(row.fb_video_id!, conn.access_token, { skipProof: isManual(conn) })
           if (videoData.status === "error") {
             await db.from("creatives").update({ status: "error" }).eq("id", row.id)
             errors.push({ id: row.id, error: videoData.errorMsg || "Video processing failed" })
