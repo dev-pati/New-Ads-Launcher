@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail } from "@/lib/facebook"
+import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail, getResourceAccountId } from "@/lib/facebook"
+import { normalizeAdAccountId } from "../_utils"
 
 function applyPattern(pattern: string, ctx: { filename?: string; index?: number; date: string; shortDate: string }) {
   let r = pattern
@@ -19,7 +20,8 @@ async function buildAdset(
   campaignId: string, name: string, dailyBudget?: number, startTime?: string,
   pageId?: string, resolvedObjective?: string,
   pixelId?: string, pixelEvent?: string,
-  status = "PAUSED"
+  status = "PAUSED",
+  tokenOpts?: { isManual?: boolean }
 ) {
   // Safe optimization goal per objective for adset-level budget (non-CBO) campaigns.
   // ENGAGED_USERS is CBO-only; for adset budgets, OUTCOME_ENGAGEMENT requires POST_ENGAGEMENT.
@@ -93,7 +95,7 @@ async function buildAdset(
       daily_budget: dailyBudget,
       start_time: startTime,
       status,
-    })
+    }, tokenOpts)
   }
 
   return createAdSet(adAccountId, token, {
@@ -109,7 +111,7 @@ async function buildAdset(
     destination_type: destinationType,
     promoted_object: promotedObject,
     attribution_spec: template.adset.attribution_spec || undefined,
-  })
+  }, tokenOpts)
 }
 
 interface TextOverride {
@@ -138,7 +140,8 @@ async function createAdsInAdset(
   adStatus = "PAUSED",
   utmQuery = "",
   globalWebsiteUrl = "",
-  globalDisplayUrl = ""
+  globalDisplayUrl = "",
+  tokenOpts?: { isManual?: boolean }
 ) {
   const results: any[] = []
   const errors: any[] = []
@@ -196,7 +199,7 @@ async function createAdsInAdset(
         display_url,
         status: adStatus,
         degrees_of_freedom_spec: creative.fb_video_id ? vidDof : imgDof,
-      })
+      }, tokenOpts)
       await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
       results.push({
         creativeId: creative.id,
@@ -219,21 +222,36 @@ export async function POST(request: NextRequest) {
     const launchStartedAt = Date.now()
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
     const authCtx = ctx
-
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
     const supabase = createAdminClient()
     const { data: adAccounts } = await supabase.from("ad_accounts").select("fb_ad_account_id").eq("org_id", ctx.orgId)
     if (!adAccounts?.length) return NextResponse.json({ error: "No ad account found" }, { status: 400 })
 
-    const token = connection.access_token
     const body = await request.json()
 
     const requestedId = body.adAccountId
-    const matched = requestedId && adAccounts.find((a: any) => a.fb_ad_account_id === requestedId)
-    const adAccountId = matched ? requestedId : adAccounts[0].fb_ad_account_id
+    const matched = requestedId && adAccounts.find(
+      (a: any) => normalizeAdAccountId(a.fb_ad_account_id) === normalizeAdAccountId(requestedId)
+    )
+    const adAccountId = matched ? matched.fb_ad_account_id : adAccounts[0].fb_ad_account_id
+
+    // Via MECE: launch = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, adAccountId, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) {
+        return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      }
+      throw err
+    }
+    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+
+    const token = connection.access_token
+    const tokenOpts = { isManual: isManual(connection) }
 
     const {
       templateAdId, presetId, creativeIds,
@@ -373,11 +391,37 @@ export async function POST(request: NextRequest) {
         },
       }
     } else {
-      template = await getAdDetails(templateAdId, token)
+      template = await getAdDetails(templateAdId, token, tokenOpts)
+      const templateAcct = await getResourceAccountId(templateAdId, token, tokenOpts)
+      if (templateAcct && templateAcct !== normalizeAdAccountId(adAccountId)) {
+        return NextResponse.json({ error: "Template ad không thuộc ad account đã chọn. Chọn template trong cùng account." }, { status: 400 })
+      }
+    }
+
+    const existingCampaignToCheck = existingCampaignId || template?.adset?.campaign_id
+    if (existingCampaignToCheck) {
+      const campAcct = await getResourceAccountId(existingCampaignToCheck, token, tokenOpts)
+      if (campAcct && campAcct !== normalizeAdAccountId(adAccountId)) {
+        return NextResponse.json({ error: "Campaign không thuộc ad account đã chọn." }, { status: 400 })
+      }
+    }
+    if (existingAdsetId) {
+      const adsetAcct = await getResourceAccountId(existingAdsetId, token, tokenOpts)
+      if (adsetAcct && adsetAcct !== normalizeAdAccountId(adAccountId)) {
+        return NextResponse.json({ error: "Ad set không thuộc ad account đã chọn." }, { status: 400 })
+      }
     }
     const { data: creatives } = await supabase.from("creatives").select("*").in("id", creativeIds).eq("org_id", ctx.orgId)
     if (!creatives?.length) return NextResponse.json({ error: "No creatives found" }, { status: 400 })
     const launchCreatives = creatives as any[]
+
+    const notUploaded = launchCreatives.filter(c => !c.fb_image_hash && !c.fb_video_id)
+    if (notUploaded.length) {
+      return NextResponse.json({
+        error: `${notUploaded.length} creative(s) chưa upload lên Meta. Mở Ads Manager và upload trước khi launch.`,
+        creativeIds: notUploaded.map(c => c.id),
+      }, { status: 400 })
+    }
 
     const allResults: any[] = []
     const allErrors: any[] = []
@@ -419,7 +463,7 @@ export async function POST(request: NextRequest) {
       }
       if (adsetMode === "new") {
         const name = newAdsetName || template.adset.name
-        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
         launchedAdsets.set(s.id, name || s.id)
         return s.id
       }
@@ -428,7 +472,7 @@ export async function POST(request: NextRequest) {
       }
       if (adsetMode === "auto_divide") {
         const name = applyPattern(autoDividePattern || "Ad Set {index:01}", { index, date: dateStr, shortDate: shortDateStr })
-        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
         launchedAdsets.set(s.id, name)
         return s.id
       }
@@ -500,14 +544,14 @@ export async function POST(request: NextRequest) {
           status: adStatus,
           daily_budget: campaignDailyBudget,
           bid_strategy: campaignBidStrategy,
-        })
+        }, tokenOpts)
         for (const adsetConfig of campConfig.adsets) {
           if (!adsetConfig.creativeIds?.length) continue
-          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
           launchedAdsets.set(adset.id, adsetConfig.name)
           const adsetCreatives = creatives.filter((c: any) => adsetConfig.creativeIds.includes(c.id))
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
+          const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
           globalIdx += adsetCreatives.length
           allResults.push(...results)
           allErrors.push(...errors)
@@ -531,7 +575,7 @@ export async function POST(request: NextRequest) {
           status: adStatus,
           daily_budget: campaignDailyBudget,
           bid_strategy: campaignBidStrategy,
-        })
+        }, tokenOpts)
         campaignIds.push(c.id)
       }
     } else if (campaignOption === "new") {
@@ -542,7 +586,7 @@ export async function POST(request: NextRequest) {
         status: adStatus,
         daily_budget: campaignDailyBudget,
         bid_strategy: campaignBidStrategy,
-      })
+      }, tokenOpts)
       campaignIds.push(c.id)
     } else {
       campaignIds.push(existingCampaignId || template.adset.campaign_id)
@@ -565,10 +609,10 @@ export async function POST(request: NextRequest) {
           const creative = campaignCreatives[i]
           const filename = creative.file_name.replace(/\.[^/.]+$/, "")
           const name = applyPattern(adsetNamePattern || "{filename}", { filename, index: i + 1, date: dateStr, shortDate: shortDateStr })
-          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus)
+          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
           launchedAdsets.set(adset.id, name)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
+          const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
           allResults.push(...results)
           allErrors.push(...errors)
         }
@@ -583,7 +627,7 @@ export async function POST(request: NextRequest) {
         for (let i = 0; i < chunks.length; i++) {
           const adsetId = await resolveAdset(campaignId, chunks[i], i + 1)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adsetId!, chunks[i], adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
+          const { results, errors } = await createAdsInAdset(adsetId!, chunks[i], adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
           globalIdx += chunks[i].length
           allResults.push(...results)
           allErrors.push(...errors)
@@ -592,7 +636,7 @@ export async function POST(request: NextRequest) {
         const adsetId = await resolveAdset(campaignId, campaignCreatives)
         if (adsetId) launchedAdsets.set(adsetId, launchedAdsets.get(adsetId) || template.adset.name || adsetId)
         const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-        const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl)
+        const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
         allResults.push(...results)
         allErrors.push(...errors)
       }

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { notifyOrgMembers } from "@/lib/notify-org"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createAd, getVideoThumbnail, pollVideoReady } from "@/lib/facebook"
-import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
+import { createAd, getVideoThumbnail, getResourceAccountId, pollVideoReady } from "@/lib/facebook"
+import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
 
 // Table Mode batch launch: accepts all rows in one request.
 // Auth, account validation, creative fetch happen ONCE instead of N times.
@@ -14,11 +14,9 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
 
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
-
-    const token = connection.access_token
     const supabase = createAdminClient()
     const adminDb = createAdminClient()
 
@@ -28,9 +26,35 @@ export async function POST(request: NextRequest) {
     if (!rows?.length) return NextResponse.json({ error: "No rows provided" }, { status: 400 })
     if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
 
+    // Via MECE: launch = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, adAccountId, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) {
+        return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      }
+      throw err
+    }
+    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+
+    const token = connection.access_token
+    const tokenOpts = { isManual: isManual(connection) }
+
     // Validate ad account once for all rows
     const belongs = await adAccountBelongsToOrg(ctx.orgId, adAccountId, token)
     if (!belongs) return NextResponse.json({ error: "Ad account not found or not authorized" }, { status: 403 })
+
+    const batchAdSetIds = [...new Set(rows.flatMap((r: any) => r.adSetIds || []))] as string[]
+    const wrongAdSet = await Promise.all(
+      batchAdSetIds.map(async (adSetId) => {
+        const accountId = await getResourceAccountId(adSetId, token, tokenOpts)
+        return accountId && accountId !== normalizeAdAccountId(adAccountId) ? adSetId : null
+      })
+    ).then(ids => ids.find(Boolean))
+    if (wrongAdSet) {
+      return NextResponse.json({ error: "Ad set không thuộc ad account đã chọn." }, { status: 400 })
+    }
 
     // Fetch all creatives in one DB query
     const allCreativeIds = [...new Set(rows.flatMap((r: any) => r.creativeIds || []))] as string[]
@@ -111,7 +135,7 @@ export async function POST(request: NextRequest) {
                 name: adName, adset_id: adSetId, page_id: pageId,
                 object_story_id: sourceId, title: "", body: "",
                 cta: cta || "LEARN_MORE", link_url: webLink || "", status: adStatus,
-              })
+              }, tokenOpts)
               await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
               created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "post_id" })
             } catch (err: any) {
@@ -126,7 +150,7 @@ export async function POST(request: NextRequest) {
                 name: adName, adset_id: adSetId, page_id: pageId,
                 reuse_creative_id: sourceId, title: "", body: "",
                 cta: cta || "LEARN_MORE", link_url: webLink || "", status: adStatus,
-              })
+              }, tokenOpts)
               await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
               created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "creative_id" })
             } catch (err: any) {
@@ -177,7 +201,7 @@ export async function POST(request: NextRequest) {
               ...(hasVariations ? { text_variations: { bodies: allBodies, titles: allTitles, descriptions: allDescs } } : {}),
               sitelinks: sitelinks?.length > 0 ? sitelinks : undefined,
               degrees_of_freedom_spec: degreesOfFreedom,
-            })
+            }, tokenOpts)
             await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
             created.push({
               adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId,

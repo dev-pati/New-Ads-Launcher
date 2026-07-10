@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
@@ -13,9 +13,6 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
-
     const {
       ad_account_id,
       video_id,
@@ -31,6 +28,18 @@ export async function POST(request: NextRequest) {
     if (!ad_account_id || !video_id) {
       return NextResponse.json({ error: "ad_account_id and video_id required" }, { status: 400 })
     }
+
+    // Via MECE: upload media = WRITE (thuộc flow launch) → via launch → OAuth → block
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, ad_account_id, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) {
+        return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      }
+      throw err
+    }
+    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
     const account = await getOrgAdAccountInfo(ctx.orgId, ad_account_id, connection.access_token)
     if (!account) {

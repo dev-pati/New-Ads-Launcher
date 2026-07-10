@@ -1,21 +1,30 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
 // POST /api/facebook/delete
-// Body: { ids: string[] }
+// Body: { ids: string[], adAccountId?: string }
 // Deletes campaigns, ad sets, or ads — Meta API uses DELETE /{id} for all.
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
-
-    const { ids } = await request.json()
+    const { ids, adAccountId } = await request.json()
     if (!ids?.length) return NextResponse.json({ error: "ids is required" }, { status: 400 })
+
+    // Via MECE: mutation = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, adAccountId, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) {
+        return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      }
+      throw err
+    }
+    if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
     const results: { id: string; success: boolean; error?: string }[] = []
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadImageToMeta } from "@/lib/facebook"
 import { mapCreativeForClient } from "@/lib/creative-media"
@@ -96,8 +96,16 @@ export async function POST(request: NextRequest) {
     let rateLimitPct = 0
 
     if (isImage) {
-      // Validate account ownership before calling Meta
-      const connection = await getFacebookConnection(ctx.orgId)
+      // Via MECE: upload image hash = WRITE (thuộc flow launch) → via launch → OAuth → block
+      let connection
+      try {
+        connection = await getConnectionForAdAccount(ctx.orgId, fbAdAccountId, "write")
+      } catch (err) {
+        if (err instanceof MissingViaError) {
+          return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+        }
+        throw err
+      }
       if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
       const account = await getOrgAdAccountInfo(ctx.orgId, fbAdAccountId, connection.access_token)

@@ -314,7 +314,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
                         key={sub.href}
                         href={sub.href}
                         className={cn(
-                          "flex items-center h-8 px-3 rounded-lg text-sm transition-colors mb-0.5",
+                          "flex items-center h-8 px-3 rounded-lg text-sm transition-colors mb-0.5 w-[180px]",
                           isSubActive
                             ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
                             : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-foreground"

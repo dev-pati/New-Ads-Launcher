@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getSessionAccount } from "@/lib/custom-auth"
 import { cookies } from "next/headers"
+import { NextResponse } from "next/server"
 
 /**
  * Get the authenticated Supabase user.
@@ -48,6 +49,21 @@ export async function getAuthContext() {
     return { user, orgId: firstMembership.org_id, role: firstMembership.role as string }
   }
 
+  return null
+}
+
+const LAUNCH_ROLES = new Set(["admin", "editor", "launcher"])
+
+export function requireRole(
+  ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>,
+  allowed: ReadonlySet<string> = LAUNCH_ROLES
+) {
+  if (!allowed.has(ctx.role)) {
+    return NextResponse.json(
+      { error: `Role "${ctx.role}" không có quyền thực hiện thao tác này.` },
+      { status: 403 }
+    )
+  }
   return null
 }
 

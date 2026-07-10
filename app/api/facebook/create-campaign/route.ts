@@ -10,7 +10,7 @@ import {
   uploadImageToMeta,
   uploadVideoToMeta,
 } from "@/lib/facebook"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getOrgAdAccountInfo, normalizeAdAccountId } from "../_utils"
 
@@ -594,18 +594,30 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
 
     const body = (await request.json()) as unknown
     if (!isRecord(body)) fail(400, "Invalid request body")
     const rawAdAccountId = asString(body.adAccountId)
     if (!rawAdAccountId) fail(400, "Ad account is required")
 
+    // Via MECE: create campaign = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, rawAdAccountId, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) {
+        return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      }
+      throw err
+    }
+    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+
     const state = parseState(body.state)
     const adAccountId = withActPrefix(rawAdAccountId)
     const token = connection.access_token
+    const tokenOpts = { isManual: isManual(connection) }
     rollbackToken = token
 
     const account = await assertAdAccountAllowed(ctx.orgId, adAccountId, token)
@@ -634,7 +646,7 @@ export async function POST(request: NextRequest) {
       status: "PAUSED",
       daily_budget: campaignBudget,
       bid_strategy: campaignBudget ? "LOWEST_COST_WITHOUT_CAP" : undefined,
-    })
+    }, tokenOpts)
     campaignId = campaign.id
 
     const adSet = await createAdSet(adAccountId, token, {
@@ -647,7 +659,7 @@ export async function POST(request: NextRequest) {
       status: "PAUSED",
       start_time: startTime,
       promoted_object: delivery.promotedObject,
-    })
+    }, tokenOpts)
     await patchAdSetEndTime(adSet.id, token, endTime)
 
     const media = await resolveMediaForAd(ctx.orgId, adAccountId, token, state)

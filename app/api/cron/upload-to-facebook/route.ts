@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadVideoUrlToMeta } from "@/lib/facebook"
 import { parseRateLimit } from "@/lib/facebook"
+import { getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -50,19 +51,6 @@ export async function GET(request: NextRequest) {
   }
 
   for (const [orgId, rows] of byOrg) {
-    // Get active Facebook connection for this org
-    const { data: conn } = await db
-      .from("facebook_connections")
-      .select("access_token")
-      .eq("org_id", orgId)
-      .eq("is_active", true)
-      .single()
-
-    if (!conn?.access_token) {
-      for (const row of rows) skipped.push(row.id)
-      continue
-    }
-
     let currentRatePct = 0
     const limit = Math.min(rows.length, MAX_VIDEOS_PER_ORG)
 
@@ -76,6 +64,23 @@ export async function GET(request: NextRequest) {
       }
 
       try {
+        // Via MECE: upload video = WRITE — resolve theo ad_account_id của từng creative
+        // (via launch của account → OAuth của org → skip nếu không có)
+        let conn
+        try {
+          conn = await getConnectionForAdAccount(orgId, row.ad_account_id, "write")
+        } catch (err) {
+          if (err instanceof MissingViaError) {
+            skipped.push(row.id)
+            continue
+          }
+          throw err
+        }
+        if (!conn?.access_token) {
+          skipped.push(row.id)
+          continue
+        }
+
         const normAccountId = row.ad_account_id?.startsWith("act_")
           ? row.ad_account_id
           : `act_${row.ad_account_id}`

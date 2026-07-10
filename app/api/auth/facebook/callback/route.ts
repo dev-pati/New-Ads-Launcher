@@ -67,12 +67,14 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Keep one active Facebook connection per org. Without this, reconnecting
+    // Keep one active OAuth connection per org. Without this, reconnecting
     // with another Meta account can leave stale active tokens around.
+    // Via rows (connection_type='manual_token') live independently — never touch them here.
     await supabase
       .from("facebook_connections")
       .update({ is_active: false })
       .eq("org_id", orgId)
+      .eq("connection_type", "oauth")
 
     // Save Facebook connection with org_id
     const { data: connection, error: upsertError } = await supabase
