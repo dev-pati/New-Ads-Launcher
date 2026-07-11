@@ -11000,8 +11000,8 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
         </div>
       </div>
       <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 160px))" }}
+        className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5"
+        style={{ maxWidth: "calc(5 * 160px + 4 * 12px)" }}
       >
         {selectedCreatives.map(c => {
           const thumb = proxyFbImage(c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url))
@@ -12244,10 +12244,281 @@ function CtaPickerCell({ value, onChange }: {
   )
 }
 
+// ─── Shared row primitives (reused by List / Record / Gallery views) ──────────
+function CreativeThumb({
+  row, size, uploadingRowId, onUploadFiles, onPickClick, onRemove, idPrefix,
+}: {
+  row: TableRow
+  size: number
+  uploadingRowId: string | null
+  onUploadFiles: (files: FileList | null) => void
+  onPickClick: () => void
+  onRemove: () => void
+  idPrefix: string
+}) {
+  const inputId = `${idPrefix}-upload-${row.id}`
+  return (
+    <div className="relative group/creative shrink-0" style={{ width: size, height: size }}>
+      <input
+        id={inputId}
+        type="file"
+        accept="image/*,video/*"
+        multiple
+        className="hidden"
+        onChange={e => { onUploadFiles(e.target.files); e.currentTarget.value = "" }}
+      />
+      <label
+        htmlFor={inputId}
+        className="w-full h-full rounded border-2 border-dashed border-border/60 overflow-hidden relative flex items-center justify-center bg-muted/30 hover:bg-muted/60 transition-colors cursor-pointer"
+        title={row.creative ? "Upload to replace creative" : "Upload creative from your computer"}
+      >
+        {uploadingRowId === row.id ? (
+          <IconLoader2 className="size-5 text-muted-foreground animate-spin" />
+        ) : row.creative?.status === "pending" ? (
+          <div className="flex flex-col items-center gap-1">
+            <IconClock className="size-4 text-amber-500/70" />
+            <span className="text-[9px] text-amber-600/70 leading-none text-center">Pending</span>
+          </div>
+        ) : row.creative ? (
+          <CreativeCardMedia creative={row.creative} className="w-full h-full object-cover" compact />
+        ) : (
+          <div className="flex flex-col items-center gap-1">
+            <IconUpload className="size-4 text-muted-foreground/40" />
+            <span className="text-[9px] text-muted-foreground/40 leading-none">Upload</span>
+          </div>
+        )}
+        {row.creative?.media_type === "video" && uploadingRowId !== row.id && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="size-5 bg-black/50 rounded-full flex items-center justify-center">
+              <IconPlayerPlay className="size-2.5 text-white fill-white" />
+            </div>
+          </div>
+        )}
+        {row.creative && uploadingRowId !== row.id && (
+          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity pointer-events-none">
+            <span className="text-[9px] text-white font-medium">Upload</span>
+          </div>
+        )}
+      </label>
+      <button
+        type="button"
+        onClick={e => { e.stopPropagation(); onPickClick() }}
+        className="absolute bottom-1 right-1 size-5 rounded bg-background/90 border border-border flex items-center justify-center text-muted-foreground opacity-0 group-hover/creative:opacity-100 transition-opacity hover:text-foreground"
+        title="Choose from media library"
+      >
+        <IconFolder className="size-3" />
+      </button>
+      {row.creative && uploadingRowId !== row.id && (
+        <button
+          onClick={e => { e.stopPropagation(); onRemove() }}
+          className="absolute -top-1.5 -right-1.5 size-4 bg-background border border-border rounded-full flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity hover:bg-destructive hover:border-destructive hover:text-white"
+        >
+          <IconX className="size-2.5" />
+        </button>
+      )}
+    </div>
+  )
+}
+
+function LaunchStatusToggle({ row, launchAsActive, onUpdateRow }: {
+  row: TableRow
+  launchAsActive: boolean
+  onUpdateRow: (id: string, field: keyof TableRow, value: any) => void
+}) {
+  const active = row.launchAsActive ?? launchAsActive
+  return (
+    <div className="flex items-center gap-1.5">
+      <button
+        onClick={() => onUpdateRow(row.id, "launchAsActive", row.launchAsActive === false ? true : row.launchAsActive === true ? false : !launchAsActive)}
+        className={cn(
+          "relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0",
+          active ? "bg-blue-500" : "bg-muted-foreground/30"
+        )}
+        title={active ? "Active" : "Paused"}
+      >
+        <span className={cn(
+          "inline-block size-3 rounded-full bg-white shadow-sm transition-transform",
+          active ? "translate-x-[18px]" : "translate-x-0.5"
+        )} />
+      </button>
+      <span className="text-[10px] text-muted-foreground whitespace-nowrap">{active ? "Active" : "Paused"}</span>
+    </div>
+  )
+}
+
+function RowActions({ row, onDuplicateRow, onDeleteRow }: {
+  row: TableRow
+  onDuplicateRow: (id: string) => void
+  onDeleteRow: (id: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+      <button onClick={() => onDuplicateRow(row.id)} className="text-muted-foreground hover:text-foreground" title="Duplicate row">
+        <IconCopy className="size-3.5" />
+      </button>
+      <button onClick={() => onDeleteRow(row.id)} className="text-muted-foreground hover:text-destructive" title="Delete row">
+        <IconTrash className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
+type CoreRowViewProps = {
+  row: TableRow
+  index: number
+  isSelected: boolean
+  onToggleSelect: () => void
+  onUpdateRow: (id: string, field: keyof TableRow, value: any) => void
+  onDeleteRow: (id: string) => void
+  onDuplicateRow: (id: string) => void
+  onCreativeClick: () => void
+  onRowUpload: (files: FileList | null) => void
+  uploadingRowId: string | null
+  adSets: AdSet[]
+  launchAsActive: boolean
+}
+
+// ─── 1. List view (Single column) — compact scan of many ads ──────────────────
+function ListRowItem(props: CoreRowViewProps) {
+  const { row, index, isSelected, onToggleSelect, onUpdateRow, onDeleteRow, onDuplicateRow, onCreativeClick, onRowUpload, uploadingRowId, adSets, launchAsActive } = props
+  return (
+    <div className={cn(
+      "flex items-start gap-3 px-3 py-2.5 border-b group transition-colors",
+      isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "hover:bg-muted/20"
+    )}>
+      <input type="checkbox" className="rounded size-3.5 accent-blue-600 shrink-0 mt-2" checked={isSelected} onChange={onToggleSelect} />
+      <span className="text-[11px] text-muted-foreground w-4 shrink-0 mt-2">{index + 1}</span>
+      <CreativeThumb row={row} size={36} uploadingRowId={uploadingRowId} onUploadFiles={onRowUpload} onPickClick={onCreativeClick} onRemove={() => onUpdateRow(row.id, "creative", null)} idPrefix="list" />
+      <input
+        value={row.adName}
+        onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
+        placeholder="Ad name..."
+        className="w-44 shrink-0 text-xs font-medium bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1.5 py-1.5 outline-none placeholder:text-muted-foreground/40 placeholder:font-normal"
+      />
+      <input
+        value={row.primaryText}
+        onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
+        placeholder="Primary text..."
+        className="flex-1 min-w-0 text-xs text-muted-foreground bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1.5 py-1.5 outline-none placeholder:text-muted-foreground/40"
+      />
+      <div className="w-44 shrink-0"><AdSetPickerCell selectedIds={row.adSetIds} adSets={adSets} onUpdate={ids => onUpdateRow(row.id, "adSetIds", ids)} /></div>
+      <div className="w-32 shrink-0"><CtaPickerCell value={row.cta} onChange={v => onUpdateRow(row.id, "cta", v)} /></div>
+      <div className="mt-1.5 shrink-0"><LaunchStatusToggle row={row} launchAsActive={launchAsActive} onUpdateRow={onUpdateRow} /></div>
+      <div className="mt-1"><RowActions row={row} onDuplicateRow={onDuplicateRow} onDeleteRow={onDeleteRow} /></div>
+    </div>
+  )
+}
+
+// ─── 2. Record / Form view (Stacked) — every field fully visible, one ad at a time ─
+function RecordCard(props: CoreRowViewProps) {
+  const { row, index, isSelected, onToggleSelect, onUpdateRow, onDeleteRow, onDuplicateRow, onCreativeClick, onRowUpload, uploadingRowId, adSets, launchAsActive } = props
+  return (
+    <div className={cn("p-4 group transition-colors", isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "")}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={isSelected} onChange={onToggleSelect} />
+          <span className="text-[10px] bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">SINGLE</span>
+          <span className="text-[11px] text-muted-foreground">#{index + 1} {row.adName || <span className="opacity-50">Untitled ad</span>}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <LaunchStatusToggle row={row} launchAsActive={launchAsActive} onUpdateRow={onUpdateRow} />
+          <RowActions row={row} onDuplicateRow={onDuplicateRow} onDeleteRow={onDeleteRow} />
+        </div>
+      </div>
+      <div className="flex gap-4">
+        <CreativeThumb row={row} size={92} uploadingRowId={uploadingRowId} onUploadFiles={onRowUpload} onPickClick={onCreativeClick} onRemove={() => onUpdateRow(row.id, "creative", null)} idPrefix="record" />
+        <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-3 min-w-0">
+          <div className="col-span-2">
+            <div className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Primary Text</div>
+            <textarea
+              value={row.primaryText}
+              onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
+              placeholder="Primary text..."
+              rows={3}
+              className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
+            />
+          </div>
+          <div>
+            <div className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Ad Name</div>
+            <input
+              value={row.adName}
+              onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
+              placeholder="Ad name..."
+              className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+            />
+          </div>
+          <div>
+            <div className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Headline</div>
+            <input
+              value={row.headline}
+              onChange={e => onUpdateRow(row.id, "headline", e.target.value)}
+              placeholder="Headline..."
+              className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+            />
+          </div>
+          <div>
+            <div className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Ad Sets <span className="text-amber-500 normal-case">required</span></div>
+            <AdSetPickerCell selectedIds={row.adSetIds} adSets={adSets} onUpdate={ids => onUpdateRow(row.id, "adSetIds", ids)} />
+          </div>
+          <div>
+            <div className="text-[9.5px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">CTA</div>
+            <CtaPickerCell value={row.cta} onChange={v => onUpdateRow(row.id, "cta", v)} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── 3. Gallery view (Grid) — creative-forward card grid ──────────────────────
+function GridCard(props: CoreRowViewProps) {
+  const { row, isSelected, onToggleSelect, onUpdateRow, onDeleteRow, onDuplicateRow, onCreativeClick, onRowUpload, uploadingRowId, adSets, launchAsActive } = props
+  return (
+    <div className={cn(
+      "rounded-lg border overflow-hidden flex flex-col group transition-colors",
+      isSelected ? "border-primary/40 bg-blue-50/40 dark:bg-blue-950/20" : "border-border bg-muted/10"
+    )}>
+      <div className="relative">
+        <CreativeThumb row={row} size={220} uploadingRowId={uploadingRowId} onUploadFiles={onRowUpload} onPickClick={onCreativeClick} onRemove={() => onUpdateRow(row.id, "creative", null)} idPrefix="grid" />
+        <input type="checkbox" className="absolute top-2 left-2 rounded size-3.5 accent-blue-600" checked={isSelected} onChange={onToggleSelect} />
+        <span className="absolute top-2 right-2 text-[10px] bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">SINGLE</span>
+      </div>
+      <div className="p-2.5 flex flex-col gap-1.5 flex-1">
+        <input
+          value={row.adName}
+          onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
+          placeholder="Ad name..."
+          className="text-xs font-semibold bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1 py-1 outline-none placeholder:text-muted-foreground/40 placeholder:font-normal"
+        />
+        <textarea
+          value={row.primaryText}
+          onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
+          placeholder="Primary text..."
+          rows={2}
+          className="text-[11px] text-muted-foreground bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1 py-1 outline-none resize-none placeholder:text-muted-foreground/40 leading-snug"
+        />
+        <input
+          value={row.headline}
+          onChange={e => onUpdateRow(row.id, "headline", e.target.value)}
+          placeholder="Headline..."
+          className="text-[11px] italic text-muted-foreground bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1 py-1 outline-none placeholder:text-muted-foreground/40"
+        />
+        <div className="flex items-center gap-1.5 mt-1">
+          <div className="flex-1 min-w-0"><AdSetPickerCell selectedIds={row.adSetIds} adSets={adSets} onUpdate={ids => onUpdateRow(row.id, "adSetIds", ids)} /></div>
+        </div>
+        <div className="flex items-center justify-between mt-auto pt-1.5">
+          <LaunchStatusToggle row={row} launchAsActive={launchAsActive} onUpdateRow={onUpdateRow} />
+          <RowActions row={row} onDuplicateRow={onDuplicateRow} onDeleteRow={onDeleteRow} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TableMode({
   rows, adSets, onAddRow, onUpdateRow, onDeleteRow, onDuplicateRow,
   selectedPage, igAccountCache, selectedIgPageId, searchQuery, launchAsActive, pages, selectedAccountId,
-  onOpenCreativePicker, onUploadRowFiles,
+  onOpenCreativePicker, onUploadRowFiles, viewMode,
 }: {
   rows: TableRow[]
   adSets: AdSet[]
@@ -12264,6 +12535,7 @@ function TableMode({
   selectedAccountId: string
   onOpenCreativePicker: (rowId: string) => void
   onUploadRowFiles: (rowId: string, files: FileList | File[]) => Promise<void>
+  viewMode: "single" | "stacked" | "grid" | "side-by-side"
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [expandedVar, setExpandedVar] = useState<Record<string, { primary: boolean; headline: boolean; description: boolean }>>({})
@@ -12397,6 +12669,7 @@ function TableMode({
       </div>
     )}
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      {viewMode === "side-by-side" ? (
       <div
         ref={tableScrollRef}
         className="flex-1 overflow-auto select-none"
@@ -13035,6 +13308,87 @@ function TableMode({
           <IconPlus className="size-3.5" />Add New Row
         </button>
       </div>
+      ) : viewMode === "single" ? (
+        <div className="flex-1 overflow-y-auto">
+          {filteredRows.map((row, i) => (
+            <ListRowItem
+              key={row.id}
+              row={row}
+              index={i}
+              isSelected={selectedIds.has(row.id)}
+              onToggleSelect={() => toggleRow(row.id)}
+              onUpdateRow={onUpdateRow}
+              onDeleteRow={onDeleteRow}
+              onDuplicateRow={onDuplicateRow}
+              onCreativeClick={() => handleCreativeCellClick(row.id)}
+              onRowUpload={files => handleRowUpload(row.id, files)}
+              uploadingRowId={uploadingRowId}
+              adSets={adSets}
+              launchAsActive={launchAsActive}
+            />
+          ))}
+          <button
+            onClick={onAddRow}
+            className="flex items-center gap-1.5 px-4 py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 w-full transition-colors border-b"
+          >
+            <IconPlus className="size-3.5" />Add New Row
+          </button>
+        </div>
+      ) : viewMode === "stacked" ? (
+        <div className="flex-1 overflow-y-auto divide-y divide-border">
+          {filteredRows.map((row, i) => (
+            <RecordCard
+              key={row.id}
+              row={row}
+              index={i}
+              isSelected={selectedIds.has(row.id)}
+              onToggleSelect={() => toggleRow(row.id)}
+              onUpdateRow={onUpdateRow}
+              onDeleteRow={onDeleteRow}
+              onDuplicateRow={onDuplicateRow}
+              onCreativeClick={() => handleCreativeCellClick(row.id)}
+              onRowUpload={files => handleRowUpload(row.id, files)}
+              uploadingRowId={uploadingRowId}
+              adSets={adSets}
+              launchAsActive={launchAsActive}
+            />
+          ))}
+          <button
+            onClick={onAddRow}
+            className="flex items-center gap-1.5 px-4 py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 w-full transition-colors border-b"
+          >
+            <IconPlus className="size-3.5" />Add New Row
+          </button>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid gap-3 p-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))" }}>
+            {filteredRows.map((row, i) => (
+              <GridCard
+                key={row.id}
+                row={row}
+                index={i}
+                isSelected={selectedIds.has(row.id)}
+                onToggleSelect={() => toggleRow(row.id)}
+                onUpdateRow={onUpdateRow}
+                onDeleteRow={onDeleteRow}
+                onDuplicateRow={onDuplicateRow}
+                onCreativeClick={() => handleCreativeCellClick(row.id)}
+                onRowUpload={files => handleRowUpload(row.id, files)}
+                uploadingRowId={uploadingRowId}
+                adSets={adSets}
+                launchAsActive={launchAsActive}
+              />
+            ))}
+          </div>
+          <button
+            onClick={onAddRow}
+            className="flex items-center gap-1.5 px-4 py-3 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/30 w-full transition-colors border-b"
+          >
+            <IconPlus className="size-3.5" />Add New Row
+          </button>
+        </div>
+      )}
 
       {/* Bulk selection bar */}
       {selectedCount > 0 && (
@@ -13322,6 +13676,8 @@ export default function LaunchPage() {
     { id: "1", creative: null, adName: "", primaryText: "", headline: "", description: "", adSetIds: [] }
   ])
   const [allAdSets, setAllAdSets] = useState<AdSet[]>([])
+  const [tableViewMode, setTableViewMode] = useState<"single" | "stacked" | "grid" | "side-by-side">("side-by-side")
+  const [toolbarNotice, setToolbarNotice] = useState("")
 
   const [sheetsImportOpen, setSheetsImportOpen] = useState(false)
   const [mediaModalOpen, setMediaModalOpen] = useState(false)
@@ -14973,9 +15329,9 @@ export default function LaunchPage() {
         {/* ── Main area ─────────────────────────────────────────── */}
         {mode === "gallery" ? (
           <div className="flex flex-col">
-            <div className="flex" style={{ minHeight: 'calc(100vh - 80px)' }}>
-            {/* Left panel */}
-            <div className="w-[540px] shrink-0 flex flex-col gap-3 p-4 overflow-y-auto border-r" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+            <div className="flex flex-col lg:grid lg:grid-cols-[4fr_6fr]" style={{ minHeight: 'calc(100vh - 80px)' }}>
+            {/* Left panel — Ad Sets + Ad Setup */}
+            <div className="flex flex-col gap-3 p-4 overflow-y-auto border-b lg:border-b-0 lg:border-r w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
               <AdSetsPanel
                 adAccountId={selectedAccountId}
                 selectedAdSets={selectedAdSets}
@@ -15002,8 +15358,8 @@ export default function LaunchPage() {
               />
             </div>
 
-            {/* Right panel */}
-            <div className="flex-1 flex flex-col min-w-0 border-l overflow-hidden" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+            {/* Right panel — Ads Gallery */}
+            <div className="flex-1 flex flex-col min-w-0 lg:border-l overflow-hidden" style={{ maxHeight: 'calc(100vh - 80px)' }}>
               <div className={cn("flex items-center gap-2 px-4 py-2 border-b shrink-0", validationErrors.creatives && "border-b-destructive")}>
                 <span className="text-sm font-semibold">Ads {selectedCreatives.length > 0 && <span className="text-muted-foreground font-normal">({selectedCreatives.length})</span>}</span>
                 {selectedCreatives.length > 0 && (
@@ -15232,6 +15588,7 @@ export default function LaunchPage() {
 
               {/* Configure columns */}
               <button
+                onClick={() => { setToolbarNotice("Configure columns is not available yet."); setTimeout(() => setToolbarNotice(""), 3000) }}
                 className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
                 title="Configure columns"
               >
@@ -15241,21 +15598,57 @@ export default function LaunchPage() {
               {/* Right section */}
               <div className="ml-auto flex items-center gap-1">
                 {/* AI Group */}
-                <button className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors" title="AI Group">
+                <button
+                  onClick={() => { setToolbarNotice("AI Group is coming soon."); setTimeout(() => setToolbarNotice(""), 3000) }}
+                  className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                  title="AI Group"
+                >
                   <IconWorldPin className="size-3.5" />AI Group
                 </button>
 
                 {/* Column view buttons */}
-                <button className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Single column view">
+                <button
+                  onClick={() => setTableViewMode("single")}
+                  className={cn("p-1.5 rounded transition-colors",
+                    tableViewMode === "single"
+                      ? "bg-primary/10 border border-primary/20 text-primary"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  )}
+                  title="Single column view"
+                >
                   <IconLayout className="size-3.5" />
                 </button>
-                <button className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Stacked view">
+                <button
+                  onClick={() => setTableViewMode("stacked")}
+                  className={cn("p-1.5 rounded transition-colors",
+                    tableViewMode === "stacked"
+                      ? "bg-primary/10 border border-primary/20 text-primary"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  )}
+                  title="Stacked view"
+                >
                   <IconStack2 className="size-3.5" />
                 </button>
-                <button className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Grid view">
+                <button
+                  onClick={() => setTableViewMode("grid")}
+                  className={cn("p-1.5 rounded transition-colors",
+                    tableViewMode === "grid"
+                      ? "bg-primary/10 border border-primary/20 text-primary"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  )}
+                  title="Grid view"
+                >
                   <IconLayoutGrid className="size-3.5" />
                 </button>
-                <button className="p-1.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground" title="Side-by-side view">
+                <button
+                  onClick={() => setTableViewMode("side-by-side")}
+                  className={cn("p-1.5 rounded transition-colors",
+                    tableViewMode === "side-by-side"
+                      ? "bg-primary/10 border border-primary/20 text-primary"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                  )}
+                  title="Side-by-side view"
+                >
                   <IconSelector className="size-3.5" />
                 </button>
 
@@ -15285,18 +15678,35 @@ export default function LaunchPage() {
                     <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-52 overflow-hidden py-1">
                       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Apply to all rows</p>
                       {[
-                        { label: "Primary Text from Gallery", action: () => { const pt = primaryTexts.find(t => t.trim()) || ""; if (pt) setTableRows(prev => prev.map(r => ({ ...r, primaryText: pt }))); setTableBulkOpen(false) } },
-                        { label: "Headline from Gallery", action: () => { const hl = headlines.find(h => h.trim()) || ""; if (hl) setTableRows(prev => prev.map(r => ({ ...r, headline: hl }))); setTableBulkOpen(false) } },
-                        { label: "Description from Gallery", action: () => { if (description) setTableRows(prev => prev.map(r => ({ ...r, description }))); setTableBulkOpen(false) } },
-                        { label: "Ad Sets from Gallery", action: () => { const ids = selectedAdSets.map((a: AdSet) => a.id); if (ids.length) setTableRows(prev => prev.map(r => ({ ...r, adSetIds: ids }))); setTableBulkOpen(false) } },
-                        { label: "CTA from Gallery", action: () => { if (cta) setTableRows(prev => prev.map(r => ({ ...r, cta }))); setTableBulkOpen(false) } },
+                        { label: "Primary Text from Gallery", emptyMsg: "Primary Text is empty in Gallery Mode — nothing to apply.", apply: () => { const pt = primaryTexts.find(t => t.trim()) || ""; if (!pt) return false; setTableRows(prev => prev.map(r => ({ ...r, primaryText: pt }))); return true } },
+                        { label: "Headline from Gallery", emptyMsg: "Headline is empty in Gallery Mode — nothing to apply.", apply: () => { const hl = headlines.find(h => h.trim()) || ""; if (!hl) return false; setTableRows(prev => prev.map(r => ({ ...r, headline: hl }))); return true } },
+                        { label: "Description from Gallery", emptyMsg: "Description is empty in Gallery Mode — nothing to apply.", apply: () => { if (!description) return false; setTableRows(prev => prev.map(r => ({ ...r, description }))); return true } },
+                        { label: "Ad Sets from Gallery", emptyMsg: "No Ad Sets selected in Gallery Mode — nothing to apply.", apply: () => { const ids = selectedAdSets.map((a: AdSet) => a.id); if (!ids.length) return false; setTableRows(prev => prev.map(r => ({ ...r, adSetIds: ids }))); return true } },
+                        { label: "CTA from Gallery", emptyMsg: "No CTA set in Gallery Mode — nothing to apply.", apply: () => { if (!cta) return false; setTableRows(prev => prev.map(r => ({ ...r, cta }))); return true } },
                       ].map(item => (
-                        <button key={item.label} onClick={item.action} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors">
+                        <button
+                          key={item.label}
+                          onClick={() => {
+                            const applied = item.apply()
+                            setTableBulkOpen(false)
+                            setToolbarNotice(applied ? `Applied to all rows: ${item.label.replace(" from Gallery", "")}.` : item.emptyMsg)
+                            setTimeout(() => setToolbarNotice(""), 3000)
+                          }}
+                          className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors"
+                        >
                           {item.label}
                         </button>
                       ))}
                       <div className="border-t my-1" />
-                      <button onClick={() => { setTableRows(prev => prev.map(r => ({ ...r, adSetIds: [] }))); setTableBulkOpen(false) }} className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors text-destructive">
+                      <button
+                        onClick={() => {
+                          setTableRows(prev => prev.map(r => ({ ...r, adSetIds: [] })))
+                          setTableBulkOpen(false)
+                          setToolbarNotice("Cleared Ad Sets on all rows.")
+                          setTimeout(() => setToolbarNotice(""), 3000)
+                        }}
+                        className="w-full px-3 py-2 text-xs text-left hover:bg-accent transition-colors text-destructive"
+                      >
                         Clear all Ad Sets
                       </button>
                     </div>
@@ -15336,6 +15746,12 @@ export default function LaunchPage() {
               </div>
             </div>
 
+            {toolbarNotice && (
+              <div className="absolute right-4 top-16 z-50 bg-popover border rounded-lg shadow-lg px-3 py-2 text-xs text-foreground animate-in fade-in slide-in-from-top-1">
+                {toolbarNotice}
+              </div>
+            )}
+
             <div className="flex flex-1 min-h-0 overflow-hidden">
               <TableMode
                 rows={tableRows}
@@ -15353,6 +15769,7 @@ export default function LaunchPage() {
                 onUploadRowFiles={uploadTableRowFiles}
                 pages={pages}
                 selectedAccountId={selectedAccountId || ""}
+                viewMode={tableViewMode}
               />
             </div>
 

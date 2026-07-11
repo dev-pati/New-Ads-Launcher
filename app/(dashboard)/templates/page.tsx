@@ -55,6 +55,7 @@ const emptyForm = () => ({
   description: "",
   link: "",
   cta: "SHOP_NOW",
+  tags: "" as string,
 })
 
 // ─── Template Card ──────────────────────────────────────────────────────────────
@@ -119,6 +120,13 @@ function TemplateCard({
             {t.link && <span className="text-slate-400 truncate">{t.link}</span>}
           </div>
         )}
+        {t.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {t.tags.map(tag => (
+              <span key={tag} className="px-2 py-0.5 bg-violet-50 text-violet-600 rounded-full text-[11px] font-medium">{tag}</span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -147,6 +155,7 @@ function TemplateFormDialog({
         description: initial.description || "",
         link: initial.link || "",
         cta: initial.cta || "SHOP_NOW",
+        tags: initial.tags?.join(", ") || "",
       } : { ...emptyForm(), ...(prefill || {}) })
     }
   }, [open, initial, prefill])
@@ -193,6 +202,10 @@ function TemplateFormDialog({
               <Input placeholder="https://..." value={form.link} onChange={e => set("link", e.target.value)} />
             </div>
           </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-slate-600 font-medium">Tags (Folders) <span className="text-[10px] text-slate-400 font-normal">(comma-separated)</span></Label>
+            <Input placeholder="e.g. Summer, Promo, Brand" value={form.tags} onChange={e => set("tags", e.target.value)} />
+          </div>
         </div>
 
         <DialogFooter className="px-5 py-3 border-t shrink-0">
@@ -231,6 +244,7 @@ export default function TemplatesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [accountDropOpen, setAccountDropOpen] = useState(false)
+  const [activeFolder, setActiveFolder] = useState<string | null>(null) // null = All, "__uncategorized__" = no tags, else tag name
 
   const openCreateFromCopy = useCallback((copy: { headline: string; primaryText: string }) => {
     setPrefillData({ headline: copy.headline, primary_text: copy.primaryText, name: "" })
@@ -262,12 +276,17 @@ export default function TemplatesPage() {
         t.headline?.toLowerCase().includes(q)
       )
     }
+    if (activeFolder === "__uncategorized__") {
+      list = list.filter(t => !t.tags || t.tags.length === 0)
+    } else if (activeFolder) {
+      list = list.filter(t => t.tags?.includes(activeFolder))
+    }
     if (sort === "newest") list.sort((a, b) => b.created_at.localeCompare(a.created_at))
     else if (sort === "oldest") list.sort((a, b) => a.created_at.localeCompare(b.created_at))
     else if (sort === "name-az") list.sort((a, b) => a.name.localeCompare(b.name))
     else if (sort === "name-za") list.sort((a, b) => b.name.localeCompare(a.name))
     return list
-  }, [templates, search, sort])
+  }, [templates, search, sort, activeFolder])
 
   const openCreate = () => { setEditTarget(null); setFormOpen(true) }
   const openEdit = (t: AdCopyTemplate) => { setEditTarget(t); setFormOpen(true) }
@@ -275,11 +294,13 @@ export default function TemplatesPage() {
   const handleSave = async (form: ReturnType<typeof emptyForm>) => {
     setSaving(true)
     try {
+      const tags = form.tags.split(",").map(s => s.trim()).filter(Boolean)
+      const payload = { ...form, tags }
       if (editTarget) {
         const r = await fetch(`/api/templates/${editTarget.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...form }),
+          body: JSON.stringify(payload),
         })
         const d = await r.json()
         if (r.ok) setTemplates(prev => prev.map(t => t.id === editTarget.id ? d.template : t))
@@ -287,7 +308,7 @@ export default function TemplatesPage() {
         const r = await fetch("/api/templates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ad_account_id: selectedAccountId || null, ...form }),
+          body: JSON.stringify({ ad_account_id: selectedAccountId || null, ...payload }),
         })
         const d = await r.json()
         if (r.ok) setTemplates(prev => [d.template, ...prev])
@@ -365,38 +386,82 @@ export default function TemplatesPage() {
     { value: "ai-naming", label: "AI Naming", icon: <IconSparkles className="size-3.5" /> },
   ]
 
+  const folderTags = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const t of templates) {
+      for (const tag of t.tags || []) {
+        counts.set(tag, (counts.get(tag) || 0) + 1)
+      }
+    }
+    return Array.from(counts.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [templates])
+
+  const uncategorizedCount = useMemo(
+    () => templates.filter(t => !t.tags || t.tags.length === 0).length,
+    [templates]
+  )
+
   return (
     <div className="flex h-full overflow-hidden bg-background">
       {/* ── Left Sidebar ── */}
-      <div className="w-[260px] border-r flex flex-col shrink-0">
+      <div className="w-[240px] border-r flex flex-col shrink-0">
         <div className="px-5 h-[52px] flex items-center justify-between border-b">
           <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">FOLDERS</span>
         </div>
 
         <div className="flex-1 overflow-auto py-3 px-3 space-y-0.5">
-          <button className="w-full flex items-center gap-2.5 h-9 px-3 rounded-lg bg-primary/10 text-primary text-sm font-semibold transition-colors">
+          <button
+            onClick={() => setActiveFolder(null)}
+            className={cn(
+              "w-full flex items-center gap-2.5 h-9 px-3 rounded-lg text-sm font-semibold transition-colors",
+              activeFolder === null ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50"
+            )}
+          >
             <IconTemplate className="size-4 shrink-0" />
             <span className="flex-1 text-left">All Templates</span>
-            <span className="text-[11px] bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 font-bold leading-none">
+            <span className={cn(
+              "text-[11px] rounded-full px-1.5 py-0.5 font-bold leading-none",
+              activeFolder === null ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+            )}>
               {templates.length}
             </span>
           </button>
-        </div>
 
-        <div className="px-3 py-3 border-t space-y-0.5">
-          {templates.length === 0 ? (
+          <button
+            onClick={() => setActiveFolder("__uncategorized__")}
+            className={cn(
+              "w-full flex items-center gap-2.5 h-9 px-3 rounded-lg text-sm hover:bg-muted/50 transition-colors",
+              activeFolder === "__uncategorized__" ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
+            )}
+          >
+            <IconFolder className="size-4 shrink-0" />
+            <span className="flex-1 text-left">Uncategorized</span>
+            <span className="text-[11px] font-bold opacity-40">{uncategorizedCount}</span>
+          </button>
+
+          {folderTags.length === 0 ? (
             <div className="py-6 px-2 text-center">
               <IconTag className="size-8 mx-auto mb-2 text-muted-foreground/30" />
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                No tags yet. Create tags to organize templates into folders.
+                No tags yet. Add tags when editing a template to create folders.
               </p>
             </div>
-          ) : null}
-          <button className="w-full flex items-center gap-2.5 h-9 px-3 rounded-lg text-muted-foreground text-sm hover:bg-muted/50 transition-colors">
-            <IconFolder className="size-4 shrink-0" />
-            <span className="flex-1 text-left">Uncategorized</span>
-            <span className="text-[11px] font-bold opacity-40">{templates.length}</span>
-          </button>
+          ) : (
+            folderTags.map(([tag, count]) => (
+              <button
+                key={tag}
+                onClick={() => setActiveFolder(tag)}
+                className={cn(
+                  "w-full flex items-center gap-2.5 h-9 px-3 rounded-lg text-sm hover:bg-muted/50 transition-colors",
+                  activeFolder === tag ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
+                )}
+              >
+                <IconTag className="size-4 shrink-0" />
+                <span className="flex-1 text-left truncate">{tag}</span>
+                <span className="text-[11px] font-bold opacity-40">{count}</span>
+              </button>
+            ))
+          )}
         </div>
       </div>
 

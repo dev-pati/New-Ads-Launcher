@@ -30,6 +30,13 @@ import {
   IconLogout,
 } from "@tabler/icons-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 type SubItem = { label: string; href: string }
 type NavSection = {
@@ -40,6 +47,14 @@ type NavSection = {
 }
 
 const navSections: NavSection[] = [
+  {
+    id: "search",
+    label: "Search",
+    icon: IconSearch,
+    subItems: [
+      { label: "Search", href: "/search" },
+    ],
+  },
   {
     id: "launch",
     label: "Launch",
@@ -110,13 +125,6 @@ const navSections: NavSection[] = [
   },
 ]
 
-const bottomNav = [
-  { label: "Project", href: "/projects", icon: IconBuilding },
-  { label: "Search", href: "/search", icon: IconSearch },
-  { label: "Rewards", href: "/rewards", icon: IconGift },
-  { label: "Settings", href: "/settings", icon: IconSettings },
-]
-
 function getActiveSection(pathname: string): string {
   if (pathname.startsWith("/launch") || pathname.startsWith("/ads-manager") || pathname.startsWith("/templates")) return "launch"
   if (pathname.startsWith("/assets")) return "assets"
@@ -128,8 +136,6 @@ function getActiveSection(pathname: string): string {
   if (pathname.startsWith("/inspo")) return "inspo"
   if (pathname.startsWith("/project")) return "projects"
   if (pathname.startsWith("/search")) return "search"
-  if (pathname.startsWith("/rewards")) return "rewards"
-  if (pathname.startsWith("/settings")) return "settings"
   return "launch"
 }
 
@@ -331,82 +337,51 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
         })}
       </nav>
 
-      {/* Bottom nav */}
-      <div className="border-t border-sidebar-border py-1.5">
-        {bottomNav.map((item) => {
-          const Icon = item.icon
-          const isActive = pathname.startsWith(item.href)
-          if (collapsed) {
-            return (
-              <Tooltip key={item.href} delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <Link
-                    href={item.href}
-                    className={cn(
-                      "flex items-center justify-center h-9 mx-2 rounded-lg transition-colors",
-                      isActive
-                        ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                        : "text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                    )}
-                  >
-                    <Icon className="size-4" />
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent side="right">{item.label}</TooltipContent>
-              </Tooltip>
-            )
-          }
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-2.5 h-9 px-3 mx-2 rounded-lg text-sm transition-colors",
-                isActive
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
-                  : "text-sidebar-foreground/55 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              )}
-            >
-              <Icon className="size-4" />
-              <span>{item.label}</span>
-            </Link>
-          )
-        })}
-      </div>
-
       {/* User footer */}
       <div className="border-t border-sidebar-border p-2">
-        <div className={cn("flex items-center gap-2", collapsed && "justify-center")}>
-          <div className="size-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-semibold shrink-0 overflow-hidden">
-            {userAvatarUrl ? (
-              <img src={userAvatarUrl} alt="" className="size-7 object-cover" />
-            ) : (
-              userInitials
-            )}
-          </div>
-          {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0">
-                {userName && <p className="text-xs font-medium text-sidebar-foreground truncate">{userName}</p>}
-                {userEmail && <p className="text-[10px] text-sidebar-foreground/45 truncate">{userEmail}</p>}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className={cn(
+                "flex items-center gap-2 w-full rounded-lg p-1 hover:bg-sidebar-accent transition-colors",
+                collapsed && "justify-center"
+              )}
+            >
+              <div className="size-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-semibold shrink-0 overflow-hidden">
+                {userAvatarUrl ? (
+                  <img src={userAvatarUrl} alt="" className="size-7 object-cover" />
+                ) : (
+                  userInitials
+                )}
               </div>
-              <div className="flex items-center gap-0.5 shrink-0">
-                <button
-                  onClick={toggleTheme}
-                  className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
-                >
-                  {resolvedTheme === "dark" ? <IconSun className="size-3.5" /> : <IconMoon className="size-3.5" />}
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
-                >
-                  <IconLogout className="size-3.5" />
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+              {!collapsed && (
+                <div className="flex-1 min-w-0 text-left">
+                  {userName && <p className="text-xs font-medium text-sidebar-foreground truncate">{userName}</p>}
+                  {userEmail && <p className="text-[10px] text-sidebar-foreground/45 truncate">{userEmail}</p>}
+                </div>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="top" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link href="/projects"><IconBuilding className="size-4" /> Lobby</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/rewards"><IconGift className="size-4" /> Rewards</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/settings"><IconSettings className="size-4" /> Settings</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={toggleTheme}>
+              {resolvedTheme === "dark" ? <IconSun className="size-4" /> : <IconMoon className="size-4" />}
+              {resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout}>
+              <IconLogout className="size-4" /> Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   )
