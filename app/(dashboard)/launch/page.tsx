@@ -4514,16 +4514,6 @@ function formatCurrency(n: number): string {
 // Upload queue constants — shared by handleUpload inside LoadMediaModal
 const UPLOAD_CONCURRENCY = 3   // max parallel image uploads
 
-// Adaptive inter-video delay.
-// With URL-based upload (1 Meta call/video), rate limit risk is much lower,
-// but we still pace large batches to stay within the rolling window.
-function videoUploadDelay(quotaPct: number): number {
-  if (quotaPct < 50) return 3_000    //  3s — breathing room
-  if (quotaPct < 65) return 15_000   // 15s — warming up
-  if (quotaPct < 80) return 45_000   // 45s — getting hot
-  return 120_000                      //  2m — near limit
-}
-
 function LoadMediaModal({
   open, onClose, adAccountId, adAccounts, alreadySelected, onConfirm, refreshSignal,
 }: {
@@ -4655,7 +4645,7 @@ function LoadMediaModal({
           if (d.email) setGdriveEmail(d.email)
         }
       })
-      .catch(() => {})
+      .catch(e => console.warn("[gdrive] token preload failed:", e))
   }, [open, mediaTab])
 
   // Preload Google scripts when modal opens so they're ready before user clicks
@@ -4864,8 +4854,16 @@ function LoadMediaModal({
         client_id: clientId,
         scope: "https://www.googleapis.com/auth/drive.readonly",
         ux_mode: "popup",
+        // Force the consent screen every time so Google always returns a refresh_token.
+        // Without this, returning users (who already granted access) get no refresh_token
+        // → /api/google/connect rejects with "No refresh_token returned".
+        prompt: "consent",
         callback: async (resp: any) => {
-          if (resp.error) { reject(new Error(resp.error)); return }
+          if (resp.error) {
+            console.error("[gdrive] code client error:", resp)
+            reject(new Error(resp.error_description || resp.error))
+            return
+          }
           try {
             const connectRes = await fetch("/api/google/connect", {
               method: "POST",
@@ -4873,7 +4871,11 @@ function LoadMediaModal({
               body: JSON.stringify({ code: resp.code }),
             })
             const connectData = await connectRes.json()
-            if (!connectRes.ok) { reject(new Error(connectData.error || "Connect failed")); return }
+            if (!connectRes.ok) {
+              console.error("[gdrive] connect failed:", connectRes.status, connectData)
+              reject(new Error(connectData.error || `Connect failed (${connectRes.status})`))
+              return
+            }
             // Fetch fresh token from server
             const tokenRes = await fetch("/api/google/token")
             const tokenData = await tokenRes.json()
@@ -4997,6 +4999,7 @@ function LoadMediaModal({
       .build()
     picker.setVisible(true)
     } catch (err: any) {
+      console.error("[gdrive] openGoogleDrivePicker failed:", err)
       document.body.style.pointerEvents = ""
       setDriveFilesLoading(false)
       const msg = err.message || "Google Drive connection failed"
@@ -5290,26 +5293,137 @@ function LoadMediaModal({
     setUploadPauseMsg(null)
 
     let done = 0
-    let rateLimitPct = 0
     let newCount = 0
     let dupCount = 0
+    let errCount = 0
+    let lastError = ""
 
-    // All files go through upload-binary: images + videos.
-    // Videos are now URL-based (Supabase → Meta), so only 1 Meta call per video.
-    // Server returns 201 for new uploads, 200 for duplicates (existing creative returned as-is).
+    // Path B upload (same mechanism as the Gallery panel's uploadOneFile):
+    //   Video → direct browser→Meta chunked upload (bypasses the app server body limit)
+    //   Image → signed Supabase URL + proxy PUT + finalize
+    // The old /api/creatives/upload-binary path funneled the whole file through the
+    // serverless function, so anything above the platform body cap (~4.5MB on Vercel)
+    // was rejected with 413 before the code ran.
+    const MAX_SIZE = 500 * 1024 * 1024
+
     const uploadFile = async (file: File): Promise<void> => {
+      if (file.size > MAX_SIZE) {
+        errCount++
+        lastError = `${file.name}: quá lớn (${(file.size / 1024 / 1024).toFixed(0)}MB, tối đa 500MB)`
+        return
+      }
+      const isVideo = file.type.startsWith("video/")
       try {
-        const res = await fetch(
-          `/api/creatives/upload-binary?filename=${encodeURIComponent(file.name)}&type=${encodeURIComponent(file.type)}&size=${file.size}&ad_account_id=${encodeURIComponent(adAccountId)}`,
-          { method: "POST", body: file }
-        )
-        if (res.ok) {
-          const d = await res.json()
-          if (typeof d.rateLimitPct === "number") rateLimitPct = Math.max(rateLimitPct, d.rateLimitPct)
-          if (res.status === 201) newCount++
-          else dupCount++
+        if (isVideo) {
+          // Dedup: same file already uploaded to Meta → skip all Meta calls
+          try {
+            const dupRes = await fetch(`/api/creatives?file_name=${encodeURIComponent(file.name)}&file_size=${file.size}`)
+            if (dupRes.ok) {
+              const { creatives = [] } = await dupRes.json()
+              if (creatives[0]?.fb_video_id) { dupCount++; return }
+            }
+          } catch {}
+
+          // Browser upload credentials — WRITE via resolved for this ad account
+          const credRes = await fetch(`/api/facebook/upload-credentials?adAccountId=${encodeURIComponent(adAccountId)}`)
+          if (!credRes.ok) {
+            const e = await credRes.json().catch(() => ({}))
+            throw new Error(e.error || "Failed to get upload credentials")
+          }
+          const { accessToken, adAccountId: credAccountId } = await credRes.json()
+          const cleanId = String(credAccountId).replace(/^act_/, "")
+          const FB_VIDEOS = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
+          const AUTH = `Bearer ${accessToken}`
+          const DIRECT_LIMIT = 100 * 1024 * 1024 // ≤100MB: direct POST
+          const CHUNK_SIZE = 50 * 1024 * 1024    // >100MB: 50MB chunks
+
+          let fbVideoId: string
+          if (file.size <= DIRECT_LIMIT) {
+            const form = new FormData()
+            form.append("source", file)
+            form.append("title", file.name)
+            const res = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH }, body: form })
+            const d = await res.json()
+            if (!res.ok || !d.id) throw new Error(d.error?.message || `Upload failed (${res.status})`)
+            fbVideoId = d.id
+          } else {
+            // Chunked: START → TRANSFER × N → FINISH
+            const startForm = new FormData()
+            startForm.append("upload_phase", "start")
+            startForm.append("file_size", String(file.size))
+            const startRes = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH }, body: startForm })
+            const startData = await startRes.json()
+            if (startData.error) throw new Error(startData.error.message)
+            const { upload_session_id, video_id } = startData
+            fbVideoId = video_id
+            let startOffset = parseInt(startData.start_offset || "0")
+            let endOffset = parseInt(startData.end_offset || String(Math.min(CHUNK_SIZE, file.size)))
+            while (startOffset < file.size) {
+              const chunk = file.slice(startOffset, endOffset)
+              const chunkForm = new FormData()
+              chunkForm.append("upload_phase", "transfer")
+              chunkForm.append("upload_session_id", upload_session_id)
+              chunkForm.append("start_offset", String(startOffset))
+              chunkForm.append("video_file_chunk", chunk, file.name)
+              const cRes = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH }, body: chunkForm })
+              const cData = await cRes.json()
+              if (!cRes.ok || cData.error) throw new Error(cData.error?.message || "Chunk upload failed")
+              startOffset = parseInt(cData.start_offset || String(endOffset))
+              endOffset = parseInt(cData.end_offset || String(Math.min(endOffset + CHUNK_SIZE, file.size)))
+            }
+            const finishForm = new FormData()
+            finishForm.append("upload_phase", "finish")
+            finishForm.append("upload_session_id", upload_session_id)
+            finishForm.append("title", file.name)
+            const finRes = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH }, body: finishForm })
+            const finData = await finRes.json()
+            if (finData.error) throw new Error(finData.error.message)
+          }
+
+          // Save to DB via JSON (tiny body — no size limit)
+          const dbRes = await fetch("/api/creatives", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ad_account_id: adAccountId,
+              file_name: file.name,
+              file_size: file.size,
+              media_type: "video",
+              fb_video_id: fbVideoId,
+              headline: "", primary_text: "", description: "", cta: "LEARN_MORE", link_url: "",
+            }),
+          })
+          const dbData = await dbRes.json()
+          if (!dbRes.ok || !dbData.creative) throw new Error(dbData.error || "Failed to save creative")
+          newCount++
+        } else {
+          // IMAGE: signed Supabase URL → proxy PUT (small files) → finalize
+          const signRes = await fetch(`/api/creatives/upload-sign?filename=${encodeURIComponent(file.name)}`)
+          if (!signRes.ok) {
+            const e = await signRes.json().catch(() => ({}))
+            throw new Error(e.error || `Failed to get upload URL (${signRes.status})`)
+          }
+          const { signedUrl, storagePath, publicUrl } = await signRes.json()
+          const putRes = await fetch(`/api/creatives/upload-proxy?url=${encodeURIComponent(signedUrl)}`, {
+            method: "PUT",
+            headers: { "Content-Type": file.type || "application/octet-stream" },
+            body: file,
+          })
+          if (!putRes.ok) throw new Error(`Storage upload failed (${putRes.status})`)
+          const finRes = await fetch("/api/creatives/finalize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ storagePath, publicUrl, filename: file.name, fileType: file.type, fileSize: file.size, adAccountId }),
+          })
+          const finData = await finRes.json()
+          if (!finRes.ok || !finData.creative) throw new Error(finData.error || "Failed to finalize upload")
+          newCount++
         }
-      } catch {}
+      } catch (e: any) {
+        errCount++
+        lastError = `${file.name}: ${e?.message || "upload failed"}`
+        console.error("[media-library upload]", file.name, e)
+      }
     }
 
     const images = fileArr.filter(f => !f.type.startsWith("video/"))
@@ -5328,20 +5442,12 @@ function LoadMediaModal({
       await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, images.length) }, imgWorker))
     }
 
-    // Videos: serial — large files take time on Supabase, adaptive delay paces Meta quota
+    // Videos: serial with a small fixed pause to avoid spamming Meta quota
     for (let i = 0; i < videos.length; i++) {
       await uploadFile(videos[i])
       done++
       setUploadProgress({ current: done, total: fileArr.length })
-
-      if (i < videos.length - 1) {
-        const delay = videoUploadDelay(rateLimitPct)
-        if (delay > 0) {
-          setUploadPauseMsg(`Quota ${Math.round(rateLimitPct)}% — waiting ${Math.round(delay / 1000)}s`)
-          await new Promise(r => setTimeout(r, delay))
-          setUploadPauseMsg(null)
-        }
-      }
+      if (i < videos.length - 1) await new Promise(r => setTimeout(r, 1500))
     }
 
     setUploading(false)
@@ -5349,12 +5455,13 @@ function LoadMediaModal({
     setUploadPauseMsg(null)
     fetchFbMedia()
     fetchCreatives(true)
-    if (dupCount > 0 && newCount === 0) {
-      setUploadPauseMsg(`${dupCount} file đã tồn tại — không upload lại`)
-      setTimeout(() => setUploadPauseMsg(null), 4000)
-    } else if (dupCount > 0) {
-      setUploadPauseMsg(`Uploaded ${newCount} mới · ${dupCount} đã tồn tại (bỏ qua)`)
-      setTimeout(() => setUploadPauseMsg(null), 4000)
+    const summary: string[] = []
+    if (newCount > 0) summary.push(`Uploaded ${newCount} mới`)
+    if (dupCount > 0) summary.push(`${dupCount} đã tồn tại (bỏ qua)`)
+    if (errCount > 0) summary.push(`${errCount} lỗi — ${lastError}`)
+    if (summary.length > 0) {
+      setUploadPauseMsg(summary.join(" · "))
+      setTimeout(() => setUploadPauseMsg(null), errCount > 0 ? 8000 : 4000)
     }
   }
 
@@ -14568,6 +14675,10 @@ export default function LaunchPage() {
           pageId: selectedPageId,
           headline: headline.trim(),
           primaryText: primaryText.trim(),
+          // Send remaining variations (first entry is already sent as headline/primaryText above).
+          // Server builds asset_feed_spec = [primary, ...variations] for Dynamic Creative A/B.
+          headlineVariations: headlines.filter(h => h.trim()).slice(1),
+          primaryTextVariations: primaryTexts.filter(t => t.trim()).slice(1),
           description: description.trim(),
           cta,
           webLink: utmParams.trim()
