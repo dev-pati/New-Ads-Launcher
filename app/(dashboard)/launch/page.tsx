@@ -5333,7 +5333,6 @@ function LoadMediaModal({
           const { accessToken, adAccountId: credAccountId } = await credRes.json()
           const cleanId = String(credAccountId).replace(/^act_/, "")
           const FB_VIDEOS = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
-          const AUTH = `Bearer ${accessToken}`
           const DIRECT_LIMIT = 100 * 1024 * 1024 // ≤100MB: direct POST
           const CHUNK_SIZE = 50 * 1024 * 1024    // >100MB: 50MB chunks
 
@@ -5342,7 +5341,8 @@ function LoadMediaModal({
             const form = new FormData()
             form.append("source", file)
             form.append("title", file.name)
-            const res = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH }, body: form })
+            form.append("access_token", accessToken)
+            const res = await fetch(FB_VIDEOS, { method: "POST", body: form })
             const d = await res.json()
             if (!res.ok || !d.id) throw new Error(d.error?.message || `Upload failed (${res.status})`)
             fbVideoId = d.id
@@ -5351,7 +5351,8 @@ function LoadMediaModal({
             const startForm = new FormData()
             startForm.append("upload_phase", "start")
             startForm.append("file_size", String(file.size))
-            const startRes = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH }, body: startForm })
+            startForm.append("access_token", accessToken)
+            const startRes = await fetch(FB_VIDEOS, { method: "POST", body: startForm })
             const startData = await startRes.json()
             if (startData.error) throw new Error(startData.error.message)
             const { upload_session_id, video_id } = startData
@@ -5365,7 +5366,8 @@ function LoadMediaModal({
               chunkForm.append("upload_session_id", upload_session_id)
               chunkForm.append("start_offset", String(startOffset))
               chunkForm.append("video_file_chunk", chunk, file.name)
-              const cRes = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH }, body: chunkForm })
+              chunkForm.append("access_token", accessToken)
+              const cRes = await fetch(FB_VIDEOS, { method: "POST", body: chunkForm })
               const cData = await cRes.json()
               if (!cRes.ok || cData.error) throw new Error(cData.error?.message || "Chunk upload failed")
               startOffset = parseInt(cData.start_offset || String(endOffset))
@@ -5375,7 +5377,8 @@ function LoadMediaModal({
             finishForm.append("upload_phase", "finish")
             finishForm.append("upload_session_id", upload_session_id)
             finishForm.append("title", file.name)
-            const finRes = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH }, body: finishForm })
+            finishForm.append("access_token", accessToken)
+            const finRes = await fetch(FB_VIDEOS, { method: "POST", body: finishForm })
             const finData = await finRes.json()
             if (finData.error) throw new Error(finData.error.message)
           }
@@ -10564,7 +10567,7 @@ function AdSetupPanel({
         <div className="flex items-center gap-1">
           <Tip text="Generate primary text, headline, and description with AI.">
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5" onClick={openGenerateModal}>
-              <IconSparkles className="size-3" />Generate
+              <IconSparkles className="size-3" />AI Generate
             </Button>
           </Tip>
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setSettingsOpen(true)}>
@@ -12958,6 +12961,7 @@ function TableMode({
                         placeholder="Primary text..."
                         rows={4}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
+                        style={{ minHeight: 104 }}
                       />
                       {exp.primary && ptVars.map((v, vi) => (
                         <div key={vi} className="flex items-start gap-1">
@@ -13958,7 +13962,6 @@ export default function LaunchPage() {
 
       const cleanId    = adAccountId.replace(/^act_/, "")
       const FB_VIDEOS  = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
-      const AUTH_HDR   = `Bearer ${accessToken}`
       const DIRECT_LIMIT = 100 * 1024 * 1024 // ≤100 MB: direct POST
       const CHUNK_SIZE   =  50 * 1024 * 1024 // >100 MB: 50 MB chunks
 
@@ -13969,6 +13972,7 @@ export default function LaunchPage() {
         const form = new FormData()
         form.append("source", item.file)
         form.append("title", item.file.name)
+        form.append("access_token", accessToken)
 
         const videoId = await new Promise<string | null>((resolve) => {
           const xhr = new XMLHttpRequest()
@@ -13985,10 +13989,9 @@ export default function LaunchPage() {
             if (xhr.status < 300 && d.id) { resolve(d.id) }
             else { updateUpload(item.id, { status: "error", error: d.error?.message || `Upload failed (${xhr.status})` }); resolve(null) }
           }
-          xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error" }); resolve(null) }
+          xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error connecting to Meta" }); resolve(null) }
           xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(null) }
           xhr.open("POST", FB_VIDEOS)
-          xhr.setRequestHeader("Authorization", AUTH_HDR)
           updateUpload(item.id, { xhr })
           xhr.send(form)
         })
@@ -14000,8 +14003,15 @@ export default function LaunchPage() {
         const startForm = new FormData()
         startForm.append("upload_phase", "start")
         startForm.append("file_size", String(item.file.size))
-        const startRes  = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH_HDR }, body: startForm })
-        const startData = await startRes.json()
+        startForm.append("access_token", accessToken)
+        let startData: any
+        try {
+          const startRes = await fetch(FB_VIDEOS, { method: "POST", body: startForm })
+          startData = await startRes.json()
+        } catch (err: any) {
+          updateUpload(item.id, { status: "error", error: err?.message || "Network error starting upload session" })
+          return null
+        }
         if (startData.error) { updateUpload(item.id, { status: "error", error: startData.error.message }); return null }
 
         const { upload_session_id, video_id } = startData
@@ -14016,6 +14026,7 @@ export default function LaunchPage() {
           chunkForm.append("upload_session_id", upload_session_id)
           chunkForm.append("start_offset",      String(startOffset))
           chunkForm.append("video_file_chunk",  chunk, item.file.name)
+          chunkForm.append("access_token",      accessToken)
 
           const snapStart = startOffset // progress calc snapshot
           const offsets = await new Promise<{ so: number; eo: number } | null>((resolve) => {
@@ -14040,7 +14051,6 @@ export default function LaunchPage() {
             xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error during chunk upload" }); resolve(null) }
             xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(null) }
             xhr.open("POST", FB_VIDEOS)
-            xhr.setRequestHeader("Authorization", AUTH_HDR)
             updateUpload(item.id, { xhr })
             xhr.send(chunkForm)
           })
@@ -14054,8 +14064,15 @@ export default function LaunchPage() {
         finishForm.append("upload_phase",      "finish")
         finishForm.append("upload_session_id", upload_session_id)
         finishForm.append("title",             item.file.name)
-        const finishRes  = await fetch(FB_VIDEOS, { method: "POST", headers: { Authorization: AUTH_HDR }, body: finishForm })
-        const finishData = await finishRes.json()
+        finishForm.append("access_token",      accessToken)
+        let finishData: any
+        try {
+          const finishRes = await fetch(FB_VIDEOS, { method: "POST", body: finishForm })
+          finishData = await finishRes.json()
+        } catch (err: any) {
+          updateUpload(item.id, { status: "error", error: err?.message || "Network error finishing upload" })
+          return null
+        }
         if (finishData.error) { updateUpload(item.id, { status: "error", error: finishData.error.message }); return null }
       }
 

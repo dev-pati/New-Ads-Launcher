@@ -360,6 +360,13 @@ export default function AdsManagerPage() {
     setDefaultsOpen(false)
   }
 
+  const resetAllDefaults = () => {
+    setDefaultPrimaryText("")
+    setDefaultHeadline("")
+    setDefaultCta("SHOP_NOW")
+    setDefaultLink("")
+  }
+
   const fetchHistory = async () => {
     setHistoryLoading(true)
     try {
@@ -1765,7 +1772,7 @@ export default function AdsManagerPage() {
               <textarea
                 value={defaultPrimaryText}
                 onChange={e => setDefaultPrimaryText(e.target.value)}
-                rows={5}
+                rows={3}
                 placeholder="Default primary ad text..."
                 className="w-full px-3 py-2.5 text-sm border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none bg-background"
               />
@@ -1794,7 +1801,7 @@ export default function AdsManagerPage() {
             </div>
           </div>
           <SheetFooter className="mt-8 pt-6 border-t">
-            <Button variant="ghost" onClick={() => setDefaultsOpen(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={resetAllDefaults}>Reset All</Button>
             <Button onClick={saveDefaults} className="bg-blue-600 hover:bg-blue-700 text-white">Save Defaults</Button>
           </SheetFooter>
         </SheetContent>
