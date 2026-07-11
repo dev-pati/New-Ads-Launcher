@@ -14467,11 +14467,20 @@ export default function LaunchPage() {
     const videoItems = items.filter(item => item.file.type.startsWith("video/"))
     const imageItems = items.filter(item => !item.file.type.startsWith("video/"))
 
-    await Promise.allSettled(imageItems.map(processItem))
-    for (let i = 0; i < videoItems.length; i++) {
-      await processItem(videoItems[i])
-      if (i < videoItems.length - 1) await new Promise(r => setTimeout(r, 1500))
+    // Videos upload concurrently, but capped — fully unbounded parallel makes N heavy
+    // chunked-upload sessions split the same bandwidth, so each one starves and can
+    // time out on Meta's side. A small cap keeps multiple videos moving at once
+    // without any single session going too slowly to finish.
+    const VIDEO_UPLOAD_CONCURRENCY = 2
+    let videoIdx = 0
+    const videoWorker = async () => {
+      while (videoIdx < videoItems.length) await processItem(videoItems[videoIdx++])
     }
+
+    await Promise.allSettled([
+      ...imageItems.map(processItem),
+      ...Array.from({ length: Math.min(VIDEO_UPLOAD_CONCURRENCY, videoItems.length) }, videoWorker),
+    ])
 
     // Refresh Library tab so freshly uploaded items appear with thumbnails
     if (anyUploaded) setMediaRefreshSignal(s => s + 1)
