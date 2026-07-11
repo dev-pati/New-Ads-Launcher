@@ -14370,10 +14370,15 @@ export default function LaunchPage() {
     }))
     setUploads(prev => [...prev, ...items])
 
-    // Upload all files in parallel; swap temp creative → real creative when done
+    // Upload strategy: images run in parallel (small, signed-URL upload — no contention).
+    // Videos run ONE AT A TIME. Meta's chunked upload session has a server-side timeout;
+    // firing multiple large-video chunked sessions concurrently makes each one starve for
+    // bandwidth, so chunks arrive too slowly and Meta expires the session mid-transfer
+    // (surfaces as a generic "There was a problem uploading your video file" error).
+    // Serializing matches the Media Library uploader, which never had this failure mode.
     let anyUploaded = false
     const uploadedByTempId = new Map<string, Creative>()
-    await Promise.allSettled(items.map(async (item) => {
+    const processItem = async (item: UploadItem) => {
       const real = await uploadOneFile(item)
       if (real) {
         anyUploaded = true
@@ -14446,7 +14451,17 @@ export default function LaunchPage() {
         setSelectedCreatives(prev => prev.filter(c => c.id !== item.id))
         setSelectedMediaIds(prev => { const s = new Set(prev); s.delete(item.id); return s })
       }
-    }))
+    }
+
+    const videoItems = items.filter(item => item.file.type.startsWith("video/"))
+    const imageItems = items.filter(item => !item.file.type.startsWith("video/"))
+
+    await Promise.allSettled(imageItems.map(processItem))
+    for (let i = 0; i < videoItems.length; i++) {
+      await processItem(videoItems[i])
+      if (i < videoItems.length - 1) await new Promise(r => setTimeout(r, 1500))
+    }
+
     // Refresh Library tab so freshly uploaded items appear with thumbnails
     if (anyUploaded) setMediaRefreshSignal(s => s + 1)
     return items.map(item => uploadedByTempId.get(item.id)).filter(Boolean) as Creative[]
