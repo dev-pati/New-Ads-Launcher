@@ -13977,115 +13977,141 @@ export default function LaunchPage() {
       const DIRECT_LIMIT = 100 * 1024 * 1024 // ≤100 MB: direct POST
       const CHUNK_SIZE   =  50 * 1024 * 1024 // >100 MB: 50 MB chunks
 
-      let fbVideoId: string
+      // Meta's transcode pipeline is known to be flaky for large/high-fps chunked
+      // uploads — a single transient failure otherwise kills the whole upload even
+      // though the same bytes succeed on a later attempt (matches Meta's own tools,
+      // which retry internally). Retry the whole session from scratch a few times
+      // before surfacing an error, instead of failing on the first hiccup.
+      const MAX_UPLOAD_ATTEMPTS = 3
+      let fbVideoId: string | null = null
+      let lastError = "Upload failed"
 
-      if (item.file.size <= DIRECT_LIMIT) {
-        // ── Direct POST to Meta ─────────────────────────────────────────
-        const form = new FormData()
-        form.append("source", item.file)
-        form.append("title", item.file.name)
-        form.append("access_token", accessToken)
+      for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS && !fbVideoId; attempt++) {
+        const attemptResult: { videoId: string } | { error: string } = await (async () => {
+          if (item.file.size <= DIRECT_LIMIT) {
+            // ── Direct POST to Meta ─────────────────────────────────────────
+            const form = new FormData()
+            form.append("source", item.file)
+            form.append("title", item.file.name)
+            form.append("access_token", accessToken)
 
-        const videoId = await new Promise<string | null>((resolve) => {
-          const xhr = new XMLHttpRequest()
-          let lastTick = Date.now(), lastLoaded = 0
-          xhr.upload.onprogress = (e) => {
-            if (!e.lengthComputable) return
-            const now = Date.now(), dt = (now - lastTick) / 1000
-            const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
-            lastTick = now; lastLoaded = e.loaded
-            updateUpload(item.id, { uploaded: e.loaded, fileSize: e.total, speed, eta: speed > 0 ? (e.total - e.loaded) / speed : 0 })
-          }
-          xhr.onload = () => {
-            const d = JSON.parse(xhr.responseText || "{}")
-            if (xhr.status < 300 && d.id) { resolve(d.id) }
-            else { updateUpload(item.id, { status: "error", error: d.error ? formatMetaError(d.error) : `Upload failed (${xhr.status})` }); resolve(null) }
-          }
-          xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error connecting to Meta" }); resolve(null) }
-          xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(null) }
-          xhr.open("POST", FB_VIDEOS)
-          updateUpload(item.id, { xhr })
-          xhr.send(form)
-        })
-        if (!videoId) return null
-        fbVideoId = videoId
-
-      } else {
-        // ── Chunked upload: START → TRANSFER × N → FINISH ──────────────
-        const startForm = new FormData()
-        startForm.append("upload_phase", "start")
-        startForm.append("file_size", String(item.file.size))
-        startForm.append("access_token", accessToken)
-        let startData: any
-        try {
-          const startRes = await fetch(FB_VIDEOS, { method: "POST", body: startForm })
-          startData = await startRes.json()
-        } catch (err: any) {
-          updateUpload(item.id, { status: "error", error: err?.message || "Network error starting upload session" })
-          return null
-        }
-        if (startData.error) { updateUpload(item.id, { status: "error", error: formatMetaError(startData.error) }); return null }
-
-        const { upload_session_id, video_id } = startData
-        fbVideoId = video_id
-        let startOffset = parseInt(startData.start_offset || "0")
-        let endOffset   = parseInt(startData.end_offset   || String(Math.min(CHUNK_SIZE, item.file.size)))
-
-        while (startOffset < item.file.size) {
-          const chunk     = item.file.slice(startOffset, endOffset)
-          const chunkForm = new FormData()
-          chunkForm.append("upload_phase",      "transfer")
-          chunkForm.append("upload_session_id", upload_session_id)
-          chunkForm.append("start_offset",      String(startOffset))
-          chunkForm.append("video_file_chunk",  chunk, item.file.name)
-          chunkForm.append("access_token",      accessToken)
-
-          const snapStart = startOffset // progress calc snapshot
-          const offsets = await new Promise<{ so: number; eo: number } | null>((resolve) => {
-            const xhr = new XMLHttpRequest()
-            let lastTick = Date.now(), lastLoaded = 0
-            xhr.upload.onprogress = (e) => {
-              if (!e.lengthComputable) return
-              const now = Date.now(), dt = (now - lastTick) / 1000
-              const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
-              lastTick = now; lastLoaded = e.loaded
-              const totalUploaded = snapStart + e.loaded
-              updateUpload(item.id, { uploaded: totalUploaded, fileSize: item.file.size, speed, eta: speed > 0 ? (item.file.size - totalUploaded) / speed : 0 })
-            }
-            xhr.onload = () => {
-              const d = JSON.parse(xhr.responseText || "{}")
-              if (xhr.status < 300 && !d.error) {
-                resolve({ so: parseInt(d.start_offset || String(endOffset)), eo: parseInt(d.end_offset || String(Math.min(endOffset + CHUNK_SIZE, item.file.size))) })
-              } else {
-                updateUpload(item.id, { status: "error", error: d.error ? formatMetaError(d.error) : "Chunk upload failed" }); resolve(null)
+            return new Promise<{ videoId: string } | { error: string }>((resolve) => {
+              const xhr = new XMLHttpRequest()
+              let lastTick = Date.now(), lastLoaded = 0
+              xhr.upload.onprogress = (e) => {
+                if (!e.lengthComputable) return
+                const now = Date.now(), dt = (now - lastTick) / 1000
+                const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
+                lastTick = now; lastLoaded = e.loaded
+                updateUpload(item.id, { uploaded: e.loaded, fileSize: e.total, speed, eta: speed > 0 ? (e.total - e.loaded) / speed : 0 })
               }
-            }
-            xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error during chunk upload" }); resolve(null) }
-            xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(null) }
-            xhr.open("POST", FB_VIDEOS)
-            updateUpload(item.id, { xhr })
-            xhr.send(chunkForm)
-          })
-          if (!offsets) return null
-          startOffset = offsets.so
-          endOffset   = offsets.eo
-        }
+              xhr.onload = () => {
+                const d = JSON.parse(xhr.responseText || "{}")
+                if (xhr.status < 300 && d.id) resolve({ videoId: d.id })
+                else resolve({ error: d.error ? formatMetaError(d.error) : `Upload failed (${xhr.status})` })
+              }
+              xhr.onerror = () => resolve({ error: "Network error connecting to Meta" })
+              xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve({ error: "__cancelled__" }) }
+              xhr.open("POST", FB_VIDEOS)
+              updateUpload(item.id, { xhr })
+              xhr.send(form)
+            })
 
-        // FINISH
-        const finishForm = new FormData()
-        finishForm.append("upload_phase",      "finish")
-        finishForm.append("upload_session_id", upload_session_id)
-        finishForm.append("title",             item.file.name)
-        finishForm.append("access_token",      accessToken)
-        let finishData: any
-        try {
-          const finishRes = await fetch(FB_VIDEOS, { method: "POST", body: finishForm })
-          finishData = await finishRes.json()
-        } catch (err: any) {
-          updateUpload(item.id, { status: "error", error: err?.message || "Network error finishing upload" })
+          } else {
+            // ── Chunked upload: START → TRANSFER × N → FINISH ──────────────
+            const startForm = new FormData()
+            startForm.append("upload_phase", "start")
+            startForm.append("file_size", String(item.file.size))
+            startForm.append("access_token", accessToken)
+            let startData: any
+            try {
+              const startRes = await fetch(FB_VIDEOS, { method: "POST", body: startForm })
+              startData = await startRes.json()
+            } catch (err: any) {
+              return { error: err?.message || "Network error starting upload session" }
+            }
+            if (startData.error) return { error: formatMetaError(startData.error) }
+
+            const { upload_session_id, video_id } = startData
+            let startOffset = parseInt(startData.start_offset || "0")
+            let endOffset   = parseInt(startData.end_offset   || String(Math.min(CHUNK_SIZE, item.file.size)))
+
+            while (startOffset < item.file.size) {
+              // Preserve MIME type on the slice — Blob.slice() defaults to type ""
+              // when omitted, so chunks were going out as application/octet-stream.
+              const chunk     = item.file.slice(startOffset, endOffset, item.file.type)
+              const chunkForm = new FormData()
+              chunkForm.append("upload_phase",      "transfer")
+              chunkForm.append("upload_session_id", upload_session_id)
+              chunkForm.append("start_offset",      String(startOffset))
+              chunkForm.append("video_file_chunk",  chunk, item.file.name)
+              chunkForm.append("access_token",      accessToken)
+
+              const snapStart = startOffset // progress calc snapshot
+              const offsets: { so: number; eo: number } | { error: string } = await new Promise((resolve) => {
+                const xhr = new XMLHttpRequest()
+                let lastTick = Date.now(), lastLoaded = 0
+                xhr.upload.onprogress = (e) => {
+                  if (!e.lengthComputable) return
+                  const now = Date.now(), dt = (now - lastTick) / 1000
+                  const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
+                  lastTick = now; lastLoaded = e.loaded
+                  const totalUploaded = snapStart + e.loaded
+                  updateUpload(item.id, { uploaded: totalUploaded, fileSize: item.file.size, speed, eta: speed > 0 ? (item.file.size - totalUploaded) / speed : 0 })
+                }
+                xhr.onload = () => {
+                  const d = JSON.parse(xhr.responseText || "{}")
+                  if (xhr.status < 300 && !d.error) {
+                    resolve({ so: parseInt(d.start_offset || String(endOffset)), eo: parseInt(d.end_offset || String(Math.min(endOffset + CHUNK_SIZE, item.file.size))) })
+                  } else {
+                    resolve({ error: d.error ? formatMetaError(d.error) : "Chunk upload failed" })
+                  }
+                }
+                xhr.onerror = () => resolve({ error: "Network error during chunk upload" })
+                xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve({ error: "__cancelled__" }) }
+                xhr.open("POST", FB_VIDEOS)
+                updateUpload(item.id, { xhr })
+                xhr.send(chunkForm)
+              })
+              if ("error" in offsets) return offsets
+              startOffset = offsets.so
+              endOffset   = offsets.eo
+            }
+
+            // FINISH
+            const finishForm = new FormData()
+            finishForm.append("upload_phase",      "finish")
+            finishForm.append("upload_session_id", upload_session_id)
+            finishForm.append("title",             item.file.name)
+            finishForm.append("access_token",      accessToken)
+            let finishData: any
+            try {
+              const finishRes = await fetch(FB_VIDEOS, { method: "POST", body: finishForm })
+              finishData = await finishRes.json()
+            } catch (err: any) {
+              return { error: err?.message || "Network error finishing upload" }
+            }
+            if (finishData.error) return { error: formatMetaError(finishData.error) }
+            return { videoId: video_id }
+          }
+        })()
+
+        if ("videoId" in attemptResult) {
+          fbVideoId = attemptResult.videoId
+        } else if (attemptResult.error === "__cancelled__") {
           return null
+        } else {
+          lastError = attemptResult.error
+          if (attempt < MAX_UPLOAD_ATTEMPTS) {
+            updateUpload(item.id, { uploaded: 0, speed: 0, eta: 0 })
+            await new Promise(r => setTimeout(r, 1500 * attempt))
+          }
         }
-        if (finishData.error) { updateUpload(item.id, { status: "error", error: formatMetaError(finishData.error) }); return null }
+      }
+
+      if (!fbVideoId) {
+        updateUpload(item.id, { status: "error", error: lastError })
+        return null
       }
 
       // Save to DB via JSON (tiny body — no size issue)
