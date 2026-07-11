@@ -13914,7 +13914,8 @@ export default function LaunchPage() {
   // surface them so a failure is diagnosable from the upload dock alone, no devtools needed.
   const formatMetaError = (error: any): string => {
     if (!error) return "Upload failed"
-    console.error("[video upload] Meta error:", error)
+    // console.warn (not .error) — Next.js dev overlay treats console.error as a blocking crash screen
+    console.warn("[video upload] Meta error:", error)
     const base = error.error_user_msg || error.message || "Upload failed"
     const parts = [base]
     if (error.code != null) parts.push(`code ${error.code}${error.error_subcode != null ? `/${error.error_subcode}` : ""}`)
