@@ -13910,6 +13910,17 @@ export default function LaunchPage() {
     setUploadDockOpen(false)
   }
 
+  // Meta error objects carry `code`/`error_subcode`/`error_user_msg` beyond `.message` —
+  // surface them so a failure is diagnosable from the upload dock alone, no devtools needed.
+  const formatMetaError = (error: any): string => {
+    if (!error) return "Upload failed"
+    console.error("[video upload] Meta error:", error)
+    const base = error.error_user_msg || error.message || "Upload failed"
+    const parts = [base]
+    if (error.code != null) parts.push(`code ${error.code}${error.error_subcode != null ? `/${error.error_subcode}` : ""}`)
+    return parts.join(" — ")
+  }
+
   // Upload strategy:
   //   Images → signed Supabase URL + XHR PUT (small files, no size issue) + finalize
   //   Videos → direct Meta API chunked upload from browser (proven approach, no proxy limits)
@@ -13987,7 +13998,7 @@ export default function LaunchPage() {
           xhr.onload = () => {
             const d = JSON.parse(xhr.responseText || "{}")
             if (xhr.status < 300 && d.id) { resolve(d.id) }
-            else { updateUpload(item.id, { status: "error", error: d.error?.message || `Upload failed (${xhr.status})` }); resolve(null) }
+            else { updateUpload(item.id, { status: "error", error: d.error ? formatMetaError(d.error) : `Upload failed (${xhr.status})` }); resolve(null) }
           }
           xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error connecting to Meta" }); resolve(null) }
           xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve(null) }
@@ -14012,7 +14023,7 @@ export default function LaunchPage() {
           updateUpload(item.id, { status: "error", error: err?.message || "Network error starting upload session" })
           return null
         }
-        if (startData.error) { updateUpload(item.id, { status: "error", error: startData.error.message }); return null }
+        if (startData.error) { updateUpload(item.id, { status: "error", error: formatMetaError(startData.error) }); return null }
 
         const { upload_session_id, video_id } = startData
         fbVideoId = video_id
@@ -14045,7 +14056,7 @@ export default function LaunchPage() {
               if (xhr.status < 300 && !d.error) {
                 resolve({ so: parseInt(d.start_offset || String(endOffset)), eo: parseInt(d.end_offset || String(Math.min(endOffset + CHUNK_SIZE, item.file.size))) })
               } else {
-                updateUpload(item.id, { status: "error", error: d.error?.message || "Chunk upload failed" }); resolve(null)
+                updateUpload(item.id, { status: "error", error: d.error ? formatMetaError(d.error) : "Chunk upload failed" }); resolve(null)
               }
             }
             xhr.onerror = () => { updateUpload(item.id, { status: "error", error: "Network error during chunk upload" }); resolve(null) }
@@ -14073,7 +14084,7 @@ export default function LaunchPage() {
           updateUpload(item.id, { status: "error", error: err?.message || "Network error finishing upload" })
           return null
         }
-        if (finishData.error) { updateUpload(item.id, { status: "error", error: finishData.error.message }); return null }
+        if (finishData.error) { updateUpload(item.id, { status: "error", error: formatMetaError(finishData.error) }); return null }
       }
 
       // Save to DB via JSON (tiny body — no size issue)
