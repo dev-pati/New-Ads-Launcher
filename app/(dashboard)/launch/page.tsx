@@ -5520,16 +5520,31 @@ function LoadMediaModal({
             let startOffset = parseInt(startData.start_offset || "0")
             let endOffset = parseInt(startData.end_offset || String(Math.min(CHUNK_SIZE, file.size)))
             while (startOffset < file.size) {
-              const chunk = file.slice(startOffset, endOffset)
-              const chunkForm = new FormData()
-              chunkForm.append("upload_phase", "transfer")
-              chunkForm.append("upload_session_id", upload_session_id)
-              chunkForm.append("start_offset", String(startOffset))
-              chunkForm.append("video_file_chunk", chunk, file.name)
-              chunkForm.append("access_token", accessToken)
-              const cRes = await fetch(FB_VIDEOS, { method: "POST", body: chunkForm })
-              const cData = await cRes.json()
-              if (!cRes.ok || cData.error) throw new Error(cData.error?.message || "Chunk upload failed")
+              // Retry a failed chunk at the same offset (Meta's transfer phase is
+              // idempotent per start_offset) instead of throwing away the whole upload
+              // on one transient hiccup — mirrors the Gallery uploadOneFile path.
+              const snapStart = startOffset
+              let cData: any = null
+              let cErr: string | null = null
+              for (let cAttempt = 1; cAttempt <= 4; cAttempt++) {
+                const chunk = file.slice(snapStart, endOffset)
+                const chunkForm = new FormData()
+                chunkForm.append("upload_phase", "transfer")
+                chunkForm.append("upload_session_id", upload_session_id)
+                chunkForm.append("start_offset", String(snapStart))
+                chunkForm.append("video_file_chunk", chunk, file.name)
+                chunkForm.append("access_token", accessToken)
+                try {
+                  const cRes = await fetch(FB_VIDEOS, { method: "POST", body: chunkForm })
+                  cData = await cRes.json()
+                  if (cRes.ok && !cData.error) { cErr = null; break }
+                  cErr = cData.error?.message || "Chunk upload failed"
+                } catch (e: any) {
+                  cErr = e?.message || "Network error during chunk upload"
+                }
+                if (cAttempt < 4) await new Promise(r => setTimeout(r, 800 * cAttempt))
+              }
+              if (cErr) throw new Error(cErr)
               startOffset = parseInt(cData.start_offset || String(endOffset))
               endOffset = parseInt(cData.end_offset || String(Math.min(endOffset + CHUNK_SIZE, file.size)))
             }
@@ -14253,44 +14268,65 @@ export default function LaunchPage() {
             let startOffset = parseInt(startData.start_offset || "0")
             let endOffset   = parseInt(startData.end_offset   || String(Math.min(CHUNK_SIZE, item.file.size)))
 
+            // Per-chunk retry budget. A single transfer failing at a random early
+            // offset (code 6000/1363048) previously tore down the whole session and
+            // restarted from byte 0 — re-uploading everything. Meta's transfer phase
+            // is idempotent per start_offset, so instead we re-send just the failed
+            // chunk at the same offset, preserving all prior progress. Only if a chunk
+            // exhausts its retries do we surface an error (and let the outer session
+            // loop try once more from scratch as a last resort).
+            const MAX_CHUNK_ATTEMPTS = 4
             while (startOffset < item.file.size) {
-              // Preserve MIME type on the slice — Blob.slice() defaults to type ""
-              // when omitted, so chunks were going out as application/octet-stream.
-              const chunk     = item.file.slice(startOffset, endOffset, item.file.type)
-              const chunkForm = new FormData()
-              chunkForm.append("upload_phase",      "transfer")
-              chunkForm.append("upload_session_id", upload_session_id)
-              chunkForm.append("start_offset",      String(startOffset))
-              chunkForm.append("video_file_chunk",  chunk, item.file.name)
-              chunkForm.append("access_token",      accessToken)
+              const snapStart = startOffset // progress snapshot + fixed retry offset for this chunk
 
-              const snapStart = startOffset // progress calc snapshot
-              const offsets: { so: number; eo: number } | { error: string } = await new Promise((resolve) => {
-                const xhr = new XMLHttpRequest()
-                let lastTick = Date.now(), lastLoaded = 0
-                xhr.upload.onprogress = (e) => {
-                  if (!e.lengthComputable) return
-                  const now = Date.now(), dt = (now - lastTick) / 1000
-                  const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
-                  lastTick = now; lastLoaded = e.loaded
-                  const totalUploaded = snapStart + e.loaded
-                  updateUpload(item.id, { uploaded: totalUploaded, fileSize: item.file.size, speed, eta: speed > 0 ? (item.file.size - totalUploaded) / speed : 0 })
-                }
-                xhr.onload = () => {
-                  const d = JSON.parse(xhr.responseText || "{}")
-                  if (xhr.status < 300 && !d.error) {
-                    resolve({ so: parseInt(d.start_offset || String(endOffset)), eo: parseInt(d.end_offset || String(Math.min(endOffset + CHUNK_SIZE, item.file.size))) })
-                  } else {
-                    resolve({ error: d.error ? formatMetaError(d.error) : "Chunk upload failed" })
+              let offsets: { so: number; eo: number } | { error: string } | null = null
+              for (let cAttempt = 1; cAttempt <= MAX_CHUNK_ATTEMPTS; cAttempt++) {
+                // Preserve MIME type on the slice — Blob.slice() defaults to type ""
+                // when omitted, so chunks were going out as application/octet-stream.
+                const chunk     = item.file.slice(snapStart, endOffset, item.file.type)
+                const chunkForm = new FormData()
+                chunkForm.append("upload_phase",      "transfer")
+                chunkForm.append("upload_session_id", upload_session_id)
+                chunkForm.append("start_offset",      String(snapStart))
+                chunkForm.append("video_file_chunk",  chunk, item.file.name)
+                chunkForm.append("access_token",      accessToken)
+
+                offsets = await new Promise<{ so: number; eo: number } | { error: string }>((resolve) => {
+                  const xhr = new XMLHttpRequest()
+                  let lastTick = Date.now(), lastLoaded = 0
+                  xhr.upload.onprogress = (e) => {
+                    if (!e.lengthComputable) return
+                    const now = Date.now(), dt = (now - lastTick) / 1000
+                    const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0
+                    lastTick = now; lastLoaded = e.loaded
+                    const totalUploaded = snapStart + e.loaded
+                    updateUpload(item.id, { uploaded: totalUploaded, fileSize: item.file.size, speed, eta: speed > 0 ? (item.file.size - totalUploaded) / speed : 0 })
                   }
+                  xhr.onload = () => {
+                    const d = JSON.parse(xhr.responseText || "{}")
+                    if (xhr.status < 300 && !d.error) {
+                      resolve({ so: parseInt(d.start_offset || String(endOffset)), eo: parseInt(d.end_offset || String(Math.min(endOffset + CHUNK_SIZE, item.file.size))) })
+                    } else {
+                      resolve({ error: d.error ? formatMetaError(d.error) : "Chunk upload failed" })
+                    }
+                  }
+                  xhr.onerror = () => resolve({ error: "Network error during chunk upload" })
+                  xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve({ error: "__cancelled__" }) }
+                  xhr.open("POST", FB_VIDEOS)
+                  updateUpload(item.id, { xhr })
+                  xhr.send(chunkForm)
+                })
+
+                if (!("error" in offsets)) break                    // chunk succeeded
+                if (offsets.error === "__cancelled__") return offsets // user cancelled — bail out
+                if (cAttempt < MAX_CHUNK_ATTEMPTS) {
+                  // Transient hiccup: rewind the progress bar to this chunk's start and
+                  // back off (increasing) before re-sending the same bytes.
+                  updateUpload(item.id, { uploaded: snapStart, speed: 0, eta: 0 })
+                  await new Promise(r => setTimeout(r, 800 * cAttempt))
                 }
-                xhr.onerror = () => resolve({ error: "Network error during chunk upload" })
-                xhr.onabort = () => { updateUpload(item.id, { status: "cancelled" }); resolve({ error: "__cancelled__" }) }
-                xhr.open("POST", FB_VIDEOS)
-                updateUpload(item.id, { xhr })
-                xhr.send(chunkForm)
-              })
-              if ("error" in offsets) return offsets
+              }
+              if (offsets === null || "error" in offsets) return offsets ?? { error: "Chunk upload failed" }
               startOffset = offsets.so
               endOffset   = offsets.eo
 
