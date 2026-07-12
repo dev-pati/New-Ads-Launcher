@@ -15252,6 +15252,7 @@ export default function LaunchPage() {
     const allCreatedAds: CreatedAd[] = []
     let lastBatchId: string | null = null
 
+    const validRows = tableRows.filter(r => r.creative?.id && r.adSetIds.length > 0)
     const batchRows = validRows.map(row => {
       const rowLink = (row.webLink || webLink).trim()
       const rowUtm = (row.urlTags || utmParams).trim()

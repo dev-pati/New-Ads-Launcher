@@ -360,7 +360,7 @@ export default function TemplatesPage() {
       for (const line of lines) {
         const cols = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c => c.replace(/^"|"$/g, "").replace(/""/g, '"'))
         if (cols[0]?.trim()) {
-          toCreate.push({ name: cols[0] || "", primary_text: cols[1] || "", headline: cols[2] || "", description: cols[3] || "", cta: cols[4] || "SHOP_NOW", link: cols[5] || "" })
+          toCreate.push({ name: cols[0] || "", primary_text: cols[1] || "", headline: cols[2] || "", description: cols[3] || "", cta: cols[4] || "SHOP_NOW", link: cols[5] || "", tags: "" })
         }
       }
       for (const t of toCreate) {
