@@ -5,8 +5,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-    --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-heading: var(--font-manrope), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --font-sans: var(--font-manrope), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
     --color-sidebar-ring: var(--sidebar-ring);
@@ -50,23 +50,24 @@
 }
 
 /* ============================================================
-   Meta Design System - Light Theme
-   Based on DESIGN.md (Meta Store / Dolly)
+   Star Admin 2 Pro Design System — Light Theme
+   Ported from demo.bootstrapdash.com/star-admin-2-pro
+   (horizontal-default-light) — palette + typography only
    ============================================================ */
 
 :root {
-    /* Acme Design System — Light (design-system/MASTER.md §2) */
-    --bg: #f5f6fa; --sidebar-surface: #ffffff; --surface: #ffffff; --surface-2: #f5f7fb; --inset: #f4f6fa; --hover: #f0f2f7;
-    --line-soft: rgba(18,20,32,.08); --line-2: rgba(18,20,32,.05); --line-str: rgba(18,20,32,.16);
-    --text-1: #141826; --text-2: #5b6478; --text-3: #98a0b2;
-    --violet: #7c6cf0; --violet-2: #8b5cf6; --blue: #3b82f6; --cyan: #22a7d0; --gray-line: #94a3b8;
-    --brand-accent: #7c6cf0; --accent-soft: rgba(124,108,240,.10); --accent-line: rgba(124,108,240,.32);
-    --grad: linear-gradient(135deg,#8b7ff5,#4f9cf9);
-    --grad-soft: linear-gradient(135deg,rgba(124,108,240,.12),rgba(59,130,246,.08));
-    --emerald: #0ca678; --amber: #e08a00; --rose: #e5484d;
-    --sh: 0 1px 3px rgba(18,20,32,.07);
-    --sh-md: 0 16px 44px -16px rgba(18,20,32,.2);
-    --glow: 0 8px 24px -8px rgba(124,108,240,.4);
+    /* Star Admin 2 Pro — Light */
+    --bg: #f4f5f7; --sidebar-surface: #ffffff; --surface: #ffffff; --surface-2: #f4f5f7; --inset: #f2f4f7; --hover: #eef1f6;
+    --line-soft: rgba(30,40,61,.08); --line-2: rgba(30,40,61,.05); --line-str: rgba(30,40,61,.15);
+    --text-1: #1f1f1f; --text-2: #727788; --text-3: #a3a3a3;
+    --violet: #3a61f6; --violet-2: #5a7bf9; --blue: #1f3bb3; --cyan: #05c3fb; --gray-line: #94a3b8;
+    --brand-accent: #1f3bb3; --accent-soft: rgba(31,59,179,.08); --accent-line: rgba(31,59,179,.28);
+    --grad: linear-gradient(135deg,#1f3bb3,#3a61f6);
+    --grad-soft: linear-gradient(135deg,rgba(31,59,179,.10),rgba(5,195,251,.06));
+    --emerald: #34b1aa; --amber: #e29e09; --rose: #f95f53;
+    --sh: 0 1px 2px rgba(30,40,61,.06);
+    --sh-md: 0 12px 32px -12px rgba(30,40,61,.18);
+    --glow: 0 6px 18px -6px rgba(31,59,179,.35);
 
     --primary: var(--brand-accent);
     --primary-foreground: #FFFFFF;
@@ -93,7 +94,7 @@
     --input: var(--line-str);
     --ring: var(--brand-accent);
 
-    --radius: 1rem;
+    --radius: 0.5rem;
 
     --chart-1: var(--violet);
     --chart-2: var(--blue);
@@ -112,21 +113,23 @@
 }
 
 /* ============================================================
-   Acme Design System — Dark (design-system/MASTER.md §2, default)
+   Star Admin 2 Pro Design System — Dark Theme
+   Ported from demo.bootstrapdash.com/star-admin-2-pro
+   (horizontal-default-dark) — palette + typography only
    ============================================================ */
 
 .dark {
-    --bg: #191b24; --sidebar-surface: #121319; --surface: #232733; --surface-2: #2a2f3d; --inset: #1d212b; --hover: #2c313f;
-    --line-soft: rgba(255,255,255,.07); --line-2: rgba(255,255,255,.045); --line-str: rgba(255,255,255,.13);
-    --text-1: #f1f2f7; --text-2: #9096a6; --text-3: #5f6675;
-    --violet: #8b7ff5; --violet-2: #a78bfa; --blue: #4f9cf9; --cyan: #5fd0ef; --gray-line: #cbd2e0;
-    --brand-accent: #8b7ff5; --accent-soft: rgba(139,127,245,.16); --accent-line: rgba(139,127,245,.4);
-    --grad: linear-gradient(135deg,#9b7ff7,#5a9bf7);
-    --grad-soft: linear-gradient(135deg,rgba(155,127,247,.2),rgba(90,155,247,.12));
-    --emerald: #3ecf8e; --amber: #f5b544; --rose: #f56b6b;
-    --sh: 0 2px 8px rgba(0,0,0,.35);
-    --sh-md: 0 16px 44px -14px rgba(0,0,0,.6);
-    --glow: 0 8px 26px -8px rgba(139,127,245,.6);
+    --bg: #1f2127; --sidebar-surface: #191b20; --surface: #252730; --surface-2: #2a2c36; --inset: #1b1d23; --hover: #2c2e38;
+    --line-soft: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.05); --line-str: rgba(255,255,255,.14);
+    --text-1: #d8d9e3; --text-2: #9c9fa6; --text-3: #6b6d78;
+    --violet: #5a7bf9; --violet-2: #7d97fb; --blue: #3a61f6; --cyan: #05c3fb; --gray-line: #cbd2e0;
+    --brand-accent: #3a61f6; --accent-soft: rgba(58,97,246,.16); --accent-line: rgba(58,97,246,.4);
+    --grad: linear-gradient(135deg,#3a61f6,#5a7bf9);
+    --grad-soft: linear-gradient(135deg,rgba(58,97,246,.2),rgba(5,195,251,.12));
+    --emerald: #3fbfb7; --amber: #f0aa2b; --rose: #fb6f63;
+    --sh: 0 2px 8px rgba(0,0,0,.4);
+    --sh-md: 0 16px 40px -14px rgba(0,0,0,.6);
+    --glow: 0 8px 24px -8px rgba(58,97,246,.55);
 
     --primary: var(--brand-accent);
     --primary-foreground: #FFFFFF;
@@ -170,7 +173,7 @@
   html,
   body {
     @apply bg-background text-foreground;
-    font-family: "Segoe UI", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--font-manrope), "Segoe UI", ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   }
   table, [data-metric], [data-timer] {
     font-variant-numeric: tabular-nums;
