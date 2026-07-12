@@ -49,7 +49,7 @@ function KpiCard({ label, value, sub }: { label: string; value: string; sub?: st
     <div className="rounded-xl border bg-card p-4 min-w-0">
       <p className="text-xs text-muted-foreground truncate">{label}</p>
       <p className="text-xl font-bold mt-1 truncate">{value}</p>
-      {sub && <p className="text-[10px] text-muted-foreground/60 mt-0.5 truncate">{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground/60 mt-0.5 truncate">{sub}</p>}
     </div>
   )
 }
@@ -161,7 +161,7 @@ function AccountPicker() {
             </div>
           </div>
           <div className="py-1 max-h-64 overflow-y-auto">
-            <p className="px-3 pt-1 pb-0.5 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
+            <p className="px-3 pt-1 pb-0.5 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
             {filtered.map((acc: any) => (
               <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setOpen(false); setSearch("") }}
                 className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 transition-colors",
@@ -525,7 +525,7 @@ export function SpendView() {
                         </td>
                         <td className="px-3 py-3 text-muted-foreground text-xs capitalize">{c.objective?.replace(/_/g, " ") || "—"}</td>
                         <td className="px-3 py-3">
-                          <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full capitalize", statusBadge(c.status))}>
+                          <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full capitalize", statusBadge(c.status))}>
                             {c.status?.toLowerCase().replace(/_/g, " ") || "—"}
                           </span>
                         </td>
@@ -539,7 +539,7 @@ export function SpendView() {
                             <div className="flex items-center gap-2 pl-6">
                               <span className="w-1 h-1 rounded-full bg-muted-foreground/40 shrink-0" />
                               <span className="text-xs text-muted-foreground max-w-xs truncate">{a.name}</span>
-                              <span className="text-[9px] text-muted-foreground/50">ID: {a.id}</span>
+                              <span className="text-xs text-muted-foreground/50">ID: {a.id}</span>
                             </div>
                           </td>
                           <td colSpan={2} />
@@ -708,7 +708,7 @@ export function DemographicView() {
             {selectedCampaignId && (
               <span
                 onClick={e => { e.stopPropagation(); setSelectedCampaignId(""); setCampaignPickerOpen(false) }}
-                className="text-[10px] text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-destructive/10 transition-colors"
+                className="text-xs text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-destructive/10 transition-colors"
               >
                 Clear
               </span>
@@ -860,8 +860,8 @@ export function DemographicView() {
                     return (
                       <div key={a.label} className="flex items-center gap-2">
                         <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: AGE_COLORS[a.label] || "#6366f1" }} />
-                        <span className="text-[11px] text-muted-foreground w-12">{a.label}</span>
-                        <span className="text-[11px] font-medium">{pct}%</span>
+                        <span className="text-xs text-muted-foreground w-12">{a.label}</span>
+                        <span className="text-xs font-medium">{pct}%</span>
                       </div>
                     )
                   })}
@@ -932,7 +932,7 @@ export function DemographicView() {
                         <td className="px-5 py-3">
                           <div className="flex flex-wrap gap-1.5">
                             {c.topDemographics?.map((d: string) => (
-                              <span key={d} className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{d}</span>
+                              <span key={d} className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{d}</span>
                             ))}
                           </div>
                         </td>
@@ -1002,7 +1002,7 @@ export function DemographicView() {
                     <div key={s.label} className="flex items-center justify-between rounded-lg border p-3">
                       <div>
                         <p className="text-sm font-semibold capitalize">{s.label}</p>
-                        <p className="text-[10px] text-muted-foreground">Total Spend: {fmt$(s.spend)} · Impressions: {fmtK(s.impressions)}</p>
+                        <p className="text-xs text-muted-foreground">Total Spend: {fmt$(s.spend)} · Impressions: {fmtK(s.impressions)}</p>
                       </div>
                       <p className="text-sm font-bold text-right shrink-0 ml-4">CPM: {fmt$(s.cpm)}</p>
                     </div>
@@ -1103,7 +1103,7 @@ export function CountryView() {
     else { setSortField(field); setSortDir("desc") }
   }
   const SortArrow = ({ field }: { field: string }) => (
-    <span className={cn("ml-0.5 text-[10px]", sortField === field ? "text-primary" : "text-muted-foreground/30")}>
+    <span className={cn("ml-0.5 text-xs", sortField === field ? "text-primary" : "text-muted-foreground/30")}>
       {sortField === field ? (sortDir === "desc" ? "↓" : "↑") : "↕"}
     </span>
   )
@@ -1147,7 +1147,7 @@ export function CountryView() {
           <div className="flex items-center gap-2">
             {selectedCampaignId && (
               <span onClick={e => { e.stopPropagation(); setSelectedCampaignId(""); setCampaignPickerOpen(false) }}
-                className="text-[10px] text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-destructive/10 transition-colors">Clear</span>
+                className="text-xs text-muted-foreground hover:text-destructive px-1.5 py-0.5 rounded hover:bg-destructive/10 transition-colors">Clear</span>
             )}
             <IconChevronDown className={cn("size-4 text-muted-foreground transition-transform", campaignPickerOpen && "rotate-180")} />
           </div>
@@ -1222,9 +1222,9 @@ export function CountryView() {
                     return (
                       <div key={c.code} className="flex items-center gap-2">
                         <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: COUNTRY_COLORS[i % COUNTRY_COLORS.length] }} />
-                        <span className="text-[11px] text-muted-foreground w-8 shrink-0">{c.code}</span>
-                        <span className="text-[11px] font-medium">{pct}%</span>
-                        <span className="text-[10px] text-muted-foreground truncate">{c.label}</span>
+                        <span className="text-xs text-muted-foreground w-8 shrink-0">{c.code}</span>
+                        <span className="text-xs font-medium">{pct}%</span>
+                        <span className="text-xs text-muted-foreground truncate">{c.label}</span>
                       </div>
                     )
                   })}
@@ -1369,9 +1369,9 @@ function AdCreativeCard({ ad }: { ad: any }) {
       {/* Info */}
       <div className="p-2.5 flex flex-col flex-1 gap-1.5">
         <div>
-          <p className="text-[11px] font-semibold leading-tight truncate" title={ad.adName}>{ad.adName}</p>
+          <p className="text-xs font-semibold leading-tight truncate" title={ad.adName}>{ad.adName}</p>
           {ad.campaignName && (
-            <p className="text-[9px] text-muted-foreground/50 truncate mt-0.5" title={ad.campaignName}>
+            <p className="text-xs text-muted-foreground/50 truncate mt-0.5" title={ad.campaignName}>
               Campaign: {ad.campaignName}
             </p>
           )}
@@ -1380,16 +1380,16 @@ function AdCreativeCard({ ad }: { ad: any }) {
         {/* Colored metrics */}
         <div className="space-y-1 mt-0.5">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium text-emerald-600/80">Spend</span>
-            <span className="text-[10px] font-bold text-emerald-600">{fmt$(ad.spend)}</span>
+            <span className="text-xs font-medium text-emerald-600/80">Spend</span>
+            <span className="text-xs font-bold text-emerald-600">{fmt$(ad.spend)}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium text-amber-600/80">CPC</span>
-            <span className="text-[10px] font-bold text-amber-600">{ad.cpc > 0 ? fmt$(ad.cpc) : "—"}</span>
+            <span className="text-xs font-medium text-amber-600/80">CPC</span>
+            <span className="text-xs font-bold text-amber-600">{ad.cpc > 0 ? fmt$(ad.cpc) : "—"}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-medium text-rose-600/80">CTR</span>
-            <span className="text-[10px] font-bold text-rose-600">{fmtPct(ad.ctr)}</span>
+            <span className="text-xs font-medium text-rose-600/80">CTR</span>
+            <span className="text-xs font-bold text-rose-600">{fmtPct(ad.ctr)}</span>
           </div>
         </div>
 
@@ -1397,10 +1397,10 @@ function AdCreativeCard({ ad }: { ad: any }) {
         {age > 0 && (
           <div className="mt-auto pt-1.5 border-t border-dashed border-muted/50">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] text-muted-foreground/50 font-medium uppercase tracking-wide">Age</span>
-              <span className="text-[10px] text-muted-foreground font-semibold">{age} days</span>
+              <span className="text-xs text-muted-foreground/50 font-medium uppercase tracking-wide">Age</span>
+              <span className="text-xs text-muted-foreground font-semibold">{age} days</span>
             </div>
-            {dateStr && <p className="text-[9px] text-muted-foreground/40 text-right mt-0.5">{dateStr}</p>}
+            {dateStr && <p className="text-xs text-muted-foreground/40 text-right mt-0.5">{dateStr}</p>}
           </div>
         )}
       </div>
@@ -1442,19 +1442,19 @@ function AdHistoryMonthCard({ month, sortBy }: { month: any; sortBy: string }) {
           </div>
           <div className="flex items-center gap-5 shrink-0 flex-wrap justify-end">
             <div className="text-right">
-              <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Spend</p>
+              <p className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">Spend</p>
               <p className="text-sm font-bold text-emerald-600">{fmt$(month.totalSpend)}</p>
             </div>
             <div className="text-right">
-              <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Avg. Age</p>
+              <p className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">Avg. Age</p>
               <p className="text-sm font-bold text-blue-600">{avgAge > 0 ? `${avgAge} days` : "—"}</p>
             </div>
             <div className="text-right">
-              <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Avg CPC</p>
+              <p className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">Avg CPC</p>
               <p className="text-sm font-bold text-amber-600">{month.cpc > 0 ? fmt$(month.cpc) : "—"}</p>
             </div>
             <div className="text-right">
-              <p className="text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Avg CTR</p>
+              <p className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">Avg CTR</p>
               <p className="text-sm font-bold text-rose-600">{fmtPct(month.ctr)}</p>
             </div>
           </div>
@@ -1603,7 +1603,7 @@ export function AdHistoryView() {
               {selectedCampaignId && (
                 <span
                   onClick={e => { e.stopPropagation(); setSelectedCampaignId("") }}
-                  className="text-[10px] text-muted-foreground hover:text-destructive transition-colors"
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
                 >
                   <IconX className="size-3" />
                 </span>
@@ -1837,7 +1837,7 @@ export function PlacementsView() {
                   <div className="mt-2 h-1.5 rounded-full bg-muted/40 overflow-hidden">
                     <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: platformColor(p.platform) }} />
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">{pct.toFixed(1)}% of total spend</p>
+                  <p className="text-xs text-muted-foreground mt-1">{pct.toFixed(1)}% of total spend</p>
                 </div>
               )
             })}
@@ -2255,7 +2255,7 @@ export function DeviceView() {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="text-xs border rounded-lg overflow-hidden mt-2">
-                  <div className="px-3 py-1.5 border-b bg-muted/30 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Legend</div>
+                  <div className="px-3 py-1.5 border-b bg-muted/30 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Legend</div>
                   <div className="overflow-y-auto max-h-40">
                     {devices.map((d: any, i: number) => (
                       <div key={d.device} className="flex items-center justify-between px-3 py-1.5 border-b last:border-0 hover:bg-muted/20">
@@ -2303,7 +2303,7 @@ export function DeviceView() {
             <div className="px-5 py-3 border-b flex items-center justify-between">
               <h2 className="text-sm font-semibold">Device Performance</h2>
               {data?.hasPrevious && (
-                <span className="text-[10px] text-muted-foreground bg-muted/40 px-2 py-0.5 rounded-full">vs Previous Period</span>
+                <span className="text-xs text-muted-foreground bg-muted/40 px-2 py-0.5 rounded-full">vs Previous Period</span>
               )}
             </div>
             <div className="overflow-x-auto">
@@ -2516,7 +2516,7 @@ export function ReachView() {
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="px-5 py-3 border-b flex items-center justify-between">
               <h2 className="text-sm font-semibold">Monthly Breakdown</h2>
-              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-emerald-500" />Good (&lt;2x)</span>
                 <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-amber-500" />Watch (2–4x)</span>
                 <span className="flex items-center gap-1"><span className="size-1.5 rounded-full bg-rose-500" />High (&gt;4x)</span>
@@ -2612,15 +2612,15 @@ function HookCard({ ad, rank }: { ad: any; rank: number }) {
         <div className="flex-1 min-w-0 space-y-1.5">
           {/* Badges row */}
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-bold bg-blue-500/15 text-blue-600 px-1.5 py-0.5 rounded-full">#{rank}</span>
-            <span className={cn("text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5",
+            <span className="text-xs font-bold bg-blue-500/15 text-blue-600 px-1.5 py-0.5 rounded-full">#{rank}</span>
+            <span className={cn("text-xs font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5",
               hookGood ? "bg-emerald-500/15 text-emerald-600" :
               hookOk   ? "bg-amber-500/15 text-amber-600"     :
                          "bg-rose-500/15 text-rose-600")}>
               <svg className="size-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
               Hook: {fmtPct(ad.hookRate)}
             </span>
-            <span className="text-[10px] font-semibold bg-gray-800 text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+            <span className="text-xs font-semibold bg-gray-800 text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
               <svg className="size-2.5" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
               Video
             </span>
@@ -2628,7 +2628,7 @@ function HookCard({ ad, rank }: { ad: any; rank: number }) {
 
           <p className="text-xs font-semibold line-clamp-2 leading-snug">{ad.adName}</p>
 
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-0.5">
               <svg className="size-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               Spend: <span className="font-semibold text-foreground">{fmt$(ad.spend, 0)}</span>
@@ -2639,7 +2639,7 @@ function HookCard({ ad, rank }: { ad: any; rank: number }) {
           {/* AI analysis */}
           {!analysis && !analyzing && !analysisErr && ad.thumbnail && (
             <button onClick={analyze}
-              className="mt-1 flex items-center gap-1 text-[10px] text-violet-600 hover:text-violet-700 font-medium transition-colors">
+              className="mt-1 flex items-center gap-1 text-xs text-violet-600 hover:text-violet-700 font-medium transition-colors">
               <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
               </svg>
@@ -2647,12 +2647,12 @@ function HookCard({ ad, rank }: { ad: any; rank: number }) {
             </button>
           )}
           {analyzing && (
-            <div className="mt-1 flex items-center gap-1 text-[10px] text-violet-500">
+            <div className="mt-1 flex items-center gap-1 text-xs text-violet-500">
               <IconLoader2 className="size-3 animate-spin" />Analyzing frame…
             </div>
           )}
           {analysisErr && (
-            <p className="mt-1 text-[10px] text-rose-500">{analysisErr}</p>
+            <p className="mt-1 text-xs text-rose-500">{analysisErr}</p>
           )}
         </div>
       </div>
@@ -2660,7 +2660,7 @@ function HookCard({ ad, rank }: { ad: any; rank: number }) {
       {/* AI bullets */}
       {analysis && (
         <div className="border-t px-3 py-2.5 bg-violet-500/5">
-          <p className="text-[10px] font-semibold text-violet-600 flex items-center gap-1 mb-1.5">
+          <p className="text-xs font-semibold text-violet-600 flex items-center gap-1 mb-1.5">
             <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
@@ -2668,7 +2668,7 @@ function HookCard({ ad, rank }: { ad: any; rank: number }) {
           </p>
           <ul className="space-y-1">
             {analysis.bullets.map((b, i) => (
-              <li key={i} className="flex items-start gap-1.5 text-[10px] text-muted-foreground leading-relaxed">
+              <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground leading-relaxed">
                 <svg className="size-2.5 text-violet-500 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                 {b}
               </li>
@@ -2694,7 +2694,7 @@ function HookRateAnalysisSection({ videoAds }: { videoAds: any[] }) {
             <svg className="size-4 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
             Hook Rate Analysis
           </h2>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Highest performing video ads by hook rate</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Highest performing video ads by hook rate</p>
         </div>
         <div className="flex items-center gap-1.5">
           <button onClick={() => setSortDir("highest")}
@@ -2919,14 +2919,14 @@ export function CreativeAuditView() {
                         </div>
                       )}
                       <div className="absolute top-1.5 left-1.5 flex gap-1">
-                        <span className="text-[9px] font-bold bg-black/60 text-white px-1.5 py-0.5 rounded-full">#{i + 1}</span>
-                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full"
+                        <span className="text-xs font-bold bg-black/60 text-white px-1.5 py-0.5 rounded-full">#{i + 1}</span>
+                        <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
                           style={{ backgroundColor: (FORMAT_COLORS[ad.format] || "#64748b") + "CC", color: "#fff" }}>{ad.format}</span>
                       </div>
                     </div>
                     <div className="p-2 space-y-1">
-                      <p className="text-[10px] font-medium leading-tight line-clamp-2 min-h-[28px]">{ad.adName}</p>
-                      <div className="grid grid-cols-2 gap-x-1 text-[9px]">
+                      <p className="text-xs font-medium leading-tight line-clamp-2 min-h-[28px]">{ad.adName}</p>
+                      <div className="grid grid-cols-2 gap-x-1 text-xs">
                         <span className="text-muted-foreground">Spend</span>
                         <span className="font-semibold text-right">{fmt$(ad.spend, 0)}</span>
                         <span className="text-muted-foreground">CTR</span>
@@ -2953,7 +2953,7 @@ export function CreativeAuditView() {
           {ctaDaily.length > 1 && topCtaKeys.length > 0 && (
             <div className="rounded-xl border bg-card p-4">
               <h2 className="text-sm font-semibold">Ad Spend by CTA Type</h2>
-              <p className="text-[10px] text-muted-foreground mt-0.5 mb-3">Daily spend trends by call-to-action type (top {topCtaKeys.length} CTAs)</p>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-3">Daily spend trends by call-to-action type (top {topCtaKeys.length} CTAs)</p>
               <ResponsiveContainer width="100%" height={220}>
                 <AreaChart data={ctaDaily} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                   <defs>
@@ -2985,17 +2985,17 @@ export function CreativeAuditView() {
           {ctaPerf.length > 0 && (
             <div className="rounded-xl border bg-card p-4">
               <h2 className="text-sm font-semibold">Call-to-Action Performance</h2>
-              <p className="text-[10px] text-muted-foreground mt-0.5 mb-3">CTR, spend, and usage by CTA type</p>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-3">CTR, spend, and usage by CTA type</p>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {ctaPerf.slice(0, 8).map((c: any, i: number) => (
                   <div key={c.cta} className="rounded-lg border bg-muted/10 p-3 space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold tracking-wide">{(CTA_LABELS[c.cta] || c.cta.replace(/_/g, " ")).toUpperCase()}</span>
+                      <span className="text-xs font-bold tracking-wide">{(CTA_LABELS[c.cta] || c.cta.replace(/_/g, " ")).toUpperCase()}</span>
                       <svg className="size-3 text-muted-foreground/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                     </div>
                     {/* CTR bar */}
                     <div>
-                      <div className="flex items-center justify-between text-[10px] mb-0.5">
+                      <div className="flex items-center justify-between text-xs mb-0.5">
                         <span className="text-muted-foreground">CTR</span>
                         <span className="font-bold" style={{ color: ACCOUNT_COLORS[i % ACCOUNT_COLORS.length] }}>{fmtPct(c.ctr)}</span>
                       </div>
@@ -3004,7 +3004,7 @@ export function CreativeAuditView() {
                           style={{ width: `${maxCtaCtr > 0 ? (c.ctr / maxCtaCtr) * 100 : 0}%`, backgroundColor: ACCOUNT_COLORS[i % ACCOUNT_COLORS.length] }} />
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-2 text-[10px]">
+                    <div className="grid grid-cols-2 gap-x-2 text-xs">
                       <span className="text-muted-foreground">Spend</span>
                       <span className="font-semibold text-right">{fmt$(c.spend, 0)}</span>
                       <span className="text-muted-foreground">Impressions</span>
@@ -3027,13 +3027,13 @@ export function CreativeAuditView() {
                     <svg className="size-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                     Top Performing Copy
                   </h2>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">Top {topCopy.length} ad bodies by impressions</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Top {topCopy.length} ad bodies by impressions</p>
                 </div>
               </div>
               <div className="divide-y max-h-[600px] overflow-y-auto">
                 {topCopy.map((ad: any, i: number) => (
                   <div key={ad.adId} className="p-4 space-y-2">
-                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className="font-bold text-foreground">#{i + 1}</span>
                       <span className="flex items-center gap-0.5">
                         <svg className="size-3 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
@@ -3047,7 +3047,7 @@ export function CreativeAuditView() {
                     <div className="rounded-lg border bg-background p-3">
                       <p className="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{ad.body}</p>
                     </div>
-                    <p className="text-[10px] text-blue-500 truncate">From ad: {ad.adName}</p>
+                    <p className="text-xs text-blue-500 truncate">From ad: {ad.adName}</p>
                   </div>
                 ))}
               </div>
@@ -3252,7 +3252,7 @@ export function UploadStatsView() {
                         {b.durationMs > 0 ? (b.durationMs < 60000 ? (b.durationMs / 1000).toFixed(0) + "s" : (b.durationMs / 60000).toFixed(1) + "m") : "—"}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full",
                           b.status === "success" ? "bg-emerald-500/10 text-emerald-600" :
                           b.status === "partial"  ? "bg-amber-500/10 text-amber-600" :
                           "bg-rose-500/10 text-rose-600"

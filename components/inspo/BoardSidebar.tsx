@@ -62,7 +62,7 @@ export function BoardSidebar({
               key={item.id}
               onClick={() => { onSectionChange(item.id); if (item.id !== "discovery") onBoardSelect(null) }}
               className={cn(
-                "flex items-center gap-2.5 w-full px-3 py-2 text-[13px] rounded-xl transition-all",
+                "flex items-center gap-2.5 w-full px-3 py-2 text-xs rounded-xl transition-all",
                 active
                   ? "bg-primary/10 text-primary font-semibold"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
@@ -80,7 +80,7 @@ export function BoardSidebar({
       <div className="px-2 pb-4 flex-1">
         <button
           onClick={() => setBoardsOpen(p => !p)}
-          className="flex items-center justify-between w-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60 hover:text-muted-foreground transition-colors rounded-lg hover:bg-muted/40"
+          className="flex items-center justify-between w-full px-2 py-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground/60 hover:text-muted-foreground transition-colors rounded-lg hover:bg-muted/40"
         >
           <span>Boards</span>
           <div className="flex items-center gap-1">
@@ -121,7 +121,7 @@ export function BoardSidebar({
                 <IconFolder className={cn("size-3.5 shrink-0", activeBoardId === board.id ? "text-primary" : "text-muted-foreground/50")} />
                 <span className="truncate flex-1">{board.name}</span>
                 <span className={cn(
-                  "text-[10px] shrink-0 min-w-[18px] text-center tabular-nums",
+                  "text-xs shrink-0 min-w-[18px] text-center tabular-nums",
                   activeBoardId === board.id ? "text-primary/60" : "text-muted-foreground/50"
                 )}>
                   {board.ad_count || 0}
@@ -131,10 +131,10 @@ export function BoardSidebar({
 
             {!boardsLoading && boards.length === 0 && !creatingBoard && (
               <div className="px-3 py-3 text-center">
-                <p className="text-[11px] text-muted-foreground/60">No boards yet</p>
+                <p className="text-xs text-muted-foreground/60">No boards yet</p>
                 <button
                   onClick={() => setCreatingBoard(true)}
-                  className="mt-1.5 text-[11px] text-primary hover:underline font-medium"
+                  className="mt-1.5 text-xs text-primary hover:underline font-medium"
                 >
                   + Create one
                 </button>

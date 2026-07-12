@@ -34,7 +34,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const connection = await getOwnedConnection(ctx.orgId, id)
     if (!connection) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     if (connection.connection_type !== "manual_token") {
-      return NextResponse.json({ error: "Chỉ sửa được via (manual token) connection" }, { status: 400 })
+      return NextResponse.json({ error: "Only via (manual token) connections can be edited" }, { status: 400 })
     }
 
     const body = await request.json().catch(() => null)
@@ -45,12 +45,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const newRole: ViaRole | undefined = body?.viaRole
     if (newRole !== undefined && newRole !== connection.via_role) {
       if (newRole !== "launch" && newRole !== "non_launch") {
-        return NextResponse.json({ error: "viaRole phải là 'launch' hoặc 'non_launch'" }, { status: 400 })
+        return NextResponse.json({ error: "viaRole must be 'launch' or 'non_launch'" }, { status: 400 })
       }
       const assignedCount = await countAssignedAccounts(ctx.orgId, id)
       if (assignedCount > 0) {
         return NextResponse.json(
-          { error: `Via đang gán vào ${assignedCount} ad account. Gỡ hết khỏi slot trước khi đổi role.` },
+          { error: `Via is assigned to ${assignedCount} ad account(s). Remove it from all slots before changing its role.` },
           { status: 409 }
         )
       }
@@ -58,7 +58,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "Không có gì để cập nhật" }, { status: 400 })
+      return NextResponse.json({ error: "Nothing to update" }, { status: 400 })
     }
 
     const supabase = createAdminClient()
@@ -78,7 +78,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     if (ctx.role !== "admin" && ctx.role !== "owner") {
-      return NextResponse.json({ error: "Chỉ admin được gỡ via" }, { status: 403 })
+      return NextResponse.json({ error: "Only admins can remove a via" }, { status: 403 })
     }
 
     const { id } = await params
@@ -86,7 +86,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
     if (!connection) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
     if (connection.connection_type !== "manual_token") {
       return NextResponse.json(
-        { error: "Chỉ gỡ được via tại đây — OAuth disconnect ở /api/facebook/connection" },
+        { error: "Only via can be removed here — OAuth disconnect at /api/facebook/connection" },
         { status: 400 }
       )
     }

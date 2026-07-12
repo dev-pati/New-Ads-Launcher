@@ -17,7 +17,7 @@ export function InspoSearchBar({ value, onChange, placeholder = "Search by brand
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full h-9 pl-10 pr-9 text-[13px] bg-white border border-[#dfe3ea] rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1373e6]/20 focus:border-[#1373e6] placeholder:text-slate-500 transition-all"
+        className="w-full h-9 pl-10 pr-9 text-xs bg-white border border-[#dfe3ea] rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-[#1373e6]/20 focus:border-[#1373e6] placeholder:text-slate-500 transition-all"
       />
       {value && (
         <button

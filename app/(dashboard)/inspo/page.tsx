@@ -988,7 +988,7 @@ export default function InspoPage() {
                                       <IconCheck className="size-5 text-primary" />
                                     </div>
                                   )}
-                                  <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
+                                  <p className="absolute bottom-0 left-0 right-0 text-xs truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
                                 </button>
                               ))}
                             </div>
@@ -1103,7 +1103,7 @@ export default function InspoPage() {
                                       <IconCheck className="size-5 text-primary" />
                                     </div>
                                   )}
-                                  <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
+                                  <p className="absolute bottom-0 left-0 right-0 text-xs truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
                                 </button>
                               ))}
                             </div>

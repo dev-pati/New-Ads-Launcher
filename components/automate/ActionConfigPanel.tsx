@@ -85,7 +85,7 @@ function VarChip({ token, onInsert }: { token: { key: string; label: string }; o
   return (
     <button
       onClick={() => onInsert(`{{${token.key}}}`)}
-      className="flex items-center gap-1 h-6 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors"
+      className="flex items-center gap-1 h-6 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-xs font-medium text-muted-foreground transition-colors"
     >
       <IconPlus className="size-2.5" />
       {token.label}
@@ -122,7 +122,7 @@ const EmailTagInput = forwardRef<EmailTagInputHandle, EmailTagInputProps>(
           className="flex-1 min-h-9 flex flex-wrap gap-1.5 px-3 py-2 bg-muted/40 border border-border/60 rounded-lg cursor-text"
         >
           {recipients.map((r, i) => (
-            <span key={i} className="flex items-center gap-1 h-5 px-2 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
+            <span key={i} className="flex items-center gap-1 h-5 px-2 rounded-full bg-primary/10 text-primary text-xs font-medium">
               {r}
               <button onClick={e => { e.stopPropagation(); remove(i) }} className="hover:text-destructive transition-colors">
                 <IconX className="size-2.5" />
@@ -140,12 +140,12 @@ const EmailTagInput = forwardRef<EmailTagInputHandle, EmailTagInputProps>(
             }}
             onBlur={commit}
             placeholder={recipients.length === 0 ? "Enter email and press Enter or click Add" : ""}
-            className="flex-1 min-w-[140px] bg-transparent outline-none text-[12px] placeholder:text-muted-foreground/50"
+            className="flex-1 min-w-[140px] bg-transparent outline-none text-xs placeholder:text-muted-foreground/50"
           />
         </div>
         <button
           onClick={commit}
-          className="h-9 px-3 rounded-lg border border-border/60 bg-muted/40 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+          className="h-9 px-3 rounded-lg border border-border/60 bg-muted/40 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
         >
           + Add
         </button>
@@ -164,7 +164,7 @@ function AdAccountPickerForNotif({ value, onChange }: { value: string; onChange:
       .catch(() => {})
   }, [])
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} className="w-full h-8 px-2 text-[12px] bg-background border border-border/60 rounded-lg">
+    <select value={value} onChange={e => onChange(e.target.value)} className="w-full h-8 px-2 text-xs bg-background border border-border/60 rounded-lg">
       <option value="">— Select Ad Account —</option>
       {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
     </select>
@@ -197,7 +197,7 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
     <div className="space-y-5 p-5">
       {/* APP */}
       <div className="space-y-1.5">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">App</label>
+        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">App</label>
         <div className="flex items-center justify-between h-9 px-3 bg-muted/40 border border-border/60 rounded-lg">
           <div className="flex items-center gap-2">
             <div className="size-5 rounded bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center shrink-0">
@@ -205,20 +205,20 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
             </div>
             <span className="text-sm font-medium">Notification</span>
           </div>
-          <button className="text-[11px] text-primary hover:underline font-medium">Change</button>
+          <button className="text-xs text-primary hover:underline font-medium">Change</button>
         </div>
       </div>
 
       {/* SEND VIA */}
       <div className="space-y-2">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Send Via</label>
+        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Send Via</label>
         <div className="flex items-center gap-1.5 p-1 bg-muted/40 border border-border/60 rounded-xl">
           {(["email", "slack", "lark", "both"] as const).map(v => (
             <button
               key={v}
               onClick={() => updateNotif({ via: v })}
               className={cn(
-                "flex-1 flex items-center justify-center gap-1.5 h-7 rounded-lg text-[12px] font-medium transition-colors",
+                "flex-1 flex items-center justify-center gap-1.5 h-7 rounded-lg text-xs font-medium transition-colors",
                 notif.via === v
                   ? "bg-background text-foreground shadow-sm border border-border/40"
                   : "text-muted-foreground hover:text-foreground"
@@ -226,8 +226,8 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
             >
               {v === "email" && <IconMail className="size-3.5" />}
               {v === "slack" && <IconBrandSlack className="size-3.5" />}
-              {v === "lark"  && <span className="text-[11px] font-bold">L</span>}
-              {v === "both"  && <><IconMail className="size-3" /><span className="text-[10px]">+</span><IconBrandSlack className="size-3" /></>}
+              {v === "lark"  && <span className="text-xs font-bold">L</span>}
+              {v === "both"  && <><IconMail className="size-3" /><span className="text-xs">+</span><IconBrandSlack className="size-3" /></>}
               {v === "email" ? "Email" : v === "slack" ? "Slack" : v === "lark" ? "Lark" : "Both"}
             </button>
           ))}
@@ -237,10 +237,10 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
       {/* EMAIL RECIPIENTS */}
       {showEmail && (
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Email Recipients</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Email Recipients</label>
           <EmailTagInput ref={emailInputRef} recipients={notif.emailRecipients ?? []} onChange={r => updateNotif({ emailRecipients: r })} />
           {(notif.emailRecipients ?? []).length === 0 && (
-            <p className="text-[11px] text-muted-foreground/60">No recipients added yet. Type an email address and press Enter or click Add.</p>
+            <p className="text-xs text-muted-foreground/60">No recipients added yet. Type an email address and press Enter or click Add.</p>
           )}
         </div>
       )}
@@ -248,15 +248,15 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
       {/* SLACK WEBHOOK */}
       {showSlack && (
         <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Slack Webhook URL</label>
+          <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Slack Webhook URL</label>
           <input
             type="url"
             value={(notif as any).slackWebhookUrl ?? ""}
             onChange={e => updateNotif({ ...(notif as any), slackWebhookUrl: e.target.value })}
             placeholder="https://hooks.slack.com/services/..."
-            className="w-full px-3 py-2 text-[13px] bg-muted/40 border border-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full px-3 py-2 text-xs bg-muted/40 border border-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <p className="text-[11px] text-muted-foreground/60">Tạo Incoming Webhook tại api.slack.com/apps</p>
+          <p className="text-xs text-muted-foreground/60">Tạo Incoming Webhook tại api.slack.com/apps</p>
         </div>
       )}
 
@@ -264,23 +264,23 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
       {showLark && (
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Lark Recipients (email)</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Lark Recipients (email)</label>
             <EmailTagInput
               recipients={notif.larkRecipients ?? []}
               onChange={r => updateNotif({ larkRecipients: r })}
             />
-            <p className="text-[11px] text-muted-foreground/60">Email của user trong Lark workspace</p>
+            <p className="text-xs text-muted-foreground/60">Email của user trong Lark workspace</p>
           </div>
           <div className="space-y-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Lark Group Chat ID (tuỳ chọn)</label>
+            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Lark Group Chat ID (tuỳ chọn)</label>
             <input
               type="text"
               value={notif.larkChatId ?? ""}
               onChange={e => updateNotif({ larkChatId: e.target.value })}
               placeholder="oc_xxxxxxxxxx"
-              className="w-full px-3 py-2 text-[13px] bg-muted/40 border border-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+              className="w-full px-3 py-2 text-xs bg-muted/40 border border-border/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
             />
-            <p className="text-[11px] text-muted-foreground/60">Chat ID của group Lark (lấy từ URL hoặc bot settings)</p>
+            <p className="text-xs text-muted-foreground/60">Chat ID của group Lark (lấy từ URL hoặc bot settings)</p>
           </div>
         </div>
       )}
@@ -289,8 +289,8 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
       <div className="space-y-3 border border-border/60 rounded-xl p-3 bg-muted/20">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[12px] font-semibold">Đính kèm báo cáo metrics</p>
-            <p className="text-[11px] text-muted-foreground">Tự động fetch số liệu từ DB và đưa vào email</p>
+            <p className="text-xs font-semibold">Đính kèm báo cáo metrics</p>
+            <p className="text-xs text-muted-foreground">Tự động fetch số liệu từ DB và đưa vào email</p>
           </div>
           <button
             type="button"
@@ -304,18 +304,18 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
         {notif.includeReport && (
           <div className="space-y-2">
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-muted-foreground/70">Ad Account</label>
+              <label className="text-xs font-semibold text-muted-foreground/70">Ad Account</label>
               <AdAccountPickerForNotif
                 value={notif.reportAdAccountId ?? ""}
                 onChange={v => updateNotif({ reportAdAccountId: v })}
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-muted-foreground/70">Period</label>
+              <label className="text-xs font-semibold text-muted-foreground/70">Period</label>
               <select
                 value={notif.reportPeriod ?? "yesterday"}
                 onChange={e => updateNotif({ reportPeriod: e.target.value as any })}
-                className="w-full h-8 px-2 text-[12px] bg-background border border-border/60 rounded-lg"
+                className="w-full h-8 px-2 text-xs bg-background border border-border/60 rounded-lg"
               >
                 <option value="yesterday">Yesterday</option>
                 <option value="last_7d">Last 7 days</option>
@@ -328,30 +328,30 @@ function NotificationSetup({ config, onChange }: { config: ActionConfig; onChang
 
       {/* CUSTOM MESSAGE */}
       <div className="space-y-1.5">
-        <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Custom Message (Optional)</label>
+        <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Custom Message (Optional)</label>
         <textarea
           ref={textareaRef}
           value={notif.customMessage ?? ""}
           onChange={e => updateNotif({ customMessage: e.target.value })}
           rows={3}
-          className="w-full px-3 py-2 text-[13px] bg-muted/40 border border-border/60 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
+          className="w-full px-3 py-2 text-xs bg-muted/40 border border-border/60 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono"
         />
       </div>
 
       {/* AVAILABLE VARIABLES */}
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
           Available variables <span className="normal-case font-normal text-muted-foreground/50">(click to insert)</span>
         </p>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide">Trigger</p>
+            <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wide">Trigger</p>
             <div className="flex flex-wrap gap-1.5">
               {TRIGGER_VARIABLES.map(v => <VarChip key={v.key} token={v} onInsert={insertVariable} />)}
             </div>
           </div>
           <div className="space-y-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wide">System</p>
+            <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wide">System</p>
             <div className="flex flex-wrap gap-1.5">
               {SYSTEM_VARIABLES.map(v => <VarChip key={v.key} token={v} onInsert={insertVariable} />)}
             </div>
@@ -370,17 +370,17 @@ function SelectField({ label, value, options, onChange, required, description }:
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[12px] font-semibold text-foreground/80">
+      <label className="text-xs font-semibold text-foreground/80">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       <div className="relative">
         <select value={value} onChange={e => onChange(e.target.value)}
-          className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground">
+          className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground">
           {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
       </div>
-      {description && <p className="text-[11px] text-muted-foreground">{description}</p>}
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
     </div>
   )
 }
@@ -452,13 +452,13 @@ function AdSetPicker({ label, selectedIds, onChange, level = "adset" }: {
 
   return (
     <div className="space-y-2">
-      <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</label>
+      <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">{label}</label>
 
       {/* Ad Account selector */}
       <select
         value={selAccount}
         onChange={e => { setSelAccount(e.target.value); loadCampaigns(e.target.value) }}
-        className="w-full h-8 px-2 text-[12px] bg-muted/40 border border-border/60 rounded-lg"
+        className="w-full h-8 px-2 text-xs bg-muted/40 border border-border/60 rounded-lg"
       >
         <option value="">— Select Ad Account —</option>
         {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -469,7 +469,7 @@ function AdSetPicker({ label, selectedIds, onChange, level = "adset" }: {
         <select
           value={selCampaign}
           onChange={e => { setSelCampaign(e.target.value); if (level !== "campaign") loadAdsets(e.target.value) }}
-          className="w-full h-8 px-2 text-[12px] bg-muted/40 border border-border/60 rounded-lg"
+          className="w-full h-8 px-2 text-xs bg-muted/40 border border-border/60 rounded-lg"
           disabled={loadingCamp}
         >
           <option value="">{loadingCamp ? "Loading campaigns..." : "— Select Campaign —"}</option>
@@ -481,9 +481,9 @@ function AdSetPicker({ label, selectedIds, onChange, level = "adset" }: {
       {level !== "campaign" && selCampaign && (
         <div className="border border-border/60 rounded-lg max-h-40 overflow-y-auto bg-muted/20">
           {loadingAdset ? (
-            <div className="px-3 py-2 text-[12px] text-muted-foreground">Loading ad sets...</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">Loading ad sets...</div>
           ) : adsets.length === 0 ? (
-            <div className="px-3 py-2 text-[12px] text-muted-foreground">No ad sets found</div>
+            <div className="px-3 py-2 text-xs text-muted-foreground">No ad sets found</div>
           ) : adsets.map(a => (
             <label key={a.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 cursor-pointer">
               <input
@@ -495,8 +495,8 @@ function AdSetPicker({ label, selectedIds, onChange, level = "adset" }: {
                 }}
                 className="rounded"
               />
-              <span className="text-[12px] truncate">{a.name}</span>
-              <span className="text-[10px] text-muted-foreground/50 ml-auto shrink-0">{a.id}</span>
+              <span className="text-xs truncate">{a.name}</span>
+              <span className="text-xs text-muted-foreground/50 ml-auto shrink-0">{a.id}</span>
             </label>
           ))}
         </div>
@@ -508,7 +508,7 @@ function AdSetPicker({ label, selectedIds, onChange, level = "adset" }: {
           {selectedIds.map(id => {
             const name = [...accounts, ...campaigns, ...adsets].find(x => x.id === id)?.name ?? id
             return (
-              <span key={id} className="flex items-center gap-1 text-[11px] px-2 py-0.5 bg-primary/10 text-primary rounded-full">
+              <span key={id} className="flex items-center gap-1 text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
                 {name.length > 20 ? name.slice(0, 18) + "…" : name}
                 <button onClick={() => onChange(selectedIds.filter(x => x !== id))} className="hover:text-destructive">×</button>
               </span>
@@ -527,23 +527,23 @@ function TriggerVarInput({ label, value, onChange, placeholder, description, var
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[12px] font-semibold text-foreground/80">{label} <span className="text-red-500">*</span></label>
+      <label className="text-xs font-semibold text-foreground/80">{label} <span className="text-red-500">*</span></label>
       <input type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder ?? "Use data pill from trigger..."}
-        className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+        className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
       />
       <div className="flex flex-wrap gap-1">
         {vars.map(v => (
           <button key={v.key} type="button"
             onClick={() => onChange(v.key)}
-            className="h-5 px-2 rounded-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[10px] font-medium transition-colors">
+            className="h-5 px-2 rounded-full bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-xs font-medium transition-colors">
             {v.key}
           </button>
         ))}
       </div>
-      {description && <p className="text-[11px] text-muted-foreground">{description}</p>}
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
     </div>
   )
 }
@@ -552,8 +552,8 @@ function Toggle({ checked, onChange, label, description }: { checked: boolean; o
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
-        <p className="text-[12px] font-semibold text-foreground/80">{label}</p>
-        {description && <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>}
+        <p className="text-xs font-semibold text-foreground/80">{label}</p>
+        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
       </div>
       <button type="button" onClick={() => onChange(!checked)}
         className={cn("relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
@@ -672,7 +672,7 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
               <input type="text" placeholder="e.g., US || Broad"
                 value={config.targetFilterValue ?? ""}
                 onChange={e => onChange({ ...config, targetFilterValue: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
               />
             )}
             {config.targetFilter === "specific" && (
@@ -680,7 +680,7 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
                 value={(config.duplicateTargetAdsets ?? []).join("\n")}
                 onChange={e => onChange({ ...config, duplicateTargetAdsets: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })}
                 rows={2}
-                className="w-full px-3 py-2 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono resize-none"
+                className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono resize-none"
               />
             )}
 
@@ -695,17 +695,17 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
             />
 
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">New Name (optional)</label>
+              <label className="text-xs font-semibold text-foreground/80">New Name (optional)</label>
               <input type="text" placeholder="e.g. {{original_name}}_{{date}}"
                 value={config.duplicateNameTemplate ?? ""}
                 onChange={e => onChange({ ...config, duplicateNameTemplate: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
               />
               <div className="flex flex-wrap gap-1">
                 {NAME_TEMPLATE_VARS.map(v => (
                   <button key={v} type="button"
                     onClick={() => onChange({ ...config, duplicateNameTemplate: (config.duplicateNameTemplate ?? "") + v })}
-                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-xs font-medium text-muted-foreground transition-colors">
                     {v}
                   </button>
                 ))}
@@ -743,26 +743,26 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
               level="adset"
             />
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Target Campaign (optional)</label>
+              <label className="text-xs font-semibold text-foreground/80">Target Campaign (optional)</label>
               <input type="text" placeholder="Same campaign (default)"
                 value={config.duplicateTargetCampaignId ?? ""}
                 onChange={e => onChange({ ...config, duplicateTargetCampaignId: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
               />
-              <p className="text-[11px] text-muted-foreground">Leave empty to keep the ad set in the same campaign.</p>
+              <p className="text-xs text-muted-foreground">Leave empty to keep the ad set in the same campaign.</p>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">New Name (optional)</label>
+              <label className="text-xs font-semibold text-foreground/80">New Name (optional)</label>
               <input type="text" placeholder="e.g. {{original_name}}_copy"
                 value={config.duplicateNameTemplate ?? ""}
                 onChange={e => onChange({ ...config, duplicateNameTemplate: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
               />
               <div className="flex flex-wrap gap-1">
                 {NAME_TEMPLATE_VARS.map(v => (
                   <button key={v} type="button"
                     onClick={() => onChange({ ...config, duplicateNameTemplate: (config.duplicateNameTemplate ?? "") + v })}
-                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-xs font-medium text-muted-foreground transition-colors">
                     {v}
                   </button>
                 ))}
@@ -781,17 +781,17 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
               level="campaign"
             />
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">New Name (optional)</label>
+              <label className="text-xs font-semibold text-foreground/80">New Name (optional)</label>
               <input type="text" placeholder="e.g. {{original_name}}_{{date}}"
                 value={config.duplicateNameTemplate ?? ""}
                 onChange={e => onChange({ ...config, duplicateNameTemplate: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
               />
               <div className="flex flex-wrap gap-1">
                 {NAME_TEMPLATE_VARS.map(v => (
                   <button key={v} type="button"
                     onClick={() => onChange({ ...config, duplicateNameTemplate: (config.duplicateNameTemplate ?? "") + v })}
-                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-xs font-medium text-muted-foreground transition-colors">
                     {v}
                   </button>
                 ))}
@@ -810,11 +810,11 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
               level="ad"
             />
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">New Creative ID <span className="text-red-500">*</span></label>
+              <label className="text-xs font-semibold text-foreground/80">New Creative ID <span className="text-red-500">*</span></label>
               <input type="text" placeholder="Meta creative ID"
                 value={config.newCreativeId ?? ""}
                 onChange={e => onChange({ ...config, newCreativeId: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
               />
             </div>
           </>
@@ -825,13 +825,13 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
           <>
             {(ev === "toggle_rule" || ev === "apply_existing_rule") && (
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Rule ID <span className="text-red-500">*</span></label>
+                <label className="text-xs font-semibold text-foreground/80">Rule ID <span className="text-red-500">*</span></label>
                 <input type="text" placeholder="Facebook Rule ID"
                   value={config.ruleId ?? ""}
                   onChange={e => onChange({ ...config, ruleId: e.target.value })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
                 />
-                <p className="text-[11px] text-muted-foreground">Lấy Rule ID từ Meta Ads Manager → Automated Rules</p>
+                <p className="text-xs text-muted-foreground">Lấy Rule ID từ Meta Ads Manager → Automated Rules</p>
               </div>
             )}
             {ev === "toggle_rule" && (
@@ -842,11 +842,11 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
             )}
             {ev === "create_rule" && (
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Rule Name <span className="text-red-500">*</span></label>
+                <label className="text-xs font-semibold text-foreground/80">Rule Name <span className="text-red-500">*</span></label>
                 <input type="text" placeholder="My Auto Rule"
                   value={config.ruleName ?? ""}
                   onChange={e => onChange({ ...config, ruleName: e.target.value })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50"
                 />
               </div>
             )}
@@ -857,20 +857,20 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
         {ev === "launch_ad" && (
           <>
             <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 px-3 py-2.5">
-              <p className="text-[11px] text-blue-700 dark:text-blue-400">
+              <p className="text-xs text-blue-700 dark:text-blue-400">
                 <span className="font-semibold">Note:</span> The creative asset comes from the trigger (e.g., Media Library upload or Best Performing Post). Configure the target ad set and copy below.
               </p>
             </div>
 
             {/* Ad Account — required for launch */}
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Ad Account ID <span className="text-red-500">*</span></label>
+              <label className="text-xs font-semibold text-foreground/80">Ad Account ID <span className="text-red-500">*</span></label>
               <input type="text" placeholder="act_123456789"
                 value={config.launchAdAccountId ?? ""}
                 onChange={e => onChange({ ...config, launchAdAccountId: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50"
               />
-              <p className="text-[11px] text-muted-foreground">Found in Ad Accounts page (format: act_xxxxx)</p>
+              <p className="text-xs text-muted-foreground">Found in Ad Accounts page (format: act_xxxxx)</p>
             </div>
 
             <AdSetPicker
@@ -881,17 +881,17 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
             />
 
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Ad Name Template</label>
+              <label className="text-xs font-semibold text-foreground/80">Ad Name Template</label>
               <input type="text" placeholder="{{filename}} - {{date}}"
                 value={config.launchAdNameTemplate ?? ""}
                 onChange={e => onChange({ ...config, launchAdNameTemplate: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 font-mono placeholder:text-muted-foreground/50 placeholder:font-sans"
               />
               <div className="flex flex-wrap gap-1">
                 {["{{filename}}", "{{date}}", "{{adSetName}}", "{{campaignName}}"].map(v => (
                   <button key={v} type="button"
                     onClick={() => onChange({ ...config, launchAdNameTemplate: (config.launchAdNameTemplate ?? "") + v })}
-                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+                    className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-xs font-medium text-muted-foreground transition-colors">
                     {v}
                   </button>
                 ))}
@@ -899,29 +899,29 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Headline</label>
+              <label className="text-xs font-semibold text-foreground/80">Headline</label>
               <input type="text" placeholder="Ad headline"
                 value={config.launchHeadline ?? ""}
                 onChange={e => onChange({ ...config, launchHeadline: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Primary Text</label>
+              <label className="text-xs font-semibold text-foreground/80">Primary Text</label>
               <textarea placeholder="Ad primary text" rows={3}
                 value={config.launchPrimaryText ?? ""}
                 onChange={e => onChange({ ...config, launchPrimaryText: e.target.value })}
-                className="w-full px-3 py-2 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 resize-none"
+                className="w-full px-3 py-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60 resize-none"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Link URL <span className="text-red-500">*</span></label>
+              <label className="text-xs font-semibold text-foreground/80">Link URL <span className="text-red-500">*</span></label>
               <input type="url" placeholder="https://example.com"
                 value={config.launchLinkUrl ?? ""}
                 onChange={e => onChange({ ...config, launchLinkUrl: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
               />
             </div>
 
@@ -988,18 +988,18 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
               required
             />
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">
+              <label className="text-xs font-semibold text-foreground/80">
                 Minimum Spend Amount <span className="text-red-500">*</span>
               </label>
               <div className="flex items-center gap-2">
-                <span className="text-[13px] text-muted-foreground">{config.minSpendType === "percentage" ? "%" : "$"}</span>
+                <span className="text-xs text-muted-foreground">{config.minSpendType === "percentage" ? "%" : "$"}</span>
                 <input type="number" min={0}
                   value={config.minSpendAmount ?? ""}
                   onChange={e => onChange({ ...config, minSpendAmount: parseFloat(e.target.value) || 0 })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground">Each ad set will have this minimum daily spend target</p>
+              <p className="text-xs text-muted-foreground">Each ad set will have this minimum daily spend target</p>
             </div>
           </>
         )}
@@ -1008,17 +1008,17 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
         {isBudget && (
           <>
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Budget Level</label>
+              <label className="text-xs font-semibold text-foreground/80">Budget Level</label>
               <div className="relative">
                 <select value={config.targetLevel ?? "adset"}
                   onChange={e => onChange({ ...config, targetLevel: e.target.value as any })}
-                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none">
+                  className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none">
                   <option value="adset">Ad Sets</option>
                   <option value="campaign">Campaigns</option>
                 </select>
                 <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
               </div>
-              <p className="text-[11px] text-muted-foreground">Modify budgets at the {config.targetLevel === "campaign" ? "campaign" : "ad set"} level</p>
+              <p className="text-xs text-muted-foreground">Modify budgets at the {config.targetLevel === "campaign" ? "campaign" : "ad set"} level</p>
             </div>
 
             {triggerHasNoIds ? (
@@ -1053,19 +1053,19 @@ function MetaActionSetup({ config, onChange, triggerAppId }: { config: ActionCon
 
             <div className="flex gap-3">
               <div className="flex-1 space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Amount <span className="text-red-500">*</span></label>
+                <label className="text-xs font-semibold text-foreground/80">Amount <span className="text-red-500">*</span></label>
                 <input type="number" min={0}
                   value={config.budgetAmount ?? ""}
                   onChange={e => onChange({ ...config, budgetAmount: parseFloat(e.target.value) || 0 })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
               </div>
               <div className="w-32 space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Amount Type</label>
+                <label className="text-xs font-semibold text-foreground/80">Amount Type</label>
                 <div className="relative">
                   <select value={config.budgetAmountType ?? "percentage"}
                     onChange={e => onChange({ ...config, budgetAmountType: e.target.value as any })}
-                    className="w-full h-9 pl-2 pr-6 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none">
+                    className="w-full h-9 pl-2 pr-6 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none">
                     <option value="percentage">Percentage (%)</option>
                     <option value="absolute">Dollar ($)</option>
                   </select>
@@ -1122,46 +1122,46 @@ function SheetsActionSetup({ config, onChange }: { config: ActionConfig; onChang
 
       {/* Service Account note */}
       <div className="rounded-lg bg-muted/30 border border-border px-3 py-2.5 space-y-1">
-        <p className="text-[11px] font-semibold text-foreground/70">Service Account Access</p>
-        <p className="text-[11px] text-muted-foreground">
-          Share your sheet with <span className="font-mono text-[10px] bg-muted px-1 rounded">{process.env.NEXT_PUBLIC_SHEETS_SERVICE_ACCOUNT ?? "adlauncher-sheets@..."}</span> and grant <strong>Editor</strong> access.
+        <p className="text-xs font-semibold text-foreground/70">Service Account Access</p>
+        <p className="text-xs text-muted-foreground">
+          Share your sheet with <span className="font-mono text-xs bg-muted px-1 rounded">{process.env.NEXT_PUBLIC_SHEETS_SERVICE_ACCOUNT ?? "adlauncher-sheets@..."}</span> and grant <strong>Editor</strong> access.
         </p>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Spreadsheet ID or URL <span className="text-red-500">*</span></label>
+        <label className="text-xs font-semibold text-foreground/80">Spreadsheet ID or URL <span className="text-red-500">*</span></label>
         <input type="text" placeholder="Paste spreadsheet URL or ID"
           value={config.actionSheetsSpreadsheetId ?? ""}
           onChange={e => handleSpreadsheetInput(e.target.value)}
-          className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+          className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
         />
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Sheet Name</label>
+        <label className="text-xs font-semibold text-foreground/80">Sheet Name</label>
         <input type="text" placeholder="Sheet1"
           value={config.actionSheetsSheetName ?? "Sheet1"}
           onChange={e => onChange({ ...config, actionSheetsSheetName: e.target.value })}
-          className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
       </div>
 
       {ev === "update_sheet_cell" && (
         <>
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Cell Reference <span className="text-red-500">*</span></label>
+            <label className="text-xs font-semibold text-foreground/80">Cell Reference <span className="text-red-500">*</span></label>
             <input type="text" placeholder="e.g., B2, C5"
               value={config.actionSheetsCellRef ?? ""}
               onChange={e => onChange({ ...config, actionSheetsCellRef: e.target.value })}
-              className="w-28 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              className="w-28 h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Value</label>
+            <label className="text-xs font-semibold text-foreground/80">Value</label>
             <input type="text" placeholder="Value to write"
               value={config.actionSheetsCellValue ?? ""}
               onChange={e => onChange({ ...config, actionSheetsCellValue: e.target.value })}
-              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
             />
           </div>
         </>
@@ -1170,9 +1170,9 @@ function SheetsActionSetup({ config, onChange }: { config: ActionConfig; onChang
       {(ev === "add_sheet_row" || ev === "update_sheet_row") && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <label className="text-[12px] font-semibold text-foreground/80">Column Mapping</label>
+            <label className="text-xs font-semibold text-foreground/80">Column Mapping</label>
           </div>
-          <p className="text-[11px] text-muted-foreground -mt-1">Map columns to data. Use {"{{filename}}"}, {"{{date}}"}, {"{{fileUrl}}"} as variables.</p>
+          <p className="text-xs text-muted-foreground -mt-1">Map columns to data. Use {"{{filename}}"}, {"{{date}}"}, {"{{fileUrl}}"} as variables.</p>
           {(config.actionSheetsColumnMappings ?? []).map((m, i) => (
             <div key={i} className="flex items-center gap-2">
               <input placeholder="Column" value={m.column}
@@ -1181,7 +1181,7 @@ function SheetsActionSetup({ config, onChange }: { config: ActionConfig; onChang
                   next[i] = { ...m, column: e.target.value }
                   onChange({ ...config, actionSheetsColumnMappings: next })
                 }}
-                className="w-24 h-8 px-2.5 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
+                className="w-24 h-8 px-2.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
               />
               <input placeholder="Value or {{variable}}" value={m.value}
                 onChange={e => {
@@ -1189,7 +1189,7 @@ function SheetsActionSetup({ config, onChange }: { config: ActionConfig; onChang
                   next[i] = { ...m, value: e.target.value }
                   onChange({ ...config, actionSheetsColumnMappings: next })
                 }}
-                className="flex-1 h-8 px-2.5 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
+                className="flex-1 h-8 px-2.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
               />
               <button onClick={() => onChange({ ...config, actionSheetsColumnMappings: (config.actionSheetsColumnMappings ?? []).filter((_, j) => j !== i) })}
                 className="text-muted-foreground hover:text-destructive">
@@ -1199,7 +1199,7 @@ function SheetsActionSetup({ config, onChange }: { config: ActionConfig; onChang
           ))}
           <button
             onClick={() => onChange({ ...config, actionSheetsColumnMappings: [...(config.actionSheetsColumnMappings ?? []), { column: "", value: "" }] })}
-            className="flex items-center gap-1.5 text-[12px] text-primary hover:underline font-medium">
+            className="flex items-center gap-1.5 text-xs text-primary hover:underline font-medium">
             <IconPlus className="size-3.5" /> Add Column
           </button>
         </div>
@@ -1228,9 +1228,9 @@ function MediaLibraryActionSetup({ config, onChange }: { config: ActionConfig; o
   return (
     <div className="p-5 space-y-4">
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Target Board</label>
+        <label className="text-xs font-semibold text-foreground/80">Target Board</label>
         {loading ? (
-          <div className="flex items-center gap-2 h-9 px-3 border border-border rounded-lg text-[13px] text-muted-foreground">
+          <div className="flex items-center gap-2 h-9 px-3 border border-border rounded-lg text-xs text-muted-foreground">
             <IconLoader2 className="size-3.5 animate-spin" /> Loading boards…
           </div>
         ) : (
@@ -1240,33 +1240,33 @@ function MediaLibraryActionSetup({ config, onChange }: { config: ActionConfig; o
                 const board = boards.find(b => b.id === e.target.value)
                 onChange({ ...config, actionMediaBoardId: e.target.value || undefined, actionMediaBoardName: board?.name })
               }}
-              className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground">
+              className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground">
               <option value="">No board (upload to library root)</option>
               {boards.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
             <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
           </div>
         )}
-        <p className="text-[11px] text-muted-foreground">Optionally organize uploaded media into a board.</p>
+        <p className="text-xs text-muted-foreground">Optionally organize uploaded media into a board.</p>
       </div>
 
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Naming Template (optional)</label>
+        <label className="text-xs font-semibold text-foreground/80">Naming Template (optional)</label>
         <input type="text" placeholder="{originalName}"
           value={config.actionMediaNamingTemplate ?? ""}
           onChange={e => onChange({ ...config, actionMediaNamingTemplate: e.target.value })}
-          className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+          className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
         />
         <div className="flex flex-wrap gap-1 mt-1">
           {NAMING_VARS.map(v => (
             <button key={v} type="button"
               onClick={() => onChange({ ...config, actionMediaNamingTemplate: (config.actionMediaNamingTemplate ?? "") + v })}
-              className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-[10px] font-medium text-muted-foreground transition-colors">
+              className="h-5 px-2 rounded-full bg-muted hover:bg-primary/10 hover:text-primary border border-border/50 text-xs font-medium text-muted-foreground transition-colors">
               {v}
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-muted-foreground">Leave empty to keep the original file name.</p>
+        <p className="text-xs text-muted-foreground">Leave empty to keep the original file name.</p>
       </div>
     </div>
   )
@@ -1290,8 +1290,8 @@ function SetupTab({ config, onChange, triggerAppId }: { config: ActionConfig; on
           <AppIcon className={cn("size-4", meta.iconColor)} />
         </div>
         <div>
-          <p className="text-[13px] font-semibold text-foreground">{meta.label}</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Action configured — {config.event?.replace(/_/g, " ")}</p>
+          <p className="text-xs font-semibold text-foreground">{meta.label}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Action configured — {config.event?.replace(/_/g, " ")}</p>
         </div>
       </div>
     </div>
@@ -1303,8 +1303,8 @@ function SetupTab({ config, onChange, triggerAppId }: { config: ActionConfig; on
 function PreviewRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="flex items-start gap-3 py-2 border-b border-border/40 last:border-0">
-      <span className="text-[11px] text-muted-foreground w-28 shrink-0 pt-0.5">{label}</span>
-      <span className={cn("text-[12px] font-medium flex-1", accent ? "text-primary" : "text-foreground")}>{value}</span>
+      <span className="text-xs text-muted-foreground w-28 shrink-0 pt-0.5">{label}</span>
+      <span className={cn("text-xs font-medium flex-1", accent ? "text-primary" : "text-foreground")}>{value}</span>
     </div>
   )
 }
@@ -1343,7 +1343,7 @@ function MetaActionPreview({ config }: { config: ActionConfig }) {
         <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40">
           <div className="flex items-center gap-2">
             <IconBrandMeta className="size-4 text-[#1877F2]" />
-            <span className="text-[12px] font-semibold text-foreground">Meta · {label}</span>
+            <span className="text-xs font-semibold text-foreground">Meta · {label}</span>
           </div>
         </div>
         <div className="px-4 py-1">
@@ -1362,7 +1362,7 @@ function MetaActionPreview({ config }: { config: ActionConfig }) {
       </div>
 
       <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 px-4 py-3">
-        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+        <p className="text-xs text-amber-700 dark:text-amber-400">
           <span className="font-semibold">Note:</span> This action calls the Meta Ads API and will affect real ads when the automation fires.
           {config.requireApproval && " Approval is required before executing."}
         </p>
@@ -1383,7 +1383,7 @@ function SheetsActionPreview({ config }: { config: ActionConfig }) {
         <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40">
           <div className="flex items-center gap-2">
             <IconTable className="size-4 text-green-600" />
-            <span className="text-[12px] font-semibold text-foreground">Google Sheets · {label}</span>
+            <span className="text-xs font-semibold text-foreground">Google Sheets · {label}</span>
           </div>
         </div>
         <div className="px-4 py-1">
@@ -1406,14 +1406,14 @@ function SheetsActionPreview({ config }: { config: ActionConfig }) {
 
       {!spreadsheetId && (
         <div className="rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800/40 px-4 py-3">
-          <p className="text-[11px] text-red-600 dark:text-red-400">
+          <p className="text-xs text-red-600 dark:text-red-400">
             <span className="font-semibold">Missing:</span> Spreadsheet ID or URL is required.
           </p>
         </div>
       )}
 
       <div className="rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 px-4 py-3">
-        <p className="text-[11px] text-blue-700 dark:text-blue-400">
+        <p className="text-xs text-blue-700 dark:text-blue-400">
           <span className="font-semibold">Tip:</span> Make sure the service account has <strong>Editor</strong> access to the spreadsheet.
         </p>
       </div>
@@ -1431,7 +1431,7 @@ function MediaLibraryActionPreview({ config }: { config: ActionConfig }) {
         <div className="px-4 py-2.5 bg-muted/30 border-b border-border/40">
           <div className="flex items-center gap-2">
             <IconPhoto className="size-4 text-orange-500" />
-            <span className="text-[12px] font-semibold text-foreground">Media Library · Upload</span>
+            <span className="text-xs font-semibold text-foreground">Media Library · Upload</span>
           </div>
         </div>
         <div className="px-4 py-1">
@@ -1442,7 +1442,7 @@ function MediaLibraryActionPreview({ config }: { config: ActionConfig }) {
       </div>
 
       <div className="rounded-xl bg-muted/30 border border-border px-4 py-3">
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           When this action runs, the file from the trigger will be uploaded to your Media Library
           {boardName ? ` and added to the board "<strong>${boardName}</strong>"` : ""}.
         </p>
@@ -1500,8 +1500,8 @@ function PreviewTab({ config, automationId }: { config: ActionConfig; automation
   if (config.appId !== "notification") {
     return (
       <div className="p-5">
-        <p className="text-[13px] font-medium text-foreground">{meta.label}</p>
-        <p className="text-[11px] text-muted-foreground mt-1">This action will execute when the trigger fires.</p>
+        <p className="text-xs font-medium text-foreground">{meta.label}</p>
+        <p className="text-xs text-muted-foreground mt-1">This action will execute when the trigger fires.</p>
       </div>
     )
   }
@@ -1509,10 +1509,10 @@ function PreviewTab({ config, automationId }: { config: ActionConfig; automation
   return (
     <div className="p-5 space-y-4">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">Sends</p>
-        <p className="text-[12px] font-medium text-foreground">Notification · Send Notification</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">Sends</p>
+        <p className="text-xs font-medium text-foreground">Notification · Send Notification</p>
         <div className="flex items-center gap-1.5 mt-1.5">
-          <span className="px-2 py-0.5 rounded-full bg-muted text-[10px] font-medium text-muted-foreground">
+          <span className="px-2 py-0.5 rounded-full bg-muted text-xs font-medium text-muted-foreground">
             {notif?.via === "email" ? "Email only" : notif?.via === "slack" ? "Slack only" : "Email + Slack"}
             &middot; {recipientCount === 0 ? "no recipients" : `${recipientCount} recipient(s)`}
           </span>
@@ -1520,7 +1520,7 @@ function PreviewTab({ config, automationId }: { config: ActionConfig; automation
       </div>
 
       <div className="space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">What will get sent</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">What will get sent</p>
         <button
           onClick={handleDryRun}
           disabled={dryRunning}
@@ -1529,26 +1529,26 @@ function PreviewTab({ config, automationId }: { config: ActionConfig; automation
           {dryRunning ? <><IconLoader2 className="size-3.5 animate-spin" /> Sending…</> : "Dry-run this notification"}
         </button>
         {dryRunResult && (
-          <p className="text-[12px] text-center font-medium py-1">{dryRunResult}</p>
+          <p className="text-xs text-center font-medium py-1">{dryRunResult}</p>
         )}
       </div>
 
       {(!notif || notif.via === "email" || notif.via === "both") && (
         <div className="border border-border/60 rounded-xl overflow-hidden">
           <div className="px-3 py-2 bg-muted/30 border-b border-border/40 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
               <IconMail className="size-3.5" />EMAIL
             </div>
-            <span className="text-[10px] text-muted-foreground/60">{recipientCount === 0 ? "No recipients" : `${recipientCount} recipient(s)`}</span>
+            <span className="text-xs text-muted-foreground/60">{recipientCount === 0 ? "No recipients" : `${recipientCount} recipient(s)`}</span>
           </div>
           <div className="p-3">
             <div className="flex items-start gap-2">
-              <div className="size-6 rounded-full bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground shrink-0">AM</div>
+              <div className="size-6 rounded-full bg-primary flex items-center justify-center text-xs font-bold text-primary-foreground shrink-0">AM</div>
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-medium">Notification: Performance Monitoring</p>
-                <p className="text-[10px] text-muted-foreground">to {recipientCount > 0 ? notif?.emailRecipients?.[0] : "you@example.com"}{recipientCount > 1 && ` +${recipientCount - 1} more`}</p>
+                <p className="text-xs font-medium">Notification: Performance Monitoring</p>
+                <p className="text-xs text-muted-foreground">to {recipientCount > 0 ? notif?.emailRecipients?.[0] : "you@example.com"}{recipientCount > 1 && ` +${recipientCount - 1} more`}</p>
                 <div className="mt-2 bg-muted/40 rounded-lg p-2">
-                  <p className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed break-all">{msg}</p>
+                  <p className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed break-all">{msg}</p>
                 </div>
               </div>
             </div>
@@ -1559,21 +1559,21 @@ function PreviewTab({ config, automationId }: { config: ActionConfig; automation
       {(!notif || notif.via === "slack" || notif.via === "both") && (
         <div className="border border-border/60 rounded-xl overflow-hidden">
           <div className="px-3 py-2 bg-muted/30 border-b border-border/40 flex items-center justify-between">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
               <IconBrandSlack className="size-3.5" />SLACK
             </div>
-            <span className="text-[10px] text-muted-foreground/60">{notif?.slackChannel ?? "# your org default"}</span>
+            <span className="text-xs text-muted-foreground/60">{notif?.slackChannel ?? "# your org default"}</span>
           </div>
           <div className="p-3">
             <div className="flex items-start gap-2">
-              <div className="size-6 rounded bg-primary flex items-center justify-center text-[9px] font-bold text-primary-foreground shrink-0">AM</div>
+              <div className="size-6 rounded bg-primary flex items-center justify-center text-xs font-bold text-primary-foreground shrink-0">AM</div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] font-semibold">AdLauncher</span>
-                  <span className="text-[9px] text-muted-foreground bg-muted px-1 py-0.5 rounded font-medium">APP</span>
+                  <span className="text-xs font-semibold">AdLauncher</span>
+                  <span className="text-xs text-muted-foreground bg-muted px-1 py-0.5 rounded font-medium">APP</span>
                 </div>
                 <div className="mt-1.5 bg-muted/40 rounded-lg p-2">
-                  <p className="text-[11px] font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed break-all">{msg}</p>
+                  <p className="text-xs font-mono text-muted-foreground whitespace-pre-wrap leading-relaxed break-all">{msg}</p>
                 </div>
               </div>
             </div>
@@ -1609,10 +1609,10 @@ export function ActionConfigPanel({ stepIndex, config, onChange, onClose, automa
             <AppIcon className={cn("size-5", meta.iconColor)} />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
+            <p className="text-xs font-semibold text-foreground leading-tight truncate">
               {stepIndex}. {meta.label}
             </p>
-            <p className="text-[11px] text-muted-foreground/70 leading-tight mt-0.5">
+            <p className="text-xs text-muted-foreground/70 leading-tight mt-0.5">
               What happens when it fires?
             </p>
           </div>
@@ -1634,7 +1634,7 @@ export function ActionConfigPanel({ stepIndex, config, onChange, onClose, automa
             key={t}
             onClick={() => setActiveTab(t)}
             className={cn(
-              "flex-1 py-2.5 text-[13px] font-medium transition-colors capitalize",
+              "flex-1 py-2.5 text-xs font-medium transition-colors capitalize",
               activeTab === t ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >

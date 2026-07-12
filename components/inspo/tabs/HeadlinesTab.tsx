@@ -27,7 +27,7 @@ function ScoreBar({ score }: { score: number }) {
       <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
         <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[11px] tabular-nums text-muted-foreground w-6 text-right">{pct}</span>
+      <span className="text-xs tabular-nums text-muted-foreground w-6 text-right">{pct}</span>
     </div>
   )
 }
@@ -85,7 +85,7 @@ export function HeadlinesTab({ headlines }: Props) {
       <div className="bg-card border border-border/60 rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border/50 text-muted-foreground text-[11px] uppercase tracking-wide">
+            <tr className="border-b border-border/50 text-muted-foreground text-xs uppercase tracking-wide">
               <th className="text-left px-5 py-3 font-semibold w-[45%]">Headline</th>
               {(["adsCount", "longestRunning", "totalRunningDays", "totalReach", "score"] as SortKey[]).map(k => (
                 <th key={k} className="px-5 py-3 text-right cursor-pointer select-none" onClick={() => toggleSort(k)}>
@@ -105,7 +105,7 @@ export function HeadlinesTab({ headlines }: Props) {
             {paged.map((row, i) => (
               <tr key={i} className="hover:bg-muted/20 transition-colors">
                 <td className="px-5 py-3">
-                  <p className="text-[13px] font-medium text-foreground">{row.text}</p>
+                  <p className="text-xs font-medium text-foreground">{row.text}</p>
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums font-medium">{row.adsCount}</td>
                 <td className="px-5 py-3 text-right tabular-nums">{row.longestRunning}d</td>

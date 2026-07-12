@@ -93,12 +93,12 @@ export function CampaignLevel({ state, update, currency }: Props) {
 
       <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
         <div>
-          <label className="text-[13px] font-semibold text-[#1c2b33] dark:text-gray-200">
+          <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
             Campaign name
           </label>
           <input
             type="text"
-            className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-[13px] outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
+            className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
             value={state.campaignName}
             onChange={(event) => update({ campaignName: event.target.value })}
             placeholder="Enter a campaign name"
@@ -108,10 +108,10 @@ export function CampaignLevel({ state, update, currency }: Props) {
 
       <div className="space-y-3 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
         <div>
-          <h3 className="text-[15px] font-semibold text-[#1c2b33] dark:text-gray-100">
+          <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">
             Special Ad Categories
           </h3>
-          <p className="mt-1 text-[13px] text-[#65676b]">
+          <p className="mt-1 text-xs text-[#65676b]">
             Select only categories that apply. Leave all unchecked for no categories.
           </p>
         </div>
@@ -119,7 +119,7 @@ export function CampaignLevel({ state, update, currency }: Props) {
           {SPECIAL_CATEGORIES.map((category) => (
             <label
               key={category.value}
-              className="flex cursor-pointer items-center gap-2 rounded border border-[#ccd0d5] px-3 py-2 text-[13px] dark:border-gray-700"
+              className="flex cursor-pointer items-center gap-2 rounded border border-[#ccd0d5] px-3 py-2 text-xs dark:border-gray-700"
             >
               <input
                 type="checkbox"
@@ -134,16 +134,16 @@ export function CampaignLevel({ state, update, currency }: Props) {
       </div>
 
       <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
-        <h3 className="text-[15px] font-semibold text-[#1c2b33] dark:text-gray-100">
+        <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">
           Campaign details
         </h3>
         <div className="flex items-center justify-between">
-          <span className="text-[13px] text-[#1c2b33] dark:text-gray-300">Buying type</span>
-          <span className="text-[13px] font-medium text-[#4b4f56] dark:text-gray-400">Auction</span>
+          <span className="text-xs text-[#1c2b33] dark:text-gray-300">Buying type</span>
+          <span className="text-xs font-medium text-[#4b4f56] dark:text-gray-400">Auction</span>
         </div>
 
         <div className="space-y-2">
-          <span className="block text-[13px] text-[#1c2b33] dark:text-gray-300">
+          <span className="block text-xs text-[#1c2b33] dark:text-gray-300">
             Campaign objective
           </span>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -170,13 +170,13 @@ export function CampaignLevel({ state, update, currency }: Props) {
                   <span>
                     <span
                       className={cn(
-                        "block text-[13px] font-semibold",
+                        "block text-xs font-semibold",
                         selected ? "text-[#1877f2]" : "text-[#1c2b33] dark:text-gray-200"
                       )}
                     >
                       {objective.label}
                     </span>
-                    <span className="mt-1 block text-[11px] leading-snug text-[#65676b]">
+                    <span className="mt-1 block text-xs leading-snug text-[#65676b]">
                       {objective.desc}
                     </span>
                   </span>
@@ -190,10 +190,10 @@ export function CampaignLevel({ state, update, currency }: Props) {
       <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-[15px] font-semibold text-[#1c2b33] dark:text-gray-100">
+            <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">
               Advantage campaign budget
             </h3>
-            <p className="mt-1 text-[13px] text-[#65676b]">
+            <p className="mt-1 text-xs text-[#65676b]">
               When enabled, the daily budget is set at campaign level. When disabled, budget is set on the ad set.
             </p>
           </div>
@@ -217,11 +217,11 @@ export function CampaignLevel({ state, update, currency }: Props) {
 
         {state.advantageCampaignBudget && (
           <div className="border-t border-[#e4e6eb] pt-4 dark:border-gray-800">
-            <label className="text-[13px] font-semibold text-[#1c2b33] dark:text-gray-200">
+            <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
               Daily campaign budget
             </label>
             <div className="relative mt-1.5 max-w-[220px]">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-[#65676b]">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#65676b]">
                 {currency}
               </span>
               <input
@@ -230,7 +230,7 @@ export function CampaignLevel({ state, update, currency }: Props) {
                 step={budgetStep}
                 value={state.campaignBudget}
                 onChange={(event) => update({ campaignBudget: event.target.value })}
-                className="h-9 w-full rounded border border-[#ccd0d5] bg-white pl-14 pr-3 text-[13px] outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
+                className="h-9 w-full rounded border border-[#ccd0d5] bg-white pl-14 pr-3 text-xs outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
               />
             </div>
           </div>

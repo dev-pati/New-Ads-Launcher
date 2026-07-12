@@ -43,7 +43,7 @@ function NotifItem({ n, onRead }: { n: AppNotification; onRead: (id: string) => 
       <div className="flex-1 min-w-0">
         <p className={cn("text-sm leading-snug", !n.is_read && "font-semibold")}>{n.title}</p>
         {n.body && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>}
-        <p className="text-[10px] text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>
+        <p className="text-xs text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>
       </div>
       {!n.is_read && (
         <span className="size-1.5 rounded-full bg-primary shrink-0 mt-1.5" />
@@ -82,7 +82,7 @@ export function NotificationsDropdown({ onClose }: Props) {
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">Notifications</span>
           {unreadCount > 0 && (
-            <span className="text-[10px] font-bold bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+            <span className="text-xs font-bold bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
               {unreadCount}
             </span>
           )}

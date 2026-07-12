@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       })
     ).then(ids => ids.find(Boolean))
     if (wrongAdSet) {
-      return NextResponse.json({ error: "Ad set không thuộc ad account đã chọn." }, { status: 400 })
+      return NextResponse.json({ error: "Ad set does not belong to the selected ad account." }, { status: 400 })
     }
 
     // Fetch all creatives in one DB query
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (notReady.length > 0) {
       const names = notReady.map((c: any) => `"${c.file_name}" (${c.status})`).join(", ")
       return NextResponse.json({
-        error: `Một số media chưa sẵn sàng để launch (đang upload hoặc xử lý trên Meta): ${names}. Vui lòng đợi hoàn tất rồi thử lại.`
+        error: `Some media isn't ready to launch yet (uploading or processing on Meta): ${names}. Please wait until it finishes and try again.`
       }, { status: 400 })
     }
 

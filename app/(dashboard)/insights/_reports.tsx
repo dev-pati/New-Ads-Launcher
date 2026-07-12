@@ -586,14 +586,14 @@ function ReportAdCard({ ad, metricKeys }: { ad: ReportAd; metricKeys: string[] }
           #{ad.rank}
         </div>
         {ad.isVideo && (
-          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-600 text-white">Video</div>
+          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-xs font-bold bg-violet-600 text-white">Video</div>
         )}
         {!ad.isVideo && ad.thumbnail && (
-          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white">Image</div>
+          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-xs font-bold bg-blue-600 text-white">Image</div>
         )}
       </div>
       <div className="p-3 space-y-2">
-        <p className="text-[10px] text-muted-foreground font-medium truncate">{ad.campaignName || "—"}</p>
+        <p className="text-xs text-muted-foreground font-medium truncate">{ad.campaignName || "—"}</p>
         <p className="text-xs font-semibold line-clamp-2 leading-tight min-h-[2.4rem]">{ad.adName}</p>
         <div className="space-y-1.5 pt-1.5 border-t">
           {defs.map(m => {
@@ -603,9 +603,9 @@ function ReportAdCard({ ad, metricKeys }: { ad: ReportAd; metricKeys: string[] }
               <div key={m.key} className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
-                  <span className="text-[10px] text-muted-foreground">{m.label}</span>
+                  <span className="text-xs text-muted-foreground">{m.label}</span>
                 </div>
-                <span className="text-[11px] font-semibold">{val}</span>
+                <span className="text-xs font-semibold">{val}</span>
               </div>
             )
           })}
@@ -701,7 +701,7 @@ function TableView({
               <th key={d.key} className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap cursor-pointer select-none"
                 onClick={() => onSort(d.key)}>
                 <div className="flex items-center justify-end gap-1">
-                  <span className="size-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                  <span className="size-4 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                     style={{ backgroundColor: d.color }}>{i + 1}</span>
                   <span>{d.label}</span>
                   {sortKey === d.key
@@ -742,7 +742,7 @@ function TableView({
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium truncate max-w-[260px]" title={ad.adName}>{ad.adName}</p>
-                    <p className="text-muted-foreground/60 text-[10px]">Rank #{ad.rank} · {ad.adsetName ? "1 ad" : "—"}</p>
+                    <p className="text-muted-foreground/60 text-xs">Rank #{ad.rank} · {ad.adsetName ? "1 ad" : "—"}</p>
                   </div>
                 </div>
               </td>
@@ -770,7 +770,7 @@ function TableView({
             <td className="py-2 px-3 text-muted-foreground/60">
               {selectable && <span className="size-3.5 inline-block" />}
             </td>
-            <td className="py-2 px-3 text-muted-foreground text-[11px]">
+            <td className="py-2 px-3 text-muted-foreground text-xs">
               {selectable && someChecked
                 ? <span className="text-primary font-semibold">{ads.filter(a => selectedIds!.has(a.adId)).length} of {ads.length} selected</span>
                 : `Total: ${ads.length} ads`}
@@ -781,7 +781,7 @@ function TableView({
                 ? (d.key === "createdTime" ? "—" : d.fmt(tv, tv))
                 : "—"
               return (
-                <td key={d.key} className="py-2 px-3 text-right whitespace-nowrap tabular-nums text-[11px]">
+                <td key={d.key} className="py-2 px-3 text-right whitespace-nowrap tabular-nums text-xs">
                   {display}
                 </td>
               )
@@ -1045,7 +1045,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
           </div>
           <div className="min-w-0">
             <h1 className="font-bold text-base leading-tight">{config.title}</h1>
-            <p className="text-[11px] text-muted-foreground line-clamp-1 max-w-sm">{config.description}</p>
+            <p className="text-xs text-muted-foreground line-clamp-1 max-w-sm">{config.description}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -1183,7 +1183,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
                         return (
                           <div key={f.key}>
                             {showHeader && (
-                              <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{cat}</p>
+                              <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">{cat}</p>
                             )}
                             <button onClick={() => { setPendingField(f); setPendingValue(""); setPendingOperator(">=") }}
                               className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50">{f.label}</button>
@@ -1296,7 +1296,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
             <div key={key}
               className={cn("flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-xs font-medium select-none transition-colors",
                 isActive ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted/50")}>
-              <span className="size-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+              <span className="size-4 h-4 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                 style={{ backgroundColor: def.color }}>{idx + 1}</span>
               <button onClick={() => handleSort(key)} className="flex items-center gap-1">
                 {def.label}
@@ -1327,7 +1327,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
                     return (
                       <div key={m.key}>
                         {showHeader && (
-                          <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{m.category}</p>
+                          <p className="px-3 pt-2.5 pb-1 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">{m.category}</p>
                         )}
                         <button onClick={() => { setMetricKeys(p => [...p, m.key]); setMetricOpen(false) }}
                           className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2">
@@ -1659,7 +1659,7 @@ function FilterDropdown({
         )}
       </div>
       {filters.length > 0 && (
-        <button onClick={onClear} className="text-[10px] text-muted-foreground hover:text-destructive px-1">Clear</button>
+        <button onClick={onClear} className="text-xs text-muted-foreground hover:text-destructive px-1">Clear</button>
       )}
     </div>
   )
@@ -1800,7 +1800,7 @@ function VSModeView() {
           </div>
           <div>
             <h1 className="font-bold text-base leading-tight">VS Mode</h1>
-            <p className="text-[11px] text-muted-foreground">Compare two ad segments side by side with independent filter sets.</p>
+            <p className="text-xs text-muted-foreground">Compare two ad segments side by side with independent filter sets.</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -1901,7 +1901,7 @@ function VSModeView() {
             <div key={key}
               className={cn("flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-xs font-medium select-none transition-colors",
                 isActive ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted/50")}>
-              <span className="size-4 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+              <span className="size-4 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                 style={{ backgroundColor: def.color }}>{idx + 1}</span>
               <button onClick={() => handleSort(key)} className="flex items-center gap-1">
                 {def.label}
@@ -1930,7 +1930,7 @@ function VSModeView() {
                     return (
                       <div key={m.key}>
                         {showHeader && (
-                          <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">{m.category}</p>
+                          <p className="px-3 pt-2.5 pb-1 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">{m.category}</p>
                         )}
                         <button onClick={() => { setMetricKeys(p => [...p, m.key]); setMetricOpen(false) }}
                           className="w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50 flex items-center gap-2">
@@ -1982,7 +1982,7 @@ function VSModeView() {
                       const isWinner = w === si + 1
                       return (
                         <div key={d.key} className={cn("rounded-lg p-2.5 border", isWinner ? "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20" : "border-border")}>
-                          <p className="text-[10px] text-muted-foreground mb-1 line-clamp-1">{d.label}</p>
+                          <p className="text-xs text-muted-foreground mb-1 line-clamp-1">{d.label}</p>
                           <div className="flex items-center gap-1">
                             {isWinner && <IconArrowUp className="size-3 text-emerald-500 shrink-0" />}
                             <p className={cn("text-sm font-bold tabular-nums", isWinner ? "text-emerald-600" : "")}>
@@ -2130,7 +2130,7 @@ function AdManageAdsView() {
           </div>
           <div>
             <h1 className="font-bold text-base leading-tight">AdManage Ads</h1>
-            <p className="text-[11px] text-muted-foreground">Track ads launched through AdManage across all platforms over time</p>
+            <p className="text-xs text-muted-foreground">Track ads launched through AdManage across all platforms over time</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

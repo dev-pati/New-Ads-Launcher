@@ -123,7 +123,7 @@ function TemplateCard({
         {t.tags?.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {t.tags.map(tag => (
-              <span key={tag} className="px-2 py-0.5 bg-violet-50 text-violet-600 rounded-full text-[11px] font-medium">{tag}</span>
+              <span key={tag} className="px-2 py-0.5 bg-violet-50 text-violet-600 rounded-full text-xs font-medium">{tag}</span>
             ))}
           </div>
         )}
@@ -203,7 +203,7 @@ function TemplateFormDialog({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-slate-600 font-medium">Tags (Folders) <span className="text-[10px] text-slate-400 font-normal">(comma-separated)</span></Label>
+            <Label className="text-xs font-semibold text-slate-600 font-medium">Tags (Folders) <span className="text-xs text-slate-400 font-normal">(comma-separated)</span></Label>
             <Input placeholder="e.g. Summer, Promo, Brand" value={form.tags} onChange={e => set("tags", e.target.value)} />
           </div>
         </div>
@@ -406,7 +406,7 @@ export default function TemplatesPage() {
       {/* ── Left Sidebar ── */}
       <div className="w-[240px] border-r flex flex-col shrink-0">
         <div className="px-5 h-[52px] flex items-center justify-between border-b">
-          <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">FOLDERS</span>
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">FOLDERS</span>
         </div>
 
         <div className="flex-1 overflow-auto py-3 px-3 space-y-0.5">
@@ -420,7 +420,7 @@ export default function TemplatesPage() {
             <IconTemplate className="size-4 shrink-0" />
             <span className="flex-1 text-left">All Templates</span>
             <span className={cn(
-              "text-[11px] rounded-full px-1.5 py-0.5 font-bold leading-none",
+              "text-xs rounded-full px-1.5 py-0.5 font-bold leading-none",
               activeFolder === null ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
             )}>
               {templates.length}
@@ -436,13 +436,13 @@ export default function TemplatesPage() {
           >
             <IconFolder className="size-4 shrink-0" />
             <span className="flex-1 text-left">Uncategorized</span>
-            <span className="text-[11px] font-bold opacity-40">{uncategorizedCount}</span>
+            <span className="text-xs font-bold opacity-40">{uncategorizedCount}</span>
           </button>
 
           {folderTags.length === 0 ? (
             <div className="py-6 px-2 text-center">
               <IconTag className="size-8 mx-auto mb-2 text-muted-foreground/30" />
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 No tags yet. Add tags when editing a template to create folders.
               </p>
             </div>
@@ -458,7 +458,7 @@ export default function TemplatesPage() {
               >
                 <IconTag className="size-4 shrink-0" />
                 <span className="flex-1 text-left truncate">{tag}</span>
-                <span className="text-[11px] font-bold opacity-40">{count}</span>
+                <span className="text-xs font-bold opacity-40">{count}</span>
               </button>
             ))
           )}

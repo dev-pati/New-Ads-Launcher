@@ -86,8 +86,8 @@ function ResultRow({ r, onClick }: { r: SearchResult; onClick: () => void }) {
 function SectionLabel({ label, count }: { label: string; count: number }) {
   return (
     <div className="flex items-center gap-2 px-4 pt-5 pb-1.5">
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{label}</span>
-      <span className="text-[10px] text-muted-foreground/40">({count})</span>
+      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">{label}</span>
+      <span className="text-xs text-muted-foreground/40">({count})</span>
     </div>
   )
 }
@@ -265,7 +265,7 @@ export default function SearchPage() {
               {recent.length > 0 && (
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Recent</span>
+                    <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">Recent</span>
                     <button onClick={() => { localStorage.removeItem(STORAGE_KEY); setRecent([]) }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
                       Clear all
                     </button>
@@ -287,7 +287,7 @@ export default function SearchPage() {
               )}
 
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-2">Quick nav</p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60 mb-2">Quick nav</p>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { label: "Assets", sub: "Creatives & media", href: "/assets", Icon: IconPhoto },

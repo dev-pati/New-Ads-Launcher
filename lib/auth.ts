@@ -60,7 +60,7 @@ export function requireRole(
 ) {
   if (!allowed.has(ctx.role)) {
     return NextResponse.json(
-      { error: `Role "${ctx.role}" không có quyền thực hiện thao tác này.` },
+      { error: `Role "${ctx.role}" does not have permission to perform this action.` },
       { status: 403 }
     )
   }
@@ -108,7 +108,7 @@ export interface ResolvedConnection {
 export class MissingViaError extends Error {
   purpose: MetaPurpose
   constructor(purpose: MetaPurpose) {
-    super("Ad account này chưa có via launch. Thêm via launch trong Connect.")
+    super("This ad account has no launch via. Add a launch via in Connect.")
     this.name = "MissingViaError"
     this.purpose = purpose
   }

@@ -69,7 +69,7 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
           <button
             onClick={e => { e.stopPropagation(); onBrandClick?.(ad.brandName) }}
             className={cn(
-              "min-w-0 flex-1 text-left text-[15px] font-semibold leading-tight text-slate-950",
+              "min-w-0 flex-1 text-left text-sm font-semibold leading-tight text-slate-950",
               onBrandClick && "hover:text-primary transition-colors"
             )}
             tabIndex={onBrandClick ? 0 : -1}
@@ -117,7 +117,7 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
         </div>
 
         {(ad.headline || ad.primaryText) && (
-          <p className="line-clamp-1 text-[13px] leading-snug text-slate-950">
+          <p className="line-clamp-1 text-xs leading-snug text-slate-950">
             {ad.headline || ad.primaryText}
           </p>
         )}
@@ -179,7 +179,7 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
 
       <div className="flex min-h-[64px] items-center gap-3 border-t border-[#edf0f4] px-4 py-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[13px] font-semibold text-slate-950">{ad.primaryText || ad.headline || ad.brandName}</p>
+          <p className="truncate text-xs font-semibold text-slate-950">{ad.primaryText || ad.headline || ad.brandName}</p>
           {ad.cta && <p className="mt-1 text-xs text-slate-500">{ad.cta}</p>}
         </div>
         {isSaved && (

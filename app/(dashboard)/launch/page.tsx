@@ -33,7 +33,7 @@ import {
   IconPlayerPlay, IconAlertCircle, IconAlertTriangle,
   IconCircleCheck, IconDotsVertical, IconMinus, IconBrandMeta,
   IconExternalLink, IconBrandFacebook, IconBrandInstagram,
-  IconUsers, IconLanguage, IconStack2, IconLayout,
+  IconUsers, IconLanguage, IconStack2, IconStack3, IconLayout,
   IconClock, IconPencil, IconInfoCircle, IconArrowsUpDown,
   IconSelector, IconChevronUp, IconFolderOpen, IconDeviceFloppy,
   IconFileDescription, IconBuildingStore, IconShoppingBag, IconBox,
@@ -198,6 +198,15 @@ interface CatalogAdsState {
   hideAutoCreatedSets: boolean
 }
 
+// Files currently mid-upload (by name:size), module-scoped so the guard survives even if
+// React ends up dispatching a change/drop event against a stale or duplicate component
+// fiber (observed in dev: two calls into handleUploadFiles for one file-picker interaction,
+// each seeing an empty in-flight set because they belonged to different fiber instances of
+// a component-level useRef). A module-level Set has exactly one instance for the whole tab,
+// so it can't be duplicated by remounts. Two upload sessions racing over the same video get
+// rejected by Meta with a generic "There was a problem uploading your video file" (code 6000).
+const inFlightUploadKeys = new Set<string>()
+
 // Available template variables for product fields (Meta DPA placeholders)
 const PRODUCT_FIELD_OPTIONS = [
   { key: "product_name", label: "Product Name" },
@@ -342,7 +351,7 @@ function PlatformStatusPopover() {
         className="flex items-center gap-1 hover:opacity-70 transition-opacity"
       >
         <div className={cn("size-1.5 rounded-full", allOk && updatedAt ? "bg-green-500" : "bg-muted-foreground/40")} />
-        <span className="text-[10px] text-muted-foreground font-medium tracking-wide">Status</span>
+        <span className="text-xs text-muted-foreground font-medium tracking-wide">Status</span>
       </button>
 
       {open && (
@@ -352,7 +361,7 @@ function PlatformStatusPopover() {
             <span className="text-sm font-semibold">Platform Status</span>
             <div className="flex items-center gap-2">
               {minutesAgo !== null && (
-                <span className="text-[11px] text-muted-foreground">Updated {minutesAgo}m ago</span>
+                <span className="text-xs text-muted-foreground">Updated {minutesAgo}m ago</span>
               )}
               <button onClick={checkStatus} disabled={loading} className="hover:opacity-70 transition-opacity">
                 <IconRefresh className={cn("size-3.5 text-muted-foreground", loading && "animate-spin")} />
@@ -363,7 +372,7 @@ function PlatformStatusPopover() {
           <div className="px-4 py-3 space-y-3">
             {/* Meta API */}
             <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Meta API</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Meta API</p>
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-sm">Ads Manager</span>
@@ -378,7 +387,7 @@ function PlatformStatusPopover() {
 
             {/* Launcher */}
             <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Launcher</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Launcher</p>
               <div className="flex items-center justify-between">
                 <span className="text-sm">App Server</span>
                 <StatusBadge status="operational" />
@@ -389,7 +398,7 @@ function PlatformStatusPopover() {
           {/* Links */}
           <div className="px-4 py-2.5 border-t flex flex-wrap gap-x-3 gap-y-1">
             <a href="https://metastatus.com" target="_blank" rel="noopener noreferrer"
-              className="text-[11px] text-primary hover:underline flex items-center gap-0.5">
+              className="text-xs text-primary hover:underline flex items-center gap-0.5">
               <IconExternalLink className="size-3" />Meta Status
             </a>
           </div>
@@ -471,7 +480,7 @@ function AdAccountDropdown({ accounts, selectedId, onSelect }: {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{a.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{a.id}</p>
+                    <p className="text-xs text-muted-foreground">{a.id}</p>
                   </div>
                 </button>
               )
@@ -601,7 +610,7 @@ function AdProfilesModal({
             Ad Account Pages ({pages.length} Pages, {igLoading ? "..." : totalIg} Instagrams)
           </span>
           {fetchTime !== null && !igLoading && (
-            <span className="text-[11px] text-muted-foreground">Refreshed in {(fetchTime / 1000).toFixed(1)}s</span>
+            <span className="text-xs text-muted-foreground">Refreshed in {(fetchTime / 1000).toFixed(1)}s</span>
           )}
         </div>
 
@@ -621,7 +630,7 @@ function AdProfilesModal({
                 {/* "Facebook Page" type label */}
                 <div className="flex items-center gap-1 px-3 pt-2 pb-0">
                   <IconBrandMeta className="size-3 text-[#0064E0]" />
-                  <span className="text-[10px] text-muted-foreground font-medium">Facebook Page</span>
+                  <span className="text-xs text-muted-foreground font-medium">Facebook Page</span>
                 </div>
 
                 {/* Page main row */}
@@ -651,14 +660,14 @@ function AdProfilesModal({
                       <IconCircleCheck className="size-3.5 text-blue-500 shrink-0" />
                       <IconExternalLink className="size-3 text-muted-foreground/50 shrink-0" />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">{page.id}</p>
+                    <p className="text-xs text-muted-foreground">{page.id}</p>
                   </div>
                 </div>
 
                 {/* Associated Instagram Accounts — collapsible, always show */}
                 <div className="border-t">
                   <button
-                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted/20 transition-colors"
+                    className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/20 transition-colors"
                     onClick={() => setIgExpanded(prev => ({ ...prev, [page.id]: !expanded }))}
                   >
                     <IconChevronDown className={cn("size-3 transition-transform", !expanded && "-rotate-90")} />
@@ -687,7 +696,7 @@ function AdProfilesModal({
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium">Use Facebook Page</p>
-                          <p className="text-[11px] text-muted-foreground">{page.id}</p>
+                          <p className="text-xs text-muted-foreground">{page.id}</p>
                         </div>
                       </div>
 
@@ -716,16 +725,16 @@ function AdProfilesModal({
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium">@{ig.username || ig.id}</p>
-                            <p className="text-[11px] text-muted-foreground">{ig.id}</p>
+                            <p className="text-xs text-muted-foreground">{ig.id}</p>
                           </div>
                         </div>
                       ))}
 
                       {igLoading && igAccounts.length === 0 && (
-                        <p className="text-[11px] text-muted-foreground px-3 py-1">Loading...</p>
+                        <p className="text-xs text-muted-foreground px-3 py-1">Loading...</p>
                       )}
                       {!igLoading && igAccounts.length === 0 && (
-                        <p className="text-[11px] text-muted-foreground px-3 py-1">No Instagram accounts associated</p>
+                        <p className="text-xs text-muted-foreground px-3 py-1">No Instagram accounts associated</p>
                       )}
                     </div>
                   )}
@@ -847,7 +856,7 @@ function PartnershipAdsModal({
             <img src={id.page.picture.data.url} className="size-5 rounded-full shrink-0 object-cover" alt="" />
           ) : (
             <div className="size-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-              <span className="text-[9px] font-bold text-emerald-700">{(id.page?.name || id.igId)?.slice(0, 1) || "?"}</span>
+              <span className="text-xs font-bold text-emerald-700">{(id.page?.name || id.igId)?.slice(0, 1) || "?"}</span>
             </div>
           )}
           <span className="flex-1 text-sm truncate text-left">
@@ -963,7 +972,7 @@ function PartnershipAdsModal({
               <div className="border rounded-xl p-3 space-y-3 bg-muted/20">
                 {/* Search from connected pages */}
                 <div>
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">From your connected pages</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">From your connected pages</p>
                   <div className="relative mb-2">
                     <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
                     <input
@@ -987,12 +996,12 @@ function PartnershipAdsModal({
                           <img src={p.picture.data.url} className="size-6 rounded-full shrink-0 object-cover" alt="" />
                         ) : (
                           <div className="size-6 rounded-full bg-muted flex items-center justify-center shrink-0">
-                            <span className="text-[10px] font-bold">{p.name.slice(0, 1)}</span>
+                            <span className="text-xs font-bold">{p.name.slice(0, 1)}</span>
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium truncate">{p.name}</p>
-                          <p className="text-[11px] text-muted-foreground">{p.id}</p>
+                          <p className="text-xs text-muted-foreground">{p.id}</p>
                         </div>
                       </button>
                     ))}
@@ -1001,7 +1010,7 @@ function PartnershipAdsModal({
 
                 {/* Manual page ID */}
                 <div>
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Or enter Partner Page ID</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Or enter Partner Page ID</p>
                   <div className="flex gap-2">
                     <input
                       value={manualPageId}
@@ -1013,7 +1022,7 @@ function PartnershipAdsModal({
                       Add
                     </Button>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Partner page must have authorized this app or be a public page.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Partner page must have authorized this app or be a public page.</p>
                 </div>
 
                 <div className="flex justify-end">
@@ -1066,7 +1075,7 @@ function PartnershipAdsModal({
                         {identityA.page?.name || "First"} <span className="text-muted-foreground font-normal">×</span> {identityB.page?.name || "Partner"}
                       </p>
                     )}
-                    {local.displayMode === "dynamic" && <p className="text-[10px] text-muted-foreground">(Meta will pick best variant)</p>}
+                    {local.displayMode === "dynamic" && <p className="text-xs text-muted-foreground">(Meta will pick best variant)</p>}
                   </div>
                 )}
               </div>
@@ -1233,7 +1242,7 @@ function MultilanguageAdsModal({
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium">Select Languages to Add</span>
                         {local.translations.length > 0 && (
-                          <span className="text-[11px] bg-primary/10 text-primary border border-primary/20 rounded-full px-1.5 py-0.5 font-semibold leading-none">{local.translations.length} selected</span>
+                          <span className="text-xs bg-primary/10 text-primary border border-primary/20 rounded-full px-1.5 py-0.5 font-semibold leading-none">{local.translations.length} selected</span>
                         )}
                       </div>
                       {pickerOpen
@@ -1283,7 +1292,7 @@ function MultilanguageAdsModal({
                                   {isChecked && <IconCheck className="size-2.5 text-white" strokeWidth={3} />}
                                 </div>
                                 <span className="text-sm flex-1">{l.name}</span>
-                                <span className="text-[11px] text-muted-foreground font-mono">{l.code}</span>
+                                <span className="text-xs text-muted-foreground font-mono">{l.code}</span>
                               </button>
                             )
                           })}
@@ -1522,9 +1531,9 @@ function CollectionAdsModal({
   }
 
   const requiredMissing: string[] = []
-  if (!local.catalogId) requiredMissing.push("Chọn một catalog")
-  if (!local.productSetId) requiredMissing.push("Chọn một product set")
-  if (!local.destinationUrl.trim()) requiredMissing.push("Nhập Destination URL")
+  if (!local.catalogId) requiredMissing.push("Select a catalog")
+  if (!local.productSetId) requiredMissing.push("Select a product set")
+  if (!local.destinationUrl.trim()) requiredMissing.push("Enter Destination URL")
   const isValid = requiredMissing.length === 0
 
   const handleSave = () => {
@@ -1608,11 +1617,11 @@ function CollectionAdsModal({
                             <span className="text-xs font-semibold">{t.label}</span>
                             {local.templateType === t.value && <IconCheck className="size-3.5 text-primary" />}
                           </div>
-                          <p className="text-[10px] text-muted-foreground leading-relaxed">{t.desc}</p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{t.desc}</p>
                         </button>
                       ))}
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1.5">
+                    <p className="text-xs text-muted-foreground mt-1.5">
                       One instant experience will be created per media item. Cover media is taken from your selected creatives.
                     </p>
                   </div>
@@ -1676,7 +1685,7 @@ function CollectionAdsModal({
                             </div>
                             {/* Manual catalog ID fallback */}
                             <div className="border-t p-2 bg-muted/20">
-                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Or enter Catalog ID manually</p>
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Or enter Catalog ID manually</p>
                               <div className="flex gap-1.5">
                                 <input
                                   value={manualCatalogId}
@@ -1693,7 +1702,7 @@ function CollectionAdsModal({
                                   {manualCatalogLoading ? <IconLoader2 className="size-3 animate-spin" /> : "Use"}
                                 </Button>
                               </div>
-                              <p className="text-[10px] text-muted-foreground mt-1">Tip: copy ID from Facebook Commerce Manager URL.</p>
+                              <p className="text-xs text-muted-foreground mt-1">Tip: copy ID from Facebook Commerce Manager URL.</p>
                             </div>
                           </div>
                         )}
@@ -1701,11 +1710,11 @@ function CollectionAdsModal({
 
                       {/* Error / debug */}
                       {!catalogsLoading && catalogError && (
-                        <div className="mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2 text-[11px] text-amber-900 dark:text-amber-200">
+                        <div className="mt-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2 text-xs text-amber-900 dark:text-amber-200">
                           {catalogError}
                           {catalogDebug.length > 0 && (
                             <details className="mt-1">
-                              <summary className="cursor-pointer text-[10px] opacity-70">Debug</summary>
+                              <summary className="cursor-pointer text-xs opacity-70">Debug</summary>
                               <ul className="mt-1 ml-3 list-disc opacity-80">
                                 {catalogDebug.map((l, i) => <li key={i}>{l}</li>)}
                               </ul>
@@ -1719,13 +1728,13 @@ function CollectionAdsModal({
                         <div className="mt-2 border rounded-lg p-2 bg-muted/10 flex items-center justify-between">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium truncate">{local.catalogName}</p>
-                            <p className="text-[11px] text-muted-foreground">Catalog ID: {local.catalogId}</p>
+                            <p className="text-xs text-muted-foreground">Catalog ID: {local.catalogId}</p>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
                             {local.catalogVertical && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded border bg-background">{local.catalogVertical}</span>
+                              <span className="text-xs px-1.5 py-0.5 rounded border bg-background">{local.catalogVertical}</span>
                             )}
-                            <Button variant="outline" size="sm" className="h-6 text-[10px] gap-0.5">
+                            <Button variant="outline" size="sm" className="h-6 text-xs gap-0.5">
                               <IconEye className="size-3" />View
                             </Button>
                           </div>
@@ -1907,7 +1916,7 @@ function CollectionAdsModal({
                     <div>
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <span className="text-xs font-medium">IE Headline</span>
-                        <span className="text-muted-foreground text-[10px]">(optional)</span>
+                        <span className="text-muted-foreground text-xs">(optional)</span>
                         <IconInfoCircle className="size-3 text-muted-foreground" />
                       </div>
                       <input
@@ -1916,7 +1925,7 @@ function CollectionAdsModal({
                         placeholder="Headline shown inside the Instant Experience"
                         className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
                       />
-                      <p className="text-[10px] text-muted-foreground mt-1">Shown at the top of the Instant Experience (separate from main ad headline)</p>
+                      <p className="text-xs text-muted-foreground mt-1">Shown at the top of the Instant Experience (separate from main ad headline)</p>
                     </div>
                     <div>
                       <div className="flex items-center gap-1.5 mb-1.5">
@@ -1933,7 +1942,7 @@ function CollectionAdsModal({
                           saveError.length > 0 && !local.destinationUrl.trim() && "border-destructive"
                         )}
                       />
-                      <p className="text-[10px] text-muted-foreground mt-1">Landing page URL when users tap the "See more" button</p>
+                      <p className="text-xs text-muted-foreground mt-1">Landing page URL when users tap the "See more" button</p>
                     </div>
                   </div>
                 </div>
@@ -1946,7 +1955,7 @@ function CollectionAdsModal({
         <div className="flex flex-col gap-2 px-5 py-3 border-t bg-background shrink-0">
           {saveError.length > 0 && (
             <div className="bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
-              <p className="text-xs text-destructive font-medium mb-1">Vui lòng điền đầy đủ trước khi lưu:</p>
+              <p className="text-xs text-destructive font-medium mb-1">Please fill in all required fields before saving:</p>
               {saveError.map((e, i) => <p key={i} className="text-xs text-destructive ml-2">• {e}</p>)}
             </div>
           )}
@@ -2244,7 +2253,7 @@ function CatalogAdsModal({
                     {local.frameImageUrl && (
                       <button
                         onClick={() => setLocal(s => ({ ...s, frameImageUrl: "" }))}
-                        className="text-[11px] text-destructive hover:underline mt-1"
+                        className="text-xs text-destructive hover:underline mt-1"
                       >
                         Remove frame
                       </button>
@@ -2329,7 +2338,7 @@ function CatalogAdsModal({
                           ))}
                         </div>
                         <div className="border-t p-2 bg-muted/20">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Or enter Catalog ID</p>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Or enter Catalog ID</p>
                           <div className="flex gap-1.5">
                             <input
                               value={manualCatalogId}
@@ -2710,7 +2719,7 @@ function CarouselAdsModal({
                             </div>
                             <div className="flex-1 min-w-0 space-y-1">
                               <div className="flex items-center justify-between">
-                                <span className="text-[11px] font-semibold text-muted-foreground">CARD {idx + 1}</span>
+                                <span className="text-xs font-semibold text-muted-foreground">CARD {idx + 1}</span>
                                 <div className="flex items-center gap-0.5">
                                   <button onClick={() => moveCard(card.creativeId, -1)} disabled={idx === 0}
                                     className="text-muted-foreground hover:text-foreground disabled:opacity-30">
@@ -2742,7 +2751,7 @@ function CarouselAdsModal({
                         )
                       })}
                       {selectedAd.cards.length < 2 && (
-                        <p className="text-[11px] text-amber-600">Carousel ads require at least 2 cards.</p>
+                        <p className="text-xs text-amber-600">Carousel ads require at least 2 cards.</p>
                       )}
                     </div>
                   )}
@@ -2900,7 +2909,7 @@ function FlexibleAdsModal({
           {/* LEFT: Flexible Ads list */}
           <div className="border-r flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b shrink-0">
-              <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">FLEXIBLE ADS</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">FLEXIBLE ADS</p>
             </div>
             <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
               {local.flexibleAds.map(ad => {
@@ -2937,7 +2946,7 @@ function FlexibleAdsModal({
                         </button>
                       )}
                     </div>
-                    <p className={cn("text-[11px] mt-0.5", selectedAdId === ad.id ? "text-primary-foreground/80" : "text-muted-foreground")}>
+                    <p className={cn("text-xs mt-0.5", selectedAdId === ad.id ? "text-primary-foreground/80" : "text-muted-foreground")}>
                       {groupCount} group{groupCount !== 1 ? "s" : ""} · {imgCount} img
                     </p>
                   </div>
@@ -2996,7 +3005,7 @@ function FlexibleAdsModal({
                 {/* Available Media */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">AVAILABLE MEDIA</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">AVAILABLE MEDIA</p>
                     <div className="relative">
                       <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50" />
                       <input
@@ -3039,10 +3048,10 @@ function FlexibleAdsModal({
                 {/* Selected group */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                       GROUP {selectedAd.groups.findIndex(g => g.id === selectedGroupId) + 1} — SELECTED
                     </p>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                       {selectedGroup?.creativeIds.length || 0} / 10
                     </span>
                   </div>
@@ -3091,6 +3100,127 @@ function FlexibleAdsModal({
             onClick={handleDone}
           >
             Done ({validCount} flexible ad{validCount !== 1 ? "s" : ""} configured) ↵
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Creative Group Modal ─────────────────────────────────────────────────────
+// Simplified entry point onto the same Flexible Ads (Dynamic Creative) engine:
+// no groups concept, just pick up to `maxMedia` media for a single ad — Meta
+// tests which one performs best. Experimental cap, raise once validated.
+
+function CreativeGroupModal({
+  open, onClose, value, onConfirm, availableCreatives, maxMedia = 5,
+}: {
+  open: boolean
+  onClose: () => void
+  value: FlexibleAdsState
+  onConfirm: (v: FlexibleAdsState) => void
+  availableCreatives: Creative[]
+  maxMedia?: number
+}) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [search, setSearch] = useState("")
+
+  useEffect(() => {
+    if (!open) return
+    const firstGroup = value.flexibleAds[0]?.groups[0]
+    setSelectedIds(value.enabled && firstGroup ? firstGroup.creativeIds.slice(0, maxMedia) : [])
+    setSearch("")
+  }, [open])
+
+  const toggle = (id: string) => {
+    setSelectedIds(prev => {
+      if (prev.includes(id)) return prev.filter(x => x !== id)
+      if (prev.length >= maxMedia) return prev
+      return [...prev, id]
+    })
+  }
+
+  const filtered = availableCreatives.filter(c => !search || c.file_name.toLowerCase().includes(search.toLowerCase()))
+
+  const handleDone = () => {
+    onConfirm({
+      enabled: selectedIds.length > 0,
+      flexibleAds: selectedIds.length > 0
+        ? [{ id: `f_${Date.now()}`, name: "Creative Group 1", groups: [{ id: `g_${Date.now()}`, creativeIds: selectedIds }] }]
+        : [],
+    })
+    onClose()
+  }
+
+  const thumbOf = (c: Creative) => proxyFbImage(c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url))
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-3xl p-0 flex flex-col max-h-[85vh] overflow-hidden">
+        <div className="px-5 pt-4 pb-3 border-b shrink-0">
+          <DialogTitle className="text-base font-semibold">
+            Creative Group <span className="text-muted-foreground font-normal">({selectedIds.length}/{maxMedia} media)</span>
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Combine up to {maxMedia} images/videos into a single ad — Meta tests which one performs best. Experimental cap, same engine as Flexible Ads.
+          </p>
+        </div>
+
+        <div className="px-5 py-3 border-b shrink-0">
+          <div className="relative">
+            <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search media..."
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+            />
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4">
+          {filtered.length === 0 ? (
+            <p className="text-center text-xs text-muted-foreground py-8">No media found.</p>
+          ) : (
+            <div className="grid grid-cols-5 gap-2">
+              {filtered.map(c => {
+                const idx = selectedIds.indexOf(c.id)
+                const selected = idx !== -1
+                const disabled = !selected && selectedIds.length >= maxMedia
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => toggle(c.id)}
+                    className={cn(
+                      "relative aspect-square rounded-md overflow-hidden border-2 transition",
+                      selected ? "border-primary" : "border-transparent hover:border-muted-foreground/30",
+                      disabled && "opacity-40 cursor-not-allowed"
+                    )}
+                  >
+                    <img src={thumbOf(c)} alt={c.file_name} className="w-full h-full object-cover" />
+                    {c.media_type === "video" && (
+                      <span className="absolute bottom-1 left-1 size-4 rounded-full bg-black/60 flex items-center justify-center">
+                        <IconVideo className="size-2.5 text-white" />
+                      </span>
+                    )}
+                    {selected && (
+                      <span className="absolute top-1 right-1 size-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[10px] font-bold">
+                        {idx + 1}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t shrink-0">
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" onClick={handleDone} disabled={selectedIds.length === 0}>
+            {selectedIds.length > 0 ? `Group ${selectedIds.length} media into 1 ad` : "Select media"}
           </Button>
         </div>
       </DialogContent>
@@ -3221,7 +3351,7 @@ function MultiPlacementAdsModal({
         {/* Manual Placements toggle */}
         <div className="px-5 py-3 border-b shrink-0 flex items-center gap-2">
           <span className="text-sm font-medium">Manual Placements</span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-bold">BETA</span>
+          <span className="text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-bold">BETA</span>
           <button
             onClick={() => setLocal(s => ({ ...s, manualPlacements: !s.manualPlacements }))}
             className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
@@ -3347,7 +3477,7 @@ function MultiPlacementAdsModal({
                         onChange={e => updateGroupName(g.id, e.target.value)}
                         className="flex-1 bg-transparent outline-none text-sm font-semibold"
                       />
-                      <span className="text-[11px] text-muted-foreground">{g.creativeIds.length} media</span>
+                      <span className="text-xs text-muted-foreground">{g.creativeIds.length} media</span>
                       <button
                         onClick={e => { e.stopPropagation(); deleteGroup(g.id) }}
                         className="text-muted-foreground hover:text-destructive"
@@ -3356,7 +3486,7 @@ function MultiPlacementAdsModal({
                       </button>
                     </div>
                     {g.creativeIds.length === 0 ? (
-                      <p className="text-[11px] text-muted-foreground italic">Click media on the left to add</p>
+                      <p className="text-xs text-muted-foreground italic">Click media on the left to add</p>
                     ) : (
                       <div className="grid grid-cols-3 gap-1.5">
                         {g.creativeIds.map(id => {
@@ -3383,7 +3513,7 @@ function MultiPlacementAdsModal({
                                         key={p.key}
                                         onClick={e => { e.stopPropagation(); togglePlacement(g.id, id, p.key) }}
                                         className={cn(
-                                          "text-[8px] px-1 py-0.5 rounded transition-colors",
+                                          "text-xs px-1 py-0.5 rounded transition-colors",
                                           active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted-foreground/20"
                                         )}
                                         title={p.label}
@@ -3400,7 +3530,7 @@ function MultiPlacementAdsModal({
                       </div>
                     )}
                     {g.creativeIds.length === 1 && (
-                      <p className="text-[10px] text-amber-600 mt-1.5">Add at least 2 different aspect ratios</p>
+                      <p className="text-xs text-amber-600 mt-1.5">Add at least 2 different aspect ratios</p>
                     )}
                   </div>
                 ))
@@ -3479,7 +3609,7 @@ function MediaArea({ thumb, creative, isVideo, aspect = "aspect-square", roundBo
       </div>
       {/* Duration badge top-left (matches admanage.ai reference) */}
       {isVideo && duration && (
-        <div className="absolute top-2 left-2 z-30 px-2 py-0.5 rounded-md bg-black/70 text-white text-[11px] font-semibold tracking-wide pointer-events-none">
+        <div className="absolute top-2 left-2 z-30 px-2 py-0.5 rounded-md bg-black/70 text-white text-xs font-semibold tracking-wide pointer-events-none">
           {duration}
         </div>
       )}
@@ -3527,8 +3657,8 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
             ? <img src={page.picture.data.url} className="size-8 rounded-full object-cover border-2 border-white shrink-0" alt="" />
             : <div className="size-8 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 border-2 border-white"><span className="text-xs font-bold text-white">{(page?.name || "P").slice(0, 1)}</span></div>}
           <div className="flex-1 min-w-0">
-            <p className="text-white text-[13px] font-semibold leading-tight truncate">{page?.name || "Your Page"}</p>
-            <p className="text-white/70 text-[11px]">Sponsored</p>
+            <p className="text-white text-xs font-semibold leading-tight truncate">{page?.name || "Your Page"}</p>
+            <p className="text-white/70 text-xs">Sponsored</p>
           </div>
           <button className="text-white/90 p-1"><IconDotsVertical className="size-4" /></button>
           <button className="text-white/90 p-1"><IconX className="size-4" /></button>
@@ -3541,15 +3671,15 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
         <div className="absolute bottom-0 left-0 right-0 z-20 px-3 pb-5 pt-14 bg-gradient-to-t from-black/75 to-transparent">
           {primaryText && (
             <div className="mb-2.5">
-              <p className={cn("text-white text-[13px] leading-snug", primaryExpanded ? "" : "line-clamp-2")}>{primaryText}</p>
+              <p className={cn("text-white text-xs leading-snug", primaryExpanded ? "" : "line-clamp-2")}>{primaryText}</p>
               {primaryText.length > 80 && (
-                <button onClick={() => setPrimaryExpanded(!primaryExpanded)} className="text-white/60 text-[11px] flex items-center gap-0.5 mt-0.5">
+                <button onClick={() => setPrimaryExpanded(!primaryExpanded)} className="text-white/60 text-xs flex items-center gap-0.5 mt-0.5">
                   {primaryExpanded ? <IconChevronDown className="size-3" /> : <IconChevronUp className="size-3" />}
                 </button>
               )}
             </div>
           )}
-          <button className="w-full bg-white text-black font-bold text-[14px] py-2.5 rounded-full">{ctaLabel}</button>
+          <button className="w-full bg-white text-black font-bold text-sm py-2.5 rounded-full">{ctaLabel}</button>
         </div>
       </div>
     )
@@ -3563,11 +3693,11 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
           : <div className="size-10 rounded-full bg-emerald-600 flex items-center justify-center shrink-0"><span className="text-sm font-bold text-white">{(page?.name || "P").slice(0, 1)}</span></div>}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <span className="text-[14px] font-bold hover:underline cursor-pointer">{page?.name || "Your Page"}</span>
+            <span className="text-sm font-bold hover:underline cursor-pointer">{page?.name || "Your Page"}</span>
             <IconCircleCheck className="size-3.5 text-blue-500 shrink-0" />
           </div>
           <div className="flex items-center gap-1 mt-0.5">
-            <p className="text-[12px] text-[#65676B] font-medium">Sponsored</p>
+            <p className="text-xs text-[#65676B] font-medium">Sponsored</p>
             <span className="text-[#65676B]">·</span>
             <IconWorld className="size-3 text-[#65676B]" />
           </div>
@@ -3575,7 +3705,7 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
         <button className="text-[#65676B] p-1.5 rounded-full"><IconDotsVertical className="size-4" /></button>
       </div>
       {primaryText && (
-        <div className="px-3 pb-2.5 text-[13px]">
+        <div className="px-3 pb-2.5 text-xs">
           <p className={primaryExpanded ? "" : "line-clamp-3"}>{primaryText}</p>
           {primaryText.length > 120 && (
             <button onClick={() => setPrimaryExpanded(!primaryExpanded)} className="text-muted-foreground hover:underline text-xs mt-0.5">
@@ -3588,25 +3718,25 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
       <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 border-t">
         <div className="flex-1 min-w-0">
           {headline
-            ? <p className="text-[14px] font-semibold truncate leading-tight text-foreground/90">{headline}</p>
-            : <p className="text-[14px] font-semibold truncate leading-tight text-muted-foreground/50 italic">No headline</p>}
-          {description && <p className="text-[12px] text-[#65676B] truncate leading-tight mt-0.5">{description}</p>}
+            ? <p className="text-sm font-semibold truncate leading-tight text-foreground/90">{headline}</p>
+            : <p className="text-sm font-semibold truncate leading-tight text-muted-foreground/50 italic">No headline</p>}
+          {description && <p className="text-xs text-[#65676B] truncate leading-tight mt-0.5">{description}</p>}
         </div>
-        <Button size="sm" variant="outline" className="h-8 px-4 text-[13px] font-bold bg-[#E4E6EB] hover:bg-[#D8DADF] border-none text-[#050505] shrink-0 ml-3 rounded-lg">{ctaLabel}</Button>
+        <Button size="sm" variant="outline" className="h-8 px-4 text-xs font-bold bg-[#E4E6EB] hover:bg-[#D8DADF] border-none text-[#050505] shrink-0 ml-3 rounded-lg">{ctaLabel}</Button>
       </div>
       <div className="flex items-center gap-3 px-3 py-2 border-t">
-        <div className="flex items-center gap-1 text-[13px] text-[#65676B]">
+        <div className="flex items-center gap-1 text-xs text-[#65676B]">
           <div className="flex -space-x-1 mr-1">
             <span className="size-[18px] rounded-full bg-[#1877F2] border-2 border-background flex items-center justify-center"><IconThumbUp className="size-[10px] text-white" /></span>
-            <span className="size-[18px] rounded-full bg-[#F33E58] border-2 border-background flex items-center justify-center text-white text-[10px]">♥</span>
+            <span className="size-[18px] rounded-full bg-[#F33E58] border-2 border-background flex items-center justify-center text-white text-xs">♥</span>
           </div>
           <span className="hover:underline cursor-pointer">420</span>
         </div>
-        <span className="text-[13px] text-[#65676B] ml-auto hover:underline cursor-pointer">96 comments</span>
+        <span className="text-xs text-[#65676B] ml-auto hover:underline cursor-pointer">96 comments</span>
       </div>
       <div className="grid grid-cols-3 border-t mx-3 my-1">
         {[{i: IconThumbUp, l: "Like"}, {i: IconMessageCircle, l: "Comment"}, {i: IconShare3, l: "Share"}].map(({i: I, l}) => (
-          <button key={l} className="flex items-center justify-center gap-2 py-1.5 text-[13px] font-semibold text-[#65676B] hover:bg-muted/50 rounded-md">
+          <button key={l} className="flex items-center justify-center gap-2 py-1.5 text-xs font-semibold text-[#65676B] hover:bg-muted/50 rounded-md">
             <I className="size-[18px]" />{l}
           </button>
         ))}
@@ -3634,8 +3764,8 @@ function InstagramMockup({ page, creative, thumb, isVideo, primaryText, ctaLabel
             ? <div className="size-8 rounded-full overflow-hidden border-2 border-white shrink-0"><img src={page.picture.data.url} className="w-full h-full object-cover" alt="" /></div>
             : <div className="size-8 rounded-full bg-gradient-to-br from-yellow-400 via-pink-500 to-purple-600 p-[2px] shrink-0"><div className="size-full rounded-full bg-black/40 flex items-center justify-center text-white text-xs font-bold">{(page?.name || "P").slice(0, 1)}</div></div>}
           <div className="flex-1 min-w-0">
-            <p className="text-white text-[13px] font-semibold leading-tight truncate">{page?.name || "Your Page"}</p>
-            <p className="text-white/70 text-[11px]">Ad</p>
+            <p className="text-white text-xs font-semibold leading-tight truncate">{page?.name || "Your Page"}</p>
+            <p className="text-white/70 text-xs">Ad</p>
           </div>
           <button className="text-white/90 p-1"><IconDotsVertical className="size-4" /></button>
           <button className="text-white/90 p-1"><IconX className="size-4" /></button>
@@ -3648,15 +3778,15 @@ function InstagramMockup({ page, creative, thumb, isVideo, primaryText, ctaLabel
         <div className="absolute bottom-0 left-0 right-0 z-20 px-3 pb-5 pt-14 bg-gradient-to-t from-black/75 to-transparent">
           {primaryText && (
             <div className="mb-2.5">
-              <p className={cn("text-white text-[13px] leading-snug", primaryExpanded ? "" : "line-clamp-2")}>{primaryText}</p>
+              <p className={cn("text-white text-xs leading-snug", primaryExpanded ? "" : "line-clamp-2")}>{primaryText}</p>
               {primaryText.length > 80 && (
-                <button onClick={() => setPrimaryExpanded(!primaryExpanded)} className="text-white/60 text-[11px] flex items-center gap-0.5 mt-0.5">
+                <button onClick={() => setPrimaryExpanded(!primaryExpanded)} className="text-white/60 text-xs flex items-center gap-0.5 mt-0.5">
                   {primaryExpanded ? <IconChevronDown className="size-3" /> : <IconChevronUp className="size-3" />}
                 </button>
               )}
             </div>
           )}
-          <button className="w-full bg-white text-black font-bold text-[14px] py-2.5 rounded-full">{ctaLabel}</button>
+          <button className="w-full bg-white text-black font-bold text-sm py-2.5 rounded-full">{ctaLabel}</button>
         </div>
       </div>
     )
@@ -3670,8 +3800,8 @@ function InstagramMockup({ page, creative, thumb, isVideo, primaryText, ctaLabel
             ? <img src={page.picture.data.url} className="size-9 rounded-full object-cover ring-2 ring-pink-500/30" alt="" />
             : <div className="size-9 rounded-full bg-gradient-to-br from-yellow-400 via-pink-500 to-purple-600 p-0.5"><div className="size-full rounded-full bg-emerald-500 flex items-center justify-center text-white text-xs font-bold">{(page?.name || "P").slice(0, 1)}</div></div>}
           <div>
-            <p className="text-[13px] font-semibold leading-tight">@{page?.name?.toLowerCase().replace(/\s+/g, "") || "your_page"}</p>
-            <p className="text-[11px] text-muted-foreground">Sponsored</p>
+            <p className="text-xs font-semibold leading-tight">@{page?.name?.toLowerCase().replace(/\s+/g, "") || "your_page"}</p>
+            <p className="text-xs text-muted-foreground">Sponsored</p>
           </div>
         </div>
         <button><IconDotsVertical className="size-4" /></button>
@@ -3683,7 +3813,7 @@ function InstagramMockup({ page, creative, thumb, isVideo, primaryText, ctaLabel
         <IconSend className="size-6" />
         <IconBookmarkOutline className="size-6 ml-auto" />
       </div>
-      <p className="px-3 pb-3 text-[13px] font-semibold">@{page?.name?.toLowerCase().replace(/\s+/g, "") || "your_page"}</p>
+      <p className="px-3 pb-3 text-xs font-semibold">@{page?.name?.toLowerCase().replace(/\s+/g, "") || "your_page"}</p>
     </div>
   )
 }
@@ -3704,23 +3834,23 @@ function TikTokMockup({ page, creative, thumb, isVideo, ctaLabel }: MockupProps)
       {/* Right side actions */}
       <div className="absolute right-2 bottom-20 flex flex-col items-center gap-4 z-20 text-white">
         {page?.picture?.data?.url
-          ? <div className="relative"><img src={page.picture.data.url} className="size-10 rounded-full ring-2 ring-white object-cover" alt="" /><div className="absolute -bottom-1 left-1/2 -translate-x-1/2 size-4 rounded-full bg-red-500 flex items-center justify-center text-white text-[10px] font-bold">+</div></div>
+          ? <div className="relative"><img src={page.picture.data.url} className="size-10 rounded-full ring-2 ring-white object-cover" alt="" /><div className="absolute -bottom-1 left-1/2 -translate-x-1/2 size-4 rounded-full bg-red-500 flex items-center justify-center text-white text-xs font-bold">+</div></div>
           : <div className="size-10 rounded-full bg-pink-500 flex items-center justify-center text-white font-bold ring-2 ring-white">{(page?.name || "Y").slice(0, 1)}</div>}
-        <div className="flex flex-col items-center"><IconHeart className="size-7" /><span className="text-[10px] font-semibold">991K</span></div>
-        <div className="flex flex-col items-center"><IconMessageCircle className="size-7" /><span className="text-[10px] font-semibold">3456</span></div>
-        <div className="flex flex-col items-center"><IconBookmarkOutline className="size-7" /><span className="text-[10px] font-semibold">810</span></div>
-        <div className="flex flex-col items-center"><IconShare3 className="size-7" /><span className="text-[10px] font-semibold">1256</span></div>
+        <div className="flex flex-col items-center"><IconHeart className="size-7" /><span className="text-xs font-semibold">991K</span></div>
+        <div className="flex flex-col items-center"><IconMessageCircle className="size-7" /><span className="text-xs font-semibold">3456</span></div>
+        <div className="flex flex-col items-center"><IconBookmarkOutline className="size-7" /><span className="text-xs font-semibold">810</span></div>
+        <div className="flex flex-col items-center"><IconShare3 className="size-7" /><span className="text-xs font-semibold">1256</span></div>
       </div>
       {/* Bottom info + CTA */}
       <div className="absolute left-0 right-0 bottom-12 px-3 z-20 text-white">
         <p className="text-sm font-bold mb-0.5">{page?.name || "Your Page Name"}</p>
-        <p className="text-[11px] opacity-80 mb-2">Sponsored</p>
+        <p className="text-xs opacity-80 mb-2">Sponsored</p>
         <button className="w-full bg-[#FE2C55] text-white text-sm font-semibold py-2 rounded">{ctaLabel}</button>
       </div>
       {/* Bottom nav */}
       <div className="absolute bottom-0 left-0 right-0 grid grid-cols-5 py-2 bg-black/80 z-20 text-white">
         {["Home", "Friends", "+", "Inbox", "Me"].map(l => (
-          <span key={l} className="text-center text-[10px] font-medium">{l}</span>
+          <span key={l} className="text-center text-xs font-medium">{l}</span>
         ))}
       </div>
     </div>
@@ -3732,7 +3862,7 @@ function SnapchatMockup({ page, creative, thumb, isVideo, headline, webLink, cta
   return (
     <div className="w-full max-w-[280px] bg-black rounded-3xl overflow-hidden shadow-xl relative" style={{ aspectRatio: "9/19.5" }}>
       {/* Status bar */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex justify-between items-center px-5 pt-2 pb-1 text-white text-[10px] font-semibold">
+      <div className="absolute top-0 left-0 right-0 z-30 flex justify-between items-center px-5 pt-2 pb-1 text-white text-xs font-semibold">
         <span>9:41</span>
         <div className="flex items-center gap-1">
           <span>•••</span>
@@ -3746,7 +3876,7 @@ function SnapchatMockup({ page, creative, thumb, isVideo, headline, webLink, cta
           : <div className="size-7 rounded-full bg-emerald-500" />}
         <div className="flex-1 min-w-0">
           <p className="text-xs font-bold flex items-center gap-1">{page?.name || "Your Page"} <span className="opacity-70">· Ad</span></p>
-          <p className="text-[10px] opacity-80">{headline || "Your headline here"}</p>
+          <p className="text-xs opacity-80">{headline || "Your headline here"}</p>
         </div>
         <button><IconDotsVertical className="size-4" /></button>
       </div>
@@ -3761,9 +3891,9 @@ function SnapchatMockup({ page, creative, thumb, isVideo, headline, webLink, cta
             ? <img src={page.picture.data.url} className="size-8 rounded-full object-cover" alt="" />
             : <div className="size-8 rounded-full bg-emerald-500" />}
           <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-bold flex items-center gap-1 truncate">{page?.name || "Your Page"} <IconArrowRight className="size-3" /></p>
-            <p className="text-[10px] opacity-80 truncate">{headline || "Your headline here"}</p>
-            <p className="text-[10px] opacity-60 truncate">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</p>
+            <p className="text-xs font-bold flex items-center gap-1 truncate">{page?.name || "Your Page"} <IconArrowRight className="size-3" /></p>
+            <p className="text-xs opacity-80 truncate">{headline || "Your headline here"}</p>
+            <p className="text-xs opacity-60 truncate">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</p>
           </div>
           <IconHeart className="size-5" />
         </div>
@@ -3810,7 +3940,7 @@ function LoomMockup({ creative, thumb, isVideo, webLink, ctaLabel }: MockupProps
       </div>
       <div className="flex items-center justify-between px-3 py-2.5 bg-background border-t">
         <div className="flex-1 min-w-0">
-          <p className="text-[12px] text-muted-foreground truncate"><span className="font-medium text-foreground">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</span> · Sponsored</p>
+          <p className="text-xs text-muted-foreground truncate"><span className="font-medium text-foreground">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</span> · Sponsored</p>
         </div>
         <Button size="sm" variant="outline" className="h-8 text-xs rounded-full ml-3 shrink-0">{ctaLabel}</Button>
       </div>
@@ -3827,14 +3957,14 @@ function RedditMockup({ page, creative, thumb, isVideo, headline, webLink, ctaLa
           ? <img src={page.picture.data.url} className="size-8 rounded-full object-cover" alt="" />
           : <div className="size-8 rounded-full bg-orange-500 flex items-center justify-center text-white text-xs font-bold">{(page?.name || "U").slice(0, 1)}</div>}
         <div className="flex-1 min-w-0">
-          <p className="text-[13px] font-semibold">u/{page?.name?.toLowerCase().replace(/\s+/g, "") || "your_page"} · <span className="text-muted-foreground font-normal">Promoted</span></p>
+          <p className="text-xs font-semibold">u/{page?.name?.toLowerCase().replace(/\s+/g, "") || "your_page"} · <span className="text-muted-foreground font-normal">Promoted</span></p>
         </div>
         <button><IconDotsVertical className="size-4" /></button>
       </div>
-      {headline && <p className="px-3 pb-2 text-[16px] font-bold leading-tight">{headline}</p>}
+      {headline && <p className="px-3 pb-2 text-base font-bold leading-tight">{headline}</p>}
       <MediaArea thumb={thumb} creative={creative} isVideo={isVideo} aspect="aspect-square" />
       <div className="flex items-center justify-between px-3 py-2.5 border-t">
-        <p className="text-[12px] text-muted-foreground truncate font-medium">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</p>
+        <p className="text-xs text-muted-foreground truncate font-medium">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</p>
         <Button size="sm" variant="outline" className="h-8 text-xs rounded-full ml-3 shrink-0">{ctaLabel}</Button>
       </div>
       <div className="flex items-center gap-4 px-3 py-2 border-t text-muted-foreground">
@@ -3856,18 +3986,18 @@ function LinkedInMockup({ page, creative, thumb, isVideo, primaryText, headline,
           : <div className="size-12 rounded-full bg-emerald-500 flex items-center justify-center text-white text-base font-bold">{(page?.name || "P").slice(0, 1)}</div>}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
-            <p className="text-[14px] font-bold truncate">{page?.name || "Your Page"}</p>
+            <p className="text-sm font-bold truncate">{page?.name || "Your Page"}</p>
             <span className="size-4 bg-[#0A66C2] flex items-center justify-center rounded-sm"><IconBrandLinkedin className="size-3 text-white" /></span>
           </div>
-          <p className="text-[12px] text-muted-foreground">Followers</p>
-          <p className="text-[12px] text-muted-foreground">Promoted · <IconWorld className="size-3 inline" /></p>
+          <p className="text-xs text-muted-foreground">Followers</p>
+          <p className="text-xs text-muted-foreground">Promoted · <IconWorld className="size-3 inline" /></p>
         </div>
-        <button className="text-[#0A66C2] text-[13px] font-semibold flex items-center gap-1 hover:bg-blue-50 px-2 py-1 rounded">
+        <button className="text-[#0A66C2] text-xs font-semibold flex items-center gap-1 hover:bg-blue-50 px-2 py-1 rounded">
           <IconPlusFollow className="size-3.5" />Follow
         </button>
       </div>
       {primaryText && (
-        <div className="px-3 pb-2.5 text-[13px]">
+        <div className="px-3 pb-2.5 text-xs">
           <p className={primaryExpanded ? "" : "line-clamp-3"}>{primaryText}</p>
           {primaryText.length > 120 && (
             <button onClick={() => setPrimaryExpanded(!primaryExpanded)} className="text-muted-foreground hover:underline text-xs mt-0.5">
@@ -3879,8 +4009,8 @@ function LinkedInMockup({ page, creative, thumb, isVideo, primaryText, headline,
       <MediaArea thumb={thumb} creative={creative} isVideo={isVideo} aspect="aspect-square" />
       <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 border-t">
         <div className="flex-1 min-w-0">
-          <p className="text-[11px] text-muted-foreground uppercase truncate font-medium">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</p>
-          {headline && <p className="text-[14px] font-semibold truncate leading-tight mt-0.5">{headline}</p>}
+          <p className="text-xs text-muted-foreground uppercase truncate font-medium">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</p>
+          {headline && <p className="text-sm font-semibold truncate leading-tight mt-0.5">{headline}</p>}
         </div>
         <Button size="sm" variant="outline" className="h-8 text-xs font-semibold rounded-full ml-3 shrink-0 border-[#0A66C2] text-[#0A66C2] hover:bg-blue-50">{ctaLabel}</Button>
       </div>
@@ -3890,6 +4020,7 @@ function LinkedInMockup({ page, creative, thumb, isVideo, primaryText, headline,
 
 function PreviewModal({
   open, onClose, creatives, page, primaryText, headline, description, webLink, cta, adNameOverrides, onUpdateCreative,
+  confirmMode = false, onConfirmLaunch, launching = false, showSkipOption = false, skipPreview = false, onToggleSkipPreview,
 }: {
   open: boolean
   onClose: () => void
@@ -3902,6 +4033,12 @@ function PreviewModal({
   cta: string
   adNameOverrides: Record<string, string>
   onUpdateCreative?: (c: Creative) => void
+  confirmMode?: boolean
+  onConfirmLaunch?: () => void
+  launching?: boolean
+  showSkipOption?: boolean
+  skipPreview?: boolean
+  onToggleSkipPreview?: (v: boolean) => void
 }) {
   const [activeIdx, setActiveIdx] = useState(0)
   const [mockup, setMockup] = useState<MockupPlatform>("meta")
@@ -4111,13 +4248,13 @@ function PreviewModal({
                 <div className="border rounded-lg overflow-hidden">
                   {/* Destination URL */}
                   <div className="px-4 py-3 border-b bg-blue-50/70 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900/50 transition-colors">
-                    <p className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Destination URL:</p>
-                    <a href={effectiveWebLink} target="_blank" rel="noopener noreferrer" className="text-[13px] font-bold text-primary hover:underline break-all block">
+                    <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Destination URL:</p>
+                    <a href={effectiveWebLink} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-primary hover:underline break-all block">
                       {effectiveWebLink || "—"}
                     </a>
                     <div className="mt-2.5 pt-2 border-t border-blue-200/50">
-                      <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-wider mb-0.5">UTM Parameters:</p>
-                      <p className="text-[11px] text-muted-foreground font-medium italic">
+                      <p className="text-xs font-bold text-muted-foreground/70 uppercase tracking-wider mb-0.5">UTM Parameters:</p>
+                      <p className="text-xs text-muted-foreground font-medium italic">
                         {(() => {
                           try {
                             const params = new URL(effectiveWebLink).searchParams
@@ -4205,11 +4342,11 @@ function PreviewModal({
                 <div className="text-sm font-medium mb-1.5">Smart Tags</div>
                 <div className="flex flex-wrap gap-1">
                   {(creative.tags || ["influencer", "senior", "outdoor", "selfie", "textoverlay", "aging"]).map(tag => (
-                    <span key={tag} className="text-[11px] px-2.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium border border-zinc-200 dark:border-zinc-700">{tag}</span>
+                    <span key={tag} className="text-xs px-2.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-medium border border-zinc-200 dark:border-zinc-700">{tag}</span>
                   ))}
                 </div>
                 {!creative.tags && (
-                  <p className="text-[10px] text-muted-foreground mt-2 flex items-center gap-1">
+                  <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                     <IconLoader2 className="size-2.5 animate-spin" />
                     Analyzing media for smart tags...
                   </p>
@@ -4252,7 +4389,7 @@ function PreviewModal({
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs truncate" title={c.file_name}>{c.file_name}</p>
-                          <p className="text-[10px] text-muted-foreground">{cdim}{cd ? ` · ${cd}` : ""}</p>
+                          <p className="text-xs text-muted-foreground">{cdim}{cd ? ` · ${cd}` : ""}</p>
                         </div>
                         <button
                           onClick={e => { e.stopPropagation(); if (ct) window.open(ct, "_blank") }}
@@ -4266,6 +4403,29 @@ function PreviewModal({
                 </div>
               </div>
             </div>
+
+            {confirmMode && (
+              <div className="border-t p-4 shrink-0 space-y-3 bg-background">
+                {showSkipOption && (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={skipPreview}
+                      onChange={e => onToggleSkipPreview?.(e.target.checked)}
+                      className="size-3.5 rounded border-muted-foreground/40 accent-primary"
+                    />
+                    Skip preview next time — launch directly
+                  </label>
+                )}
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={onClose} disabled={launching}>Back</Button>
+                  <Button className="flex-1 gap-2 font-medium" onClick={onConfirmLaunch} disabled={launching}>
+                    {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
+                    {launching ? "Launching..." : "Confirm & Launch"}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
       </DialogContent>
     </Dialog>
@@ -5309,7 +5469,7 @@ function LoadMediaModal({
     const uploadFile = async (file: File): Promise<void> => {
       if (file.size > MAX_SIZE) {
         errCount++
-        lastError = `${file.name}: quá lớn (${(file.size / 1024 / 1024).toFixed(0)}MB, tối đa 500MB)`
+        lastError = `${file.name}: too large (${(file.size / 1024 / 1024).toFixed(0)}MB, max 500MB)`
         return
       }
       const isVideo = file.type.startsWith("video/")
@@ -5459,9 +5619,9 @@ function LoadMediaModal({
     fetchFbMedia()
     fetchCreatives(true)
     const summary: string[] = []
-    if (newCount > 0) summary.push(`Uploaded ${newCount} mới`)
-    if (dupCount > 0) summary.push(`${dupCount} đã tồn tại (bỏ qua)`)
-    if (errCount > 0) summary.push(`${errCount} lỗi — ${lastError}`)
+    if (newCount > 0) summary.push(`Uploaded ${newCount} new`)
+    if (dupCount > 0) summary.push(`${dupCount} already exist (skipped)`)
+    if (errCount > 0) summary.push(`${errCount} failed — ${lastError}`)
     if (summary.length > 0) {
       setUploadPauseMsg(summary.join(" · "))
       setTimeout(() => setUploadPauseMsg(null), errCount > 0 ? 8000 : 4000)
@@ -5498,7 +5658,7 @@ function LoadMediaModal({
           )}
         >
           <span className="font-medium">{label}</span>
-          {isActive && <span className="bg-primary/10 px-1 rounded text-[10px]">{value}</span>}
+          {isActive && <span className="bg-primary/10 px-1 rounded text-xs">{value}</span>}
           <IconChevronDown className="size-3" />
         </button>
         {openFilter === id && (
@@ -5545,7 +5705,7 @@ function LoadMediaModal({
                 )}
               >
                 <Icon className="size-4" />{t.label}
-                {t.beta && <span className="text-[9px] px-1 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">Beta</span>}
+                {t.beta && <span className="text-xs px-1 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">Beta</span>}
               </button>
             )
           })}
@@ -5624,7 +5784,7 @@ function LoadMediaModal({
             {/* Toolbar actions */}
             <div className="flex items-center justify-end gap-2 px-6 py-2 border-b shrink-0">
               {uploadPauseMsg && (
-                <span className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mr-1">
+                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 mr-1">
                   {uploading
                     ? <IconLoader2 className="size-3 animate-spin" />
                     : <IconCheck className="size-3" />
@@ -5665,7 +5825,7 @@ function LoadMediaModal({
             </div>
 
             {/* Table header */}
-            <div className="grid items-center text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wide border-b px-6 py-2 shrink-0"
+            <div className="grid items-center text-xs font-semibold text-muted-foreground/70 uppercase tracking-wide border-b px-6 py-2 shrink-0"
               style={{ gridTemplateColumns: "28px 2.5fr 80px 100px 80px 120px 1.6fr 120px 120px" }}>
               <button onClick={toggleAll} className={cn("size-4 rounded border-2 flex items-center justify-center transition-colors",
                 selected.size > 0 ? "bg-primary border-primary" : "border-muted-foreground/30 hover:border-muted-foreground/60")}>
@@ -5749,7 +5909,7 @@ function LoadMediaModal({
                       <span className="text-xs text-muted-foreground">
                         {m.date_added ? new Date(m.date_added).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                       </span>
-                      <span className={cn("inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full w-fit max-w-full", statusColor)}>
+                      <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full w-fit max-w-full", statusColor)}>
                         <span className="truncate capitalize">{statusLabel}</span>
                       </span>
                       <span className="text-xs text-muted-foreground">—</span>
@@ -5910,7 +6070,7 @@ function LoadMediaModal({
                 <button onClick={() => setExistingMetricsOpen(o => !o)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg hover:bg-muted/30">
                   <span className="font-medium">Metrics</span>
-                  <span className="text-[9px] px-1 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold">BETA</span>
+                  <span className="text-xs px-1 py-0.5 rounded-full bg-purple-100 text-purple-700 font-bold">BETA</span>
                 </button>
                 {existingMetricsOpen && (
                   <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[200px] py-1">
@@ -5922,7 +6082,7 @@ function LoadMediaModal({
                   </div>
                 )}
               </div>
-              <div className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground">
+              <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                 <span>
                   <span className="font-semibold text-foreground">{existingAds.length}</span> ads
                   {existingHasMore && " (more available)"}
@@ -5992,7 +6152,7 @@ function LoadMediaModal({
                                   {isVideo ? <IconVideo className="size-3.5 text-muted-foreground/40" /> : <IconPhoto className="size-3.5 text-muted-foreground/40" />}
                                 </div>}
                               {ad.effective_status === "DELETED" && (
-                                <div className="absolute -top-1 -right-1 size-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[8px] font-bold">D</div>
+                                <div className="absolute -top-1 -right-1 size-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">D</div>
                               )}
                               {isVideo && (
                                 <div className="absolute bottom-0.5 left-0.5 size-3.5 rounded-full bg-black/60 flex items-center justify-center">
@@ -6010,7 +6170,7 @@ function LoadMediaModal({
                             {ad.post_url ? <a href={ad.post_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" onClick={e => e.stopPropagation()}>Post</a> : "—"}
                           </td>}
                           {visibleColumns.has("status") && <td className="px-3 py-2">
-                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-bold whitespace-nowrap",
+                            <span className={cn("text-xs px-1.5 py-0.5 rounded font-bold whitespace-nowrap",
                               ad.effective_status === "ACTIVE" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
                               /PAUSED/.test(ad.effective_status) ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
                               /DISAPPROVED|DELETED|ARCHIVED/.test(ad.effective_status) ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" :
@@ -6024,7 +6184,7 @@ function LoadMediaModal({
                             </span>
                           </td>}
                           {visibleColumns.has("platform") && <td className="px-3 py-2">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">{ad.platform}</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">{ad.platform}</span>
                           </td>}
                           {visibleColumns.has("spend") && <td className="px-3 py-2 text-right font-medium">{formatCurrency(ad.spend)}</td>}
                           {visibleColumns.has("roas") && <td className="px-3 py-2 text-right">{ad.roas > 0 ? ad.roas.toFixed(2) : "—"}</td>}
@@ -6051,7 +6211,7 @@ function LoadMediaModal({
             {/* Footer — combined into single compact row + button */}
             <div className="border-t shrink-0">
               <div className="flex items-center gap-3 px-6 py-1.5">
-                <span className="text-[11px] text-muted-foreground">Include:</span>
+                <span className="text-xs text-muted-foreground">Include:</span>
                 <div className="relative">
                   <button onClick={() => setExistingIncludeOpen(o => !o)}
                     className="flex items-center gap-1.5 px-2.5 py-1 text-xs border rounded-lg hover:bg-muted/30 min-w-[130px]">
@@ -6642,10 +6802,10 @@ function DuplicateAdSetModal({
                     className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-accent border-b last:border-b-0">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{a.name}</p>
-                      <p className="text-[10px] text-muted-foreground">{a.id}</p>
+                      <p className="text-xs text-muted-foreground">{a.id}</p>
                     </div>
                     <span className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0",
+                      "text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0",
                       a.effective_status === "ACTIVE"
                         ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                         : "bg-muted text-muted-foreground"
@@ -6692,7 +6852,7 @@ function DuplicateAdSetModal({
                   className="w-full px-3 py-2.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
                 />
                 {count > 1 && (
-                  <p className="text-[10px] text-muted-foreground mt-1">Each copy will be suffixed " - 1", " - 2", etc.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Each copy will be suffixed " - 1", " - 2", etc.</p>
                 )}
               </div>
 
@@ -6706,7 +6866,7 @@ function DuplicateAdSetModal({
                   <IconEye className="size-4 text-muted-foreground" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate">{sourceAdSet.name}</p>
-                    <p className="text-[11px] text-muted-foreground">See ad set details</p>
+                    <p className="text-xs text-muted-foreground">See ad set details</p>
                   </div>
                 </button>
                 {detailsExpanded && (
@@ -6721,9 +6881,9 @@ function DuplicateAdSetModal({
                         <div className="border rounded-lg p-2.5">
                           <div className="flex items-center gap-1.5 mb-2">
                             <IconCurrencyDollar className="size-3.5 text-muted-foreground" />
-                            <span className="text-[11px] font-bold text-muted-foreground tracking-wider">BUDGET & SCHEDULE</span>
+                            <span className="text-xs font-bold text-muted-foreground tracking-wider">BUDGET & SCHEDULE</span>
                           </div>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                             {detail.adSet?.daily_budget && (
                               <span><span className="text-muted-foreground">Daily:</span> <span className="font-medium">${(parseInt(detail.adSet.daily_budget) / 100).toFixed(2)}</span></span>
                             )}
@@ -6747,7 +6907,7 @@ function DuplicateAdSetModal({
                             </span>
                           </div>
                           {detail.campaign && (
-                            <div className="mt-1.5 text-[11px]">
+                            <div className="mt-1.5 text-xs">
                               <span className="text-muted-foreground">Campaign:</span>
                               <span className="font-medium ml-1">
                                 {detail.campaign.daily_budget
@@ -6764,19 +6924,19 @@ function DuplicateAdSetModal({
                         <div className="border rounded-lg p-2.5">
                           <div className="flex items-center gap-1.5 mb-2">
                             <IconTarget className="size-3.5 text-muted-foreground" />
-                            <span className="text-[11px] font-bold text-muted-foreground tracking-wider">TARGETING</span>
+                            <span className="text-xs font-bold text-muted-foreground tracking-wider">TARGETING</span>
                           </div>
                           {detail.adSet?.targeting?.geo_locations?.countries?.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-2">
                               {detail.adSet.targeting.geo_locations.countries.slice(0, 24).map((c: string) => (
-                                <span key={c} className="text-[10px] px-1 py-0.5 rounded bg-muted/50 font-medium uppercase">{c}</span>
+                                <span key={c} className="text-xs px-1 py-0.5 rounded bg-muted/50 font-medium uppercase">{c}</span>
                               ))}
                               {detail.adSet.targeting.geo_locations.countries.length > 24 && (
-                                <span className="text-[10px] text-muted-foreground">+{detail.adSet.targeting.geo_locations.countries.length - 24}</span>
+                                <span className="text-xs text-muted-foreground">+{detail.adSet.targeting.geo_locations.countries.length - 24}</span>
                               )}
                             </div>
                           )}
-                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
                             <span>
                               <span className="text-muted-foreground">Age:</span>{" "}
                               <span className="font-medium">{detail.adSet?.targeting?.age_min || 18}-{detail.adSet?.targeting?.age_max === 65 ? "65+" : (detail.adSet?.targeting?.age_max || "65+")}</span>
@@ -6793,7 +6953,7 @@ function DuplicateAdSetModal({
                             </span>
                             <span><span className="text-muted-foreground">Ad count:</span> <span className="font-medium">{detail.adSet?.ad_count ?? 0}</span></span>
                           </div>
-                          <div className="mt-1.5 text-[11px] space-y-0.5">
+                          <div className="mt-1.5 text-xs space-y-0.5">
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <IconUsers className="size-2.5" />
                               <span>Inc:</span>
@@ -6811,9 +6971,9 @@ function DuplicateAdSetModal({
                         <div className="border rounded-lg p-2.5">
                           <div className="flex items-center gap-1.5 mb-2">
                             <IconTrendingUp className="size-3.5 text-muted-foreground" />
-                            <span className="text-[11px] font-bold text-muted-foreground tracking-wider">OPTIMIZATION</span>
+                            <span className="text-xs font-bold text-muted-foreground tracking-wider">OPTIMIZATION</span>
                           </div>
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                             {detail.campaign?.objective && (
                               <span><span className="text-muted-foreground">Objective:</span> <span className="font-bold">{detail.campaign.objective.replace(/_/g, " ")}</span></span>
                             )}
@@ -6824,7 +6984,7 @@ function DuplicateAdSetModal({
                               <span><span className="text-muted-foreground">Billing:</span> <span className="font-bold">{detail.adSet.billing_event.replace(/_/g, " ")}</span></span>
                             )}
                           </div>
-                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
                             <span><span className="text-muted-foreground">Destination:</span> <span className="font-bold">{(detail.adSet?.destination_type || "UNDEFINED").replace(/_/g, " ")}</span></span>
                             {detail.adSet?.attribution_spec && (
                               <span><span className="text-muted-foreground">Attribution:</span> <span className="font-medium">{
@@ -6860,7 +7020,7 @@ function DuplicateAdSetModal({
                         duplicateAds ? "translate-x-4" : "translate-x-0.5")} />
                     </button>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">Copy ads to new ad set</p>
+                  <p className="text-xs text-muted-foreground">Copy ads to new ad set</p>
                 </div>
 
                 <div className={cn("border rounded-xl p-3", launchAsActive && "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900")}>
@@ -6868,7 +7028,7 @@ function DuplicateAdSetModal({
                     <div className="flex items-center gap-1">
                       <p className="text-sm font-semibold">Launch as</p>
                       <span className={cn(
-                        "text-[10px] px-1.5 py-0.5 rounded-full font-bold",
+                        "text-xs px-1.5 py-0.5 rounded-full font-bold",
                         launchAsActive
                           ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                           : "bg-muted text-muted-foreground"
@@ -6883,7 +7043,7 @@ function DuplicateAdSetModal({
                         launchAsActive ? "translate-x-4" : "translate-x-0.5")} />
                     </button>
                   </div>
-                  <p className="text-[11px] text-muted-foreground">{launchAsActive ? "Starts spending immediately" : "Paused until you enable"}</p>
+                  <p className="text-xs text-muted-foreground">{launchAsActive ? "Starts spending immediately" : "Paused until you enable"}</p>
                 </div>
               </div>
 
@@ -6927,7 +7087,7 @@ function DuplicateAdSetModal({
                       {/* Budget override */}
                       <div className="border rounded-xl p-3">
                         <p className="text-sm font-bold mb-0.5">Budget</p>
-                        <p className="text-[11px] text-muted-foreground mb-2.5">Override the budget amount and type for the duplicated ad set.</p>
+                        <p className="text-xs text-muted-foreground mb-2.5">Override the budget amount and type for the duplicated ad set.</p>
                         <div className="flex gap-2">
                           <input
                             type="number"
@@ -6955,11 +7115,11 @@ function DuplicateAdSetModal({
                             <IconInfoCircle className="size-3.5 text-blue-600 dark:text-blue-400" />
                             <span className="text-sm font-bold text-blue-700 dark:text-blue-300">Campaign Budget (CBO)</span>
                           </div>
-                          <p className="text-[12px] mb-1">
+                          <p className="text-xs mb-1">
                             <span className="font-bold">Daily Budget:</span>{" "}
                             <span className="font-semibold">${detail.campaign.daily_budget ? (parseInt(detail.campaign.daily_budget) / 100).toFixed(2) : "—"}</span>
                           </p>
-                          <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80">
+                          <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
                             Consider this campaign budget when setting your ad set spending limits below.
                           </p>
                         </div>
@@ -6973,7 +7133,7 @@ function DuplicateAdSetModal({
                               <p className="text-sm font-bold">Ad set spending limits</p>
                               <IconInfoCircle className="size-3 text-muted-foreground" />
                             </div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
+                            <p className="text-xs text-muted-foreground mt-0.5">
                               Optional min and max spend per ad set. Turn on to set daily or lifetime limits in currency or as a % of campaign budget.
                             </p>
                           </div>
@@ -6989,7 +7149,7 @@ function DuplicateAdSetModal({
                         {spendingLimitsOn && (
                           <div className="grid grid-cols-2 gap-2 mt-2.5">
                             <div>
-                              <label className="text-[10px] font-medium text-muted-foreground block mb-1">Min spend ($)</label>
+                              <label className="text-xs font-medium text-muted-foreground block mb-1">Min spend ($)</label>
                               <input
                                 type="number"
                                 value={minSpend}
@@ -6999,7 +7159,7 @@ function DuplicateAdSetModal({
                               />
                             </div>
                             <div>
-                              <label className="text-[10px] font-medium text-muted-foreground block mb-1">Max spend ($)</label>
+                              <label className="text-xs font-medium text-muted-foreground block mb-1">Max spend ($)</label>
                               <input
                                 type="number"
                                 value={maxSpend}
@@ -7013,7 +7173,7 @@ function DuplicateAdSetModal({
                       </div>
 
                       {/* Day parting note */}
-                      <div className="flex items-start gap-2 px-1 text-[11px] text-muted-foreground">
+                      <div className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
                         <IconClock className="size-3.5 shrink-0 mt-0.5" />
                         <p>
                           <span className="font-medium text-foreground/70">Ad Scheduling (Day Parting)</span> - Requires Lifetime Budget. Select{" "}
@@ -7029,13 +7189,13 @@ function DuplicateAdSetModal({
                       {/* Schedule */}
                       <div className="border rounded-xl p-3">
                         <p className="text-sm font-bold mb-0.5">Schedule</p>
-                        <p className="text-[11px] text-muted-foreground mb-2.5">Override start and end dates for the duplicated ad set.</p>
+                        <p className="text-xs text-muted-foreground mb-2.5">Override start and end dates for the duplicated ad set.</p>
 
                         {/* Timezone info banner */}
                         <div className="border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/20 rounded-lg p-2.5 mb-3">
                           <div className="flex items-start gap-1.5 mb-2">
                             <IconInfoCircle className="size-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-[11px] flex-1">
+                            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs flex-1">
                               <div>
                                 <p className="font-bold text-blue-700 dark:text-blue-300">Your Local Timezone:</p>
                                 <p className="font-mono">{Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
@@ -7054,14 +7214,14 @@ function DuplicateAdSetModal({
                               </div>
                             </div>
                           </div>
-                          <p className="text-[10px] text-muted-foreground mt-1">
+                          <p className="text-xs text-muted-foreground mt-1">
                             All dates and times will be set according to <span className="text-primary font-medium">your ad account timezone</span>.
                           </p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Start Date (optional)</label>
+                            <label className="text-xs text-muted-foreground block mb-1">Start Date (optional)</label>
                             <input
                               type="datetime-local"
                               value={scheduleStart}
@@ -7070,7 +7230,7 @@ function DuplicateAdSetModal({
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">End Date (optional)</label>
+                            <label className="text-xs text-muted-foreground block mb-1">End Date (optional)</label>
                             <input
                               type="datetime-local"
                               value={scheduleEnd}
@@ -7086,7 +7246,7 @@ function DuplicateAdSetModal({
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex-1">
                             <p className="text-sm font-bold">Target Campaign (Optional)</p>
-                            <p className="text-[11px] text-muted-foreground">Choose whether to duplicate into the original campaign or another campaign.</p>
+                            <p className="text-xs text-muted-foreground">Choose whether to duplicate into the original campaign or another campaign.</p>
                           </div>
                           <button className="flex items-center gap-1 text-xs px-2 py-1 border rounded-lg hover:bg-muted/30 shrink-0 ml-2">
                             <IconRefresh className="size-3" />Refresh
@@ -7103,7 +7263,7 @@ function DuplicateAdSetModal({
                             )}
                           >
                             <p className="text-sm font-bold">Existing campaign</p>
-                            <p className={cn("text-[10px]", targetCampaign === "source" ? "opacity-80" : "text-muted-foreground")}>Keep the source campaign</p>
+                            <p className={cn("text-xs", targetCampaign === "source" ? "opacity-80" : "text-muted-foreground")}>Keep the source campaign</p>
                           </button>
                           <button
                             onClick={() => setTargetCampaign("another")}
@@ -7115,7 +7275,7 @@ function DuplicateAdSetModal({
                             )}
                           >
                             <p className="text-sm font-bold">Another campaign</p>
-                            <p className={cn("text-[10px]", targetCampaign === "another" ? "opacity-80" : "text-muted-foreground")}>Choose a destination</p>
+                            <p className={cn("text-xs", targetCampaign === "another" ? "opacity-80" : "text-muted-foreground")}>Choose a destination</p>
                           </button>
                         </div>
                         {targetCampaign === "another" && (
@@ -7139,7 +7299,7 @@ function DuplicateAdSetModal({
                         },
                         {
                           label: "Conversion location and performance goal",
-                          desc: <>Override Meta <span className="font-mono text-[10px]">destination_type</span> and <span className="font-mono text-[10px]">optimization_goal</span> on the duplicate (same fields as Ads Manager). Leave off to keep the source ad set settings.</>,
+                          desc: <>Override Meta <span className="font-mono text-xs">destination_type</span> and <span className="font-mono text-xs">optimization_goal</span> on the duplicate (same fields as Ads Manager). Leave off to keep the source ad set settings.</>,
                           state: changeConversionLocation,
                           set: setChangeConversionLocation,
                         },
@@ -7153,9 +7313,9 @@ function DuplicateAdSetModal({
                         <div key={i} className="border rounded-xl p-3 flex items-start justify-between gap-2">
                           <div className="flex-1">
                             <p className="text-sm font-bold">{row.label}</p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{row.desc}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{row.desc}</p>
                             {row.link && (
-                              <a href="#" className="text-[11px] text-primary hover:underline mt-0.5 inline-block">{row.link}</a>
+                              <a href="#" className="text-xs text-primary hover:underline mt-0.5 inline-block">{row.link}</a>
                             )}
                           </div>
                           <button
@@ -7176,7 +7336,7 @@ function DuplicateAdSetModal({
                       {/* Location Targeting */}
                       <div className="border rounded-xl p-3">
                         <p className="text-sm font-bold mb-0.5">Location Targeting</p>
-                        <p className="text-[11px] text-muted-foreground mb-2.5">Override the geographic targeting for the duplicated ad set.</p>
+                        <p className="text-xs text-muted-foreground mb-2.5">Override the geographic targeting for the duplicated ad set.</p>
 
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-xs">Target:</span>
@@ -7199,7 +7359,7 @@ function DuplicateAdSetModal({
                               key={f}
                               onClick={() => setLocationFilter(f)}
                               className={cn(
-                                "px-2.5 py-0.5 text-[11px] rounded-full font-medium transition-colors capitalize",
+                                "px-2.5 py-0.5 text-xs rounded-full font-medium transition-colors capitalize",
                                 locationFilter === f
                                   ? "bg-primary text-primary-foreground"
                                   : "bg-muted text-muted-foreground hover:bg-muted/70"
@@ -7229,13 +7389,13 @@ function DuplicateAdSetModal({
                       {/* Age Targeting */}
                       <div className="border rounded-xl p-3">
                         <p className="text-sm font-bold mb-0.5">Age Targeting</p>
-                        <p className="text-[11px] text-muted-foreground mb-2">Define the age range of people who will see your ads.</p>
+                        <p className="text-xs text-muted-foreground mb-2">Define the age range of people who will see your ads.</p>
 
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <IconCalendar className="size-3.5 text-muted-foreground" />
-                          <p className="text-[11px] font-bold text-muted-foreground">Age Targeting</p>
+                          <p className="text-xs font-bold text-muted-foreground">Age Targeting</p>
                         </div>
-                        <p className="text-[10px] text-muted-foreground mb-2">Define the age range of people who will see your ads</p>
+                        <p className="text-xs text-muted-foreground mb-2">Define the age range of people who will see your ads</p>
 
                         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-2">
                           <Select value={ageMinSelect} onValueChange={setAgeMinSelect}>
@@ -7259,11 +7419,11 @@ function DuplicateAdSetModal({
                         </div>
 
                         <div className="bg-muted/30 rounded-lg p-2 mb-2">
-                          <p className="text-[11px] font-medium">Age: {ageMinSelect} - {ageMaxSelect}</p>
-                          {ageMaxSelect === "65+" && <p className="text-[10px] text-muted-foreground">People aged 65 and older will be included</p>}
+                          <p className="text-xs font-medium">Age: {ageMinSelect} - {ageMaxSelect}</p>
+                          {ageMaxSelect === "65+" && <p className="text-xs text-muted-foreground">People aged 65 and older will be included</p>}
                         </div>
 
-                        <p className="text-[10px] text-muted-foreground mb-1">Common age ranges</p>
+                        <p className="text-xs text-muted-foreground mb-1">Common age ranges</p>
                         <div className="flex flex-wrap gap-1">
                           {[
                             { label: "All adults (18-65+)", min: "18", max: "65+" },
@@ -7275,7 +7435,7 @@ function DuplicateAdSetModal({
                               key={r.label}
                               onClick={() => { setAgeMinSelect(r.min); setAgeMaxSelect(r.max) }}
                               className={cn(
-                                "px-2 py-1 text-[11px] border rounded-full font-medium transition-colors",
+                                "px-2 py-1 text-xs border rounded-full font-medium transition-colors",
                                 ageMinSelect === r.min && ageMaxSelect === r.max
                                   ? "bg-primary text-primary-foreground border-primary"
                                   : "hover:bg-muted/30"
@@ -7290,7 +7450,7 @@ function DuplicateAdSetModal({
                       {/* Custom Audiences */}
                       <div className="border rounded-xl p-3">
                         <p className="text-sm font-bold mb-0.5">Custom Audiences</p>
-                        <p className="text-[11px] text-muted-foreground mb-2.5">Include or exclude specific audiences from targeting.</p>
+                        <p className="text-xs text-muted-foreground mb-2.5">Include or exclude specific audiences from targeting.</p>
 
                         <div className="border rounded-lg p-3">
                           <div className="flex items-center justify-between mb-2.5">
@@ -7299,7 +7459,7 @@ function DuplicateAdSetModal({
                               <p className="text-sm font-bold">Custom Audiences</p>
                               <IconInfoCircle className="size-3 text-muted-foreground" />
                             </div>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{(detail?.adSet?.targeting?.custom_audiences?.length || 4)} available</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">{(detail?.adSet?.targeting?.custom_audiences?.length || 4)} available</span>
                           </div>
 
                           {/* Include block */}
@@ -7313,7 +7473,7 @@ function DuplicateAdSetModal({
                                 <IconChevronDown className="size-3" />Include
                               </button>
                             </div>
-                            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <IconUsers className="size-3" />
                               {includedAudiences.length === 0
                                 ? <>No audiences included — click <span className="font-bold text-foreground">Include</span> to add</>
@@ -7332,7 +7492,7 @@ function DuplicateAdSetModal({
                                 <IconChevronDown className="size-3" />Exclude
                               </button>
                             </div>
-                            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <IconUsers className="size-3" />
                               {excludedAudiences.length === 0
                                 ? <>No audiences excluded — click <span className="font-bold text-foreground">Exclude</span> to add</>
@@ -7345,12 +7505,12 @@ function DuplicateAdSetModal({
                       {/* Advanced Options */}
                       <div className="border rounded-xl p-3">
                         <p className="text-sm font-bold mb-0.5">Advanced Options</p>
-                        <p className="text-[11px] text-muted-foreground mb-2.5">DSA compliance, attribution settings, and debug data.</p>
+                        <p className="text-xs text-muted-foreground mb-2.5">DSA compliance, attribution settings, and debug data.</p>
 
                         <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2 py-2 border-b">
                             <div className="flex-1">
-                              <p className="text-sm font-medium">Set DSA Beneficiary & Payer <span className="text-[10px] text-muted-foreground italic">(Only for EU/Taiwan Ad sets)</span></p>
+                              <p className="text-sm font-medium">Set DSA Beneficiary & Payer <span className="text-xs text-muted-foreground italic">(Only for EU/Taiwan Ad sets)</span></p>
                             </div>
                             <button
                               onClick={() => setSetDSA(v => !v)}
@@ -7365,8 +7525,8 @@ function DuplicateAdSetModal({
                           <div className="flex items-start justify-between gap-2 py-2">
                             <div className="flex-1">
                               <p className="text-sm font-medium">Set Custom Attribution Window</p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">Using original ad set's attribution settings</p>
-                              <button className="text-[11px] text-primary hover:underline mt-0.5 inline-flex items-center gap-1">
+                              <p className="text-xs text-muted-foreground mt-0.5">Using original ad set's attribution settings</p>
+                              <button className="text-xs text-primary hover:underline mt-0.5 inline-flex items-center gap-1">
                                 View current ad set data <IconChevronDown className="size-3" />
                               </button>
                             </div>
@@ -7760,7 +7920,7 @@ function DuplicateCampaignModal({
                       <IconBrandMeta className="size-4 text-[#0064E0] shrink-0" />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-bold truncate">{sourceCampaign.name}</p>
-                        <p className="text-[11px] text-muted-foreground truncate">
+                        <p className="text-xs text-muted-foreground truncate">
                           {sourceCampaign._adset_count ?? "—"} ad sets | {(sourceCampaign.objective || "").replace(/_/g, " ")} | spend: ${(sourceCampaign._spend || 0).toFixed(0)}
                         </p>
                       </div>
@@ -7806,7 +7966,7 @@ function DuplicateCampaignModal({
                           <IconBrandMeta className="size-4 text-[#0064E0] shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold truncate">{c.name}</p>
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                               Ad Sets: {c._adset_count ?? "—"} | {(c.objective || "").replace(/_/g, " ")} | spend: ${(c._spend || 0).toFixed(0)}
                             </p>
                           </div>
@@ -7825,13 +7985,13 @@ function DuplicateCampaignModal({
               <>
                 {/* Duplicating from card */}
                 <div className="border rounded-xl p-3 bg-muted/20">
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">DUPLICATING FROM</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1.5">DUPLICATING FROM</p>
                   <div className="flex items-center gap-2 mb-1.5">
                     <IconBrandFacebook className="size-4 text-[#1877F2]" />
                     <span className="text-sm font-bold flex-1 truncate">{sourceCampaign.name}</span>
                     <IconExternalLink className="size-3.5 text-muted-foreground" />
                   </div>
-                  <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+                  <div className="flex items-center gap-1.5 text-xs flex-wrap">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-background border">
                       <IconPlus className="size-3" />{sourceCampaign._adset_count || 0} ad set{(sourceCampaign._adset_count || 0) !== 1 ? "s" : ""}
                     </span>
@@ -7849,7 +8009,7 @@ function DuplicateCampaignModal({
                 {/* New Campaign divider */}
                 <div className="flex items-center gap-3 py-1">
                   <div className="flex-1 border-t border-dashed" />
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">NEW CAMPAIGN</span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">NEW CAMPAIGN</span>
                   <div className="flex-1 border-t border-dashed" />
                 </div>
 
@@ -7875,7 +8035,7 @@ function DuplicateCampaignModal({
                     onChange={e => setCampaignName(e.target.value)}
                     className="w-full px-3 py-2.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
                   />
-                  <p className="text-[11px] text-muted-foreground mt-1.5 flex items-center gap-1">
+                  <p className="text-xs text-muted-foreground mt-1.5 flex items-center gap-1">
                     <IconInfoCircle className="size-3" />Ad sets will be configured in the next step
                   </p>
                 </div>
@@ -7923,7 +8083,7 @@ function DuplicateCampaignModal({
                               <button
                                 type="button"
                                 onClick={() => setBudgetAmount(sourceVal)}
-                                className="text-[11px] text-primary hover:underline flex items-center gap-1"
+                                className="text-xs text-primary hover:underline flex items-center gap-1"
                                 title="Use source campaign's budget"
                               >
                                 <IconRefresh className="size-3" />Source: ${sourceVal}
@@ -7941,7 +8101,7 @@ function DuplicateCampaignModal({
                             className="w-full pl-7 pr-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
                           />
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {budgetType === "daily" ? "Amount to spend each day" : "Total amount over campaign lifetime"}
                           {budgetAmount && sourceCampaign && (() => {
                             const sc = sourceCampaign as any
@@ -7964,7 +8124,7 @@ function DuplicateCampaignModal({
                 <div className="border rounded-xl p-3 flex items-center justify-between gap-2">
                   <div className="flex-1">
                     <p className="text-sm font-bold">Campaign bid strategy</p>
-                    <p className="text-[11px] text-muted-foreground">Override the copied campaign's bid strategy</p>
+                    <p className="text-xs text-muted-foreground">Override the copied campaign's bid strategy</p>
                   </div>
                   <Select value={bidStrategy} onValueChange={setBidStrategy}>
                     <SelectTrigger className="w-36 h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
@@ -8029,13 +8189,13 @@ function DuplicateCampaignModal({
                         <li key={i} className="break-words">• {w}</li>
                       ))}
                     </ul>
-                    <button onClick={() => setWarnings([])} className="mt-1.5 text-[11px] underline opacity-70 hover:opacity-100">Dismiss</button>
+                    <button onClick={() => setWarnings([])} className="mt-1.5 text-xs underline opacity-70 hover:opacity-100">Dismiss</button>
                   </div>
                 </div>
               </div>
             )}
 
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg px-3 py-2 text-[11px] flex items-center justify-between">
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg px-3 py-2 text-xs flex items-center justify-between">
               <span><span className="font-bold text-blue-700 dark:text-blue-300">Ad Account Timezone:</span> America/Los_Angeles (UTC-07:00)</span>
               <span><span className="font-bold text-blue-700 dark:text-blue-300">Time:</span> {new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</span>
             </div>
@@ -8146,7 +8306,7 @@ function DuplicateCampaignModal({
                       const changed = cfg.statusActive !== (adset.effective_status === "ACTIVE")
                       return (
                         <span className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded font-bold border inline-flex items-center gap-1",
+                          "text-xs px-1.5 py-0.5 rounded font-bold border inline-flex items-center gap-1",
                           willBeActive
                             ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
                             : "bg-muted text-muted-foreground border-border",
@@ -8160,7 +8320,7 @@ function DuplicateCampaignModal({
                       )
                     })()}
                   </div>
-                  <p className="px-3 pb-2 text-[11px] text-muted-foreground">
+                  <p className="px-3 pb-2 text-xs text-muted-foreground">
                     Ad Set {idx + 1} of {sourceAdSets.length}
                     {sel && (
                       cfg.statusActive
@@ -8176,12 +8336,12 @@ function DuplicateCampaignModal({
                     <div className="border-t bg-background p-3 space-y-2.5">
                       <div className="grid grid-cols-[1fr_auto] gap-2">
                         <div>
-                          <label className="text-[11px] font-medium text-muted-foreground block mb-1">New Ad Set Name</label>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1">New Ad Set Name</label>
                           <input value={cfg.customName} onChange={e => updateCfg({ customName: e.target.value })}
                             className="w-full px-2 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring" />
                         </div>
                         <div>
-                          <label className="text-[11px] font-medium text-muted-foreground block mb-1">Copies <span className="text-[10px]">1–250</span></label>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1">Copies <span className="text-xs">1–250</span></label>
                           <input type="number" min={1} max={250} value={cfg.copies}
                             onChange={e => updateCfg({ copies: Math.max(1, Math.min(250, parseInt(e.target.value) || 1)) })}
                             className="w-16 px-2 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring text-center" />
@@ -8191,7 +8351,7 @@ function DuplicateCampaignModal({
                       <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-muted/30 border">
                         <div className="flex-1">
                           <p className="text-sm font-medium">Activate when duplicated</p>
-                          <p className="text-[11px] text-muted-foreground">Toggle on to set status ACTIVE + customize schedule, dates, attribution</p>
+                          <p className="text-xs text-muted-foreground">Toggle on to set status ACTIVE + customize schedule, dates, attribution</p>
                         </div>
                         <button onClick={() => updateCfg({ statusActive: true })}
                           className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 bg-muted-foreground/30">
@@ -8205,7 +8365,7 @@ function DuplicateCampaignModal({
                             Duplicate ads from original ad set
                             <IconInfoCircle className="size-3 text-muted-foreground" />
                           </p>
-                          <p className="text-[11px] text-muted-foreground">Copy all existing ads to new ad set</p>
+                          <p className="text-xs text-muted-foreground">Copy all existing ads to new ad set</p>
                         </div>
                         <button onClick={() => updateCfg({ deepCopy: !cfg.deepCopy })}
                           className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 mt-0.5",
@@ -8244,7 +8404,7 @@ function DuplicateCampaignModal({
                           ? `from ${new Date(a.start_time).toLocaleDateString()}${a.end_time ? ` to ${new Date(a.end_time).toLocaleDateString()}` : ""}`
                           : "Run continuously"
                         return (
-                          <p className="text-[11px] text-muted-foreground">
+                          <p className="text-xs text-muted-foreground">
                             <span className="font-medium">Budget:</span> {budget} <span className="opacity-50">•</span>{" "}
                             <span className="font-medium">Status:</span> {statusLabel} <span className="opacity-50">•</span>{" "}
                             <span className="font-medium">Schedule:</span> {schedule}
@@ -8254,12 +8414,12 @@ function DuplicateCampaignModal({
 
                       <div className="grid grid-cols-[1fr_auto] gap-2">
                         <div>
-                          <label className="text-[11px] font-medium text-muted-foreground block mb-1">New Ad Set Name</label>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1">New Ad Set Name</label>
                           <input value={cfg.customName} onChange={e => updateCfg({ customName: e.target.value })}
                             className="w-full px-2 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring" />
                         </div>
                         <div>
-                          <label className="text-[11px] font-medium text-muted-foreground block mb-1">Copies <span className="text-[10px]">1–250</span></label>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1">Copies <span className="text-xs">1–250</span></label>
                           <input type="number" min={1} max={250} value={cfg.copies}
                             onChange={e => updateCfg({ copies: Math.max(1, Math.min(250, parseInt(e.target.value) || 1)) })}
                             className="w-16 px-2 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring text-center" />
@@ -8278,20 +8438,20 @@ function DuplicateCampaignModal({
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="text-[11px] font-medium block mb-1">Start Date & Time <span className="text-muted-foreground">(Optional)</span></label>
+                          <label className="text-xs font-medium block mb-1">Start Date & Time <span className="text-muted-foreground">(Optional)</span></label>
                           <input type="datetime-local" value={cfg.startTime} onChange={e => updateCfg({ startTime: e.target.value })}
                             className="w-full px-2 py-1.5 text-xs bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring" />
-                          <p className="text-[10px] text-muted-foreground mt-0.5">Leave empty to start immediately when ad set is activated</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Leave empty to start immediately when ad set is activated</p>
                         </div>
                         <div>
-                          <label className="text-[11px] font-medium block mb-1">End Date & Time <span className="text-muted-foreground">(Optional)</span></label>
+                          <label className="text-xs font-medium block mb-1">End Date & Time <span className="text-muted-foreground">(Optional)</span></label>
                           <input type="datetime-local" value={cfg.endTime} onChange={e => updateCfg({ endTime: e.target.value })} disabled={!cfg.startTime}
                             className="w-full px-2 py-1.5 text-xs bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring disabled:opacity-50" />
-                          <p className="text-[10px] text-muted-foreground mt-0.5">Please select a start date first</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Please select a start date first</p>
                         </div>
                       </div>
 
-                      <p className="text-[11px] text-muted-foreground flex items-start gap-1">
+                      <p className="text-xs text-muted-foreground flex items-start gap-1">
                         <IconClock className="size-3 mt-0.5" />
                         <span><span className="font-medium text-foreground/70">Ad Scheduling (Day Parting)</span> - Requires Lifetime Budget. Turn off "Copy current settings" and select "Lifetime Budget" to enable.</span>
                       </p>
@@ -8301,7 +8461,7 @@ function DuplicateCampaignModal({
                         <div className="flex items-start justify-between gap-2 py-1">
                           <div>
                             <p className="text-sm font-medium">Set Custom Attribution Window</p>
-                            <p className="text-[11px] text-muted-foreground">{cfg.customAttribution ? "Override the source ad set's attribution settings" : "Using original ad set's attribution settings"}</p>
+                            <p className="text-xs text-muted-foreground">{cfg.customAttribution ? "Override the source ad set's attribution settings" : "Using original ad set's attribution settings"}</p>
                           </div>
                           <button onClick={() => updateCfg({ customAttribution: !cfg.customAttribution })}
                             className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0 mt-0.5",
@@ -8314,7 +8474,7 @@ function DuplicateCampaignModal({
                           <div className="space-y-2 mt-2 pl-1">
                             <div className="grid grid-cols-2 gap-2">
                               <div>
-                                <label className="text-[11px] font-medium block mb-1 flex items-center gap-1">
+                                <label className="text-xs font-medium block mb-1 flex items-center gap-1">
                                   View-through Days <IconInfoCircle className="size-3 text-muted-foreground" />
                                 </label>
                                 <Select value={cfg.attrViewDays} onValueChange={v => updateCfg({ attrViewDays: v })}>
@@ -8326,7 +8486,7 @@ function DuplicateCampaignModal({
                                 </Select>
                               </div>
                               <div>
-                                <label className="text-[11px] font-medium block mb-1 flex items-center gap-1">
+                                <label className="text-xs font-medium block mb-1 flex items-center gap-1">
                                   Click-through Days <IconInfoCircle className="size-3 text-muted-foreground" />
                                 </label>
                                 <Select value={cfg.attrClickDays} onValueChange={v => updateCfg({ attrClickDays: v })}>
@@ -8340,7 +8500,7 @@ function DuplicateCampaignModal({
                               </div>
                             </div>
                             <div>
-                              <label className="text-[11px] font-medium block mb-1 flex items-center gap-1">
+                              <label className="text-xs font-medium block mb-1 flex items-center gap-1">
                                 Engaged-view Days <span className="text-muted-foreground">(Video ads only)</span> <IconInfoCircle className="size-3 text-muted-foreground" />
                               </label>
                               <Select value={cfg.attrEngagedViewDays} onValueChange={v => updateCfg({ attrEngagedViewDays: v })}>
@@ -8351,7 +8511,7 @@ function DuplicateCampaignModal({
                                 </SelectContent>
                               </Select>
                             </div>
-                            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-2 text-[11px] text-amber-800 dark:text-amber-300">
+                            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-lg p-2 text-xs text-amber-800 dark:text-amber-300">
                               <p className="font-bold flex items-center gap-1 mb-0.5">
                                 <IconAlertTriangle className="size-3" />Attribution Window Limitations
                               </p>
@@ -8371,12 +8531,12 @@ function DuplicateCampaignModal({
                               Duplicate ads from original ad set
                               <IconInfoCircle className="size-3 text-muted-foreground" />
                               {cfg.deepCopy && (
-                                <span className="ml-2 text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
+                                <span className="ml-2 text-xs text-emerald-700 dark:text-emerald-400 font-semibold">
                                   ✓ Will copy {cfg.selectedAdIds.length} ad{cfg.selectedAdIds.length !== 1 ? "s" : ""}
                                 </span>
                               )}
                             </p>
-                            <p className="text-[11px] text-muted-foreground">{cfg.deepCopy ? `${cfg.selectedAdIds.length} ad${cfg.selectedAdIds.length !== 1 ? "s" : ""} from original ad set will be copied` : "Copy all existing ads to new ad set"}</p>
+                            <p className="text-xs text-muted-foreground">{cfg.deepCopy ? `${cfg.selectedAdIds.length} ad${cfg.selectedAdIds.length !== 1 ? "s" : ""} from original ad set will be copied` : "Copy all existing ads to new ad set"}</p>
                           </div>
                           <button onClick={() => {
                             const next = !cfg.deepCopy
@@ -8392,7 +8552,7 @@ function DuplicateCampaignModal({
                         {cfg.deepCopy && (
                           <div className="space-y-2 mt-2">
                             <div className="flex items-center justify-between gap-2">
-                              <label className="text-[11px] font-medium">Duplicated ads status <span className="text-muted-foreground italic">Ads will be created as {cfg.duplicatedAdsStatus}</span></label>
+                              <label className="text-xs font-medium">Duplicated ads status <span className="text-muted-foreground italic">Ads will be created as {cfg.duplicatedAdsStatus}</span></label>
                               <Select value={cfg.duplicatedAdsStatus} onValueChange={v => updateCfg({ duplicatedAdsStatus: v as "ACTIVE" | "PAUSED" })}>
                                 <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
                                 <SelectContent>
@@ -8403,7 +8563,7 @@ function DuplicateCampaignModal({
                             </div>
 
                             <div className="border rounded-lg overflow-hidden">
-                              <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b text-[11px]">
+                              <div className="flex items-center justify-between px-3 py-2 bg-muted/30 border-b text-xs">
                                 <button
                                   onClick={() => {
                                     const allSelected = cfg.adsList.length > 0 && cfg.selectedAdIds.length === cfg.adsList.length
@@ -8452,7 +8612,7 @@ function DuplicateCampaignModal({
                                       />
                                       <IconBrandMeta className="size-3.5 text-[#0064E0]" />
                                       <span className="flex-1 truncate text-xs font-medium">{ad.name}</span>
-                                      <span className={cn("text-[9px] px-1.5 py-0.5 rounded font-bold border",
+                                      <span className={cn("text-xs px-1.5 py-0.5 rounded font-bold border",
                                         ad.effective_status === "ACTIVE"
                                           ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
                                           : "bg-muted text-muted-foreground border-border"
@@ -8495,14 +8655,14 @@ function DuplicateCampaignModal({
                     <IconBrandMeta className="size-4 text-[#0064E0]" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold truncate">{c.name}</p>
-                      <p className="text-[11px] text-muted-foreground font-mono">Campaign ID: {c.id}</p>
+                      <p className="text-xs text-muted-foreground font-mono">Campaign ID: {c.id}</p>
                     </div>
                     <a href={`https://www.facebook.com/adsmanager/manage/campaigns?act=${adAccountId}&selected_campaign_ids=${c.id}`} target="_blank" rel="noopener noreferrer"
                       className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
                       View Campaign <IconExternalLink className="size-3" />
                     </a>
                   </div>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase px-3 py-1.5">AD SETS ({c.adSets?.length || 0})</p>
+                  <p className="text-xs font-bold text-muted-foreground uppercase px-3 py-1.5">AD SETS ({c.adSets?.length || 0})</p>
                   {(c.adSets || []).map((a: any) => (
                     <div key={a.id} className="px-3 py-1.5 flex items-center gap-2 text-xs border-t">
                       <span className="size-1.5 rounded-full bg-emerald-500" />
@@ -8622,12 +8782,12 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove, invalid 
           fetchAdSets(true)
         }}
       />
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold">Ad Sets</span>
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b overflow-x-auto">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-sm font-semibold whitespace-nowrap">Ad Sets</span>
           <span className="text-destructive text-xs font-bold">*</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0">
           <Tip text="Copy the selected ad set setup into a new ad set.">
             <Button
               variant="outline"
@@ -8674,7 +8834,7 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove, invalid 
             onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
             placeholder="Search by Ad Set name or ID"
             className="w-full pl-9 pr-16 py-2 text-sm bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50" />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground/40 font-mono">Ctrl+K</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground/40 font-mono">Ctrl+K</span>
 
           {showDropdown && (
             <div className="absolute top-full left-0 right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto">
@@ -8692,12 +8852,12 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove, invalid 
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">{a.name}</p>
                     {a.campaign_name && (
-                      <p className="text-[11px] text-primary/70 truncate">{a.campaign_name}</p>
+                      <p className="text-xs text-primary/70 truncate">{a.campaign_name}</p>
                     )}
-                    <p className="text-[10px] text-muted-foreground/60 font-mono">{a.id}</p>
+                    <p className="text-xs text-muted-foreground/60 font-mono">{a.id}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-2">
-                    <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                    <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-medium",
                       a.effective_status === "ACTIVE" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground")}>
                       {a.effective_status}
                     </span>
@@ -9019,7 +9179,7 @@ function SettingsModal({
         <div className="px-6 py-4 border-b shrink-0">
           <DialogTitle className="text-base font-bold">Default Ad Settings: {adAccountName}</DialogTitle>
           <p className="text-xs text-muted-foreground mt-0.5">Manage naming convention, creative enhancements, launch settings, ad copy defaults, and web/app links</p>
-          <p className="text-[11px] text-muted-foreground/70 font-mono mt-1">Business ID: {adAccountId} | Workspace: {orgName}</p>
+          <p className="text-xs text-muted-foreground/70 font-mono mt-1">Business ID: {adAccountId} | Workspace: {orgName}</p>
         </div>
 
         {/* Body: sidebar + content */}
@@ -9097,7 +9257,7 @@ function SettingsModal({
                             key={t}
                             onClick={() => addTag(t)}
                             className={cn(
-                              "px-2 py-1.5 text-[11px] font-mono border rounded-md hover:bg-muted/40 transition-colors",
+                              "px-2 py-1.5 text-xs font-mono border rounded-md hover:bg-muted/40 transition-colors",
                               AI_NAME_TAGS.includes(t) && "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/30 dark:border-purple-900"
                             )}
                           >
@@ -9198,12 +9358,12 @@ function SettingsModal({
                       </div>
                       <div className="border rounded-lg p-2 bg-muted/20">
                         <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[10px] font-medium text-muted-foreground">Current Schema</span>
-                          <button className="text-[10px] text-primary hover:underline">Edit →</button>
+                          <span className="text-xs font-medium text-muted-foreground">Current Schema</span>
+                          <button className="text-xs text-primary hover:underline">Edit →</button>
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {settings.naming.aiNameSchema.map(s => (
-                            <span key={s} className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-950/30 dark:text-purple-400 rounded">{s}</span>
+                            <span key={s} className="text-xs px-1.5 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 rounded">{s}</span>
                           ))}
                         </div>
                       </div>
@@ -9220,7 +9380,7 @@ function SettingsModal({
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-bold">Meta <span className="text-blue-600">Creative Enhancements</span></span>
                     <IconInfoCircle className="size-3.5 text-muted-foreground" />
-                    <span className="text-[11px] text-muted-foreground italic">Toggle all enhancements on/off</span>
+                    <span className="text-xs text-muted-foreground italic">Toggle all enhancements on/off</span>
                   </div>
                   <button
                     onClick={() => setSettings(s => ({ ...s, enhancements: { ...s.enhancements, metaCreativeEnhancements: !s.enhancements.metaCreativeEnhancements } }))}
@@ -9235,7 +9395,7 @@ function SettingsModal({
                 <div className="flex items-start justify-between p-3 border rounded-xl">
                   <div>
                     <p className="text-sm font-medium">Optimise text per person</p>
-                    <p className="text-[11px] text-muted-foreground">Independent of individual creative enhancement switches; maps to the same setting the launcher sends to Meta</p>
+                    <p className="text-xs text-muted-foreground">Independent of individual creative enhancement switches; maps to the same setting the launcher sends to Meta</p>
                   </div>
                   <button
                     onClick={() => setSettings(s => ({ ...s, enhancements: { ...s.enhancements, optimiseTextPerPerson: !s.enhancements.optimiseTextPerPerson } }))}
@@ -9247,7 +9407,7 @@ function SettingsModal({
                   </button>
                 </div>
 
-                <p className="text-[11px] text-muted-foreground italic">Standard enhancements are deprecated in Marketing API v22.0. Use individual Advantage+ Creative features instead.</p>
+                <p className="text-xs text-muted-foreground italic">Standard enhancements are deprecated in Marketing API v22.0. Use individual Advantage+ Creative features instead.</p>
 
                 <div className="grid grid-cols-3 gap-4">
                   {(["images", "videos", "carousel"] as const).map(group => (
@@ -9281,7 +9441,7 @@ function SettingsModal({
                         <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground flex items-center gap-1">
                           <IconChevronDown className="size-3" />Deprecated Fields
                         </summary>
-                        <p className="text-[11px] text-muted-foreground italic mt-1.5 pl-4">Legacy fields no longer needed in v22.0+</p>
+                        <p className="text-xs text-muted-foreground italic mt-1.5 pl-4">Legacy fields no longer needed in v22.0+</p>
                       </details>
                     </div>
                   ))}
@@ -9307,7 +9467,7 @@ function SettingsModal({
                     <div key={def.key} className="flex items-start justify-between gap-3 p-3 border rounded-lg hover:bg-muted/20">
                       <div className="flex-1">
                         <p className="text-sm font-medium flex items-center gap-1">{def.label} <IconInfoCircle className="size-3 text-muted-foreground" /></p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">{def.desc}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{def.desc}</p>
                       </div>
                       <button
                         onClick={() => setSettings(s => ({ ...s, launch: { ...s.launch, [def.key]: !s.launch[def.key] } }))}
@@ -9328,55 +9488,59 @@ function SettingsModal({
               <div className="space-y-4">
                 <h3 className="text-base font-bold">Default Ad Copy</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex items-center gap-1 mb-1.5">
-                      <label className="text-sm font-bold">Primary Text</label>
-                      <IconInfoCircle className="size-3 text-muted-foreground" />
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center gap-1 mb-1.5">
+                        <label className="text-sm font-bold">Primary Text</label>
+                        <IconInfoCircle className="size-3 text-muted-foreground" />
+                      </div>
+                      <textarea
+                        value={settings.adCopy.primaryText}
+                        onChange={e => setSettings(s => ({ ...s, adCopy: { ...s.adCopy, primaryText: e.target.value } }))}
+                        rows={3}
+                        placeholder="Enter your default primary text..."
+                        className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none"
+                      />
+                      <button className="mt-1 text-xs text-primary hover:underline flex items-center gap-1">
+                        Show Variations <IconPlus className="size-3 rounded-full border border-primary" />
+                      </button>
                     </div>
-                    <textarea
-                      value={settings.adCopy.primaryText}
-                      onChange={e => setSettings(s => ({ ...s, adCopy: { ...s.adCopy, primaryText: e.target.value } }))}
-                      rows={5}
-                      placeholder="Enter your default primary text..."
-                      className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none"
-                    />
-                    <button className="mt-1 text-xs text-primary hover:underline flex items-center gap-1">
-                      Show Variations <IconPlus className="size-3 rounded-full border border-primary" />
-                    </button>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1 mb-1.5">
-                      <label className="text-sm font-bold">Headline</label>
-                      <IconInfoCircle className="size-3 text-muted-foreground" />
+                    <div>
+                      <label className="text-sm font-bold block mb-1.5">Description</label>
+                      <textarea
+                        value={settings.adCopy.description}
+                        onChange={e => setSettings(s => ({ ...s, adCopy: { ...s.adCopy, description: e.target.value } }))}
+                        rows={3}
+                        placeholder="Enter your ad description here"
+                        className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none"
+                      />
                     </div>
-                    <input
-                      value={settings.adCopy.headline}
-                      onChange={e => setSettings(s => ({ ...s, adCopy: { ...s.adCopy, headline: e.target.value } }))}
-                      placeholder="Enter default headline..."
-                      className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
-                    />
-                    <button className="mt-1 text-xs text-primary hover:underline flex items-center gap-1">
-                      Show Variations <IconPlus className="size-3 rounded-full border border-primary" />
-                    </button>
                   </div>
-                  <div>
-                    <label className="text-sm font-bold block mb-1.5">Description</label>
-                    <textarea
-                      value={settings.adCopy.description}
-                      onChange={e => setSettings(s => ({ ...s, adCopy: { ...s.adCopy, description: e.target.value } }))}
-                      rows={3}
-                      placeholder="Enter your ad description here"
-                      className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-bold block mb-1.5">Call To Action</label>
-                    <Select value={settings.adCopy.cta} onValueChange={v => setSettings(s => ({ ...s, adCopy: { ...s.adCopy, cta: v } }))}>
-                      <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center gap-1 mb-1.5">
+                        <label className="text-sm font-bold">Headline</label>
+                        <IconInfoCircle className="size-3 text-muted-foreground" />
+                      </div>
+                      <input
+                        value={settings.adCopy.headline}
+                        onChange={e => setSettings(s => ({ ...s, adCopy: { ...s.adCopy, headline: e.target.value } }))}
+                        placeholder="Enter default headline..."
+                        className="w-full px-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                      />
+                      <button className="mt-1 text-xs text-primary hover:underline flex items-center gap-1">
+                        Show Variations <IconPlus className="size-3 rounded-full border border-primary" />
+                      </button>
+                    </div>
+                    <div>
+                      <label className="text-sm font-bold block mb-1.5">Call To Action</label>
+                      <Select value={settings.adCopy.cta} onValueChange={v => setSettings(s => ({ ...s, adCopy: { ...s.adCopy, cta: v } }))}>
+                        <SelectTrigger className="h-9 text-sm bg-background"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -9788,9 +9952,9 @@ function AdCopyTemplateModal({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">Default Settings</span>
-                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 font-medium">Default</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 font-medium">Default</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {[defaultCopy?.headline, defaultCopy?.cta, defaultLinks?.webLink ? new URL(defaultLinks.webLink.startsWith("http") ? defaultLinks.webLink : `https://${defaultLinks.webLink}`).hostname : null].filter(Boolean).join(" · ") || "No defaults configured"}
                   </p>
                 </div>
@@ -9809,25 +9973,25 @@ function AdCopyTemplateModal({
                 <div className="border-t px-4 py-3 bg-muted/20 space-y-2">
                   {defaultCopy?.primaryText && (
                     <div className="grid grid-cols-[120px_1fr] gap-2">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide pt-0.5">Primary Text</span>
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-0.5">Primary Text</span>
                       <p className="text-xs leading-relaxed line-clamp-4">{defaultCopy.primaryText}</p>
                     </div>
                   )}
                   {defaultCopy?.headline && (
                     <div className="grid grid-cols-[120px_1fr] gap-2">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Headline</span>
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Headline</span>
                       <p className="text-xs">{defaultCopy.headline}</p>
                     </div>
                   )}
                   {defaultLinks?.webLink && (
                     <div className="grid grid-cols-[120px_1fr] gap-2">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</span>
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Link</span>
                       <p className="text-xs text-muted-foreground truncate">{defaultLinks.webLink}</p>
                     </div>
                   )}
                   {defaultCopy?.cta && (
                     <div className="grid grid-cols-[120px_1fr] gap-2">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</span>
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CTA</span>
                       <p className="text-xs">{defaultCopy.cta}</p>
                     </div>
                   )}
@@ -9852,7 +10016,7 @@ function AdCopyTemplateModal({
                 </button>
                 <div className="flex-1 min-w-0">
                   <span className="text-sm font-semibold">{t.name}</span>
-                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                  <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {[t.headline, t.cta, t.link ? (() => { try { return new URL(t.link).hostname } catch { return t.link } })() : null].filter(Boolean).join(" · ")}
                   </p>
                 </div>
@@ -9876,24 +10040,24 @@ function AdCopyTemplateModal({
                 <div className="border-t px-4 py-3 bg-muted/20 space-y-2">
                   {t.primaryText && (
                     <div className="grid grid-cols-[120px_1fr] gap-2">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide pt-0.5">Primary Text</span>
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-0.5">Primary Text</span>
                       <p className="text-xs leading-relaxed whitespace-pre-wrap line-clamp-4">{t.primaryText}</p>
                     </div>
                   )}
                   {t.headline && (
                     <div className="grid grid-cols-[120px_1fr] gap-2">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Headline</span>
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Headline</span>
                       <p className="text-xs">{t.headline}</p>
                     </div>
                   )}
                   {t.link && (
                     <div className="grid grid-cols-[120px_1fr] gap-2">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</span>
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Link</span>
                       <p className="text-xs text-muted-foreground truncate">{t.link}</p>
                     </div>
                   )}
                   <div className="grid grid-cols-[120px_1fr] gap-2">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</span>
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">CTA</span>
                     <p className="text-xs">{t.cta}</p>
                   </div>
                 </div>
@@ -10038,7 +10202,7 @@ function AdCopyTemplateModal({
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{ad.name}</p>
-                    <p className="text-[11px] text-muted-foreground">{ad.effective_status}</p>
+                    <p className="text-xs text-muted-foreground">{ad.effective_status}</p>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => saveAdAsTemplate(ad)}>
@@ -10052,9 +10216,9 @@ function AdCopyTemplateModal({
                     <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{ad.primaryText}</p>
                   )}
                   <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                    {ad.headline && <span className="text-[11px] font-medium">{ad.headline}</span>}
-                    {ad.cta && <span className="text-[11px] text-muted-foreground">{ad.cta}</span>}
-                    {ad.link && <span className="text-[11px] text-muted-foreground truncate max-w-[200px]">{(() => { try { return new URL(ad.link).hostname } catch { return ad.link } })()}</span>}
+                    {ad.headline && <span className="text-xs font-medium">{ad.headline}</span>}
+                    {ad.cta && <span className="text-xs text-muted-foreground">{ad.cta}</span>}
+                    {ad.link && <span className="text-xs text-muted-foreground truncate max-w-[200px]">{(() => { try { return new URL(ad.link).hostname } catch { return ad.link } })()}</span>}
                   </div>
                 </div>
               </div>
@@ -10142,22 +10306,22 @@ function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayL
           {/* UTM Parameters */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[11px] font-medium text-primary">UTM Parameters</label>
+              <label className="text-xs font-medium text-primary">UTM Parameters</label>
               <div className="flex items-center gap-1">
                 {/* Dynamic params */}
                 <Popover open={dynOpen} onOpenChange={setDynOpen}>
                   <PopoverTrigger asChild>
-                    <button className="text-[10px] px-1.5 py-0.5 border rounded font-mono text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors">
+                    <button className="text-xs px-1.5 py-0.5 border rounded font-mono text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors">
                       {"{ }"}
                     </button>
                   </PopoverTrigger>
                   <PopoverContent className="w-52 p-1" align="end">
-                    <p className="text-[10px] text-muted-foreground px-2 py-1 font-medium">Meta Dynamic Params</p>
+                    <p className="text-xs text-muted-foreground px-2 py-1 font-medium">Meta Dynamic Params</p>
                     {META_DYNAMIC_PARAMS.map(p => (
                       <button key={p.value} onClick={() => { insertAtCursor(p.value); setDynOpen(false) }}
                         className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted rounded flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">{p.label}</span>
-                        <span className="font-mono text-[10px] text-primary truncate">{p.value}</span>
+                        <span className="font-mono text-xs text-primary truncate">{p.value}</span>
                       </button>
                     ))}
                   </PopoverContent>
@@ -10165,15 +10329,15 @@ function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayL
                 {/* Suggestions */}
                 <Popover open={utmSugOpen} onOpenChange={setUtmSugOpen}>
                   <PopoverTrigger asChild>
-                    <button className="text-[10px] text-primary hover:underline">from suggest</button>
+                    <button className="text-xs text-primary hover:underline">from suggest</button>
                   </PopoverTrigger>
                   <PopoverContent className="w-80 p-1" align="end">
-                    <p className="text-[10px] text-muted-foreground px-2 py-1 font-medium">UTM Templates</p>
+                    <p className="text-xs text-muted-foreground px-2 py-1 font-medium">UTM Templates</p>
                     {UTM_SUGGESTIONS.map(s => (
                       <button key={s.label} onClick={() => { setUtmParams(s.value); setUtmSugOpen(false) }}
                         className="w-full text-left px-2 py-2 hover:bg-muted rounded">
                         <p className="text-xs font-medium mb-0.5">{s.label}</p>
-                        <p className="text-[10px] text-muted-foreground font-mono break-all leading-tight">{s.value}</p>
+                        <p className="text-xs text-muted-foreground font-mono break-all leading-tight">{s.value}</p>
                       </button>
                     ))}
                   </PopoverContent>
@@ -10189,7 +10353,7 @@ function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayL
               className="w-full px-3 py-2 text-xs bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40 font-mono"
             />
             {utmParams && webLink && (
-              <p className="text-[10px] text-muted-foreground/60 mt-1 truncate font-mono">
+              <p className="text-xs text-muted-foreground/60 mt-1 truncate font-mono">
                 → {webLink}{webLink.includes("?") ? "&" : "?"}{utmParams}
               </p>
             )}
@@ -10197,7 +10361,7 @@ function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayL
 
           {/* Display Link */}
           <div>
-            <label className="text-[11px] font-medium text-primary block mb-1">Display Link</label>
+            <label className="text-xs font-medium text-primary block mb-1">Display Link</label>
             <input
               type="text"
               value={displayLink}
@@ -10205,7 +10369,7 @@ function WebLinkSection({ webLink, setWebLink, utmParams, setUtmParams, displayL
               placeholder="e.g. wellnessnest.co/shop"
               className="w-full px-3 py-2 text-xs bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
             />
-            <p className="text-[10px] text-muted-foreground/60 mt-1 leading-tight">
+            <p className="text-xs text-muted-foreground/60 mt-1 leading-tight">
               Short URL shown in the ad (does not affect destination)
             </p>
           </div>
@@ -10323,14 +10487,14 @@ function AdSetupPanel({
   const handleGenerateCopy = async () => {
     const hasUrl = !!genUrl.trim()
     const hasVideo = !!genCreative
-    if (!hasUrl && !hasVideo) { setGenerateCopyError("Nhập URL hoặc chọn video để generate"); return }
+    if (!hasUrl && !hasVideo) { setGenerateCopyError("Enter a URL or select a video to generate"); return }
     setGeneratingCopy(true)
     setGenerateCopyError(null)
     try {
       let body: Record<string, string>
       if (hasUrl && hasVideo) {
         body = { type: "both", url: genUrl.trim(), videoUrl: genCreative!.file_url }
-        setGenerateCopyStep("Đang phân tích URL & video...")
+        setGenerateCopyStep("Analyzing URL & video...")
       } else if (hasUrl) {
         body = { type: "url", url: genUrl.trim() }
         setGenerateCopyStep("Fetching page...")
@@ -10381,7 +10545,7 @@ function AdSetupPanel({
           {/* No source text → ask user to enter text first */}
           {!primaryTexts[0]?.trim() && !loadingAiVariations && aiVariations.length === 0 && !aiVariationsError ? (
             <div className="space-y-3 py-2">
-              <p className="text-sm text-muted-foreground">Nhập primary text để AI tạo 5 variations:</p>
+              <p className="text-sm text-muted-foreground">Enter primary text for AI to generate 5 variations:</p>
               <textarea
                 placeholder="Write your primary ad text..."
                 rows={5}
@@ -10476,12 +10640,12 @@ function AdSetupPanel({
               Generate Ad Copy with AI
             </DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground -mt-2">AI sẽ tạo primary text, headline, description và CTA — tự điền vào các field bên dưới.</p>
+          <p className="text-xs text-muted-foreground -mt-2">AI will generate primary text, headline, description and CTA — auto-filling the fields below.</p>
 
           {/* Combined mode badge */}
           {genUrl.trim() && genCreative && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-xs text-primary font-medium w-fit">
-              <IconSparkles className="size-3.5" />Kết hợp URL + Video — kết quả tốt nhất
+              <IconSparkles className="size-3.5" />Combine URL + Video — best results
             </div>
           )}
 
@@ -10514,7 +10678,7 @@ function AdSetupPanel({
                 </label>
                 {sessionVideos.length === 0 ? (
                   <div className="py-4 text-center text-xs text-muted-foreground border rounded-lg bg-muted/20">
-                    Chưa có video nào. Thêm video vào ads trước.
+                    No videos yet. Add a video to your ads first.
                   </div>
                 ) : (
                   <div className="grid grid-cols-3 gap-2 max-h-44 overflow-y-auto">
@@ -10529,14 +10693,14 @@ function AdSetupPanel({
                             <IconCheck className="size-5 text-primary" />
                           </div>
                         )}
-                        <p className="absolute bottom-0 left-0 right-0 text-[9px] truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
+                        <p className="absolute bottom-0 left-0 right-0 text-xs truncate px-1 py-0.5 bg-black/50 text-white">{c.file_name}</p>
                       </button>
                     ))}
                   </div>
                 )}
                 {genCreative && (
-                  <p className="text-xs text-muted-foreground">Đã chọn: <strong className="text-foreground">{genCreative.file_name}</strong>
-                    <button onClick={() => setGenCreative(null)} className="ml-2 text-destructive hover:underline">Bỏ chọn</button>
+                  <p className="text-xs text-muted-foreground">Selected: <strong className="text-foreground">{genCreative.file_name}</strong>
+                    <button onClick={() => setGenCreative(null)} className="ml-2 text-destructive hover:underline">Deselect</button>
                   </p>
                 )}
               </div>
@@ -10559,12 +10723,12 @@ function AdSetupPanel({
         </DialogContent>
       </Dialog>
 
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-semibold">Ad Setup</span>
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b overflow-x-auto">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-sm font-semibold whitespace-nowrap">Ad Setup</span>
           <span className="text-destructive text-xs font-bold">*</span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <Tip text="Generate primary text, headline, and description with AI.">
             <Button variant="outline" size="sm" className="h-7 text-xs gap-1 text-primary border-primary/30 hover:bg-primary/5" onClick={openGenerateModal}>
               <IconSparkles className="size-3" />AI Generate
@@ -10632,7 +10796,7 @@ function AdSetupPanel({
                 placeholder="Enter headline..." maxLength={125}
                 className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50 pr-20" />
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-                <span className="text-[10px] text-muted-foreground/45">{h.length}/125</span>
+                <span className="text-xs text-muted-foreground/45">{h.length}/125</span>
                 {headlines.length > 1 && (
                   <button onClick={() => removeHeadline(idx)} className="text-muted-foreground/40 hover:text-destructive transition-colors">
                     <IconMinus className="size-3.5" />
@@ -10722,10 +10886,10 @@ function AdSetupPanel({
                   <span className="text-xs font-semibold">Ad Source</span>
                   <IconInfoCircle className="size-3 text-muted-foreground/50" title="How ads reference your creative on Meta" />
                   {adSourceMode === "new_ad"
-                    ? <span className="text-[10px] text-green-600 font-medium">{resolvedCount}/{selectedCreatives.length} resolved</span>
+                    ? <span className="text-xs text-green-600 font-medium">{resolvedCount}/{selectedCreatives.length} resolved</span>
                     : resolvedCount > 0
-                      ? <span className="text-[10px] text-green-600 font-medium">{resolvedCount}/{selectedCreatives.length} resolved</span>
-                      : <span className="text-[10px] text-amber-500 font-medium">0/{selectedCreatives.length} resolved</span>
+                      ? <span className="text-xs text-green-600 font-medium">{resolvedCount}/{selectedCreatives.length} resolved</span>
+                      : <span className="text-xs text-amber-500 font-medium">0/{selectedCreatives.length} resolved</span>
                   }
                 </div>
                 <button
@@ -10757,9 +10921,9 @@ function AdSetupPanel({
                       )}>
                         {adSourceMode === opt.value && <div className="size-1.5 rounded-full bg-primary" />}
                       </div>
-                      <span className="text-[11px] font-semibold leading-tight">{opt.label}</span>
+                      <span className="text-xs font-semibold leading-tight">{opt.label}</span>
                     </div>
-                    <span className="text-[10px] text-muted-foreground leading-tight pl-[18px]">{opt.desc}</span>
+                    <span className="text-xs text-muted-foreground leading-tight pl-[18px]">{opt.desc}</span>
                   </button>
                 ))}
               </div>
@@ -10787,12 +10951,12 @@ function AdSetupPanel({
                           value={val}
                           onChange={e => setAdSourceIds({ ...adSourceIds, [c.id]: e.target.value.trim() })}
                           placeholder={adSourceMode === "post_id" ? "Paste Post ID (e.g. 123_456)" : "Paste Creative ID"}
-                          className="flex-1 px-2 py-1 text-[11px] bg-muted/30 border rounded-md outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
+                          className="flex-1 px-2 py-1 text-xs bg-muted/30 border rounded-md outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/40"
                         />
                       </div>
                     )
                   })}
-                  <p className="text-[10px] text-muted-foreground px-0.5">
+                  <p className="text-xs text-muted-foreground px-0.5">
                     {adSourceMode === "post_id"
                       ? "Find Post ID in Meta Ads Manager → Ad → Creative → Post ID"
                       : "Find Creative ID in Meta Ads Manager → Ad → Creative → Creative ID"}
@@ -10879,7 +11043,7 @@ function UploadDock({ uploads, onCancel, onClear, onClose }: {
         </button>
         <div className="flex items-center gap-1">
           {uploads.every(u => u.status !== "uploading") && (
-            <button onClick={onClear} className="text-[10px] text-muted-foreground hover:text-foreground px-1.5 py-0.5">
+            <button onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground px-1.5 py-0.5">
               Clear
             </button>
           )}
@@ -10937,7 +11101,7 @@ function UploadDock({ uploads, onCancel, onClear, onClose }: {
                     )} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate" title={u.filename}>{u.filename}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {u.fileTypeShort}
                         {" "}{formatBytes(u.uploaded)} / {formatBytes(u.fileSize)}
                         {u.status === "uploading" && (
@@ -11037,7 +11201,7 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
                 <IconPhoto className="size-7 text-muted-foreground/30" />
               </div>
               <div className="absolute -bottom-1 -right-1 size-5 rounded-full bg-muted border-2 border-background flex items-center justify-center">
-                <span className="text-[10px] font-bold text-muted-foreground">0</span>
+                <span className="text-xs font-bold text-muted-foreground">0</span>
               </div>
             </div>
             <p className="text-sm font-medium text-foreground/70">No media assets selected</p>
@@ -11148,7 +11312,7 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
 
                 {/* Duration badge bottom-left for video */}
                 {isVideo && duration && (
-                  <div className="absolute bottom-2 left-2 px-1.5 py-0.5 bg-black/70 text-white text-[10px] font-bold rounded">
+                  <div className="absolute bottom-2 left-2 px-1.5 py-0.5 bg-black/70 text-white text-xs font-bold rounded">
                     {duration}
                   </div>
                 )}
@@ -11156,7 +11320,7 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
                 {/* Not ready badge */}
                 {!isReady && (
                   <div className={cn(
-                    "absolute bottom-2 right-2 text-[9px] text-white font-semibold px-1.5 py-0.5 rounded",
+                    "absolute bottom-2 right-2 text-xs text-white font-semibold px-1.5 py-0.5 rounded",
                     c.status === "error" ? "bg-red-500/90" : "bg-amber-500/90"
                   )}>
                     {c.status === "error" ? "Upload Failed" : "Not Uploaded"}
@@ -11167,7 +11331,7 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
               {/* Body — ad name */}
               <div className="p-2.5">
                 <div className="flex items-center gap-1 mb-0.5">
-                  <span className="text-[11px] font-semibold text-foreground">Ad Name</span>
+                  <span className="text-xs font-semibold text-foreground">Ad Name</span>
                   <button
                     onClick={() => setEditingNameId(c.id)}
                     className="text-muted-foreground hover:text-foreground"
@@ -11202,8 +11366,8 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
 function DetailItem({ label, value, copyable, mono }: { label: string; value: string; copyable?: boolean; mono?: boolean }) {
   return (
     <div className="flex items-start gap-2 min-w-0">
-      <span className="text-muted-foreground shrink-0 w-24 text-[11px]">{label}</span>
-      <span className={cn("flex-1 text-foreground text-[11px] truncate", mono && "font-mono text-[10px]")} title={value}>{value}</span>
+      <span className="text-muted-foreground shrink-0 w-24 text-xs">{label}</span>
+      <span className={cn("flex-1 text-foreground text-xs truncate", mono && "font-mono text-xs")} title={value}>{value}</span>
       {copyable && (
         <button onClick={() => navigator.clipboard.writeText(value)} className="text-muted-foreground hover:text-foreground shrink-0">
           <IconCopy className="size-3" />
@@ -11233,12 +11397,12 @@ function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
         <td className="px-2 py-1.5 text-xs font-medium max-w-[140px] truncate" title={displayName}>{displayName}</td>
         <td className="px-2 py-1.5 w-28">
           {status
-            ? <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase", status === "ACTIVE" ? "bg-green-100 text-green-700" : status === "PAUSED" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500")}>{status}</span>
-            : <span className="flex items-center gap-1 text-green-600 text-[10px] font-medium"><IconCircleCheck className="size-3" />Success</span>}
+            ? <span className={cn("px-1.5 py-0.5 rounded text-xs font-semibold uppercase", status === "ACTIVE" ? "bg-green-100 text-green-700" : status === "PAUSED" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500")}>{status}</span>
+            : <span className="flex items-center gap-1 text-green-600 text-xs font-medium"><IconCircleCheck className="size-3" />Success</span>}
         </td>
         <td className="px-2 py-1.5 w-40">
           <div className="flex items-center gap-1">
-            <span className="font-mono text-[10px] text-muted-foreground">{ad.adId.slice(0, 15)}…</span>
+            <span className="font-mono text-xs text-muted-foreground">{ad.adId.slice(0, 15)}…</span>
             <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(ad.adId) }} className="text-muted-foreground hover:text-foreground"><IconCopy className="size-3" /></button>
             <a href={metaUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-500 hover:text-blue-600"><IconExternalLink className="size-3" /></a>
           </div>
@@ -11469,7 +11633,7 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                     { label: "Reach", value: totals.reach.toLocaleString(), icon: IconUsers },
                   ].map(m => (
                     <div key={m.label} className="bg-muted/30 rounded-lg px-3 py-2.5">
-                      <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1"><m.icon className="size-3" />{m.label}</div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1"><m.icon className="size-3" />{m.label}</div>
                       <p className="text-base font-semibold">{m.value}</p>
                     </div>
                   ))}
@@ -11519,7 +11683,7 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                             </td>
                             <td className="px-2 py-1.5 font-medium max-w-[140px] truncate" title={row.name}>{row.name}</td>
                             <td className="px-2 py-1.5">
-                              <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase", row.effectiveStatus === "ACTIVE" ? "bg-green-100 text-green-700" : row.effectiveStatus === "PAUSED" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500")}>{row.effectiveStatus}</span>
+                              <span className={cn("px-1.5 py-0.5 rounded text-xs font-semibold uppercase", row.effectiveStatus === "ACTIVE" ? "bg-green-100 text-green-700" : row.effectiveStatus === "PAUSED" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500")}>{row.effectiveStatus}</span>
                             </td>
                             <td className="px-2 py-1.5 text-right">${row.spend.toFixed(2)}</td>
                             <td className="px-2 py-1.5 text-right">{row.costPerAction > 0 ? `$${row.costPerAction.toFixed(2)}` : "—"}</td>
@@ -11578,7 +11742,7 @@ function ThumbStack({ thumbs, count }: { thumbs: string[]; count: number }) {
       ))}
       {extra > 0 && (
         <div className="size-9 rounded-lg border-2 border-background bg-muted flex items-center justify-center shrink-0">
-          <span className="text-[10px] font-semibold text-muted-foreground">+{extra}</span>
+          <span className="text-xs font-semibold text-muted-foreground">+{extra}</span>
         </div>
       )}
       {shown.length === 0 && (
@@ -11598,7 +11762,7 @@ function UserAvatar({ name }: { name: string }) {
   const color = colors[name.charCodeAt(0) % colors.length]
 
   return (
-    <div className={cn("size-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0", color)}>
+    <div className={cn("size-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0", color)}>
       {initials}
     </div>
   )
@@ -11623,7 +11787,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b">
           <DialogTitle className="text-base font-semibold">Launch Details</DialogTitle>
-          <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold",
+          <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold",
             batch.status === "success" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
             batch.status === "partial" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
             "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400")}>
@@ -11643,7 +11807,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
             ].map(s => (
               <div key={s.label} className="text-center bg-muted/30 rounded-xl py-3">
                 <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">{s.label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
               </div>
             ))}
           </div>
@@ -11651,7 +11815,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
           {/* Creatives */}
           {batch.creative_thumbs?.length > 0 && (
             <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Creatives</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Creatives</p>
               <div className="flex gap-2 flex-wrap">
                 {batch.creative_thumbs.map((thumb, i) => (
                   <div key={i} className="size-16 rounded-lg overflow-hidden bg-muted border shrink-0">
@@ -11667,34 +11831,34 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
           <div className="grid grid-cols-2 gap-4">
             {batch.primary_text && (
               <div>
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Primary Text</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Primary Text</p>
                 <p className="text-sm bg-muted/30 rounded-lg p-3 leading-relaxed border">{batch.primary_text}</p>
               </div>
             )}
             <div className="space-y-3">
               {batch.headline && (
                 <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Headline</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Headline</p>
                   <p className="text-sm font-medium">{batch.headline}</p>
                 </div>
               )}
               <div className="flex gap-4">
                 {batch.cta && (
                   <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">CTA</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">CTA</p>
                     <span className="text-xs px-2 py-0.5 rounded bg-muted font-medium">{ctaLabel}</span>
                   </div>
                 )}
                 {batch.duration_ms && (
                   <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Duration</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Duration</p>
                     <p className="text-xs font-medium">{formatDuration(batch.duration_ms)}</p>
                   </div>
                 )}
               </div>
               {batch.web_link && (
                 <div>
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Destination URL</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Destination URL</p>
                   <a href={batch.web_link} target="_blank" rel="noopener noreferrer"
                     className="text-xs text-primary hover:underline break-all">{batch.web_link}</a>
                 </div>
@@ -11705,7 +11869,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
           {/* Ad Sets */}
           {batch.adset_names?.length > 0 && (
             <div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Ad Sets Targeted</p>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Ad Sets Targeted</p>
               <div className="flex flex-wrap gap-1.5">
                 {batch.adset_names.map((name, i) => (
                   <a
@@ -11725,7 +11889,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
           {/* Errors */}
           {batch.errors?.length > 0 && (
             <div>
-              <p className="text-[10px] font-semibold text-red-500 uppercase tracking-wide mb-2">Errors ({batch.errors.length})</p>
+              <p className="text-xs font-semibold text-red-500 uppercase tracking-wide mb-2">Errors ({batch.errors.length})</p>
               <div className="space-y-1.5 max-h-36 overflow-y-auto">
                 {batch.errors.map((err: any, i: number) => (
                   <div key={i} className="text-xs bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800/50 rounded-lg px-3 py-2">
@@ -11932,7 +12096,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
                 </div>
               </div>
               {/* Drafts header */}
-              <div className="grid text-[10px] font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
+              <div className="grid text-xs font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
                 style={{ gridTemplateColumns: "120px 1fr 140px 70px 120px 90px 100px" }}>
                 <span>Creatives</span><span>Title</span><span>Account</span>
                 <span>Rows</span><span>Created</span><span>User</span><span>Actions</span>
@@ -11987,7 +12151,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
       {/* Launches + Scheduled tab content */}
       {tab !== "drafts" && <>
       {/* Table header */}
-      <div className="grid text-[10px] font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
+      <div className="grid text-xs font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
         style={{ gridTemplateColumns: "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
         <span>CREATIVES</span>
         <span>ADSETS</span>
@@ -12056,7 +12220,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
               </span>
 
               {/* Status */}
-              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-semibold w-fit",
+              <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-semibold w-fit",
                 b.status === "success" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
                 b.status === "partial" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
                 "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400")}>
@@ -12127,7 +12291,7 @@ function SitelinksModal({ open, onClose, value, onConfirm }: {
           <DialogTitle className="text-base font-semibold">Sitelinks</DialogTitle>
         </div>
         <div className="px-5 py-4 space-y-3 overflow-y-auto flex-1 min-h-0">
-          <p className="text-xs text-muted-foreground">Thêm tối đa 4 sitelink hiển thị bên dưới ad. Mỗi sitelink cần title và URL.</p>
+          <p className="text-xs text-muted-foreground">Add up to 4 sitelinks shown below the ad. Each sitelink needs a title and URL.</p>
           {local.map((link, idx) => (
             <div key={idx} className="border rounded-xl p-3 space-y-2">
               <div className="flex items-center justify-between">
@@ -12205,7 +12369,7 @@ function AdSetPickerCell({ selectedIds, adSets, onUpdate }: {
             const as = adSets.find(a => a.id === id)
             if (!as) return null
             return (
-              <span key={id} className="inline-flex items-center gap-0.5 text-[10px] bg-muted/80 border border-border/50 px-1.5 py-0.5 rounded-full max-w-full">
+              <span key={id} className="inline-flex items-center gap-0.5 text-xs bg-muted/80 border border-border/50 px-1.5 py-0.5 rounded-full max-w-full">
                 <span className="truncate max-w-[110px]">{as.name}</span>
                 <button
                   onClick={e => { e.stopPropagation(); toggle(id) }}
@@ -12224,7 +12388,7 @@ function AdSetPickerCell({ selectedIds, adSets, onUpdate }: {
         else setSearch("")
       }}>
         <PopoverTrigger asChild>
-          <button className="h-7 px-2 text-[11px] border border-dashed border-border/60 rounded-md flex items-center gap-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors w-full justify-center">
+          <button className="h-7 px-2 text-xs border border-dashed border-border/60 rounded-md flex items-center gap-1 text-muted-foreground hover:text-foreground hover:border-border transition-colors w-full justify-center">
             <IconPlus className="size-3 shrink-0" />
             {selectedIds.length === 0 ? "Add ad set" : "Add more"}
           </button>
@@ -12274,7 +12438,7 @@ function AdSetPickerCell({ selectedIds, adSets, onUpdate }: {
                   </div>
                   <span className={cn("flex-1 truncate", isSelected && "font-medium text-primary")}>{a.name}</span>
                   <span className={cn(
-                    "text-[9px] px-1.5 py-0.5 rounded-sm font-semibold shrink-0",
+                    "text-xs px-1.5 py-0.5 rounded-sm font-semibold shrink-0",
                     isActive ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-muted text-muted-foreground"
                   )}>
                     {isActive ? "Active" : "Paused"}
@@ -12287,10 +12451,10 @@ function AdSetPickerCell({ selectedIds, adSets, onUpdate }: {
           {/* Footer */}
           {selectedIds.length > 0 && (
             <div className="border-t px-3 py-1.5 flex items-center justify-between bg-muted/20">
-              <span className="text-[11px] text-muted-foreground">{selectedIds.length} selected</span>
+              <span className="text-xs text-muted-foreground">{selectedIds.length} selected</span>
               <button
                 onClick={() => { onUpdate([]); setOpen(false) }}
-                className="text-[11px] text-destructive hover:underline"
+                className="text-xs text-destructive hover:underline"
               >
                 Clear all
               </button>
@@ -12387,14 +12551,14 @@ function CreativeThumb({
         ) : row.creative?.status === "pending" ? (
           <div className="flex flex-col items-center gap-1">
             <IconClock className="size-4 text-amber-500/70" />
-            <span className="text-[9px] text-amber-600/70 leading-none text-center">Pending</span>
+            <span className="text-xs text-amber-600/70 leading-none text-center">Pending</span>
           </div>
         ) : row.creative ? (
           <CreativeCardMedia creative={row.creative} className="w-full h-full object-cover" compact />
         ) : (
           <div className="flex flex-col items-center gap-1">
             <IconUpload className="size-4 text-muted-foreground/40" />
-            <span className="text-[9px] text-muted-foreground/40 leading-none">Upload</span>
+            <span className="text-xs text-muted-foreground/40 leading-none">Upload</span>
           </div>
         )}
         {row.creative?.media_type === "video" && uploadingRowId !== row.id && (
@@ -12406,7 +12570,7 @@ function CreativeThumb({
         )}
         {row.creative && uploadingRowId !== row.id && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity pointer-events-none">
-            <span className="text-[9px] text-white font-medium">Upload</span>
+            <span className="text-xs text-white font-medium">Upload</span>
           </div>
         )}
       </label>
@@ -12451,7 +12615,7 @@ function LaunchStatusToggle({ row, launchAsActive, onUpdateRow }: {
           active ? "translate-x-[18px]" : "translate-x-0.5"
         )} />
       </button>
-      <span className="text-[10px] text-muted-foreground whitespace-nowrap">{active ? "Active" : "Paused"}</span>
+      <span className="text-xs text-muted-foreground whitespace-nowrap">{active ? "Active" : "Paused"}</span>
     </div>
   )
 }
@@ -12497,7 +12661,7 @@ function ListRowItem(props: CoreRowViewProps) {
       isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "hover:bg-muted/20"
     )}>
       <input type="checkbox" className="rounded size-3.5 accent-blue-600 shrink-0 mt-2" checked={isSelected} onChange={onToggleSelect} />
-      <span className="text-[11px] text-muted-foreground w-4 shrink-0 mt-2">{index + 1}</span>
+      <span className="text-xs text-muted-foreground w-4 shrink-0 mt-2">{index + 1}</span>
       <CreativeThumb row={row} size={36} uploadingRowId={uploadingRowId} onUploadFiles={onRowUpload} onPickClick={onCreativeClick} onRemove={() => onUpdateRow(row.id, "creative", null)} idPrefix="list" />
       <input
         value={row.adName}
@@ -12527,8 +12691,8 @@ function RecordCard(props: CoreRowViewProps) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={isSelected} onChange={onToggleSelect} />
-          <span className="text-[10px] bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">SINGLE</span>
-          <span className="text-[11px] text-muted-foreground">#{index + 1} {row.adName || <span className="opacity-50">Untitled ad</span>}</span>
+          <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">SINGLE</span>
+          <span className="text-xs text-muted-foreground">#{index + 1} {row.adName || <span className="opacity-50">Untitled ad</span>}</span>
         </div>
         <div className="flex items-center gap-3">
           <LaunchStatusToggle row={row} launchAsActive={launchAsActive} onUpdateRow={onUpdateRow} />
@@ -12591,7 +12755,7 @@ function GridCard(props: CoreRowViewProps) {
       <div className="relative">
         <CreativeThumb row={row} size={220} uploadingRowId={uploadingRowId} onUploadFiles={onRowUpload} onPickClick={onCreativeClick} onRemove={() => onUpdateRow(row.id, "creative", null)} idPrefix="grid" />
         <input type="checkbox" className="absolute top-2 left-2 rounded size-3.5 accent-blue-600" checked={isSelected} onChange={onToggleSelect} />
-        <span className="absolute top-2 right-2 text-[10px] bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">SINGLE</span>
+        <span className="absolute top-2 right-2 text-xs bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">SINGLE</span>
       </div>
       <div className="p-2.5 flex flex-col gap-1.5 flex-1">
         <input
@@ -12605,13 +12769,13 @@ function GridCard(props: CoreRowViewProps) {
           onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
           placeholder="Primary text..."
           rows={2}
-          className="text-[11px] text-muted-foreground bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1 py-1 outline-none resize-none placeholder:text-muted-foreground/40 leading-snug"
+          className="text-xs text-muted-foreground bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1 py-1 outline-none resize-none placeholder:text-muted-foreground/40 leading-snug"
         />
         <input
           value={row.headline}
           onChange={e => onUpdateRow(row.id, "headline", e.target.value)}
           placeholder="Headline..."
-          className="text-[11px] italic text-muted-foreground bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1 py-1 outline-none placeholder:text-muted-foreground/40"
+          className="text-xs italic text-muted-foreground bg-transparent border border-transparent focus:border-border focus:bg-muted/20 rounded px-1 py-1 outline-none placeholder:text-muted-foreground/40"
         />
         <div className="flex items-center gap-1.5 mt-1">
           <div className="flex-1 min-w-0"><AdSetPickerCell selectedIds={row.adSetIds} adSets={adSets} onUpdate={ids => onUpdateRow(row.id, "adSetIds", ids)} /></div>
@@ -12795,53 +12959,53 @@ function TableMode({
               <th className="w-10 px-3 py-2.5 text-left">
                 <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
               </th>
-              <th className="w-7 px-1 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">#</th>
-              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
+              <th className="w-7 px-1 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">#</th>
+              <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
               <th
-                className="w-72 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-72 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("adName")}
               >
                 <span className="flex items-center gap-0.5">Ad Name <SortIcon field="adName" /></span>
               </th>
               <th
-                className="w-80 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-80 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("primaryText")}
               >
                 <span className="flex items-center gap-0.5">Primary Text <SortIcon field="primaryText" /></span>
               </th>
               <th
-                className="w-64 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-64 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("headline")}
               >
                 <span className="flex items-center gap-0.5">Headline <SortIcon field="headline" /></span>
               </th>
               <th
-                className="w-52 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
+                className="w-52 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("description")}
               >
                 <span className="flex items-center gap-0.5">Description <SortIcon field="description" /></span>
               </th>
               <th className="w-48 px-3 py-2.5 text-left">
-                <span className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-                  Ad Sets <span className="text-[9px] font-medium text-amber-500 normal-case tracking-normal">required</span>
+                <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Ad Sets <span className="text-xs font-medium text-amber-500 normal-case tracking-normal">required</span>
                   <IconArrowsUpDown className="size-3 opacity-30 ml-0.5" />
                 </span>
               </th>
-              <th className="w-40 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
-              <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
-              <th className="w-48 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
-              <th className="w-44 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
-              <th className="w-36 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sitelinks</th>
-              <th className="w-36 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Partnership Ads</th>
+              <th className="w-40 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
+              <th className="w-28 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
+              <th className="w-48 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
+              <th className="w-44 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
+              <th className="w-36 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sitelinks</th>
+              <th className="w-36 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Partnership Ads</th>
               <th className="w-36 px-3 py-2.5 text-left">
-                <span className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   <IconSparkles className="size-3 text-blue-400" />Multi-Language
                 </span>
               </th>
-              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Catalog</th>
-              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Meta Schedule</th>
-              <th className="w-32 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Promo Code</th>
-              <th className="w-28 px-3 py-2.5 text-left text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Launch Status</th>
+              <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Catalog</th>
+              <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Meta Schedule</th>
+              <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Promo Code</th>
+              <th className="w-28 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Launch Status</th>
               <th className="w-14 px-3 py-2.5" />
             </tr>
           </thead>
@@ -12866,12 +13030,12 @@ function TableMode({
                   </td>
 
                   {/* # */}
-                  <td className="px-1 pt-3 pb-2 text-[11px] text-muted-foreground">{i + 1}</td>
+                  <td className="px-1 pt-3 pb-2 text-xs text-muted-foreground">{i + 1}</td>
 
                   {/* CREATIVE */}
                   <td className="px-3 py-2">
                     <div className="flex flex-col items-start gap-1">
-                      <span className="text-[10px] bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">
+                      <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">
                         SINGLE
                       </span>
                       <div className="relative group/creative">
@@ -12896,14 +13060,14 @@ function TableMode({
                           ) : row.creative?.status === "pending" ? (
                             <div className="flex flex-col items-center gap-1">
                               <IconClock className="size-4 text-amber-500/70" />
-                              <span className="text-[9px] text-amber-600/70 leading-none text-center">Pending</span>
+                              <span className="text-xs text-amber-600/70 leading-none text-center">Pending</span>
                             </div>
                           ) : row.creative ? (
                             <CreativeCardMedia creative={row.creative} className="w-full h-full object-cover" compact />
                           ) : (
                             <div className="flex flex-col items-center gap-1">
                               <IconUpload className="size-4 text-muted-foreground/40" />
-                              <span className="text-[9px] text-muted-foreground/40 leading-none">Upload</span>
+                              <span className="text-xs text-muted-foreground/40 leading-none">Upload</span>
                             </div>
                           )}
                           {row.creative?.media_type === "video" && !uploadingRowId && (
@@ -12916,7 +13080,7 @@ function TableMode({
                           {/* Replace overlay on hover (when has creative) */}
                           {row.creative && uploadingRowId !== row.id && (
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/creative:opacity-100 transition-opacity pointer-events-none">
-                              <span className="text-[9px] text-white font-medium">Upload</span>
+                              <span className="text-xs text-white font-medium">Upload</span>
                             </div>
                           )}
                         </label>
@@ -12992,7 +13156,7 @@ function TableMode({
                           onUpdateRow(row.id, "primaryTextVariations", [...ptVars, ""])
                           setExpanded(row.id, { primary: true })
                         }}
-                        className="text-[10px] text-blue-600 hover:text-blue-700 text-left font-medium"
+                        className="text-xs text-blue-600 hover:text-blue-700 text-left font-medium"
                       >
                         Primary Text Variations {ptVars.length > 0 ? `${ptVars.length + 1} ` : ""}+
                       </button>
@@ -13038,7 +13202,7 @@ function TableMode({
                           onUpdateRow(row.id, "headlineVariations", [...hlVars, ""])
                           setExpanded(row.id, { headline: true })
                         }}
-                        className="text-[10px] text-blue-600 hover:text-blue-700 text-left font-medium"
+                        className="text-xs text-blue-600 hover:text-blue-700 text-left font-medium"
                       >
                         Headline Variations {hlVars.length > 0 ? `${hlVars.length + 1} ` : ""}+
                       </button>
@@ -13084,7 +13248,7 @@ function TableMode({
                           onUpdateRow(row.id, "descriptionVariations", [...descVars, ""])
                           setExpanded(row.id, { description: true })
                         }}
-                        className="text-[10px] text-blue-600 hover:text-blue-700 text-left font-medium"
+                        className="text-xs text-blue-600 hover:text-blue-700 text-left font-medium"
                       >
                         Description Variations {descVars.length > 0 ? `${descVars.length + 1} ` : ""}+
                       </button>
@@ -13132,7 +13296,7 @@ function TableMode({
                                   ? <img src={rowPage.picture.data.url} className="w-full h-full object-cover" alt={rowPage.name} />
                                   : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-3 text-blue-600" /></div>}
                               </div>
-                              <span className="text-[11px] truncate max-w-[100px] text-foreground/80">
+                              <span className="text-xs truncate max-w-[100px] text-foreground/80">
                                 {rowPage ? rowPage.name : <span className="text-muted-foreground/40">No page</span>}
                               </span>
                             </div>
@@ -13143,7 +13307,7 @@ function TableMode({
                                   ? <img src={rowIg.profile_pic} className="w-full h-full object-cover" alt={rowIg.username || "IG"} />
                                   : <div className="w-full h-full flex items-center justify-center"><IconBrandInstagram className="size-3 text-white" /></div>}
                               </div>
-                              <span className="text-[11px] truncate max-w-[100px] text-foreground/60">
+                              <span className="text-xs truncate max-w-[100px] text-foreground/60">
                                 {rowIg ? `@${rowIg.username || rowIg.id}` : <span className="text-muted-foreground/40">@Use Facebook</span>}
                               </span>
                             </div>
@@ -13156,7 +13320,7 @@ function TableMode({
                               className="z-[9999] bg-popover border rounded-xl shadow-xl w-64 py-1 overflow-hidden max-h-72 overflow-y-auto"
                             >
                               {/* FB Pages */}
-                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Facebook Page</p>
+                              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Facebook Page</p>
                               {pages.length === 0 && (
                                 <p className="text-xs text-muted-foreground px-3 py-2">No pages available</p>
                               )}
@@ -13192,7 +13356,7 @@ function TableMode({
                                 return (
                                   <>
                                     <div className="border-t my-1" />
-                                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Instagram Account</p>
+                                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Instagram Account</p>
                                     {igAccounts.map(ig => (
                                       <button
                                         key={ig.id}
@@ -13225,7 +13389,7 @@ function TableMode({
                                     setProfilePopoverRow(null)
                                     setProfilePopoverPos(null)
                                   }}
-                                  className="text-[11px] text-muted-foreground hover:text-foreground"
+                                  className="text-xs text-muted-foreground hover:text-foreground"
                                 >
                                   Reset to gallery default
                                 </button>
@@ -13332,7 +13496,7 @@ function TableMode({
                           className="flex flex-col items-start gap-0.5 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1 hover:bg-green-100 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800 max-w-[120px]"
                         >
                           <span className="flex items-center gap-1 font-medium"><IconCheck className="size-3 shrink-0" />Enabled</span>
-                          <span className="truncate text-[10px] opacity-70">{row.catalog.catalogName || row.catalog.catalogId}</span>
+                          <span className="truncate text-xs opacity-70">{row.catalog.catalogName || row.catalog.catalogId}</span>
                         </button>
                       : <button
                           onClick={() => setRowModal({ type: "catalog", rowId: row.id })}
@@ -13348,7 +13512,7 @@ function TableMode({
                     {row.schedule?.start
                       ? <button
                           onClick={() => setRowModal({ type: "schedule", rowId: row.id })}
-                          className="text-left text-[10px] text-blue-600 hover:text-blue-700 leading-snug"
+                          className="text-left text-xs text-blue-600 hover:text-blue-700 leading-snug"
                         >
                           <span className="block">{new Date(row.schedule.start).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                           {row.schedule.end && <span className="block opacity-70">→ {new Date(row.schedule.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
@@ -13389,7 +13553,7 @@ function TableMode({
                           (row.launchAsActive ?? launchAsActive) ? "translate-x-[18px]" : "translate-x-0.5"
                         )} />
                       </button>
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
                         {(row.launchAsActive ?? launchAsActive) ? "Active" : "Paused"}
                       </span>
                     </div>
@@ -13797,6 +13961,57 @@ export default function LaunchPage() {
   const [mediaRefreshSignal, setMediaRefreshSignal] = useState(0)
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  // Preview-before-launch gate: force a preview step before each launch, with an opt-out
+  const PREVIEW_SKIP_KEY = "launch_skip_preview_gate"
+  const [skipPreviewGate, setSkipPreviewGate] = useState(false)
+  const [previewConfirmMode, setPreviewConfirmMode] = useState(false)
+  // Only show the "skip preview next time" opt-out when the gate opened the modal,
+  // not when the user proactively clicked Preview
+  const [previewShowSkip, setPreviewShowSkip] = useState(false)
+  const pendingLaunchRef = useRef<null | (() => void)>(null)
+  useEffect(() => {
+    try { setSkipPreviewGate(localStorage.getItem(PREVIEW_SKIP_KEY) === "1") } catch {}
+  }, [])
+  const updateSkipPreviewGate = (skip: boolean) => {
+    setSkipPreviewGate(skip)
+    try { localStorage.setItem(PREVIEW_SKIP_KEY, skip ? "1" : "0") } catch {}
+  }
+  // Pre-launch gate: run the right validator (table rows vs. gallery form) before Preview
+  // or Launch is allowed to do anything, so incomplete setups block immediately instead of
+  // surfacing only after Confirm & Launch inside the modal.
+  const validateBeforeLaunch = (): boolean => {
+    const hasRowCreatives = tableRows.some(r => r.creative?.id && r.adSetIds.length > 0)
+    return hasRowCreatives ? validateTableRows() : validate()
+  }
+  // Open the preview modal with a pending launch action so the user can confirm & launch from inside it.
+  // showSkip=true only when the launch gate opened it (offers the opt-out); false for a proactive Preview click.
+  const openPreview = (launchFn: () => void, showSkip = false) => {
+    if (!validateBeforeLaunch()) return
+    pendingLaunchRef.current = launchFn
+    setPreviewConfirmMode(true)
+    setPreviewShowSkip(showSkip)
+    setPreviewModalOpen(true)
+  }
+  const requestLaunch = (launchFn: () => void) => {
+    if (!validateBeforeLaunch()) return
+    if (!skipPreviewGate && selectedCreatives.length > 0) {
+      openPreview(launchFn, true)
+    } else {
+      launchFn()
+    }
+  }
+  const confirmPendingLaunch = () => {
+    setPreviewModalOpen(false)
+    setPreviewConfirmMode(false)
+    const fn = pendingLaunchRef.current
+    pendingLaunchRef.current = null
+    fn?.()
+  }
+  const closePreviewModal = () => {
+    setPreviewModalOpen(false)
+    setPreviewConfirmMode(false)
+    pendingLaunchRef.current = null
+  }
   const [partnershipModalOpen, setPartnershipModalOpen] = useState(false)
   const [partnership, setPartnership] = useState<PartnershipState>({
     enabled: false,
@@ -13843,6 +14058,7 @@ export default function LaunchPage() {
     carousels: [],
   })
   const [flexibleModalOpen, setFlexibleModalOpen] = useState(false)
+  const [creativeGroupModalOpen, setCreativeGroupModalOpen] = useState(false)
   const [flexibleAds, setFlexibleAds] = useState<FlexibleAdsState>({
     enabled: false,
     flexibleAds: [],
@@ -13929,7 +14145,7 @@ export default function LaunchPage() {
     if (item.file.size > 500 * 1024 * 1024) {
       updateUpload(item.id, {
         status: "error",
-        error: `File quá lớn (${(item.file.size / 1024 / 1024).toFixed(0)} MB). Tối đa 500 MB.`,
+        error: `File too large (${(item.file.size / 1024 / 1024).toFixed(0)} MB). Max 500 MB.`,
       })
       return null
     }
@@ -13942,6 +14158,7 @@ export default function LaunchPage() {
     // Supabase PUT drops large files (~87 MB) due to storage server body limits.
     // Meta API chunked upload is the proven fix (same pattern as bulk-upload-dialog).
     if (isVideo) {
+      console.warn("[DEBUG video meta]", { type: item.file.type, size: item.file.size, name: item.file.name })
       // Dedup: same file already uploaded → reuse, skip ALL Meta API calls
       try {
         const dupRes = await fetch(`/api/creatives?file_name=${encodeURIComponent(item.file.name)}&file_size=${item.file.size}`)
@@ -14076,6 +14293,15 @@ export default function LaunchPage() {
               if ("error" in offsets) return offsets
               startOffset = offsets.so
               endOffset   = offsets.eo
+
+              // Pace consecutive chunk transfers. Confirmed via live capture: Meta's own
+              // Ads Manager UI uploads this exact file with no issue, but our chunked
+              // /advideos session reliably dies partway through (after ~3-22 back-to-back
+              // ~1MB transfers, no delay between) with a generic "There was a problem
+              // uploading your video file" (code 6000/1363048) — consistent with Meta
+              // rate-limiting/throttling rapid-fire chunk requests rather than an actual
+              // file problem. A short pause between chunks avoids tripping that limit.
+              if (startOffset < item.file.size) await new Promise(r => setTimeout(r, 400))
             }
 
             // FINISH
@@ -14341,8 +14567,17 @@ export default function LaunchPage() {
 
   const handleUploadFiles = async (filesIn: FileList | File[]): Promise<Creative[]> => {
     if (!selectedAccountId) { setError("Select an ad account first"); return [] }
-    const files = Array.from(filesIn).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"))
-    if (files.length === 0) { setError("No valid image/video files selected"); return [] }
+    const rawFiles = Array.from(filesIn).filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"))
+    if (rawFiles.length === 0) { setError("No valid image/video files selected"); return [] }
+
+    // Drop any file that's already mid-upload from an earlier call (see inFlightUploadKeys).
+    const files = rawFiles.filter(f => {
+      const key = `${f.name}:${f.size}`
+      if (inFlightUploadKeys.has(key)) return false
+      inFlightUploadKeys.add(key)
+      return true
+    })
+    if (files.length === 0) return []
     setError("")
     setUploadDockOpen(true)
 
@@ -14409,15 +14644,13 @@ export default function LaunchPage() {
     setUploads(prev => [...prev, ...items])
 
     // Upload strategy: images run in parallel (small, signed-URL upload — no contention).
-    // Videos run ONE AT A TIME. Meta's chunked upload session has a server-side timeout;
-    // firing multiple large-video chunked sessions concurrently makes each one starve for
-    // bandwidth, so chunks arrive too slowly and Meta expires the session mid-transfer
-    // (surfaces as a generic "There was a problem uploading your video file" error).
-    // Serializing matches the Media Library uploader, which never had this failure mode.
+    // Videos run with a small concurrency cap (see VIDEO_UPLOAD_CONCURRENCY below) —
+    // unbounded parallel chunked sessions split the same bandwidth and can starve/time out.
     let anyUploaded = false
     const uploadedByTempId = new Map<string, Creative>()
     const processItem = async (item: UploadItem) => {
       const real = await uploadOneFile(item)
+      inFlightUploadKeys.delete(`${item.file.name}:${item.file.size}`)
       if (real) {
         anyUploaded = true
         // Swap temp → real, but ALWAYS keep local blob URL for instant preview.
@@ -14634,11 +14867,11 @@ export default function LaunchPage() {
       setValidationErrors(Object.fromEntries(fields.map(f => [f, true])))
       return false
     }
-    if (selectedAdSets.length === 0) return fail("Chưa chọn Ad Set — vui lòng chọn ít nhất 1 ad set", ["adsets"])
-    if (selectedMediaIds.size === 0) return fail("Chưa chọn creative — vui lòng chọn ít nhất 1 ảnh/video", ["creatives"])
+    if (selectedAdSets.length === 0) return fail("No ad set selected — please select at least 1 ad set", ["adsets"])
+    if (selectedMediaIds.size === 0) return fail("No creative selected — please select at least 1 image/video", ["creatives"])
     const pendingCreatives = selectedCreatives.filter(c => c.status !== "ready")
     if (pendingCreatives.length > 0) {
-      return fail(`${pendingCreatives.length} media đang chờ upload/xử lý trên Meta — vui lòng đợi đến khi hiển thị "ready" rồi thử lại`, ["creatives"])
+      return fail(`${pendingCreatives.length} media still uploading/processing on Meta — please wait until they show "ready" then try again`, ["creatives"])
     }
     if (!webLink.trim()) return fail("Destination URL is required when the CTA uses a link.", ["webLink"])
     if (!/^https?:\/\//.test(webLink.trim())) return fail("URL must start with http:// or https://.", ["webLink"])
@@ -14952,18 +15185,18 @@ export default function LaunchPage() {
     })
   }
 
-  // Table mode: launch each row individually using per-row settings
-  const doTableLaunch = useCallback(async (scheduledTime?: string, scheduleEndTime?: string) => {
+  // Table mode: validate rows up front — reused both as a pre-launch gate (before the
+  // preview modal opens) and as the final check inside doTableLaunch itself.
+  const validateTableRows = (): boolean => {
     const validRows = tableRows.filter(r => r.creative?.id && r.adSetIds.length > 0)
     if (!validRows.length) {
       const missing: string[] = []
       if (!tableRows.some(r => r.creative?.id)) missing.push("creative")
       if (!tableRows.some(r => r.adSetIds.length > 0)) missing.push("ad set")
       setError(`Each row needs a ${missing.join(" and ")} before launching.`)
-      return
+      return false
     }
 
-    // Client-side validation — catch all issues before hitting the server
     const rowErrors: string[] = []
     for (const row of validRows) {
       const label = row.adName?.trim() || `Ad #${tableRows.indexOf(row) + 1}`
@@ -14985,8 +15218,15 @@ export default function LaunchPage() {
     }
     if (rowErrors.length > 0) {
       setError(rowErrors.join(" · "))
-      return
+      return false
     }
+    setError("")
+    return true
+  }
+
+  // Table mode: launch each row individually using per-row settings
+  const doTableLaunch = useCallback(async (scheduledTime?: string, scheduleEndTime?: string) => {
+    if (!validateTableRows()) return
 
     setLaunching(true)
     setLaunchResult(null)
@@ -15341,6 +15581,13 @@ export default function LaunchPage() {
         onConfirm={setFlexibleAds}
         availableCreatives={selectedCreatives}
       />
+      <CreativeGroupModal
+        open={creativeGroupModalOpen}
+        onClose={() => setCreativeGroupModalOpen(false)}
+        value={flexibleAds}
+        onConfirm={setFlexibleAds}
+        availableCreatives={selectedCreatives}
+      />
       <MultiPlacementAdsModal
         open={multiPlacementModalOpen}
         onClose={() => setMultiPlacementModalOpen(false)}
@@ -15360,7 +15607,7 @@ export default function LaunchPage() {
 
       <PreviewModal
         open={previewModalOpen}
-        onClose={() => setPreviewModalOpen(false)}
+        onClose={closePreviewModal}
         creatives={selectedCreatives}
         page={selectedPage}
         primaryText={primaryTexts.find(t => t.trim()) || ""}
@@ -15370,16 +15617,22 @@ export default function LaunchPage() {
         cta={cta}
         adNameOverrides={adNameOverrides}
         onUpdateCreative={(c) => setSelectedCreatives(prev => prev.map(x => x.id === c.id ? c : x))}
+        confirmMode={previewConfirmMode}
+        onConfirmLaunch={confirmPendingLaunch}
+        launching={launching}
+        showSkipOption={previewShowSkip}
+        skipPreview={skipPreviewGate}
+        onToggleSkipPreview={updateSkipPreviewGate}
       />
 
       <div className="flex flex-col">
         {/* ── Top bar ─────────────────────────────────────────────── */}
-        <div className="flex items-end gap-4 px-4 pt-2 pb-2.5 border-b shrink-0 bg-background sticky top-0 z-[30]">
+        <div className="flex items-end gap-4 px-4 pt-2 pb-2.5 border-b shrink-0 bg-background sticky top-0 z-[30] overflow-x-auto">
 
           {/* Ad Account custom dropdown */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 shrink-0">
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px] text-muted-foreground font-medium tracking-wide">Ad Account •</span>
+              <span className="text-xs text-muted-foreground font-medium tracking-wide">Ad Account •</span>
               <PlatformStatusPopover />
             </div>
             <AdAccountDropdown
@@ -15390,20 +15643,20 @@ export default function LaunchPage() {
           </div>
 
           {/* Divider */}
-          <div className="w-px bg-border mb-1" style={{ height: 32 }} />
+          <div className="w-px bg-border mb-1 shrink-0" style={{ height: 32 }} />
 
           {/* Facebook page pill → opens Ad Profiles modal */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 shrink-0">
             <div className="flex items-center gap-1">
               <IconBrandFacebook className="size-3 text-[#1877F2]" />
-              <span className="text-[10px] text-muted-foreground">Facebook</span>
+              <span className="text-xs text-muted-foreground">Facebook</span>
               {pagesError && (
                 needsReconnect ? (
-                  <a href="/connect" className="text-[10px] text-red-600 hover:underline" title={pagesError}>
+                  <a href="/connect" className="text-xs text-red-600 hover:underline" title={pagesError}>
                     Reconnect ⚠
                   </a>
                 ) : (
-                  <span title={pagesError} className="text-[10px] text-amber-600 cursor-help">⚠</span>
+                  <span title={pagesError} className="text-xs text-amber-600 cursor-help">⚠</span>
                 )
               )}
             </div>
@@ -15420,7 +15673,7 @@ export default function LaunchPage() {
                 <img src={selectedPage.picture.data.url} className="size-5 rounded-full shrink-0 object-cover" alt="" />
               ) : (
                 <div className="size-5 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center shrink-0">
-                  <span className="text-[9px] font-bold text-rose-400">{selectedPage?.name?.slice(0, 1) || "P"}</span>
+                  <span className="text-xs font-bold text-rose-400">{selectedPage?.name?.slice(0, 1) || "P"}</span>
                 </div>
               )}
               <span className="text-sm truncate flex-1 text-left">
@@ -15431,10 +15684,10 @@ export default function LaunchPage() {
           </div>
 
           {/* Instagram pill → same Ad Profiles modal */}
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 shrink-0">
             <div className="flex items-center gap-1">
               <IconBrandInstagram className="size-3 text-[#E1306C]" />
-              <span className="text-[10px] text-muted-foreground">Instagram</span>
+              <span className="text-xs text-muted-foreground">Instagram</span>
             </div>
             <button
               onClick={() => setAdProfilesOpen(true)}
@@ -15451,7 +15704,7 @@ export default function LaunchPage() {
                 }
                 return (
                   <div className="size-5 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0">
-                    <span className="text-[9px] font-bold text-purple-400">I</span>
+                    <span className="text-xs font-bold text-purple-400">I</span>
                   </div>
                 )
               })()}
@@ -15470,7 +15723,7 @@ export default function LaunchPage() {
           </div>
 
           {/* Right: mode toggle */}
-          <div className="ml-auto">
+          <div className="ml-auto shrink-0">
             <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs"
               onClick={() => {
                 if (mode === "gallery") {
@@ -15679,8 +15932,8 @@ export default function LaunchPage() {
               )}
 
               <div className="flex items-center gap-2 px-4 py-3 border-t shrink-0">
-                <Tip text="Preview the ad setup before launching.">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview</Button>
+                <Tip text="Preview the ads, then confirm to launch.">
+                  <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => openPreview(() => doLaunch())} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview</Button>
                 </Tip>
                 <Tip text="Save this launch setup as a draft.">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs"><IconBookmark className="size-3.5" />Save</Button>
@@ -15691,8 +15944,8 @@ export default function LaunchPage() {
                     <IconCalendar className="size-3.5" />Schedule
                   </Button>
                 </Tip>
-                <Tip text="Create the ads in Meta with the current setup." className="flex-1">
-                  <Button className="w-full gap-2 font-medium" onClick={() => doLaunch()} disabled={launching}>
+                <Tip text={skipPreviewGate ? "Create the ads in Meta with the current setup." : "Preview the ads, then confirm to launch."} className="flex-1">
+                  <Button className="w-full gap-2 font-medium" onClick={() => requestLaunch(() => doLaunch())} disabled={launching}>
                     {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
                     {launching ? "Launching..." : "Launch Ads"}
                   </Button>
@@ -15866,7 +16119,7 @@ export default function LaunchPage() {
                   </Button>
                   {tableBulkOpen && (
                     <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-52 overflow-hidden py-1">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Apply to all rows</p>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 py-1.5">Apply to all rows</p>
                       {[
                         { label: "Primary Text from Gallery", emptyMsg: "Primary Text is empty in Gallery Mode — nothing to apply.", apply: () => { const pt = primaryTexts.find(t => t.trim()) || ""; if (!pt) return false; setTableRows(prev => prev.map(r => ({ ...r, primaryText: pt }))); return true } },
                         { label: "Headline from Gallery", emptyMsg: "Headline is empty in Gallery Mode — nothing to apply.", apply: () => { const hl = headlines.find(h => h.trim()) || ""; if (!hl) return false; setTableRows(prev => prev.map(r => ({ ...r, headline: hl }))); return true } },
@@ -15970,8 +16223,11 @@ export default function LaunchPage() {
             )}
 
             <div className="flex items-center gap-2 px-4 py-3 border-t shrink-0">
-              <Tip text="Preview the ad setup before launching.">
-                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => setPreviewModalOpen(true)} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview Ads</Button>
+              <Tip text="Preview the ads, then confirm to launch.">
+                <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => openPreview(() => {
+                  const hasRowCreatives = tableRows.some(r => r.creative?.id && r.adSetIds.length > 0)
+                  hasRowCreatives ? doTableLaunch() : doLaunch()
+                })} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview Ads</Button>
               </Tip>
               <Tip text="Save this launch setup as a draft.">
                 <Button
@@ -15989,13 +16245,13 @@ export default function LaunchPage() {
                   <IconCalendar className="size-3.5" />Schedule
                 </Button>
               </Tip>
-              <Tip text="Create the ads in Meta with the current setup." className="flex-1">
+              <Tip text={skipPreviewGate ? "Create the ads in Meta with the current setup." : "Preview the ads, then confirm to launch."} className="flex-1">
                 <Button
                   className="w-full gap-2 font-medium"
-                  onClick={() => {
+                  onClick={() => requestLaunch(() => {
                     const hasRowCreatives = tableRows.some(r => r.creative?.id && r.adSetIds.length > 0)
                     hasRowCreatives ? doTableLaunch() : doLaunch()
-                  }}
+                  })}
                   disabled={launching}
                 >
                   {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}

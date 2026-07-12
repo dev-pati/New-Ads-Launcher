@@ -331,11 +331,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "creativeIds are required" }, { status: 400 })
     }
     if (!pageId) {
-      return NextResponse.json({ error: "Bạn chưa chọn Facebook Page. Vui lòng chọn một Page trước khi launch." }, { status: 400 })
+      return NextResponse.json({ error: "No Facebook Page selected. Please select a Page before launching." }, { status: 400 })
     }
     const isCreatingNewCampaign = campaignOption === "new" || campaignOption === "multiple" || adsetMode === "custom"
     if (isCreatingNewCampaign && !adsetDailyBudget) {
-      return NextResponse.json({ error: "Daily budget là bắt buộc khi tạo campaign mới." }, { status: 400 })
+      return NextResponse.json({ error: "Daily budget is required when creating a new campaign." }, { status: 400 })
     }
 
     const today = new Date()
@@ -394,7 +394,7 @@ export async function POST(request: NextRequest) {
       template = await getAdDetails(templateAdId, token, tokenOpts)
       const templateAcct = await getResourceAccountId(templateAdId, token, tokenOpts)
       if (templateAcct && templateAcct !== normalizeAdAccountId(adAccountId)) {
-        return NextResponse.json({ error: "Template ad không thuộc ad account đã chọn. Chọn template trong cùng account." }, { status: 400 })
+        return NextResponse.json({ error: "Template ad does not belong to the selected ad account. Choose a template in the same account." }, { status: 400 })
       }
     }
 
@@ -402,13 +402,13 @@ export async function POST(request: NextRequest) {
     if (existingCampaignToCheck) {
       const campAcct = await getResourceAccountId(existingCampaignToCheck, token, tokenOpts)
       if (campAcct && campAcct !== normalizeAdAccountId(adAccountId)) {
-        return NextResponse.json({ error: "Campaign không thuộc ad account đã chọn." }, { status: 400 })
+        return NextResponse.json({ error: "Campaign does not belong to the selected ad account." }, { status: 400 })
       }
     }
     if (existingAdsetId) {
       const adsetAcct = await getResourceAccountId(existingAdsetId, token, tokenOpts)
       if (adsetAcct && adsetAcct !== normalizeAdAccountId(adAccountId)) {
-        return NextResponse.json({ error: "Ad set không thuộc ad account đã chọn." }, { status: 400 })
+        return NextResponse.json({ error: "Ad set does not belong to the selected ad account." }, { status: 400 })
       }
     }
     const { data: creatives } = await supabase.from("creatives").select("*").in("id", creativeIds).eq("org_id", ctx.orgId)
@@ -418,7 +418,7 @@ export async function POST(request: NextRequest) {
     if (notReady.length > 0) {
       const names = notReady.map((c: any) => `"${c.file_name}" (${c.status})`).join(", ")
       return NextResponse.json({
-        error: `Một số media chưa sẵn sàng để launch (đang upload hoặc xử lý trên Meta): ${names}. Vui lòng đợi hoàn tất rồi thử lại.`
+        error: `Some media isn't ready to launch yet (uploading or processing on Meta): ${names}. Please wait until it finishes and try again.`
       }, { status: 400 })
     }
 
@@ -427,7 +427,7 @@ export async function POST(request: NextRequest) {
     const notUploaded = launchCreatives.filter(c => !c.fb_image_hash && !c.fb_video_id)
     if (notUploaded.length) {
       return NextResponse.json({
-        error: `${notUploaded.length} creative(s) chưa upload lên Meta. Mở Ads Manager và upload trước khi launch.`,
+        error: `${notUploaded.length} creative(s) not yet uploaded to Meta. Open Ads Manager and upload them before launching.`,
         creativeIds: notUploaded.map(c => c.id),
       }, { status: 400 })
     }

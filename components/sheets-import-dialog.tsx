@@ -633,7 +633,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                 <div key={n} className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5">
                     <div className={cn(
-                      "size-5 rounded-full flex items-center justify-center text-[10px] font-bold",
+                      "size-5 rounded-full flex items-center justify-center text-xs font-bold",
                       done  ? "bg-emerald-500 text-white" :
                       active ? "bg-primary text-primary-foreground" :
                                "bg-muted text-muted-foreground"
@@ -837,7 +837,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                       <div className="px-4 py-2.5 flex items-center gap-2">
                         <span className="text-sm font-medium">{label}</span>
                         {mappedHeader && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium leading-none shrink-0">mapped</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium leading-none shrink-0">mapped</span>
                         )}
                       </div>
                       <div className="flex items-center justify-center">
@@ -861,7 +861,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                                 <span className="text-muted-foreground/60">— skip —</span>
                               ) : (
                                 <span className="flex items-center gap-1.5 min-w-0">
-                                  <span className="shrink-0 size-4 rounded bg-muted text-[10px] font-bold flex items-center justify-center text-muted-foreground">
+                                  <span className="shrink-0 size-4 rounded bg-muted text-xs font-bold flex items-center justify-center text-muted-foreground">
                                     {mappedIdx + 1}
                                   </span>
                                   <span className="truncate">{cleanHeader(headers[mappedIdx] || `Col ${mappedIdx + 1}`)}</span>
@@ -876,14 +876,14 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                             {headers.map((h, i) => (
                               <SelectItem key={i} value={String(i)}>
                                 <span className="flex items-center gap-2">
-                                  <span className="shrink-0 size-4 rounded bg-muted text-[10px] font-bold flex items-center justify-center text-muted-foreground leading-none">
+                                  <span className="shrink-0 size-4 rounded bg-muted text-xs font-bold flex items-center justify-center text-muted-foreground leading-none">
                                     {i + 1}
                                   </span>
                                   <span className="truncate max-w-[180px]">
                                     {cleanHeader(h) || `Column ${i + 1}`}
                                   </span>
                                   {cleanHeader(h) !== h.trim() && (
-                                    <span className="text-[10px] text-muted-foreground/50 shrink-0 hidden sm:inline truncate max-w-[80px]">
+                                    <span className="text-xs text-muted-foreground/50 shrink-0 hidden sm:inline truncate max-w-[80px]">
                                       {h.trim()}
                                     </span>
                                   )}
@@ -945,13 +945,13 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                   </div>
 
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {previewCols.length} column{previewCols.length !== 1 ? "s" : ""} mapped
                       {tableExpanded ? " · expanded" : " · compact"}
                     </span>
                     <button
                       onClick={() => setTableExpanded(v => !v)}
-                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted/50"
+                      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-muted/50"
                     >
                       {tableExpanded
                         ? <><IconArrowsMinimize className="size-3" />Compact</>
@@ -1044,11 +1044,11 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                                   }}
                                 >
                                   {!val ? (
-                                    <span className="text-muted-foreground/40 italic text-[11px]">—</span>
+                                    <span className="text-muted-foreground/40 italic text-xs">—</span>
                                   ) : (f.key === "creative_url" || f.key === "creative_file") ? (
                                     <span
                                       className={cn(
-                                        "text-primary text-[11px] cursor-pointer",
+                                        "text-primary text-xs cursor-pointer",
                                         !isExpanded && !tableExpanded && "block truncate"
                                       )}
                                       style={!isExpanded && !tableExpanded ? { maxWidth: 150 } : undefined}
@@ -1059,7 +1059,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                                   ) : (
                                     <span
                                       className={cn(
-                                        "text-[11px] leading-relaxed cursor-pointer",
+                                        "text-xs leading-relaxed cursor-pointer",
                                         !isExpanded && !tableExpanded && "line-clamp-2"
                                       )}
                                       title={!isExpanded && !tableExpanded ? val : undefined}

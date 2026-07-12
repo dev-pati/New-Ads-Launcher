@@ -190,7 +190,7 @@ export function InspoDiscoveryPage({
       <div className="flex items-center justify-between px-5 pt-2 border-b border-[#e4e7ec] shrink-0">
         <InspoTabs active={activeTab} onChange={setActiveTab} />
         {activeBoard && (
-          <div className="flex items-center gap-1.5 pb-2.5 text-[13px] font-semibold text-primary">
+          <div className="flex items-center gap-1.5 pb-2.5 text-xs font-semibold text-primary">
             <IconBookmarkFilled className="size-3.5" />
             {activeBoard.name}
             <span className="text-xs text-muted-foreground font-normal ml-0.5">
@@ -226,14 +226,14 @@ export function InspoDiscoveryPage({
       {/* Results count */}
       {!loading && !error && apiAds.length > 0 && (
         <div className="px-5 py-1.5 shrink-0 flex items-center gap-2">
-          <p className="text-[11px] text-muted-foreground/60">
+          <p className="text-xs text-muted-foreground/60">
             {filteredAds.length} ads{search ? ` for "${search}"` : ""}
           </p>
           {dataSource === "db" && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-medium">DB</span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-medium">DB</span>
           )}
           {dataSource === "meta" && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-medium">Meta API</span>
+            <span className="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 font-medium">Meta API</span>
           )}
         </div>
       )}

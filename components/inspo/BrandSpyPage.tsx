@@ -41,8 +41,8 @@ export function BrandSpyPage({ initialBrand, onBrandChange }: Props) {
               <IconBinoculars className="size-4 text-primary" />
             </div>
             <div>
-              <h1 className="text-[16px] font-bold">Brand Spy</h1>
-              <p className="text-[11px] text-muted-foreground">{total} brands tracked</p>
+              <h1 className="text-base font-bold">Brand Spy</h1>
+              <p className="text-xs text-muted-foreground">{total} brands tracked</p>
             </div>
           </div>
 
@@ -70,7 +70,7 @@ export function BrandSpyPage({ initialBrand, onBrandChange }: Props) {
           </div>
         ) : (
           <>
-            <p className="text-[11px] text-muted-foreground/60 mb-4">
+            <p className="text-xs text-muted-foreground/60 mb-4">
               {brands.length} brand{brands.length !== 1 ? "s" : ""}
               {search.trim() ? ` matching "${search}"` : ""}
             </p>
