@@ -136,7 +136,7 @@ function AnalyticsKpi({ label, value, icon, trend, sub, isScore }: {
           {trend >= 0 ? "↑" : "↓"} {Math.abs(trend).toFixed(1)}% vs previous period
         </p>
       )}
-      {sub && <p className="text-[10px] text-muted-foreground/60 mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground/60 mt-0.5">{sub}</p>}
     </div>
   )
 }
@@ -161,16 +161,16 @@ function CommentCard({ comment, replyingTo, replyText, replyLoading, onReply, on
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold">{comment.from_name || "Unknown"}</span>
-            <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize", SENT_BADGE[comment.sentiment])}>
+            <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded-full capitalize", SENT_BADGE[comment.sentiment])}>
               {comment.sentiment}
             </span>
-            {comment.is_hidden  && <span className="text-[10px] bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded-full">Hidden</span>}
-            {comment.is_replied && <span className="text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-600 px-1.5 py-0.5 rounded-full">Replied</span>}
-            <span className="text-[10px] text-muted-foreground ml-auto">{timeStr}</span>
+            {comment.is_hidden  && <span className="text-xs bg-muted/60 text-muted-foreground px-1.5 py-0.5 rounded-full">Hidden</span>}
+            {comment.is_replied && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 px-1.5 py-0.5 rounded-full">Replied</span>}
+            <span className="text-xs text-muted-foreground ml-auto">{timeStr}</span>
           </div>
 
           {comment.fb_post_message && (
-            <p className="text-[10px] text-muted-foreground/50 mt-0.5 truncate">
+            <p className="text-xs text-muted-foreground/50 mt-0.5 truncate">
               On: {comment.fb_post_message}
             </p>
           )}
@@ -180,14 +180,14 @@ function CommentCard({ comment, replyingTo, replyText, replyLoading, onReply, on
           {comment.themes?.length > 0 && (
             <div className="flex gap-1 mt-1.5 flex-wrap">
               {comment.themes.slice(0, 3).map(t => (
-                <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground">{t}</span>
+                <span key={t} className="text-xs px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground">{t}</span>
               ))}
             </div>
           )}
 
           {comment.draft_reply && !comment.is_replied && (
             <div className="mt-2 px-3 py-2 rounded-lg bg-violet-50 dark:bg-violet-950/30 border border-violet-200 dark:border-violet-800">
-              <p className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 mb-0.5">✨ AI Draft Reply</p>
+              <p className="text-xs font-semibold text-violet-600 dark:text-violet-400 mb-0.5">✨ AI Draft Reply</p>
               <p className="text-xs text-foreground/70">{comment.draft_reply}</p>
             </div>
           )}
@@ -520,7 +520,7 @@ export function CommentsView() {
                   <span className="capitalize">{f}</span>
                 </div>
                 {counts[f] > 0 && (
-                  <span className="text-[10px] tabular-nums bg-muted/70 px-1.5 py-0.5 rounded-full leading-none">
+                  <span className="text-xs tabular-nums bg-muted/70 px-1.5 py-0.5 rounded-full leading-none">
                     {counts[f]}
                   </span>
                 )}
@@ -538,7 +538,7 @@ export function CommentsView() {
                 <input value={search} onChange={e => setSearch(e.target.value)}
                   placeholder="Search comments, ads, users..."
                   className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/40 min-w-0" />
-                <span className="text-[10px] text-muted-foreground/40 bg-muted/60 px-1.5 py-0.5 rounded shrink-0">⌘K</span>
+                <span className="text-xs text-muted-foreground/40 bg-muted/60 px-1.5 py-0.5 rounded shrink-0">⌘K</span>
               </div>
 
               {/* Sort */}
@@ -753,7 +753,7 @@ export function CommentsView() {
                         <span key={t.theme}
                           className="px-2.5 py-1 rounded-full text-xs bg-primary/10 text-primary flex items-center gap-1">
                           {t.theme}
-                          {t.count > 1 && <span className="opacity-60 text-[10px]">×{t.count}</span>}
+                          {t.count > 1 && <span className="opacity-60 text-xs">×{t.count}</span>}
                         </span>
                       ))}
                     </div>
@@ -849,7 +849,7 @@ export function CommentsView() {
                   <div className="flex items-start justify-between">
                     <span className="text-2xl leading-none">{t.icon}</span>
                     {t.popular && (
-                      <span className="text-[10px] font-bold bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full">
+                      <span className="text-xs font-bold bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full">
                         Popular
                       </span>
                     )}
@@ -860,7 +860,7 @@ export function CommentsView() {
                   </div>
                   <p className="text-xs text-muted-foreground flex-1 leading-relaxed">{t.desc}</p>
                   <div className="flex items-center justify-between pt-1 border-t">
-                    <span className="text-[10px] text-muted-foreground/60">{t.time}</span>
+                    <span className="text-xs text-muted-foreground/60">{t.time}</span>
                     <button onClick={() => !added && useTemplate(t)}
                       className={cn("text-xs font-medium flex items-center gap-1 transition-colors",
                         added ? "text-muted-foreground/40 cursor-default" : "text-primary hover:text-primary/70")}>
@@ -927,7 +927,7 @@ export function CommentsView() {
                       <td className="px-4 py-3 text-muted-foreground capitalize">{r.action_taken?.replace(/_/g, " ")}</td>
                       <td className="px-4 py-3 text-muted-foreground max-w-[220px] truncate">{r.result}</td>
                       <td className="px-4 py-3">
-                        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                        <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full",
                           r.status === "success" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
                             : r.status === "skipped" ? "bg-muted/60 text-muted-foreground"
                             : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400")}>

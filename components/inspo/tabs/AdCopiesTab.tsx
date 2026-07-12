@@ -28,7 +28,7 @@ function ScoreBar({ score }: { score: number }) {
       <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
         <div className="h-full bg-primary rounded-full" style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-[11px] tabular-nums text-muted-foreground w-6 text-right">{pct}</span>
+      <span className="text-xs tabular-nums text-muted-foreground w-6 text-right">{pct}</span>
     </div>
   )
 }
@@ -89,7 +89,7 @@ export function AdCopiesTab({ copies, emptyLabel = "No ad copies found." }: Prop
       <div className="bg-card border border-border/60 rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border/50 text-muted-foreground text-[11px] uppercase tracking-wide">
+            <tr className="border-b border-border/50 text-muted-foreground text-xs uppercase tracking-wide">
               <th className="text-left px-5 py-3 font-semibold w-[40%]">Ad Copy</th>
               {(["adsCount", "longestRunning", "totalRunningDays", "totalReach", "score"] as SortKey[]).map(k => (
                 <SortHeader key={k} label={LABELS[k]} sortKey={k} current={sortKey} asc={sortAsc} onSort={toggleSort} />
@@ -108,13 +108,13 @@ export function AdCopiesTab({ copies, emptyLabel = "No ad copies found." }: Prop
                         <img src={row.firstAd.mediaUrl} alt="" className="size-10 rounded-lg object-cover shrink-0 mt-0.5" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className={cn("text-[13px] text-foreground leading-snug", !isExpanded && "line-clamp-2")}>
+                        <p className={cn("text-xs text-foreground leading-snug", !isExpanded && "line-clamp-2")}>
                           {row.text}
                         </p>
                         {row.text.length > 120 && (
                           <button
                             onClick={() => setExpanded(p => { const n = new Set(p); isExpanded ? n.delete(row.text) : n.add(row.text); return n })}
-                            className="text-[11px] text-primary hover:underline mt-0.5"
+                            className="text-xs text-primary hover:underline mt-0.5"
                           >
                             {isExpanded ? "Show less" : "Show more"}
                           </button>

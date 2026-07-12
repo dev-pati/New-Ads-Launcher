@@ -1223,7 +1223,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                                   return <td className="px-3 py-2 text-xs italic text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{val}</td>
                                 if (val === "—")
                                   return <td className="px-3 py-2 text-muted-foreground">—</td>
-                                return <td className="px-3 py-2 font-mono text-muted-foreground text-[10px] whitespace-nowrap">{val}</td>
+                                return <td className="px-3 py-2 font-mono text-muted-foreground text-xs whitespace-nowrap">{val}</td>
                               }
                               return (
                                 <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
@@ -1348,7 +1348,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                       <p className="text-sm font-medium">Website URL <span className="text-xs font-normal text-muted-foreground">(optional)</span></p>
                       {pageLinks.length > 0 && (
                         <Select onValueChange={(val) => setCommonWebsiteUrl(val)}>
-                          <SelectTrigger className="h-7 w-fit text-[10px] bg-muted/50 border-none hover:bg-muted">
+                          <SelectTrigger className="h-7 w-fit text-xs bg-muted/50 border-none hover:bg-muted">
                             <SelectValue placeholder="Quick select from Pages" />
                           </SelectTrigger>
                           <SelectContent>
@@ -1606,7 +1606,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                               <div className="flex gap-2">
                                 {/* Hours column */}
                                 <div className="flex flex-col items-center gap-1">
-                                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">HH</span>
+                                  <span className="text-xs text-muted-foreground uppercase tracking-wide">HH</span>
                                   <div className="h-48 overflow-y-auto scrollbar-thin flex flex-col gap-0.5 pr-1">
                                     {hours.map(h => (
                                       <button key={h} type="button" onClick={() => setScheduleHour(h)}
@@ -1619,7 +1619,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                                 <div className="flex items-center pb-1 text-muted-foreground text-lg font-light">:</div>
                                 {/* Minutes column */}
                                 <div className="flex flex-col items-center gap-1">
-                                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">MM</span>
+                                  <span className="text-xs text-muted-foreground uppercase tracking-wide">MM</span>
                                   <div className="h-48 overflow-y-auto scrollbar-thin flex flex-col gap-0.5 pr-1">
                                     {minutes.map(m => (
                                       <button key={m} type="button" onClick={() => setScheduleMinute(m)}
@@ -1677,14 +1677,14 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                           ["utm_term", "Term", utmTerm, setUtmTerm, "keyword (optional)"],
                         ] as [string, string, string, (v: string) => void, string][]).map(([key, label, val, set, ph]) => (
                           <div key={key} className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground">{label} <span className="font-mono text-[10px]">{key}</span></p>
+                            <p className="text-xs font-medium text-muted-foreground">{label} <span className="font-mono text-xs">{key}</span></p>
                             <Input value={val} onChange={e => set(e.target.value)} placeholder={ph} className="h-8 text-xs" />
                           </div>
                         ))}
                       </div>
                       {utmPreview && (
                         <div className="rounded-md bg-muted px-3 py-2">
-                          <p className="text-[10px] text-muted-foreground mb-1">Preview</p>
+                          <p className="text-xs text-muted-foreground mb-1">Preview</p>
                           <p className="text-xs font-mono break-all text-foreground">?{utmPreview}</p>
                         </div>
                       )}

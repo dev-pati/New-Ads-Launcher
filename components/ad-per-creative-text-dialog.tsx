@@ -136,7 +136,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                             <IconVideo className="size-6 text-muted-foreground" />
                           </div>
                         )}
-                        <p className="text-[10px] text-muted-foreground text-center break-all leading-tight max-w-[140px]">{cr.file_name}</p>
+                        <p className="text-xs text-muted-foreground text-center break-all leading-tight max-w-[140px]">{cr.file_name}</p>
                       </div>
                     </td>
 
@@ -221,7 +221,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                           ))}
                         </select>
                         {cr.cta && cr.cta !== cfg.cta && (
-                          <p className="text-[10px] text-muted-foreground">Current: {cr.cta}</p>
+                          <p className="text-xs text-muted-foreground">Current: {cr.cta}</p>
                         )}
                       </div>
                     </td>

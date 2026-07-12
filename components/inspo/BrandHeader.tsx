@@ -34,8 +34,8 @@ export function BrandHeader({ analytics, onBack, search, onSearchChange }: Props
         <div className="flex items-center gap-3">
           <BrandAvatar name={analytics.brandName} src={analytics.brandAvatar} size="lg" />
           <div>
-            <h1 className="text-[18px] font-bold text-foreground leading-tight">{analytics.brandName}</h1>
-            <p className="text-[12px] text-muted-foreground mt-0.5">
+            <h1 className="text-lg font-bold text-foreground leading-tight">{analytics.brandName}</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
               {analytics.activeAds} active · {analytics.totalAds} total ads
             </p>
           </div>
@@ -80,8 +80,8 @@ export function BrandHeader({ analytics, onBack, search, onSearchChange }: Props
 function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
     <div className="text-right">
-      <p className={`text-[15px] font-bold tabular-nums ${accent ? "text-emerald-600 dark:text-emerald-400" : ""}`}>{value}</p>
-      <p className="text-[10px] text-muted-foreground uppercase font-medium tracking-wide">{label}</p>
+      <p className={`text-sm font-bold tabular-nums ${accent ? "text-emerald-600 dark:text-emerald-400" : ""}`}>{value}</p>
+      <p className="text-xs text-muted-foreground uppercase font-medium tracking-wide">{label}</p>
     </div>
   )
 }

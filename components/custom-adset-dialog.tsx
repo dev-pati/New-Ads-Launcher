@@ -178,7 +178,7 @@ export function CustomAdSetDialog({ open, onClose, creativeIds, campaignNames, o
                             <IconVideo className="size-6 text-muted-foreground" />
                           </div>
                         )}
-                        <p className="text-[10px] truncate px-1 py-0.5">{creative.file_name}</p>
+                        <p className="text-xs truncate px-1 py-0.5">{creative.file_name}</p>
                       </button>
                     )
                   })}

@@ -32,8 +32,8 @@ export async function POST(request: NextRequest) {
         const { subject, html, text } = buildNotificationEmail({
           automationName: "Automation Test",
           message: notification.customMessage
-            ? `[DRY-RUN]\n\n${notification.customMessage}\n\nℹ️ Template variables ({{trigger.summary}} etc.) sẽ được điền với data thực khi automation chạy.`
-            : "[DRY-RUN] Automation notification đã được cấu hình đúng.",
+            ? `[DRY-RUN]\n\n${notification.customMessage}\n\nℹ️ Template variables ({{trigger.summary}} etc.) will be filled with real data when the automation runs.`
+            : "[DRY-RUN] Automation notification is configured correctly.",
           status: "info",
         })
         const emailResult = await sendEmail({ to: recipients, subject: "🧪 " + subject, html, text })
@@ -61,12 +61,12 @@ export async function POST(request: NextRequest) {
     const larkChatId: string = notification.larkChatId ?? ""
     if ((larkRecipients.length || larkChatId) && notification.via === "lark") {
       if (larkRecipients.length) {
-        const r = await sendLarkMessage({ recipients: larkRecipients, title: "🧪 Dry-run Test", message: "Automation notification đã được cấu hình đúng. Đây là tin nhắn test." })
+        const r = await sendLarkMessage({ recipients: larkRecipients, title: "🧪 Dry-run Test", message: "Automation notification is configured correctly. This is a test message." })
         if (!r.ok) errors.push(`Lark DM: ${r.error}`)
         else results.push(`lark → ${larkRecipients.join(", ")}`)
       }
       if (larkChatId) {
-        const r = await sendLarkGroupMessage({ chatId: larkChatId, title: "🧪 Dry-run Test", message: "Automation notification đã được cấu hình đúng." })
+        const r = await sendLarkGroupMessage({ chatId: larkChatId, title: "🧪 Dry-run Test", message: "Automation notification is configured correctly." })
         if (!r.ok) errors.push(`Lark group: ${r.error}`)
         else results.push("lark group")
       }

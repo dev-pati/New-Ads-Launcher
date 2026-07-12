@@ -105,7 +105,7 @@ export function SaveToBoardButton({
 
       {open && (
         <div className="absolute right-0 top-full mt-1 z-50 bg-popover border rounded-xl shadow-lg w-52 py-1.5">
-          <p className="px-3 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+          <p className="px-3 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
             Save to board
           </p>
 

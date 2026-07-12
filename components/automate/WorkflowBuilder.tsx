@@ -132,8 +132,8 @@ function AppPickerModal({
         {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4 shrink-0">
           <div>
-            <h2 className="text-[17px] font-bold text-foreground">Choose an app</h2>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
+            <h2 className="text-base font-bold text-foreground">Choose an app</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
               Select the app you want to use for this trigger
             </p>
           </div>
@@ -154,7 +154,7 @@ function AppPickerModal({
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search apps..."
-              className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/50"
+              className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
             />
           </div>
         </div>
@@ -162,7 +162,7 @@ function AppPickerModal({
         {/* Grid */}
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           {filtered.length === 0 ? (
-            <p className="text-center text-[13px] text-muted-foreground py-8">No apps found.</p>
+            <p className="text-center text-xs text-muted-foreground py-8">No apps found.</p>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {filtered.map(app => {
@@ -180,10 +180,10 @@ function AppPickerModal({
                       <AppIcon className="size-6" style={{ color: app.iconFg }} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
+                      <p className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
                         {app.name}
                       </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug line-clamp-2">
                         {app.desc}
                       </p>
                     </div>
@@ -248,8 +248,8 @@ function DelayConfigPanel({ stepIndex, config, onChange, onClose }: {
             <IconClock className="size-4 text-purple-600 dark:text-purple-400" />
           </div>
           <div>
-            <p className="text-[13px] font-semibold">Delay</p>
-            <p className="text-[11px] text-muted-foreground">Step {stepIndex}</p>
+            <p className="text-xs font-semibold">Delay</p>
+            <p className="text-xs text-muted-foreground">Step {stepIndex}</p>
           </div>
         </div>
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
@@ -257,26 +257,26 @@ function DelayConfigPanel({ stepIndex, config, onChange, onClose }: {
         </button>
       </div>
       <div className="flex-1 overflow-y-auto p-5">
-        <p className="text-[13px] font-semibold text-foreground mb-4">Wait duration</p>
+        <p className="text-xs font-semibold text-foreground mb-4">Wait duration</p>
         <div className="flex items-center gap-3">
           <input
             type="number"
             min={1}
             value={config.value}
             onChange={e => onChange({ ...config, value: Math.max(1, Number(e.target.value)) })}
-            className="w-24 h-10 px-3 border border-border rounded-xl text-[13px] font-medium bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-24 h-10 px-3 border border-border rounded-xl text-xs font-medium bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           <select
             value={config.unit}
             onChange={e => onChange({ ...config, unit: e.target.value as DelayConfig["unit"] })}
-            className="flex-1 h-10 px-3 border border-border rounded-xl text-[13px] bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="flex-1 h-10 px-3 border border-border rounded-xl text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
             <option value="minutes">Minutes</option>
             <option value="hours">Hours</option>
             <option value="days">Days</option>
           </select>
         </div>
-        <p className="text-[12px] text-muted-foreground mt-3">
+        <p className="text-xs text-muted-foreground mt-3">
           The automation will wait {config.value} {config.unit} before proceeding to the next step.
         </p>
       </div>
@@ -311,8 +311,8 @@ function ApprovalConfigPanel({ stepIndex, config, onChange, onClose }: {
             <IconShieldCheck className="size-4 text-amber-600 dark:text-amber-400" />
           </div>
           <div>
-            <p className="text-[13px] font-semibold">Approval</p>
-            <p className="text-[11px] text-muted-foreground">Step {stepIndex}</p>
+            <p className="text-xs font-semibold">Approval</p>
+            <p className="text-xs text-muted-foreground">Step {stepIndex}</p>
           </div>
         </div>
         <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground transition-colors">
@@ -321,7 +321,7 @@ function ApprovalConfigPanel({ stepIndex, config, onChange, onClose }: {
       </div>
       <div className="flex-1 overflow-y-auto p-5 space-y-5">
         <div>
-          <p className="text-[13px] font-semibold text-foreground mb-2">Approvers</p>
+          <p className="text-xs font-semibold text-foreground mb-2">Approvers</p>
           <div className="flex gap-2 mb-2">
             <input
               type="email"
@@ -329,22 +329,22 @@ function ApprovalConfigPanel({ stepIndex, config, onChange, onClose }: {
               value={emailInput}
               onChange={e => setEmailInput(e.target.value)}
               onKeyDown={e => e.key === "Enter" && addApprover()}
-              className="flex-1 h-9 px-3 border border-border rounded-xl text-[13px] bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="flex-1 h-9 px-3 border border-border rounded-xl text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
             <button
               onClick={addApprover}
-              className="h-9 px-3 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:bg-primary/90 transition-colors"
+              className="h-9 px-3 rounded-xl bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
             >
               Add
             </button>
           </div>
           {config.approvers.length === 0 ? (
-            <p className="text-[12px] text-muted-foreground">No approvers added yet.</p>
+            <p className="text-xs text-muted-foreground">No approvers added yet.</p>
           ) : (
             <div className="space-y-1.5">
               {config.approvers.map(email => (
                 <div key={email} className="flex items-center justify-between px-3 py-2 bg-muted/50 rounded-xl">
-                  <span className="text-[13px]">{email}</span>
+                  <span className="text-xs">{email}</span>
                   <button
                     onClick={() => onChange({ ...config, approvers: config.approvers.filter(e => e !== email) })}
                     className="text-muted-foreground hover:text-destructive transition-colors"
@@ -357,26 +357,26 @@ function ApprovalConfigPanel({ stepIndex, config, onChange, onClose }: {
           )}
         </div>
         <div>
-          <p className="text-[13px] font-semibold text-foreground mb-2">Message (optional)</p>
+          <p className="text-xs font-semibold text-foreground mb-2">Message (optional)</p>
           <textarea
             rows={3}
             placeholder="Describe what needs to be approved..."
             value={config.message ?? ""}
             onChange={e => onChange({ ...config, message: e.target.value })}
-            className="w-full px-3 py-2.5 border border-border rounded-xl text-[13px] bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
+            className="w-full px-3 py-2.5 border border-border rounded-xl text-xs bg-background focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none"
           />
         </div>
         <div>
-          <p className="text-[13px] font-semibold text-foreground mb-2">Auto-reject after</p>
+          <p className="text-xs font-semibold text-foreground mb-2">Auto-reject after</p>
           <div className="flex items-center gap-3">
             <input
               type="number"
               min={0}
               value={config.timeoutHours ?? 24}
               onChange={e => onChange({ ...config, timeoutHours: Number(e.target.value) })}
-              className="w-24 h-10 px-3 border border-border rounded-xl text-[13px] font-medium bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-24 h-10 px-3 border border-border rounded-xl text-xs font-medium bg-background focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
-            <span className="text-[13px] text-muted-foreground">hours (0 = never)</span>
+            <span className="text-xs text-muted-foreground">hours (0 = never)</span>
           </div>
         </div>
       </div>
@@ -453,8 +453,8 @@ function ActionPickerModal({ onPick, onClose }: {
       >
         <div className="flex items-start justify-between p-6 pb-4 shrink-0">
           <div>
-            <h2 className="text-[17px] font-bold text-foreground">Choose an app</h2>
-            <p className="text-[13px] text-muted-foreground mt-0.5">Select the app you want to use for this action</p>
+            <h2 className="text-base font-bold text-foreground">Choose an app</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Select the app you want to use for this action</p>
           </div>
           <button
             onClick={onClose}
@@ -471,13 +471,13 @@ function ActionPickerModal({ onPick, onClose }: {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search apps..."
-              className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/50"
+              className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
             />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           {filtered.length === 0 ? (
-            <p className="text-center text-[13px] text-muted-foreground py-8">No apps found.</p>
+            <p className="text-center text-xs text-muted-foreground py-8">No apps found.</p>
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {filtered.map(app => {
@@ -495,10 +495,10 @@ function ActionPickerModal({ onPick, onClose }: {
                       <AppIcon className="size-6" style={{ color: app.iconFg }} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
+                      <p className="text-xs font-semibold text-foreground group-hover:text-primary transition-colors leading-tight">
                         {app.name}
                       </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug line-clamp-2">
                         {app.desc}
                       </p>
                     </div>
@@ -589,8 +589,8 @@ function AddStepPopup({ x, y, onAddKind, onClose }: {
               {t.iconEl}
             </div>
             <div>
-              <p className="text-[13px] font-medium leading-tight">{t.label}</p>
-              <p className="text-[11px] text-muted-foreground">{t.desc}</p>
+              <p className="text-xs font-medium leading-tight">{t.label}</p>
+              <p className="text-xs text-muted-foreground">{t.desc}</p>
             </div>
           </button>
         ))}
@@ -651,12 +651,12 @@ function TopBar({
             onChange={e => onNameChange(e.target.value)}
             onBlur={() => setEditingName(false)}
             onKeyDown={e => e.key === "Enter" && setEditingName(false)}
-            className="text-[17px] font-semibold bg-transparent border-b-2 border-[#2563EB] outline-none min-w-0 flex-1 max-w-sm"
+            className="text-base font-semibold bg-transparent border-b-2 border-[#2563EB] outline-none min-w-0 flex-1 max-w-sm"
           />
         ) : (
           <button
             onClick={() => setEditingName(true)}
-            className="text-[17px] font-semibold text-foreground hover:text-[#2563EB] transition-colors truncate"
+            className="text-base font-semibold text-foreground hover:text-[#2563EB] transition-colors truncate"
           >
             {name}
           </button>
@@ -668,7 +668,7 @@ function TopBar({
           <button
             onClick={onSave}
             disabled={saving}
-            className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-[13px] font-medium text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-xs font-medium text-foreground/80 hover:bg-muted transition-colors disabled:opacity-50"
           >
             {saving ? <IconLoader2 className="size-3.5 animate-spin" /> :
              saved  ? <IconCheck className="size-3.5 text-emerald-500" /> :
@@ -678,18 +678,18 @@ function TopBar({
           <button
             onClick={onRun}
             disabled={running}
-            className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-[#2563EB] text-white text-[13px] font-semibold hover:bg-[#1D4ED8] transition-colors shadow-sm disabled:opacity-60"
+            className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-[#2563EB] text-white text-xs font-semibold hover:bg-[#1D4ED8] transition-colors shadow-sm disabled:opacity-60"
           >
             {running
               ? <IconLoader2 className="size-3.5 animate-spin" />
               : <IconPlayerPlay className="size-3.5 fill-white" />}
             {running ? "Running…" : "Run"}
           </button>
-          <button onClick={onPreview} className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-[13px] font-medium text-foreground/80 hover:bg-muted transition-colors">
+          <button onClick={onPreview} className="flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border bg-background text-xs font-medium text-foreground/80 hover:bg-muted transition-colors">
             <IconEye className="size-3.5" />
             Full preview
           </button>
-          <button onClick={onHistory} className={cn("flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border text-[13px] font-medium transition-colors",
+          <button onClick={onHistory} className={cn("flex items-center gap-1.5 h-8 px-3.5 rounded-lg border border-border text-xs font-medium transition-colors",
             historyOpen ? "bg-primary/10 text-primary border-primary/30" : "bg-background text-foreground/80 hover:bg-muted"
           )}>
             <IconHistory className="size-3.5" />
@@ -1013,7 +1013,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
             <div className="flex items-center justify-between px-5 py-4 border-b">
               <div>
                 <h2 className="text-base font-semibold">{name}</h2>
-                <p className="text-[12px] text-muted-foreground mt-0.5">{steps.length} step{steps.length !== 1 ? "s" : ""} · Full preview</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{steps.length} step{steps.length !== 1 ? "s" : ""} · Full preview</p>
               </div>
               <button onClick={() => setShowPreview(false)} className="size-7 rounded-lg flex items-center justify-center hover:bg-muted transition-colors">
                 <IconX className="size-4" />
@@ -1033,15 +1033,15 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
                   return (
                     <div key={step.id} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <div className="size-7 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-[11px] font-bold text-violet-600">{stepNum}</div>
+                        <div className="size-7 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-xs font-bold text-violet-600">{stepNum}</div>
                         {i < steps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
                       </div>
                       <div className="flex-1 pb-3">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-violet-500 bg-violet-50 dark:bg-violet-900/20 px-1.5 py-0.5 rounded">TRIGGER</span>
-                          <span className="text-[13px] font-medium">{app?.name ?? cfg?.appId ?? "—"}</span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-violet-500 bg-violet-50 dark:bg-violet-900/20 px-1.5 py-0.5 rounded">TRIGGER</span>
+                          <span className="text-xs font-medium">{app?.name ?? cfg?.appId ?? "—"}</span>
                         </div>
-                        <div className="text-[12px] text-muted-foreground space-y-0.5">
+                        <div className="text-xs text-muted-foreground space-y-0.5">
                           {cfg?.event && <p>Event: <span className="text-foreground font-medium">{cfg.event}</span></p>}
                           {cfg?.scheduleFrequency && <p>Schedule: <span className="text-foreground font-medium">{cfg.scheduleFrequency} · {cfg.scheduleTime ?? ""}</span></p>}
                           {cfg?.roasTarget && <p>ROAS target: <span className="text-foreground font-medium">{cfg.roasTarget}</span></p>}
@@ -1058,15 +1058,15 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
                   return (
                     <div key={step.id} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <div className="size-7 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-[11px] font-bold text-amber-600">{stepNum}</div>
+                        <div className="size-7 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-xs font-bold text-amber-600">{stepNum}</div>
                         {i < steps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
                       </div>
                       <div className="flex-1 pb-3">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">DELAY</span>
-                          <span className="text-[13px] font-medium">Wait {cfg?.value ?? 1} {cfg?.unit ?? "hours"}</span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-amber-500 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">DELAY</span>
+                          <span className="text-xs font-medium">Wait {cfg?.value ?? 1} {cfg?.unit ?? "hours"}</span>
                         </div>
-                        <p className="text-[12px] text-muted-foreground">Tự động tiếp tục sau {cfg?.value ?? 1} {cfg?.unit ?? "hours"}</p>
+                        <p className="text-xs text-muted-foreground">Tự động tiếp tục sau {cfg?.value ?? 1} {cfg?.unit ?? "hours"}</p>
                       </div>
                     </div>
                   )
@@ -1076,15 +1076,15 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
                   return (
                     <div key={step.id} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <div className="size-7 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-[11px] font-bold text-blue-600">{stepNum}</div>
+                        <div className="size-7 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-xs font-bold text-blue-600">{stepNum}</div>
                         {i < steps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
                       </div>
                       <div className="flex-1 pb-3">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">APPROVAL</span>
-                          <span className="text-[13px] font-medium">Approval Required</span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded">APPROVAL</span>
+                          <span className="text-xs font-medium">Approval Required</span>
                         </div>
-                        <div className="text-[12px] text-muted-foreground space-y-0.5">
+                        <div className="text-xs text-muted-foreground space-y-0.5">
                           {(cfg?.approvers ?? []).length > 0
                             ? <p>Approvers: <span className="text-foreground font-medium">{(cfg!.approvers).join(", ")}</span></p>
                             : <p className="text-amber-500">⚠ Chưa có approvers</p>}
@@ -1111,19 +1111,19 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
                   return (
                     <div key={step.id} className="flex gap-3">
                       <div className="flex flex-col items-center">
-                        <div className="size-7 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-[11px] font-bold text-emerald-600">{stepNum}</div>
+                        <div className="size-7 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-xs font-bold text-emerald-600">{stepNum}</div>
                         {i < steps.length - 1 && <div className="w-0.5 flex-1 bg-border mt-1" />}
                       </div>
                       <div className="flex-1 pb-3">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">ACTION</span>
-                          <span className="text-[13px] font-medium">{app?.name ?? cfg?.appId ?? "—"} · {ACTION_LABELS[cfg?.event ?? ""] ?? cfg?.event ?? "—"}</span>
+                          <span className="text-xs font-bold uppercase tracking-wider text-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 px-1.5 py-0.5 rounded">ACTION</span>
+                          <span className="text-xs font-medium">{app?.name ?? cfg?.appId ?? "—"} · {ACTION_LABELS[cfg?.event ?? ""] ?? cfg?.event ?? "—"}</span>
                         </div>
-                        <div className="text-[12px] text-muted-foreground space-y-0.5">
+                        <div className="text-xs text-muted-foreground space-y-0.5">
                           {targetIds.length > 0 && <p>Targets: <span className="text-foreground font-medium">{targetIds.length} ID{targetIds.length !== 1 ? "s" : ""} selected</span></p>}
-                          {cfg?.actionTargetExpression && !targetIds.length && <p>Target: <span className="text-foreground font-mono text-[11px]">{cfg.actionTargetExpression}</span></p>}
+                          {cfg?.actionTargetExpression && !targetIds.length && <p>Target: <span className="text-foreground font-mono text-xs">{cfg.actionTargetExpression}</span></p>}
                           {cfg?.budgetAmount && <p>Amount: <span className="text-foreground font-medium">{cfg.budgetAmountType === "percentage" ? `${cfg.budgetAmount}%` : `$${cfg.budgetAmount}`} ({cfg.budgetOperation ?? "increase"})</span></p>}
-                          {cfg?.launchAdAccountId && <p>Ad Account: <span className="text-foreground font-mono text-[11px]">{cfg.launchAdAccountId}</span></p>}
+                          {cfg?.launchAdAccountId && <p>Ad Account: <span className="text-foreground font-mono text-xs">{cfg.launchAdAccountId}</span></p>}
                           {(cfg?.launchTargetAdsets ?? []).length > 0 && <p>Ad Sets: <span className="text-foreground font-medium">{cfg!.launchTargetAdsets!.length} selected</span></p>}
                           {cfg?.notification?.emailRecipients?.length ? <p>Email: <span className="text-foreground font-medium">{cfg.notification.emailRecipients.join(", ")}</span></p> : null}
                           {step.status !== "configured" && <p className="text-amber-500">⚠ Chưa cấu hình đầy đủ</p>}
@@ -1140,12 +1140,12 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
             <div className="border-t px-5 py-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5">
                 {steps.every(s => s.status === "configured")
-                  ? <><IconCheck className="size-4 text-emerald-500" /><span className="text-[12px] text-emerald-600 font-medium">Tất cả steps đã cấu hình</span></>
-                  : <><IconX className="size-4 text-amber-500" /><span className="text-[12px] text-amber-600 font-medium">{steps.filter(s => s.status !== "configured").length} step chưa cấu hình</span></>}
+                  ? <><IconCheck className="size-4 text-emerald-500" /><span className="text-xs text-emerald-600 font-medium">Tất cả steps đã cấu hình</span></>
+                  : <><IconX className="size-4 text-amber-500" /><span className="text-xs text-amber-600 font-medium">{steps.filter(s => s.status !== "configured").length} step chưa cấu hình</span></>}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setShowPreview(false)} className="h-8 px-4 text-[13px] rounded-lg border hover:bg-muted transition-colors">Đóng</button>
-                <button onClick={() => { setShowPreview(false); handleSave() }} className="h-8 px-4 text-[13px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5">
+                <button onClick={() => setShowPreview(false)} className="h-8 px-4 text-xs rounded-lg border hover:bg-muted transition-colors">Đóng</button>
+                <button onClick={() => { setShowPreview(false); handleSave() }} className="h-8 px-4 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5">
                   <IconDeviceFloppy className="size-3.5" /> Save
                 </button>
               </div>
@@ -1168,37 +1168,37 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
               </button>
             </div>
             <div className="p-5 space-y-4">
-              <p className="text-[13px] text-muted-foreground">Nhận thông báo email khi automation chạy xong.</p>
+              <p className="text-xs text-muted-foreground">Nhận thông báo email khi automation chạy xong.</p>
 
               {/* Email */}
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold">Email nhận thông báo</label>
+                <label className="text-xs font-semibold">Email nhận thông báo</label>
                 <input
                   type="email"
                   placeholder="email@company.com"
                   value={notifEmail}
                   onChange={e => setNotifEmail(e.target.value)}
-                  className="w-full h-9 px-3 text-[13px] bg-muted/40 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full h-9 px-3 text-xs bg-muted/40 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
                 />
-                <p className="text-[11px] text-muted-foreground">Nhiều email cách nhau bằng dấu phẩy</p>
+                <p className="text-xs text-muted-foreground">Nhiều email cách nhau bằng dấu phẩy</p>
               </div>
 
               {/* Khi nào gửi */}
               <div className="space-y-2">
-                <label className="text-[12px] font-semibold">Gửi khi nào</label>
+                <label className="text-xs font-semibold">Gửi khi nào</label>
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <input type="checkbox" checked={notifOnSuccess} onChange={e => setNotifOnSuccess(e.target.checked)} className="rounded" />
-                  <span className="text-[13px]">Automation chạy thành công ✅</span>
+                  <span className="text-xs">Automation chạy thành công ✅</span>
                 </label>
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <input type="checkbox" checked={notifOnFail} onChange={e => setNotifOnFail(e.target.checked)} className="rounded" />
-                  <span className="text-[13px]">Automation thất bại hoặc bị skip ❌</span>
+                  <span className="text-xs">Automation thất bại hoặc bị skip ❌</span>
                 </label>
               </div>
             </div>
             <div className="border-t px-5 py-3 flex justify-end gap-2">
-              <button onClick={() => setShowNotifSettings(false)} className="h-8 px-4 text-[13px] rounded-lg border hover:bg-muted transition-colors">Hủy</button>
-              <button onClick={() => { setShowNotifSettings(false); handleSave() }} className="h-8 px-4 text-[13px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5">
+              <button onClick={() => setShowNotifSettings(false)} className="h-8 px-4 text-xs rounded-lg border hover:bg-muted transition-colors">Hủy</button>
+              <button onClick={() => { setShowNotifSettings(false); handleSave() }} className="h-8 px-4 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1.5">
                 <IconCheck className="size-3.5" /> Lưu
               </button>
             </div>
@@ -1209,7 +1209,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
       {/* Run result toast */}
       {runResult && (
         <div className={cn(
-          "fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-[13px] font-medium border max-w-sm",
+          "fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg text-xs font-medium border max-w-sm",
           runResult.status === "success" ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300"
           : runResult.status === "pending_delay" || runResult.status === "pending_approval" ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300"
           : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 text-red-800 dark:text-red-300"
@@ -1224,7 +1224,7 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
         {showHistory && (
           <div className="w-[360px] shrink-0 border-r border-border bg-background flex flex-col overflow-hidden">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <p className="text-[14px] font-semibold">Run History</p>
+              <p className="text-sm font-semibold">Run History</p>
               <button onClick={() => setShowHistory(false)} className="text-muted-foreground hover:text-foreground">
                 <IconX className="size-4" />
               </button>
@@ -1237,21 +1237,21 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
               ) : history.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
                   <IconHistory className="size-8 mb-2 opacity-30" />
-                  <p className="text-[13px]">No runs yet</p>
+                  <p className="text-xs">No runs yet</p>
                 </div>
               ) : history.map((exec: any) => (
                 <div key={exec.id} className="px-4 py-3 space-y-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                    <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full",
                       exec.status === "success" ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400"
                       : exec.status === "pending" ? "bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400"
                       : "bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400"
                     )}>
                       {exec.status}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">{new Date(exec.executed_at).toLocaleString()}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(exec.executed_at).toLocaleString()}</span>
                   </div>
-                  <p className="text-[12px] text-muted-foreground">{exec.action_taken || "—"} · {exec.entities_affected ?? 0} affected</p>
+                  <p className="text-xs text-muted-foreground">{exec.action_taken || "—"} · {exec.entities_affected ?? 0} affected</p>
                 </div>
               ))}
             </div>

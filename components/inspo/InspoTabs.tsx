@@ -17,7 +17,7 @@ export function InspoTabs({ active, onChange }: Props) {
           key={tab}
           onClick={() => onChange(tab)}
           className={cn(
-            "px-0 py-3.5 text-[15px] font-semibold capitalize transition-colors relative",
+            "px-0 py-3.5 text-sm font-semibold capitalize transition-colors relative",
             active === tab
               ? "text-slate-950"
               : "text-slate-600 hover:text-slate-950"

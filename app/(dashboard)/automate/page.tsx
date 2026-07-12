@@ -1032,7 +1032,7 @@ export default function AutomatePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium truncate">{a.name}</span>
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize", statusBadge(a.status))}>
+                        <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-medium capitalize", statusBadge(a.status))}>
                           {a.status}
                         </span>
                       </div>
@@ -1101,7 +1101,7 @@ export default function AutomatePage() {
               const Icon = featured.icon
               return (
                 <div className="relative border-2 border-violet-400 rounded-2xl p-5 bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/20 dark:to-purple-950/10">
-                  <div className="absolute top-3 left-5 flex items-center gap-1 text-[10px] font-bold text-violet-600 uppercase tracking-wide">
+                  <div className="absolute top-3 left-5 flex items-center gap-1 text-xs font-bold text-violet-600 uppercase tracking-wide">
                     <IconStar className="size-3 fill-current" />FEATURED
                   </div>
                   <div className="mt-4 flex items-start gap-4">
@@ -1111,7 +1111,7 @@ export default function AutomatePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-sm">{featured.name}</h3>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 font-medium">
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 font-medium">
                           {featured.category}
                         </span>
                       </div>
@@ -1119,7 +1119,7 @@ export default function AutomatePage() {
                       <div className="flex items-center gap-3 mt-3">
                         <AppChain chain={(featured as any).appChain ?? ["meta", "notification"]} steps={featured.steps} />
                         {(featured as any).fbLive && (
-                          <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400 font-medium">
+                          <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400 font-medium">
                             <span className="size-1.5 rounded-full bg-green-500 inline-block" />Live on Meta
                           </span>
                         )}
@@ -1147,7 +1147,7 @@ export default function AutomatePage() {
                       </div>
                       <div className="min-w-0 pr-20">
                         <h3 className="text-sm font-medium leading-tight">{t.name}</h3>
-                        <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-1 inline-block",
+                        <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-medium mt-1 inline-block",
                           t.category === "Scaling" ? "bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400" :
                           t.category === "Optimization" ? "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400" :
                           "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400")}>
@@ -1210,7 +1210,7 @@ export default function AutomatePage() {
                         {a.last_run_at && ` · Last run ${fmtDate(a.last_run_at)}`}
                       </p>
                     </div>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400 font-medium">
+                    <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400 font-medium">
                       Active
                     </span>
                   </div>
@@ -1345,7 +1345,7 @@ export default function AutomatePage() {
               </div>
             ) : (
               <div className="border rounded-xl overflow-hidden">
-                <div className="grid text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70 bg-muted/30 px-4 py-2 border-b"
+                <div className="grid text-xs font-semibold uppercase tracking-wide text-muted-foreground/70 bg-muted/30 px-4 py-2 border-b"
                   style={{ gridTemplateColumns: "1fr 80px 80px 1fr 160px" }}>
                   <span>Automation</span>
                   <span>Entities</span>
@@ -1358,7 +1358,7 @@ export default function AutomatePage() {
                     style={{ gridTemplateColumns: "1fr 80px 80px 1fr 160px" }}>
                     <div>
                       <p className="text-sm font-medium truncate">{h.automation_name}</p>
-                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium capitalize", execStatusBadge(h.status))}>
+                      <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-medium capitalize", execStatusBadge(h.status))}>
                         {h.status}
                       </span>
                     </div>

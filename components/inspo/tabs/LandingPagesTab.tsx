@@ -59,7 +59,7 @@ export function LandingPagesTab({ pages: lps }: Props) {
       <div className="bg-card border border-border/60 rounded-2xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border/50 text-muted-foreground text-[11px] uppercase tracking-wide">
+            <tr className="border-b border-border/50 text-muted-foreground text-xs uppercase tracking-wide">
               <th className="text-left px-5 py-3 font-semibold">Landing Page URL</th>
               {(["adsCount", "distribution"] as SortKey[]).map(k => (
                 <th key={k} className="px-5 py-3 text-right cursor-pointer select-none" onClick={() => toggleSort(k)}>
@@ -72,7 +72,7 @@ export function LandingPagesTab({ pages: lps }: Props) {
                   </span>
                 </th>
               ))}
-              <th className="w-20 px-5 py-3 text-right font-semibold text-[11px] uppercase tracking-wide">Actions</th>
+              <th className="w-20 px-5 py-3 text-right font-semibold text-xs uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border/30">
@@ -80,10 +80,10 @@ export function LandingPagesTab({ pages: lps }: Props) {
               <tr key={i} className="hover:bg-muted/20 transition-colors">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">
-                    <span className="size-5 rounded text-[9px] font-bold bg-muted flex items-center justify-center text-muted-foreground shrink-0">
+                    <span className="size-5 rounded text-xs font-bold bg-muted flex items-center justify-center text-muted-foreground shrink-0">
                       {i + 1}
                     </span>
-                    <span className="text-[12px] font-mono text-foreground/80 truncate max-w-[360px]">{row.url}</span>
+                    <span className="text-xs font-mono text-foreground/80 truncate max-w-[360px]">{row.url}</span>
                   </div>
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums font-semibold">{row.adsCount}</td>
@@ -92,7 +92,7 @@ export function LandingPagesTab({ pages: lps }: Props) {
                     <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary/70 rounded-full" style={{ width: `${row.distribution}%` }} />
                     </div>
-                    <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{row.distribution}%</span>
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">{row.distribution}%</span>
                   </div>
                 </td>
                 <td className="px-3 py-3">

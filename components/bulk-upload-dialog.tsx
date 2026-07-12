@@ -480,26 +480,26 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                   </td>
                   <td className="px-2 py-2">
                     <p className="text-xs truncate max-w-[150px] text-muted-foreground" title={row.file.name}>{row.file.name}</p>
-                    <p className="text-[10px] text-muted-foreground/60">{(row.file.size / 1024).toFixed(0)} KB</p>
+                    <p className="text-xs text-muted-foreground/60">{(row.file.size / 1024).toFixed(0)} KB</p>
                   </td>
                   <td className="px-2 py-2">
                     {row.campaign_name || row.adset_name ? (
                       <div className="space-y-1">
                         {row.campaign_name && (
-                          <p className="text-[10px] leading-tight bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 truncate max-w-[150px]"
+                          <p className="text-xs leading-tight bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 truncate max-w-[150px]"
                             title={row.campaign_name}>
                             <span className="font-semibold">C:</span> {row.campaign_name}
                           </p>
                         )}
                         {row.adset_name && (
-                          <p className="text-[10px] leading-tight bg-violet-50 text-violet-700 border border-violet-200 rounded px-1.5 py-0.5 truncate max-w-[150px]"
+                          <p className="text-xs leading-tight bg-violet-50 text-violet-700 border border-violet-200 rounded px-1.5 py-0.5 truncate max-w-[150px]"
                             title={row.adset_name}>
                             <span className="font-semibold">A:</span> {row.adset_name}
                           </p>
                         )}
                       </div>
                     ) : (
-                      <span className="text-[10px] text-muted-foreground/40 italic">—</span>
+                      <span className="text-xs text-muted-foreground/40 italic">—</span>
                     )}
                   </td>
                   <td className="px-2 py-2">
@@ -542,7 +542,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                             <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
                               <div className="h-full bg-primary transition-all" style={{ width: `${row.uploadProgress}%` }} />
                             </div>
-                            <span className="text-[10px] text-primary">{row.uploadProgress}%</span>
+                            <span className="text-xs text-primary">{row.uploadProgress}%</span>
                           </div>
                         )}
                       </div>
@@ -551,7 +551,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                     {row.status === "error" && (
                       <span className="text-xs text-destructive leading-tight" title={row.error}>
                         Lỗi<br/>
-                        <span className="text-[10px] opacity-70 break-all">{row.error?.slice(0, 60)}</span>
+                        <span className="text-xs opacity-70 break-all">{row.error?.slice(0, 60)}</span>
                       </span>
                     )}
                   </td>

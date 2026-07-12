@@ -452,10 +452,10 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
               <IconX className="size-5 text-[#65676b]" />
             </button>
             <div className="min-w-0">
-              <h2 className="truncate text-[15px] font-semibold text-[#1c2b33] dark:text-gray-100">
+              <h2 className="truncate text-sm font-semibold text-[#1c2b33] dark:text-gray-100">
                 Create a New Campaign
               </h2>
-              <p className="truncate text-[11px] text-[#65676b]">{activeTitle}</p>
+              <p className="truncate text-xs text-[#65676b]">{activeTitle}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -464,7 +464,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
               size="sm"
               onClick={onClose}
               disabled={isPublishing}
-              className="h-8 border-[#ccd0d5] text-[13px] font-semibold text-[#4b4f56]"
+              className="h-8 border-[#ccd0d5] text-xs font-semibold text-[#4b4f56]"
             >
               Close
             </Button>
@@ -479,7 +479,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
                 !selectedAccountId ||
                 Boolean(loadError)
               }
-              className="h-8 bg-[#31a24c] px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-[#2b9244]"
+              className="h-8 bg-[#31a24c] px-4 text-xs font-semibold text-white shadow-sm hover:bg-[#2b9244]"
             >
               {isPublishing ? (
                 <>
@@ -495,12 +495,12 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
         {(formError || mediaUploadError || loadError || createdIds?.success) && (
           <div className="shrink-0 border-b border-[#e4e6eb] bg-white px-4 py-2 dark:border-gray-800 dark:bg-card">
             {formError || mediaUploadError || loadError ? (
-              <div className="flex items-start gap-2 text-[13px] text-red-600">
+              <div className="flex items-start gap-2 text-xs text-red-600">
                 <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
                 <span>{formError || mediaUploadError || loadError}</span>
               </div>
             ) : (
-              <div className="flex items-start gap-2 text-[13px] text-green-700">
+              <div className="flex items-start gap-2 text-xs text-green-700">
                 <IconCheck className="mt-0.5 size-4 shrink-0" />
                 <span>Campaign created successfully.</span>
               </div>
@@ -607,7 +607,7 @@ function StepButton({
       </div>
       <p
         className={cn(
-          "min-w-0 flex-1 truncate text-[13px] font-medium",
+          "min-w-0 flex-1 truncate text-xs font-medium",
           active ? "text-[#1877f2]" : "text-[#1c2b33] dark:text-gray-200"
         )}
       >

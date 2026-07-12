@@ -250,7 +250,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
         {creative.fb_video_id || isPendingVideo ? (
           <>
             <IconLoader2 className={`${compact ? "size-3" : "size-5"} text-muted-foreground/40 animate-spin`} />
-            {!compact && <span className="text-[10px] text-muted-foreground/60">{isPendingVideo ? "Uploading video..." : "Generating preview..."}</span>}
+            {!compact && <span className="text-xs text-muted-foreground/60">{isPendingVideo ? "Uploading video..." : "Generating preview..."}</span>}
           </>
         ) : (
           <IconVideo className={`${compact ? "size-3.5" : "size-6"} text-muted-foreground/40`} />

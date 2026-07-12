@@ -47,7 +47,7 @@ export function BrandTabs({ active, onChange }: Props) {
           data-tab={tab.id}
           onClick={() => onChange(tab.id)}
           className={cn(
-            "relative flex-shrink-0 px-4 py-2.5 text-[13px] font-medium whitespace-nowrap transition-colors",
+            "relative flex-shrink-0 px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors",
             active === tab.id
               ? "text-foreground"
               : "text-muted-foreground hover:text-foreground"

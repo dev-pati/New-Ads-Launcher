@@ -118,7 +118,7 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
         {/* ── Header ── */}
         <div className="flex items-start justify-between px-6 pt-6 pb-4 border-b shrink-0">
           <div>
-            <h2 className="text-[17px] font-bold text-[#1c2b33] dark:text-white">Customise columns</h2>
+            <h2 className="text-base font-bold text-[#1c2b33] dark:text-white">Customise columns</h2>
             <p className="text-sm text-[#65676b] dark:text-muted-foreground mt-0.5">
               Choose which columns to show and arrange how they appear in the table.
             </p>
@@ -148,7 +148,7 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
               </div>
               <button
                 onClick={toggleCollapseAll}
-                className="flex items-center gap-1.5 h-9 px-3 text-[13px] border rounded-lg hover:bg-muted/50 transition-colors text-[#65676b] dark:text-muted-foreground whitespace-nowrap shrink-0"
+                className="flex items-center gap-1.5 h-9 px-3 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-[#65676b] dark:text-muted-foreground whitespace-nowrap shrink-0"
               >
                 <IconChevronLeft className={cn("size-3.5 transition-transform", allCollapsed && "rotate-180")} />
                 {allCollapsed ? "Expand all" : "Collapse all"}
@@ -163,7 +163,7 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
                     key={t.id}
                     onClick={() => { setActiveTab(t.id); setCollapsed({}) }}
                     className={cn(
-                      "px-3 py-1.5 text-[13px] rounded-lg transition-colors font-medium",
+                      "px-3 py-1.5 text-xs rounded-lg transition-colors font-medium",
                       activeTab === t.id
                         ? "bg-[#e7f3ff] text-[#1877f2]"
                         : "text-[#65676b] dark:text-muted-foreground hover:bg-muted/50"
@@ -190,9 +190,9 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
                       className="w-full flex items-center justify-between px-4 py-3 bg-[#f7f8fa] dark:bg-muted/30 hover:bg-[#f0f2f5] dark:hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-[13px] font-semibold text-[#1c2b33] dark:text-white">{label}</span>
+                        <span className="text-xs font-semibold text-[#1c2b33] dark:text-white">{label}</span>
                         {selectedN > 0 && (
-                          <span className="text-[12px] text-[#65676b] dark:text-muted-foreground">
+                          <span className="text-xs text-[#65676b] dark:text-muted-foreground">
                             {selectedN} selected
                           </span>
                         )}
@@ -217,10 +217,10 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
                               onChange={() => toggleCol(col.id)}
                             />
                             <div className="min-w-0">
-                              <p className="text-[13px] font-medium text-[#1c2b33] dark:text-white leading-tight">
+                              <p className="text-xs font-medium text-[#1c2b33] dark:text-white leading-tight">
                                 {col.label}
                               </p>
-                              <p className="text-[11px] text-[#65676b] dark:text-muted-foreground mt-0.5">
+                              <p className="text-xs text-[#65676b] dark:text-muted-foreground mt-0.5">
                                 {col.description}
                               </p>
                             </div>
@@ -241,10 +241,10 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
           {/* ── Right panel ── */}
           <div className="flex flex-col w-[42%] min-h-0">
             <div className="px-4 py-3 border-b shrink-0">
-              <p className="text-[13px] font-bold text-[#1c2b33] dark:text-white">
+              <p className="text-xs font-bold text-[#1c2b33] dark:text-white">
                 {localCols.length + REQUIRED_COLS.length} columns selected
               </p>
-              <p className="text-[12px] text-[#65676b] dark:text-muted-foreground mt-0.5">
+              <p className="text-xs text-[#65676b] dark:text-muted-foreground mt-0.5">
                 Drag and drop to arrange the order they appear in the table.
               </p>
             </div>
@@ -254,8 +254,8 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
               {REQUIRED_COLS.map(col => (
                 <div key={col.id} className="flex items-center gap-3 px-4 py-2.5 select-none">
                   <IconGripVertical className="size-3.5 text-muted-foreground/20 shrink-0" />
-                  <span className="flex-1 text-[13px] text-[#1c2b33] dark:text-white">{col.label}</span>
-                  <span className="text-[11px] text-muted-foreground">Required</span>
+                  <span className="flex-1 text-xs text-[#1c2b33] dark:text-white">{col.label}</span>
+                  <span className="text-xs text-muted-foreground">Required</span>
                 </div>
               ))}
 
@@ -280,7 +280,7 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
                     )}
                   >
                     <IconGripVertical className="size-3.5 text-muted-foreground/50 shrink-0" />
-                    <span className="flex-1 text-[13px] text-[#1c2b33] dark:text-white">{colDef.label}</span>
+                    <span className="flex-1 text-xs text-[#1c2b33] dark:text-white">{colDef.label}</span>
                     <button
                       onClick={() => toggleCol(colId)}
                       className="size-5 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors shrink-0"
@@ -328,7 +328,7 @@ export function CustomizeColumnsModal({ open, columnOrder, onApply, onSavePreset
             ) : (
               <button
                 onClick={() => setShowSaveInput(true)}
-                className="text-[13px] text-[#1877f2] font-semibold hover:underline"
+                className="text-xs text-[#1877f2] font-semibold hover:underline"
               >
                 Save as column preset
               </button>

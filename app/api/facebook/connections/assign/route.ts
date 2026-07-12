@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
     if (!fbAdAccountId || (slot !== "launch" && slot !== "read")) {
       return NextResponse.json(
-        { error: "Cần fbAdAccountId và slot ('launch' | 'read')" },
+        { error: "fbAdAccountId and slot ('launch' | 'read') are required" },
         { status: 400 }
       )
     }
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
       if (!connection) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
       if (connection.connection_type !== "manual_token") {
-        return NextResponse.json({ error: "Chỉ gán via (manual token) vào slot" }, { status: 400 })
+        return NextResponse.json({ error: "Only a via (manual token) can be assigned to a slot" }, { status: 400 })
       }
       const expectedRole = slot === "launch" ? "launch" : "non_launch"
       if (connection.via_role !== expectedRole) {

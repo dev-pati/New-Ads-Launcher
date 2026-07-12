@@ -77,13 +77,13 @@ export function TimelineTab({ ads }: Props) {
     <div className="space-y-4">
       {/* Timeframe filter */}
       <div className="flex items-center gap-1.5">
-        <span className="text-[12px] text-muted-foreground font-medium mr-1">Timeframe:</span>
+        <span className="text-xs text-muted-foreground font-medium mr-1">Timeframe:</span>
         {(["3m", "6m", "12m", "all"] as TimeframeFilter[]).map(tf => (
           <button
             key={tf}
             onClick={() => setTimeframe(tf)}
             className={cn(
-              "h-7 px-3 text-[12px] font-medium rounded-lg border transition-colors",
+              "h-7 px-3 text-xs font-medium rounded-lg border transition-colors",
               timeframe === tf
                 ? "bg-primary/10 text-primary border-primary/30"
                 : "bg-muted/40 border-border/60 text-foreground/70 hover:bg-muted"
@@ -101,7 +101,7 @@ export function TimelineTab({ ads }: Props) {
           {monthMarkers.map((m, i) => (
             <div key={i} className="absolute top-0 bottom-0 flex items-center" style={{ left: `calc(180px + ${m.pct}%)` }}>
               <div className="h-full w-px bg-border/30" />
-              <span className="absolute left-1.5 text-[10px] text-muted-foreground/70 whitespace-nowrap">{m.label}</span>
+              <span className="absolute left-1.5 text-xs text-muted-foreground/70 whitespace-nowrap">{m.label}</span>
             </div>
           ))}
         </div>
@@ -122,7 +122,7 @@ export function TimelineTab({ ads }: Props) {
                 {/* Label */}
                 <div className="w-[180px] shrink-0 px-4 flex items-center gap-2">
                   <img src={ad.mediaUrl} alt="" className="size-7 rounded object-cover shrink-0" />
-                  <span className="text-[11px] text-foreground/80 truncate">{ad.headline || ad.brandName}</span>
+                  <span className="text-xs text-foreground/80 truncate">{ad.headline || ad.brandName}</span>
                 </div>
 
                 {/* Bar track */}
@@ -139,14 +139,14 @@ export function TimelineTab({ ads }: Props) {
                     title={`${formatDate(new Date(adStart))} – ${ad.runningDays}d`}
                   >
                     {widthPct > 8 && (
-                      <span className="text-[9px] text-white font-medium whitespace-nowrap">{ad.runningDays}d</span>
+                      <span className="text-xs text-white font-medium whitespace-nowrap">{ad.runningDays}d</span>
                     )}
                   </div>
                 </div>
 
                 {/* Duration label */}
                 <div className="w-16 shrink-0 px-3 text-right">
-                  <span className={cn("text-[11px] font-medium tabular-nums", isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
+                  <span className={cn("text-xs font-medium tabular-nums", isActive ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground")}>
                     {ad.runningDays ?? "?"}d
                   </span>
                 </div>
@@ -156,7 +156,7 @@ export function TimelineTab({ ads }: Props) {
         </div>
 
         {/* Footer legend */}
-        <div className="px-4 py-2.5 border-t border-border/30 flex items-center gap-4 text-[10px] text-muted-foreground">
+        <div className="px-4 py-2.5 border-t border-border/30 flex items-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5"><div className="size-2.5 rounded-full bg-emerald-500" /> Active</div>
           <div className="flex items-center gap-1.5"><div className="size-2.5 rounded-full bg-muted-foreground/40" /> Ended</div>
           <span className="ml-auto">{formatDate(rangeStart)} – {formatDate(rangeEnd)}</span>

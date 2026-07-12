@@ -284,8 +284,8 @@ export function WorkflowCanvas({ steps, selectedStepId, onSelectStep, onAddStep,
               </div>
             </div>
             <div className="space-y-2">
-              <h2 className="text-[20px] font-bold text-foreground">Build your automation</h2>
-              <p className="text-[13px] text-muted-foreground leading-relaxed">
+              <h2 className="text-xl font-bold text-foreground">Build your automation</h2>
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Start by adding a trigger — the event that kicks off your automation workflow.
               </p>
             </div>
