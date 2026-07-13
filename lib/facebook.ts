@@ -446,6 +446,7 @@ export interface AdSet {
   bid_amount?: string
   optimization_goal?: string
   billing_event?: string
+  is_dynamic_creative?: boolean
   targeting?: {
     age_min?: number
     age_max?: number
@@ -470,7 +471,7 @@ export async function getAdSets(
     : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
   const fields = [
     "id", "name", "status", "effective_status", "campaign_id", "campaign{name}",
-    "daily_budget", "lifetime_budget", "budget_remaining",
+    "daily_budget", "lifetime_budget", "budget_remaining", "is_dynamic_creative",
     "optimization_goal", "billing_event", "bid_strategy", "bid_amount",
     "start_time", "end_time", "created_time",
     insightsParam,
@@ -491,6 +492,12 @@ export async function getAdSets(
 }
 
 // Ad interfaces and functions
+export interface CreativeVariations {
+  bodies: string[]
+  titles: string[]
+  descriptions: string[]
+}
+
 export interface Ad {
   id: string
   name: string
@@ -506,7 +513,21 @@ export interface Ad {
     image_url?: string
     thumbnail_url?: string
   }
+  // Normalized from creative.asset_feed_spec (MTO / Dynamic Creative). Present when the ad
+  // carries multiple text options — what Meta Ads Manager shows as expandable variations.
+  creative_variations?: CreativeVariations
   created_time: string
+}
+
+// ponytail: inline normalization — expand later if more asset_feed_spec fields surface
+function normalizeVariations(raw: any): CreativeVariations | undefined {
+  if (!raw) return undefined
+  const bodies = (raw.bodies || []).map((b: any) => b?.text).filter(Boolean)
+  const titles = (raw.titles || []).map((t: any) => t?.text).filter(Boolean)
+  const descriptions = (raw.descriptions || []).map((d: any) => d?.text).filter(Boolean)
+  const multi = bodies.length > 1 || titles.length > 1 || descriptions.length > 1
+  if (!multi) return undefined
+  return { bodies, titles, descriptions }
 }
 
 export async function getAds(
@@ -521,7 +542,7 @@ export async function getAds(
     : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
   const fields = [
     "id", "name", "status", "effective_status", "adset_id", "campaign_id",
-    "creative{id,name,title,body,image_url,thumbnail_url}",
+    "creative{id,name,title,body,image_url,thumbnail_url,object_story_spec{link_data{message,name,description},video_data{message,title,image_url}},asset_feed_spec{bodies{text},titles{text},descriptions{text}}}",
     "created_time",
     insightsParam,
   ].join(",")
@@ -531,7 +552,24 @@ export async function getAds(
     url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
   }
 
-  return fetchAllMetaPages<Ad>(url, "Failed to get ads")
+  const ads = await fetchAllMetaPages<Ad & { creative?: any }>(url, "Failed to get ads")
+  return ads.map((ad) => {
+    const creative = ad.creative
+    const creative_variations = normalizeVariations(creative?.asset_feed_spec)
+    if (!creative_variations) return ad
+
+    const fallbackTitle = creative?.object_story_spec?.link_data?.name || creative?.object_story_spec?.video_data?.title || creative?.title
+    const fallbackBody = creative?.object_story_spec?.link_data?.message || creative?.object_story_spec?.video_data?.message || creative?.body
+    return {
+      ...ad,
+      creative: {
+        ...creative,
+        title: creative_variations.titles[0] || fallbackTitle,
+        body: creative_variations.bodies[0] || fallbackBody,
+      },
+      creative_variations,
+    }
+  })
 }
 
 // Business Manager interfaces and functions
@@ -859,6 +897,7 @@ export async function createAdSet(
     destination_type?: string
     promoted_object?: Record<string, any>
     attribution_spec?: any[]
+    is_dynamic_creative?: boolean
   },
   opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
@@ -871,6 +910,7 @@ export async function createAdSet(
     status: params.status || "PAUSED",
     access_token: accessToken,
   }
+  if (params.is_dynamic_creative) body.is_dynamic_creative = "true"
   if (params.bid_amount) body.bid_amount = params.bid_amount
   if (params.bid_strategy) body.bid_strategy = params.bid_strategy
   if (params.daily_budget) body.daily_budget = params.daily_budget
@@ -897,7 +937,7 @@ export async function createAdSet(
 export async function copyAdSet(
   accessToken: string,
   sourceAdsetId: string,
-  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string; status?: string },
+  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string; status?: string; is_dynamic_creative?: boolean },
   opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
   const body = new URLSearchParams({
@@ -921,6 +961,7 @@ export async function copyAdSet(
   const patch = new URLSearchParams({ name: params.name, access_token: accessToken })
   if (params.daily_budget) patch.set("daily_budget", String(Math.round(params.daily_budget * 100)))
   if (params.start_time) patch.set("start_time", params.start_time)
+  if (params.is_dynamic_creative) patch.set("is_dynamic_creative", "true")
   await secureMetaFetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch }, { skipProof: opts?.isManual })
 
   return { id: newId }
@@ -1308,7 +1349,28 @@ export async function createAd(
   }
 
   const creativeJson: any = { object_story_spec: creativeSpec }
-  if (params.degrees_of_freedom_spec) {
+  // Only attach degrees_of_freedom_spec (Advantage+ creative enhancements) if not using text_variations.
+  // Combining both makes Meta treat it as a Dynamic Creative Ad, which requires a dynamic creative ad set (max 1 active ad).
+  const usesTextVariations = params.text_variations && (params.text_variations.bodies.length > 1 || params.text_variations.titles.length > 1 || params.text_variations.descriptions.length > 1)
+  if (usesTextVariations) {
+    // Explicitly OPT_OUT of all Advantage+ creative enhancements when using MTO.
+    // standard_enhancements is deprecated; Meta now validates creative_features_spec keys against a fixed enum
+    // (confirmed via API error #100): IG_VIDEO_NATIVE_SUBTITLE, IMAGE_ANIMATION, PRODUCT_BROWSING,
+    // PRODUCT_METADATA_AUTOMATION, PROFILE_CARD, STANDARD_ENHANCEMENTS_CATALOG, TEXT_OVERLAY_TRANSLATION.
+    // STANDARD_ENHANCEMENTS_CATALOG is the umbrella replacement for the old standard_enhancements field.
+    const validFeatureKeys = [
+      "IG_VIDEO_NATIVE_SUBTITLE", "IMAGE_ANIMATION", "PRODUCT_BROWSING",
+      "PRODUCT_METADATA_AUTOMATION", "PROFILE_CARD", "STANDARD_ENHANCEMENTS_CATALOG",
+      "TEXT_OVERLAY_TRANSLATION",
+    ]
+    const features: Record<string, any> = {}
+    validFeatureKeys.forEach(key => {
+      features[key] = { enroll_status: "OPT_OUT" }
+    })
+    creativeJson.degrees_of_freedom_spec = {
+      creative_features_spec: features
+    }
+  } else if (params.degrees_of_freedom_spec) {
     creativeJson.degrees_of_freedom_spec = params.degrees_of_freedom_spec
   }
   // Multi Placement Ads — asset_feed_spec with placement-aware customization rules
@@ -1360,23 +1422,25 @@ export async function createAd(
     delete creativeSpec.video_data
   }
 
-  // Text Variations — Dynamic Creative A/B testing via asset_feed_spec.
-  // Triggered when caller provides >1 body or >1 title. Meta automatically rotates
-  // and optimises delivery across all provided copy combinations.
-  if (params.text_variations && (params.text_variations.bodies.length > 1 || params.text_variations.titles.length > 1)) {
+  // Text Variations (Multiple Text Options - MTO) via asset_feed_spec.
+  // Meta natively supports MTO on STANDARD ad sets without requiring is_dynamic_creative=true.
+  // To avoid triggering Dynamic Creative errors, we must provide EXACTLY ONE image or ONE video
+  // and strictly specify "SINGLE_IMAGE" or "SINGLE_VIDEO" as ad_formats (do not use "AUTOMATIC_FORMAT").
+  if (params.text_variations && (params.text_variations.bodies.length > 1 || params.text_variations.titles.length > 1 || params.text_variations.descriptions.length > 1)) {
     const tv = params.text_variations
     const spec: any = {
       bodies: tv.bodies.map(t => ({ text: t })),
       titles: tv.titles.map(t => ({ text: t })),
       call_to_action_types: [params.cta],
       link_urls: [{ website_url: params.link_url }],
-      ad_formats: params.video_id ? ["AUTOMATIC_FORMAT"] : ["SINGLE_IMAGE"],
+      ad_formats: params.video_id ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"],
     }
     if (tv.descriptions.length > 0) spec.descriptions = tv.descriptions.map(t => ({ text: t }))
     if (params.image_hash) spec.images = [{ hash: params.image_hash }]
     if (params.video_id) {
       spec.videos = [{ video_id: params.video_id, ...(params.thumbnail_url ? { thumbnail_url: params.thumbnail_url } : {}) }]
     }
+
     creativeJson.asset_feed_spec = spec
     delete creativeSpec.link_data
     delete creativeSpec.video_data

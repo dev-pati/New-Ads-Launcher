@@ -26,6 +26,18 @@ export async function POST(request: NextRequest) {
     if (!rows?.length) return NextResponse.json({ error: "No rows provided" }, { status: 400 })
     if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
 
+    const batchHasTextVariations = rows.some((row: any) =>
+      (row.headlineVariations || []).filter((s: string) => s?.trim()).length > 0 ||
+      (row.primaryTextVariations || []).filter((s: string) => s?.trim()).length > 0 ||
+      (row.descriptionVariations || []).filter((s: string) => s?.trim()).length > 0
+    )
+    if (batchHasTextVariations) {
+      return NextResponse.json({
+        error: "Multiple text options require a new Dynamic Creative ad set. Use the campaign launch flow (New/Per-creative ad set mode) instead of batch launching into existing ad sets.",
+        code: "VARIATIONS_NEED_NEW_ADSET",
+      }, { status: 400 })
+    }
+
     // Via MECE: launch = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
     let connection
     try {
@@ -182,10 +194,10 @@ export async function POST(request: NextRequest) {
             const rowTitle = (headline || creative.headline || "").trim()
             const rowBody  = (primaryText || creative.primary_text || "").trim()
             const rowDesc  = (description || creative.description || "").trim()
-            const allBodies = [rowBody,  ...(primaryTextVariations || [])].map((s: string) => s.trim()).filter(Boolean)
-            const allTitles = [rowTitle, ...(headlineVariations    || [])].map((s: string) => s.trim()).filter(Boolean)
-            const allDescs  = [rowDesc,  ...(descriptionVariations || [])].map((s: string) => s.trim()).filter(Boolean)
-            const hasVariations = allBodies.length > 1 || allTitles.length > 1
+            const allBodies = Array.from(new Set([rowBody,  ...(primaryTextVariations || [])].map((s: string) => s.trim()).filter(Boolean)))
+            const allTitles = Array.from(new Set([rowTitle, ...(headlineVariations    || [])].map((s: string) => s.trim()).filter(Boolean)))
+            const allDescs  = Array.from(new Set([rowDesc,  ...(descriptionVariations || [])].map((s: string) => s.trim()).filter(Boolean)))
+            const hasVariations = allBodies.length > 1 || allTitles.length > 1 || allDescs.length > 1
 
             const ad = await createAd(adAccountId, token, {
               name: adName,
