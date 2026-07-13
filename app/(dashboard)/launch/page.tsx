@@ -13959,7 +13959,8 @@ export default function LaunchPage() {
     if (pending.length === 0) return
 
     const tick = async () => {
-      for (const c of pending) {
+      if (document.hidden) return
+      for (const c of pending.slice(0, 2)) {
         try {
           const res = await fetch(`/api/creatives/${c.id}`)
           if (!res.ok) continue
