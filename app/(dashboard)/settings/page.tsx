@@ -589,7 +589,7 @@ function SettingsContent() {
                               <p className="truncate text-sm font-medium">
                                 {account.full_name || account.email}
                               </p>
-                              <Badge variant="secondary" className="h-5 px-1.5 text-[11px]">
+                              <Badge variant="secondary" className="h-5 px-1.5 text-xs">
                                 Lark
                               </Badge>
                             </div>

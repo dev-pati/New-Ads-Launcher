@@ -219,7 +219,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
               >
                 <IconBell className="size-3.5" />
                 {unreadCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 size-3.5 rounded-full bg-red-500 text-[8px] font-bold text-white flex items-center justify-center leading-none">
+                  <span className="absolute -top-0.5 -right-0.5 size-3.5 rounded-full bg-red-500 text-xs font-bold text-white flex items-center justify-center leading-none">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
@@ -287,7 +287,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
                   {/* Launch stats widget */}
                   {section.id === "launch" && (
                     <div className="mx-2 mb-2 rounded-lg bg-sidebar-accent px-3 py-2">
-                      <p className="text-[10px] font-medium text-sidebar-foreground/40 uppercase tracking-wide mb-1.5">
+                      <p className="text-xs font-medium text-sidebar-foreground/40 uppercase tracking-wide mb-1.5">
                         Your team&apos;s last 30d
                       </p>
                       <div className="flex items-center gap-4">
@@ -295,19 +295,19 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
                           <div className="text-xs font-bold text-sidebar-foreground">
                             {launchStats.ads === null ? "—" : launchStats.ads.toLocaleString()}
                           </div>
-                          <div className="text-[9px] text-sidebar-foreground/45">Ads</div>
+                          <div className="text-xs text-sidebar-foreground/45">Ads</div>
                         </div>
                         <div>
                           <div className="text-xs font-bold text-sidebar-foreground">
                             {launchStats.batches === null ? "—" : launchStats.batches}
                           </div>
-                          <div className="text-[9px] text-sidebar-foreground/45">Batches</div>
+                          <div className="text-xs text-sidebar-foreground/45">Batches</div>
                         </div>
                         <div>
                           <div className="text-xs font-bold text-sidebar-foreground">
                             {launchStats.saved === null ? "—" : launchStats.saved}
                           </div>
-                          <div className="text-[9px] text-sidebar-foreground/45">Templates</div>
+                          <div className="text-xs text-sidebar-foreground/45">Templates</div>
                         </div>
                       </div>
                     </div>
@@ -357,7 +357,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
               {!collapsed && (
                 <div className="flex-1 min-w-0 text-left">
                   {userName && <p className="text-xs font-medium text-sidebar-foreground truncate">{userName}</p>}
-                  {userEmail && <p className="text-[10px] text-sidebar-foreground/45 truncate">{userEmail}</p>}
+                  {userEmail && <p className="text-xs text-sidebar-foreground/45 truncate">{userEmail}</p>}
                 </div>
               )}
             </button>

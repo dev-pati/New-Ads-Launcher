@@ -1031,7 +1031,7 @@ function PreviewImage({ src, alt, mediaType }: { src: string; alt: string; media
     <div className="relative aspect-[4/3] overflow-hidden rounded-lg bg-muted">
       <img src={src} alt={alt} className="size-full object-cover" loading="lazy" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent" />
-      <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[10px] font-medium text-white">
+      <div className="absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-xs font-medium text-white">
         {mediaType === "video" ? <IconPlayerPlay className="size-3" /> : <IconPhoto className="size-3" />}
         {mediaType === "video" ? "Video" : "Image"}
       </div>
@@ -1047,7 +1047,7 @@ function FacebookPostPreviewCard({ preview }: { preview: FacebookPostPreview }) 
           <InboxAvatar name={preview.pageName} src={preview.pagePicture} size="sm" online />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[#050505] dark:text-foreground">{preview.pageName}</p>
-            <p className="text-[11px] text-[#65676B]">
+            <p className="text-xs text-[#65676B]">
               {preview.createdAt ? postDate(preview.createdAt) : "Facebook post"} · Sponsored
             </p>
           </div>
@@ -1104,7 +1104,7 @@ function FacebookPostPreviewCard({ preview }: { preview: FacebookPostPreview }) 
       </div>
 
       {preview.commentId ? (
-        <div className="border-t border-[#E4E6EB] px-3 py-2 text-[11px] text-[#65676B]">
+        <div className="border-t border-[#E4E6EB] px-3 py-2 text-xs text-[#65676B]">
           Comment ID: {preview.commentId}
         </div>
       ) : null}
@@ -1120,7 +1120,7 @@ function PageTag({ page }: { page: PageItem }) {
       </div>
       <div className="min-w-0">
         <div className="text-sm font-medium truncate">{page.name}</div>
-        <div className="text-[11px] text-muted-foreground truncate">{page.followers} followers</div>
+        <div className="text-xs text-muted-foreground truncate">{page.followers} followers</div>
       </div>
     </div>
   )
@@ -3792,7 +3792,7 @@ export default function PageManagerPage() {
                       </div>
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium leading-tight">{selectedPage?.name || "No Page selected"}</p>
-                        <p className="truncate text-[11px] leading-tight text-muted-foreground">
+                        <p className="truncate text-xs leading-tight text-muted-foreground">
                           {selectedPage?.category || "Add a Page to this workspace"}
                         </p>
                       </div>
@@ -4020,7 +4020,7 @@ export default function PageManagerPage() {
                                     <span className={cn("font-medium", status.text)}>{status.label}</span>
                                     <span className="text-muted-foreground">/</span>
                                     <span className="truncate text-muted-foreground">{page.category}</span>
-                                    <Badge variant={active ? "default" : "outline"} className="h-5 rounded-full px-2 text-[10px]">
+                                    <Badge variant={active ? "default" : "outline"} className="h-5 rounded-full px-2 text-xs">
                                       {active ? "Active" : "Inactive"}
                                     </Badge>
                                   </div>
@@ -4317,7 +4317,7 @@ export default function PageManagerPage() {
                               <div className="min-w-0 max-w-full overflow-hidden">
                                 <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                                   <p className={cn("min-w-0 max-w-full truncate text-sm text-[#050505] dark:text-foreground", thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold" : "font-medium")}>{thread.name}</p>
-                                  <span className="max-w-[84px] truncate text-[11px] text-[#65676B]">{thread.latestAt}</span>
+                                  <span className="max-w-[84px] truncate text-xs text-[#65676B]">{thread.latestAt}</span>
                                 </div>
                                 <div className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                                   <p className={cn(
@@ -4326,13 +4326,13 @@ export default function PageManagerPage() {
                                   )}>
                                     {thread.latestMessage}
                                   </p>
-                                  {thread.unread > 0 ? <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0084FF] text-[11px] font-bold text-white">{thread.unread}</span> : null}
+                                  {thread.unread > 0 ? <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0084FF] text-xs font-bold text-white">{thread.unread}</span> : null}
                                 </div>
                                 <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-1 overflow-hidden">
                                   <Badge
                                     variant="outline"
                                     className={cn(
-                                      "h-5 max-w-[90px] truncate rounded-full px-2 text-[10px]",
+                                      "h-5 max-w-[90px] truncate rounded-full px-2 text-xs",
                                       thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment"
                                         ? "border-violet-200 bg-violet-50 text-violet-700"
                                         : "border-blue-200 bg-blue-50 text-blue-700"
@@ -4343,7 +4343,7 @@ export default function PageManagerPage() {
                                   <Badge
                                     variant="outline"
                                     className={cn(
-                                      "h-5 max-w-[80px] truncate rounded-full px-2 text-[10px]",
+                                      "h-5 max-w-[80px] truncate rounded-full px-2 text-xs",
                                       thread.responseStatus === "replied" && "border-emerald-200 bg-emerald-50 text-emerald-700",
                                       thread.responseStatus === "pending" && "border-amber-200 bg-amber-50 text-amber-700",
                                       thread.responseStatus === "hidden" && "border-slate-200 bg-slate-100 text-slate-700",
@@ -4353,7 +4353,7 @@ export default function PageManagerPage() {
                                     {thread.responseStatus === "replied" ? "Replied" : thread.responseStatus === "pending" ? "Pending" : thread.responseStatus === "hidden" ? "Hidden" : "Open"}
                                   </Badge>
                                 </div>
-                                <div className="mt-1 flex max-w-full items-center gap-1 overflow-hidden text-[11px] text-[#65676B]">
+                                <div className="mt-1 flex max-w-full items-center gap-1 overflow-hidden text-xs text-[#65676B]">
                                   {thread.assignedTo && thread.assignedTo !== "Unassigned" ? <span className="truncate">{thread.assignedTo}</span> : <span>Unassigned</span>}
                                 </div>
                               </div>
@@ -4387,7 +4387,7 @@ export default function PageManagerPage() {
                             <Badge
                               variant="outline"
                               className={cn(
-                                "rounded-full text-[10px]",
+                                "rounded-full text-xs",
                                 selectedThread.sourceType === "facebook_comment" || selectedThread.sourceType === "instagram_comment"
                                   ? "bg-violet-50 text-violet-700"
                                   : "bg-blue-50 text-blue-700"
@@ -4395,11 +4395,11 @@ export default function PageManagerPage() {
                             >
                               {selectedThread.sourceLabel}
                             </Badge>
-                            <Badge variant="outline" className="rounded-full text-[10px]">
+                            <Badge variant="outline" className="rounded-full text-xs">
                               {selectedThreadMeta.responseStatus === "replied" ? "Replied" : selectedThreadMeta.responseStatus === "pending" ? "Pending" : selectedThreadMeta.status}
                             </Badge>
                             {pageManagerSettings.conversations.showAssignedStaff ? (
-                              <Badge variant="outline" className="rounded-full text-[10px]">
+                              <Badge variant="outline" className="rounded-full text-xs">
                                 Assigned: {selectedThreadMeta.assignedTo}
                               </Badge>
                             ) : null}
@@ -4528,7 +4528,7 @@ export default function PageManagerPage() {
                               >
                                 <MessengerAttachmentContent message={message} />
                                 <p className={cn(
-                                  "mt-1 text-[11px]",
+                                  "mt-1 text-xs",
                                   message.direction === "outbound" ? "text-white/75" : "text-[#65676B]"
                                 )}>
                                   {message.fb_created_time ? postDate(message.fb_created_time) : postDate(message.created_at)}
@@ -4538,21 +4538,21 @@ export default function PageManagerPage() {
                           ) : (
                             <div className="max-w-[78%] rounded-[18px] bg-[#F0F2F5] px-3.5 py-2 text-[#050505] dark:bg-muted dark:text-foreground">
                               <p className="text-sm leading-5">{selectedThread.lastMessage}</p>
-                              <p className="mt-1 text-[11px] text-[#65676B]">{selectedThread.updatedAt}</p>
+                              <p className="mt-1 text-xs text-[#65676B]">{selectedThread.updatedAt}</p>
                             </div>
                           )}
 
                           {selectedThread.sourceType === "facebook_comment" && selectedThread.comment?.draft_reply ? (
                             <div className="ml-auto max-w-[78%] rounded-[18px] bg-[#0084FF] px-3.5 py-2 text-white shadow-sm">
                               <p className="whitespace-pre-wrap text-sm leading-5">{selectedThread.comment.draft_reply}</p>
-                              <p className="mt-1 text-[11px] text-white/75">Reply</p>
+                              <p className="mt-1 text-xs text-white/75">Reply</p>
                             </div>
                           ) : null}
 
                           {shouldShowSelectedThreadAutoReply && selectedThreadAutoReply ? (
                             <div className="ml-auto max-w-[78%] rounded-[18px] bg-[#0084FF] px-3.5 py-2 text-white shadow-sm">
                               <p className="whitespace-pre-wrap text-sm leading-5">{selectedThreadAutoReply.text}</p>
-                              <p className="mt-1 text-[11px] text-white/75">
+                              <p className="mt-1 text-xs text-white/75">
                                 {selectedThreadAutoReply.action === "auto_sent_preview" ? "AI auto reply preview" : "Reply"} - {selectedThreadAutoReply.at}
                               </p>
                             </div>
@@ -4561,7 +4561,7 @@ export default function PageManagerPage() {
                           {selectedThread.sourceType === "messenger" && !selectedThread.conversation ? (
                             <div className="max-w-[78%] rounded-[18px] bg-[#F0F2F5] px-3.5 py-2 text-[#050505] dark:bg-muted dark:text-foreground">
                               <p className="text-sm leading-5">Let me know if you want a quick bundle recommendation too.</p>
-                              <p className="mt-1 text-[11px] text-[#65676B]">Suggested follow-up</p>
+                              <p className="mt-1 text-xs text-[#65676B]">Suggested follow-up</p>
                             </div>
                           ) : null}
                         </div>
@@ -4993,19 +4993,19 @@ export default function PageManagerPage() {
                         </div>
                         <div className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-4">
                           <div className="rounded-xl border bg-muted/20 p-2">
-                            <p className="text-[10px] uppercase text-muted-foreground/70">Ads inspected</p>
+                            <p className="text-xs uppercase text-muted-foreground/70">Ads inspected</p>
                             <p className="mt-1 font-medium text-foreground">{metaDarkPostsMeta?.inspectedAds ?? 0}</p>
                           </div>
                           <div className="rounded-xl border bg-muted/20 p-2">
-                            <p className="text-[10px] uppercase text-muted-foreground/70">Story IDs</p>
+                            <p className="text-xs uppercase text-muted-foreground/70">Story IDs</p>
                             <p className="mt-1 font-medium text-foreground">{metaDarkPostsMeta?.adsWithStoryId ?? 0}</p>
                           </div>
                           <div className="rounded-xl border bg-muted/20 p-2">
-                            <p className="text-[10px] uppercase text-muted-foreground/70">From Meta</p>
+                            <p className="text-xs uppercase text-muted-foreground/70">From Meta</p>
                             <p className="mt-1 font-medium text-foreground">{metaDarkPostCount}</p>
                           </div>
                           <div className="rounded-xl border bg-muted/20 p-2">
-                            <p className="text-[10px] uppercase text-muted-foreground/70">Launch history</p>
+                            <p className="text-xs uppercase text-muted-foreground/70">Launch history</p>
                             <p className="mt-1 font-medium text-foreground">{launchHistoryDarkPostCount}</p>
                           </div>
                         </div>
@@ -5082,19 +5082,19 @@ export default function PageManagerPage() {
                                     ) : null}
                                     <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
                                       <div className="rounded-lg border bg-muted/20 p-2">
-                                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Linked ad</p>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Linked ad</p>
                                         <p className="mt-1 truncate text-foreground">{item.adId || "—"}</p>
                                       </div>
                                       <div className="rounded-lg border bg-muted/20 p-2">
-                                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Launched by</p>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Launched by</p>
                                         <p className="mt-1 truncate text-foreground">{item.userName || "Unknown"}</p>
                                       </div>
                                       <div className="rounded-lg border bg-muted/20 p-2">
-                                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Spend</p>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Spend</p>
                                         <p className="mt-1 truncate text-foreground">{money(spend)}</p>
                                       </div>
                                       <div className="rounded-lg border bg-muted/20 p-2">
-                                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Impressions</p>
+                                        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Impressions</p>
                                         <p className="mt-1 truncate text-foreground">{fullNumber(impressions)}</p>
                                       </div>
                                     </div>
@@ -5197,19 +5197,19 @@ export default function PageManagerPage() {
 
                           <div className="grid grid-cols-2 gap-2">
                             <div className="rounded-xl border bg-background p-3">
-                              <p className="text-[11px] text-muted-foreground">Engagement</p>
+                              <p className="text-xs text-muted-foreground">Engagement</p>
                               <p className="mt-1 text-lg font-semibold">{compactNumber(selectedPost.scope === "dark" ? selectedDarkInsight?.actions ?? selectedPost.engagement : selectedPost.engagement)}</p>
                             </div>
                             <div className="rounded-xl border bg-background p-3">
-                              <p className="text-[11px] text-muted-foreground">Reach</p>
+                              <p className="text-xs text-muted-foreground">Reach</p>
                               <p className="mt-1 text-lg font-semibold">{compactNumber(selectedPost.scope === "dark" ? selectedDarkInsight?.reach ?? selectedPost.reach : selectedPost.reach)}</p>
                             </div>
                             <div className="rounded-xl border bg-background p-3">
-                              <p className="text-[11px] text-muted-foreground">Impressions</p>
+                              <p className="text-xs text-muted-foreground">Impressions</p>
                               <p className="mt-1 text-lg font-semibold">{compactNumber(selectedPost.scope === "dark" ? selectedDarkInsight?.impressions ?? selectedPost.impressions : selectedPost.impressions)}</p>
                             </div>
                             <div className="rounded-xl border bg-background p-3">
-                              <p className="text-[11px] text-muted-foreground">{selectedPost.scope === "dark" ? "Spend" : "Comments"}</p>
+                              <p className="text-xs text-muted-foreground">{selectedPost.scope === "dark" ? "Spend" : "Comments"}</p>
                               <p className="mt-1 text-lg font-semibold">{selectedPost.scope === "dark" ? money(selectedDarkInsight?.spend) : compactNumber(selectedPost.comments)}</p>
                             </div>
                           </div>
@@ -5316,7 +5316,7 @@ export default function PageManagerPage() {
                               >
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="truncate text-xs font-medium">{comment.from_name || "Unknown"}</p>
-                                  <Badge variant="outline" className={cn("h-5 text-[10px]", comment.is_hidden ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200")}>
+                                  <Badge variant="outline" className={cn("h-5 text-xs", comment.is_hidden ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200")}>
                                     {comment.is_hidden ? "hidden" : "visible"}
                                   </Badge>
                                 </div>
@@ -5522,7 +5522,7 @@ export default function PageManagerPage() {
                         )}
                       >
                         <span className="text-sm font-medium">{item.label}</span>
-                        <span className="text-[11px] text-muted-foreground">{item.count}</span>
+                        <span className="text-xs text-muted-foreground">{item.count}</span>
                       </button>
                     ))}
 
@@ -5607,7 +5607,7 @@ export default function PageManagerPage() {
                                         <Badge
                                           variant="outline"
                                           className={cn(
-                                            "h-5 border text-[10px]",
+                                            "h-5 border text-xs",
                                             comment.sentiment === "positive"
                                               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                                               : comment.sentiment === "negative"
@@ -5618,12 +5618,12 @@ export default function PageManagerPage() {
                                           {comment.sentiment}
                                         </Badge>
                                         {comment.is_replied ? (
-                                          <Badge variant="outline" className="h-5 border-blue-200 bg-blue-50 text-[10px] text-blue-700">
+                                          <Badge variant="outline" className="h-5 border-blue-200 bg-blue-50 text-xs text-blue-700">
                                             Replied
                                           </Badge>
                                         ) : null}
                                         {comment.is_hidden ? (
-                                          <Badge variant="outline" className="h-5 border-slate-200 bg-slate-50 text-[10px] text-slate-600">
+                                          <Badge variant="outline" className="h-5 border-slate-200 bg-slate-50 text-xs text-slate-600">
                                             Hidden
                                           </Badge>
                                         ) : null}
@@ -5632,7 +5632,7 @@ export default function PageManagerPage() {
                                         {comment.message}
                                       </p>
                                     </div>
-                                    <div className="text-right text-[11px] text-muted-foreground">
+                                    <div className="text-right text-xs text-muted-foreground">
                                       <div>{timeLabel}</div>
                                       {comment.like_count ? (
                                         <div className="mt-1 flex items-center justify-end gap-1">
@@ -5642,7 +5642,7 @@ export default function PageManagerPage() {
                                     </div>
                                   </div>
 
-                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                     {comment.fb_post_message ? (
                                       <span className="truncate rounded-full border bg-muted/30 px-2 py-1">
                                         On: {comment.fb_post_message}
@@ -5733,7 +5733,7 @@ export default function PageManagerPage() {
                             <div className="flex items-center justify-between">
                               <p className="text-sm font-medium">Reply</p>
                               {selectedComment.is_replied ? (
-                                <Badge variant="outline" className="h-6 border-blue-200 bg-blue-50 text-[10px] text-blue-700">
+                                <Badge variant="outline" className="h-6 border-blue-200 bg-blue-50 text-xs text-blue-700">
                                   Already replied
                                 </Badge>
                               ) : null}
@@ -5778,19 +5778,19 @@ export default function PageManagerPage() {
                         <>
                           <div className="grid grid-cols-2 gap-3">
                             <div className="rounded-xl border bg-muted/20 p-3">
-                              <p className="text-[11px] text-muted-foreground">Total</p>
+                              <p className="text-xs text-muted-foreground">Total</p>
                               <p className="mt-1 text-lg font-semibold">{commentsAnalytics?.total ?? commentCounts.all}</p>
                             </div>
                             <div className="rounded-xl border bg-muted/20 p-3">
-                              <p className="text-[11px] text-muted-foreground">Unreplied</p>
+                              <p className="text-xs text-muted-foreground">Unreplied</p>
                               <p className="mt-1 text-lg font-semibold">{commentCounts.unreplied}</p>
                             </div>
                             <div className="rounded-xl border bg-muted/20 p-3">
-                              <p className="text-[11px] text-muted-foreground">Avg sentiment</p>
+                              <p className="text-xs text-muted-foreground">Avg sentiment</p>
                               <p className="mt-1 text-lg font-semibold">{commentsAnalytics ? commentsAnalytics.avgSentiment.toFixed(2) : "�"}</p>
                             </div>
                             <div className="rounded-xl border bg-muted/20 p-3">
-                              <p className="text-[11px] text-muted-foreground">Reactions</p>
+                              <p className="text-xs text-muted-foreground">Reactions</p>
                               <p className="mt-1 text-lg font-semibold">{commentsAnalytics?.totalReactions ?? 0}</p>
                             </div>
                           </div>
@@ -5800,7 +5800,7 @@ export default function PageManagerPage() {
                               <p className="text-sm font-medium">Top themes</p>
                               <div className="flex flex-wrap gap-2">
                                 {commentThemes.map(theme => (
-                                  <Badge key={theme.theme} variant="outline" className="h-6 bg-muted/40 text-[11px]">
+                                  <Badge key={theme.theme} variant="outline" className="h-6 bg-muted/40 text-xs">
                                     {theme.theme} � {theme.count}
                                   </Badge>
                                 ))}
@@ -5836,7 +5836,7 @@ export default function PageManagerPage() {
                               </Badge>
                             </div>
                             <p className="mt-1 text-xs text-muted-foreground">{rule.description || "No description"}</p>
-                            <div className="mt-2 grid gap-2 text-[11px] text-muted-foreground">
+                            <div className="mt-2 grid gap-2 text-xs text-muted-foreground">
                               <div className="rounded-lg border bg-background px-2 py-1.5">
                                 Trigger: {rule.trigger_type}{rule.trigger_value ? ` � ${rule.trigger_value}` : ""}
                               </div>

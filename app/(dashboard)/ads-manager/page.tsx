@@ -236,12 +236,12 @@ function DeliveryBadge({ effective_status, budget_remaining }: { effective_statu
   const remainingDollars = budget_remaining !== undefined ? (parseInt(budget_remaining) / 100).toFixed(2) : null
   return (
     <span className="flex flex-col gap-0.5">
-      <span className="flex items-center gap-1.5 text-[13px] text-[#1c2b33] dark:text-gray-300">
+      <span className="flex items-center gap-1.5 text-xs text-[#1c2b33] dark:text-gray-300">
         <span className={cn("size-[7px] rounded-full shrink-0", isOutOfBudget ? "bg-[#f0a500]" : isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]")} />
         {isActive ? "Active" : effective_status === "PAUSED" ? "Off" : effective_status.charAt(0) + effective_status.slice(1).toLowerCase()}
       </span>
       {isOutOfBudget && remainingDollars !== null && (
-        <span className="text-[11px] text-[#f0a500] pl-3.5">${remainingDollars} remaining</span>
+        <span className="text-xs text-[#f0a500] pl-3.5">${remainingDollars} remaining</span>
       )}
     </span>
   )
@@ -256,7 +256,7 @@ function SortTh({ label, field, sortField, sortDir, onSort, className }: {
   const active = sortField === field
   return (
     <th
-      className={cn("px-3 py-2 text-left text-[13px] font-semibold text-[#65676b] dark:text-muted-foreground cursor-pointer select-none whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5", className)}
+      className={cn("px-3 py-2 text-left text-xs font-semibold text-[#65676b] dark:text-muted-foreground cursor-pointer select-none whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5", className)}
       onClick={() => onSort(field)}
     >
       <span className="flex items-center gap-1">
@@ -358,6 +358,13 @@ export default function AdsManagerPage() {
     const d = { primaryText: defaultPrimaryText, headline: defaultHeadline, cta: defaultCta, link: defaultLink }
     try { localStorage.setItem(DEFAULTS_KEY, JSON.stringify(d)) } catch {}
     setDefaultsOpen(false)
+  }
+
+  const resetAllDefaults = () => {
+    setDefaultPrimaryText("")
+    setDefaultHeadline("")
+    setDefaultCta("SHOP_NOW")
+    setDefaultLink("")
   }
 
   const fetchHistory = async () => {
@@ -811,13 +818,13 @@ export default function AdsManagerPage() {
 
     switch (colId) {
       case "spend":
-        return <span className="text-[13px] tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</span>
 
       case "results": {
         const { count, type } = getResults(row, objective)
         return <>
-          <span className="text-[13px] tabular-nums">{ins ? count : "—"}</span>
-          {ins && <p className="text-[11px] text-[#65676b]">{type}</p>}
+          <span className="text-xs tabular-nums">{ins ? count : "—"}</span>
+          {ins && <p className="text-xs text-[#65676b]">{type}</p>}
         </>
       }
 
@@ -825,16 +832,16 @@ export default function AdsManagerPage() {
         const { type } = getResults(row, objective)
         const cpr = getCostPerResult(row, objective)
         return <>
-          <span className="text-[13px] tabular-nums">{cpr || "—"}</span>
-          {cpr && <p className="text-[11px] text-[#65676b]">Per {type}</p>}
+          <span className="text-xs tabular-nums">{cpr || "—"}</span>
+          {cpr && <p className="text-xs text-[#65676b]">Per {type}</p>}
         </>
       }
 
       case "budget":
-        return <span className="text-[13px] tabular-nums">{(row as any).daily_budget ? fmtBudget((row as any).daily_budget) : "—"}</span>
+        return <span className="text-xs tabular-nums">{(row as any).daily_budget ? fmtBudget((row as any).daily_budget) : "—"}</span>
 
       case "lifetime_budget":
-        return <span className="text-[13px] tabular-nums">{(row as any).lifetime_budget ? fmtBudget((row as any).lifetime_budget) : "—"}</span>
+        return <span className="text-xs tabular-nums">{(row as any).lifetime_budget ? fmtBudget((row as any).lifetime_budget) : "—"}</span>
 
       case "delivery": {
         let budgetRemaining: string | undefined = (row as any).budget_remaining
@@ -853,107 +860,107 @@ export default function AdsManagerPage() {
       }
 
       case "effective_status":
-        return <span className="text-[13px]">{row.effective_status.charAt(0) + row.effective_status.slice(1).toLowerCase()}</span>
+        return <span className="text-xs">{row.effective_status.charAt(0) + row.effective_status.slice(1).toLowerCase()}</span>
 
       case "impressions":
-        return <span className="text-[13px] tabular-nums">{ins?.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins?.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
 
       case "clicks":
-        return <span className="text-[13px] tabular-nums">{ins?.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins?.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
 
       case "reach":
-        return <span className="text-[13px] tabular-nums">{ins?.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins?.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
 
       case "cpm": {
-        if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-[13px]">—</span>
+        if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
         const cpmVal = (parseFloat(ins.spend || "0") / parseFloat(ins.impressions)) * 1000
-        return <span className="text-[13px] tabular-nums">${cpmVal.toFixed(2)}</span>
+        return <span className="text-xs tabular-nums">${cpmVal.toFixed(2)}</span>
       }
 
       case "frequency":
-        return <span className="text-[13px]">—</span>
+        return <span className="text-xs">—</span>
 
       case "ctr": {
-        if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-[13px]">—</span>
+        if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
         const ctrVal = (parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100
-        return <span className="text-[13px] tabular-nums">{ctrVal.toFixed(2)}%</span>
+        return <span className="text-xs tabular-nums">{ctrVal.toFixed(2)}%</span>
       }
 
       case "cpc": {
-        if (!ins || !ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
+        if (!ins || !ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
       }
 
       case "purchases":
-        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "omni_purchase") : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "omni_purchase") : "—"}</span>
 
       case "purchase_value": {
         const value = getActionValueAmount(ins, "omni_purchase")
-        return <span className="text-[13px] tabular-nums">{formatMoneyAmount(value)}</span>
+        return <span className="text-xs tabular-nums">{formatMoneyAmount(value)}</span>
       }
 
       case "avg_order_value": {
         const purchasesN = getActionValue(ins, "omni_purchase")
         const purchaseValue = getActionValueAmount(ins, "omni_purchase")
-        if (!ins || purchasesN === 0 || purchaseValue === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">${(purchaseValue / purchasesN).toFixed(2)}</span>
+        if (!ins || purchasesN === 0 || purchaseValue === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(purchaseValue / purchasesN).toFixed(2)}</span>
       }
 
       case "roas": {
         const purchaseValue = getActionValueAmount(ins, "omni_purchase")
-        if (!ins || spend === 0 || purchaseValue === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">{(purchaseValue / spend).toFixed(2)}x</span>
+        if (!ins || spend === 0 || purchaseValue === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{(purchaseValue / spend).toFixed(2)}x</span>
       }
 
       case "cost_per_purchase": {
         const p = getActionValue(ins, "omni_purchase")
-        if (!ins || p === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">${(spend / p).toFixed(2)}</span>
+        if (!ins || p === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / p).toFixed(2)}</span>
       }
 
       case "cost_per_lead": {
         const l = getActionValue(ins, "lead")
-        if (!ins || l === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">${(spend / l).toFixed(2)}</span>
+        if (!ins || l === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / l).toFixed(2)}</span>
       }
 
       case "leads":
-        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "lead") : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "lead") : "—"}</span>
 
       case "add_to_cart":
-        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "add_to_cart") : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "add_to_cart") : "—"}</span>
 
       case "purchase_conv_rate": {
         const p = getActionValue(ins, "omni_purchase")
         const cl = ins ? parseInt(ins.clicks || "0") : 0
-        if (!ins || cl === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">{((p / cl) * 100).toFixed(2)}%</span>
+        if (!ins || cl === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{((p / cl) * 100).toFixed(2)}%</span>
       }
 
       case "video_views_3s":
-        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_view") : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_view") : "—"}</span>
       case "video_25":
-        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_p25_watched_actions") : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_p25_watched_actions") : "—"}</span>
       case "video_50":
-        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_p50_watched_actions") : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_p50_watched_actions") : "—"}</span>
       case "video_75":
-        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_p75_watched_actions") : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_p75_watched_actions") : "—"}</span>
       case "video_100":
-        return <span className="text-[13px] tabular-nums">{ins ? getActionValue(ins, "video_p100_watched_actions") : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_p100_watched_actions") : "—"}</span>
 
       case "schedule_start":
-        return <span className="text-[13px] text-[#65676b]">{fmtDate((row as any).start_time)}</span>
+        return <span className="text-xs text-[#65676b]">{fmtDate((row as any).start_time)}</span>
       case "schedule_end":
-        return <span className="text-[13px] text-[#65676b]">{fmtDate((row as any).stop_time || (row as any).end_time)}</span>
+        return <span className="text-xs text-[#65676b]">{fmtDate((row as any).stop_time || (row as any).end_time)}</span>
       case "optimization_goal":
-        return <span className="text-[13px] text-[#65676b]">{(row as AdSet).optimization_goal?.replace(/_/g, " ").toLowerCase() || "—"}</span>
+        return <span className="text-xs text-[#65676b]">{(row as AdSet).optimization_goal?.replace(/_/g, " ").toLowerCase() || "—"}</span>
       case "bid_strategy":
-        return <span className="text-[13px] text-[#65676b]">{(row as any).bid_strategy?.replace(/_/g, " ").toLowerCase() || "—"}</span>
+        return <span className="text-xs text-[#65676b]">{(row as any).bid_strategy?.replace(/_/g, " ").toLowerCase() || "—"}</span>
       case "objective":
-        return <span className="text-[13px] text-[#65676b]">{(row as Campaign).objective?.replace(/OUTCOME_/g, "").replace(/_/g, " ").toLowerCase() || "—"}</span>
+        return <span className="text-xs text-[#65676b]">{(row as Campaign).objective?.replace(/OUTCOME_/g, "").replace(/_/g, " ").toLowerCase() || "—"}</span>
 
       default:
-        return <span className="text-[13px]">—</span>
+        return <span className="text-xs">—</span>
     }
   }
 
@@ -963,51 +970,51 @@ export default function AdsManagerPage() {
     const getValue = (type: string) => getActionValueAmount(ins, type)
     switch (colId) {
       case "spend":
-        return <span className="text-[13px] tabular-nums">{ins.spend ? `$${spend.toFixed(2)}` : "—"}</span>
+        return <span className="text-xs tabular-nums">{ins.spend ? `$${spend.toFixed(2)}` : "—"}</span>
       case "results": {
         const obj = OBJECTIVE_RESULT[objective || ""]
-        if (!obj) return <span className="text-[13px]">—</span>
+        if (!obj) return <span className="text-xs">—</span>
         const count = getVal(obj.actionType)
-        return <><span className="text-[13px] tabular-nums">{count || "—"}</span>{count > 0 && <p className="text-[11px] text-[#65676b]">{obj.type}</p>}</>
+        return <><span className="text-xs tabular-nums">{count || "—"}</span>{count > 0 && <p className="text-xs text-[#65676b]">{obj.type}</p>}</>
       }
       case "cost_per_result": {
         const obj = OBJECTIVE_RESULT[objective || ""]
-        if (!obj) return <span className="text-[13px]">—</span>
+        if (!obj) return <span className="text-xs">—</span>
         const cpa = ins.cost_per_action_type?.find(a => (ACTION_ALIASES[obj.actionType] || [obj.actionType]).includes(a.action_type))
         const count = getVal(obj.actionType)
         const value = cpa ? parseFloat(cpa.value) : (count > 0 ? spend / count : NaN)
-        if (!Number.isFinite(value)) return <span className="text-[13px]">—</span>
-        return <><span className="text-[13px] tabular-nums">${value.toFixed(2)}</span><p className="text-[11px] text-[#65676b]">Per {obj.type}</p></>
+        if (!Number.isFinite(value)) return <span className="text-xs">—</span>
+        return <><span className="text-xs tabular-nums">${value.toFixed(2)}</span><p className="text-xs text-[#65676b]">Per {obj.type}</p></>
       }
-      case "impressions": return <span className="text-[13px] tabular-nums">{ins.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
-      case "clicks":      return <span className="text-[13px] tabular-nums">{ins.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
-      case "reach":       return <span className="text-[13px] tabular-nums">{ins.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
+      case "impressions": return <span className="text-xs tabular-nums">{ins.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
+      case "clicks":      return <span className="text-xs tabular-nums">{ins.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
+      case "reach":       return <span className="text-xs tabular-nums">{ins.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
       case "cpm": {
-        if (!ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">${((spend / parseFloat(ins.impressions)) * 1000).toFixed(2)}</span>
+        if (!ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${((spend / parseFloat(ins.impressions)) * 1000).toFixed(2)}</span>
       }
       case "ctr": {
-        if (!ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">{((parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100).toFixed(2)}%</span>
+        if (!ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{((parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100).toFixed(2)}%</span>
       }
       case "cpc": {
-        if (!ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-[13px]">—</span>
-        return <span className="text-[13px] tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
+        if (!ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
       }
-      case "purchases":        { const p = getVal("omni_purchase"); return <span className="text-[13px] tabular-nums">{p || "—"}</span> }
-      case "purchase_value":   { const value = getValue("omni_purchase"); return <span className="text-[13px] tabular-nums">{formatMoneyAmount(value)}</span> }
-      case "avg_order_value":  { const p = getVal("omni_purchase"); const value = getValue("omni_purchase"); return <span className="text-[13px] tabular-nums">{p && value ? `$${(value / p).toFixed(2)}` : "—"}</span> }
-      case "roas":             { const value = getValue("omni_purchase"); return <span className="text-[13px] tabular-nums">{spend && value ? `${(value / spend).toFixed(2)}x` : "—"}</span> }
-      case "cost_per_purchase":{ const p = getVal("omni_purchase"); return <span className="text-[13px] tabular-nums">{p ? `$${(spend/p).toFixed(2)}` : "—"}</span> }
-      case "leads":            { const l = getVal("lead"); return <span className="text-[13px] tabular-nums">{l || "—"}</span> }
-      case "cost_per_lead":    { const l = getVal("lead"); return <span className="text-[13px] tabular-nums">{l ? `$${(spend/l).toFixed(2)}` : "—"}</span> }
-      case "add_to_cart":      { const atc = getVal("add_to_cart"); return <span className="text-[13px] tabular-nums">{atc || "—"}</span> }
-      case "video_views_3s":   { const v = getVal("video_view"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
-      case "video_25":         { const v = getVal("video_p25_watched_actions"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
-      case "video_50":         { const v = getVal("video_p50_watched_actions"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
-      case "video_75":         { const v = getVal("video_p75_watched_actions"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
-      case "video_100":        { const v = getVal("video_p100_watched_actions"); return <span className="text-[13px] tabular-nums">{v || "—"}</span> }
-      default: return <span className="text-[13px]">—</span>
+      case "purchases":        { const p = getVal("omni_purchase"); return <span className="text-xs tabular-nums">{p || "—"}</span> }
+      case "purchase_value":   { const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{formatMoneyAmount(value)}</span> }
+      case "avg_order_value":  { const p = getVal("omni_purchase"); const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{p && value ? `$${(value / p).toFixed(2)}` : "—"}</span> }
+      case "roas":             { const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{spend && value ? `${(value / spend).toFixed(2)}x` : "—"}</span> }
+      case "cost_per_purchase":{ const p = getVal("omni_purchase"); return <span className="text-xs tabular-nums">{p ? `$${(spend/p).toFixed(2)}` : "—"}</span> }
+      case "leads":            { const l = getVal("lead"); return <span className="text-xs tabular-nums">{l || "—"}</span> }
+      case "cost_per_lead":    { const l = getVal("lead"); return <span className="text-xs tabular-nums">{l ? `$${(spend/l).toFixed(2)}` : "—"}</span> }
+      case "add_to_cart":      { const atc = getVal("add_to_cart"); return <span className="text-xs tabular-nums">{atc || "—"}</span> }
+      case "video_views_3s":   { const v = getVal("video_view"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
+      case "video_25":         { const v = getVal("video_p25_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
+      case "video_50":         { const v = getVal("video_p50_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
+      case "video_75":         { const v = getVal("video_p75_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
+      case "video_100":        { const v = getVal("video_p100_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
+      default: return <span className="text-xs">—</span>
     }
   }
 
@@ -1085,11 +1092,11 @@ export default function AdsManagerPage() {
           <IconChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
         </div>
         {selectedAccount && (
-          <span className="text-[10px] text-muted-foreground">{selectedAccount.id}</span>
+          <span className="text-xs text-muted-foreground">{selectedAccount.id}</span>
         )}
         <div className="ml-auto flex items-center gap-2">
           {loadedMs !== null && (
-            <span className="text-[10px] text-muted-foreground border rounded px-2 py-1">
+            <span className="text-xs text-muted-foreground border rounded px-2 py-1">
               Loaded {loadedMs}ms
             </span>
           )}
@@ -1169,14 +1176,14 @@ export default function AdsManagerPage() {
                 key={t}
                 onClick={() => switchTab(t)}
                 className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 text-[13px] transition-colors whitespace-nowrap rounded-t-lg border-t border-l border-r",
+                  "flex items-center gap-1.5 px-4 py-2 text-xs transition-colors whitespace-nowrap rounded-t-lg border-t border-l border-r",
                   tab === t
                     ? "bg-white dark:bg-card border-[#e4e6eb] dark:border-gray-800 font-bold text-gray-900 dark:text-gray-100 z-10 -mb-px shadow-[0_-2px_0_0_#1877f2]"
                     : "bg-[#f5f6f7] dark:bg-muted/50 border-transparent border-b-[#e4e6eb] dark:border-b-gray-800 text-[#65676b] dark:text-muted-foreground hover:bg-[#ebedf0] dark:hover:bg-muted font-semibold"
                 )}
               >
                 {t === "campaigns"
-                  ? <span className="size-4 shrink-0 flex items-center justify-center rounded bg-blue-600 text-white text-[9px] font-bold">A</span>
+                  ? <span className="size-4 shrink-0 flex items-center justify-center rounded bg-blue-600 text-white text-xs font-bold">A</span>
                   : <IconTable className="size-3.5 shrink-0" />
                 }
                 <span className="truncate max-w-[110px]">{tabLabel(t)}</span>
@@ -1184,7 +1191,7 @@ export default function AdsManagerPage() {
                 {/* Search/filter match count badge — only when tab has loaded data */}
                 {(search || statusFilter !== "all") && tabMatchCounts[t] !== null && (
                   <span className={cn(
-                    "px-1.5 py-0.5 text-[10px] rounded-full font-bold leading-none",
+                    "px-1.5 py-0.5 text-xs rounded-full font-bold leading-none",
                     tab === t
                       ? "bg-blue-600 text-white"
                       : "bg-muted text-muted-foreground"
@@ -1195,7 +1202,7 @@ export default function AdsManagerPage() {
 
                 {/* Hierarchical filter badge */}
                 {!search && statusFilter === "all" && badge && (
-                  <span className="flex items-center gap-px px-1.5 py-0.5 bg-blue-600 text-white text-[10px] rounded-full font-bold leading-none">
+                  <span className="flex items-center gap-px px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full font-bold leading-none">
                     {badge.count}
                     <span
                       role="button"
@@ -1360,7 +1367,7 @@ export default function AdsManagerPage() {
 
             {colsOpen && (
               <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-64 py-2">
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">POPULAR</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">POPULAR</p>
                 {DEFAULT_PRESETS.map(preset => {
                   const isActive = getActivePreset(columnOrder, customPresets)?.id === preset.id
                   return (
@@ -1373,15 +1380,15 @@ export default function AdsManagerPage() {
                         "size-3.5 rounded-full border-2 shrink-0 transition-colors",
                         isActive ? "border-[#1877f2] bg-[#1877f2]" : "border-muted-foreground/40"
                       )} />
-                      <span className="text-[13px]">{preset.label}</span>
+                      <span className="text-xs">{preset.label}</span>
                     </button>
                   )
                 })}
 
                 <div className="border-t my-1.5" />
-                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">SAVED IN YOUR ORG</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">SAVED IN YOUR ORG</p>
                 {customPresets.length === 0
-                  ? <p className="text-[12px] text-muted-foreground px-3 py-1.5">No saved presets yet.</p>
+                  ? <p className="text-xs text-muted-foreground px-3 py-1.5">No saved presets yet.</p>
                   : customPresets.map(preset => {
                       const isActive = getActivePreset(columnOrder, customPresets)?.id === preset.id
                       return (
@@ -1394,7 +1401,7 @@ export default function AdsManagerPage() {
                             "size-3.5 rounded-full border-2 shrink-0",
                             isActive ? "border-[#1877f2] bg-[#1877f2]" : "border-muted-foreground/40"
                           )} />
-                          <span className="text-[13px]">{preset.label}</span>
+                          <span className="text-xs">{preset.label}</span>
                         </button>
                       )
                     })
@@ -1405,7 +1412,7 @@ export default function AdsManagerPage() {
                   onClick={() => { setColsOpen(false); setCustomizeColsOpen(true) }}
                   className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/50 transition-colors"
                 >
-                  <span className="flex items-center gap-2 text-[13px]">
+                  <span className="flex items-center gap-2 text-xs">
                     <IconTable className="size-3.5 text-muted-foreground" />
                     Customize columns
                   </span>
@@ -1439,7 +1446,7 @@ export default function AdsManagerPage() {
                 <th className="w-10 px-3 py-2.5">
                   <input ref={headerCheckRef} type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
                 </th>
-                <th className="w-16 px-2 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Off/On</th>
+                <th className="w-16 px-2 py-2.5 text-left text-xs font-semibold text-muted-foreground">Off/On</th>
                 <SortTh
                   label={tab === "ads" ? "Ad name" : tab === "adsets" ? "Ad set" : "Campaign"}
                   field="name"
@@ -1449,7 +1456,7 @@ export default function AdsManagerPage() {
                   className="min-w-[220px]"
                 />
                 {tab === "ads" && (
-                  <th className="w-20 px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground">Preview</th>
+                  <th className="w-20 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Preview</th>
                 )}
                 {columnOrder.map(colId => {
                   const col = COLUMN_MAP[colId]
@@ -1467,7 +1474,7 @@ export default function AdsManagerPage() {
                     )
                   }
                   return (
-                    <th key={colId} className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground whitespace-nowrap">
+                    <th key={colId} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
                       {col.headerLabel}
                     </th>
                   )
@@ -1516,19 +1523,19 @@ export default function AdsManagerPage() {
                         </td>
                         <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === c.id ? (
-                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(c.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)} className="h-7 text-[13px] py-1" autoFocus /></div>
+                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(c.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               <div className="flex items-center gap-2">
-                                <button onClick={() => drillToAdSets(c)} className="text-[#1877f2] hover:underline text-[13px] font-semibold text-left line-clamp-2">{c.name}</button>
+                                <button onClick={() => drillToAdSets(c)} className="text-[#1877f2] hover:underline text-xs font-semibold text-left line-clamp-2">{c.name}</button>
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(c.id); setInlineEditingName(c.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(c)}>Edit</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(c)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                               </div>
-                              <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{c.id}</p>
+                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{c.id}</p>
                             </div>
                           )}
                         </td>
@@ -1539,7 +1546,7 @@ export default function AdsManagerPage() {
                           <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
                           <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
                           <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
-                            <span className="pl-6 text-[13px] text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
+                            <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
                           {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
                         </tr>
@@ -1564,19 +1571,19 @@ export default function AdsManagerPage() {
                         </td>
                         <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
-                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-[13px] py-1" autoFocus /></div>
+                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               <div className="flex items-center gap-2">
-                                <button onClick={() => drillToAds(a)} className="text-[#1877f2] hover:underline text-[13px] font-semibold text-left line-clamp-2">{a.name}</button>
+                                <button onClick={() => drillToAds(a)} className="text-[#1877f2] hover:underline text-xs font-semibold text-left line-clamp-2">{a.name}</button>
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                               </div>
-                              <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
+                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
                             </div>
                           )}
                         </td>
@@ -1587,7 +1594,7 @@ export default function AdsManagerPage() {
                           <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
                           <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
                           <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
-                            <span className="pl-6 text-[13px] text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
+                            <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
                           {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
@@ -1614,25 +1621,25 @@ export default function AdsManagerPage() {
                         </td>
                         <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
-                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-[13px] py-1" autoFocus /></div>
+                            <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               <div className="flex items-center gap-2">
-                                <p className="text-[13px] font-semibold text-[#1c2b33] dark:text-gray-200 line-clamp-2">{a.name}</p>
+                                <p className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200 line-clamp-2">{a.name}</p>
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-[11px] text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                               </div>
-                              <p className="text-[11px] text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
-                              {adSet && <p className="text-[10px] text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
+                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
+                              {adSet && <p className="text-xs text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
                             </div>
                           )}
                         </td>
                         <td className="px-3 py-2.5">
-                          {thumb ? <img src={thumb} alt="" className="size-12 rounded object-cover border" loading="lazy" /> : <div className="size-12 rounded bg-muted border flex items-center justify-center text-[10px] text-muted-foreground">No img</div>}
+                          {thumb ? <img src={thumb} alt="" className="size-12 rounded object-cover border" loading="lazy" /> : <div className="size-12 rounded bg-muted border flex items-center justify-center text-xs text-muted-foreground">No img</div>}
                         </td>
                         {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>)}
                       </tr>
@@ -1641,7 +1648,7 @@ export default function AdsManagerPage() {
                           <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
                           <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
                           <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
-                            <span className="pl-6 text-[13px] text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
+                            <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
                           <td className="px-3 py-2 bg-[#f5f6f7] dark:bg-muted/10" />
                           {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, objective)}</td>)}
@@ -1664,19 +1671,19 @@ export default function AdsManagerPage() {
                     if (colId === "spend") return (
                       <td key={colId} className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white">
                         ${totalSpend.toFixed(2)}
-                        <p className="text-[11px] text-muted-foreground font-normal">Total spent</p>
+                        <p className="text-xs text-muted-foreground font-normal">Total spent</p>
                       </td>
                     )
                     if (colId === "results") return (
                       <td key={colId} className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white">
                         {totalResultsCount > 0 ? totalResultsCount.toLocaleString() : "—"}
-                        <p className="text-[11px] text-muted-foreground font-normal">Total</p>
+                        <p className="text-xs text-muted-foreground font-normal">Total</p>
                       </td>
                     )
                     if (colId === "cost_per_result") return (
                       <td key={colId} className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white">
                         {totalResultsCount > 0 ? `$${(totalSpend / totalResultsCount).toFixed(2)}` : "—"}
-                        <p className="text-[11px] text-muted-foreground font-normal">Average</p>
+                        <p className="text-xs text-muted-foreground font-normal">Average</p>
                       </td>
                     )
                     return <td key={colId} />
@@ -1731,7 +1738,7 @@ export default function AdsManagerPage() {
               <div key={b.id} className="border rounded-xl p-4 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-semibold",
+                    <span className={cn("text-xs px-2 py-0.5 rounded-full font-semibold",
                       b.status === "success" ? "bg-green-100 text-green-700" :
                       b.status === "partial" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700"
                     )}>● {b.status}</span>
@@ -1759,13 +1766,13 @@ export default function AdsManagerPage() {
             <SheetTitle>Ad Defaults</SheetTitle>
             <SheetDescription>Default copy applied when launching new ads from this account</SheetDescription>
           </SheetHeader>
-          <div className="mt-6 space-y-5">
+          <div className="mt-6 space-y-5 px-4">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide block">Primary Text</label>
               <textarea
                 value={defaultPrimaryText}
                 onChange={e => setDefaultPrimaryText(e.target.value)}
-                rows={5}
+                rows={3}
                 placeholder="Default primary ad text..."
                 className="w-full px-3 py-2.5 text-sm border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none bg-background"
               />
@@ -1794,7 +1801,7 @@ export default function AdsManagerPage() {
             </div>
           </div>
           <SheetFooter className="mt-8 pt-6 border-t">
-            <Button variant="ghost" onClick={() => setDefaultsOpen(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={resetAllDefaults}>Reset All</Button>
             <Button onClick={saveDefaults} className="bg-blue-600 hover:bg-blue-700 text-white">Save Defaults</Button>
           </SheetFooter>
         </SheetContent>
@@ -1879,11 +1886,11 @@ export default function AdsManagerPage() {
                     <TypeIcon className="size-4.5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{typeLabel}</p>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{typeLabel}</p>
                     <p className="text-sm font-semibold truncate leading-tight">{node.name}</p>
                   </div>
                   <span className={cn(
-                    "shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold",
+                    "shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold",
                     isActive
                       ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                       : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400"
@@ -1906,7 +1913,7 @@ export default function AdsManagerPage() {
                         { label: "Clicks", value: parseInt(insight.clicks).toLocaleString() },
                       ].map(s => (
                         <div key={s.label} className="rounded-xl bg-muted/40 border px-2.5 py-2 text-center">
-                          <p className="text-[10px] text-muted-foreground mb-0.5">{s.label}</p>
+                          <p className="text-xs text-muted-foreground mb-0.5">{s.label}</p>
                           <p className={cn("text-sm font-bold tabular-nums truncate", s.accent && "text-primary")}>{s.value}</p>
                         </div>
                       ))}
@@ -1915,7 +1922,7 @@ export default function AdsManagerPage() {
 
                   {/* ── Settings section ── */}
                   <div className="space-y-3">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Settings</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Settings</p>
 
                     {/* Name */}
                     <div className="space-y-1.5">
@@ -1970,7 +1977,7 @@ export default function AdsManagerPage() {
                             />
                           </div>
                           {isAdSet && node.budget_remaining != null && (
-                            <p className="text-[11px] text-muted-foreground">
+                            <p className="text-xs text-muted-foreground">
                               Remaining: <span className="font-medium text-foreground">${(parseInt(node.budget_remaining) / 100).toFixed(2)}</span>
                             </p>
                           )}
@@ -2009,7 +2016,7 @@ export default function AdsManagerPage() {
                   {((isCampaign && (node.objective || node.bid_strategy)) ||
                     (isAdSet && (node.optimization_goal || node.bid_strategy))) && (
                     <div className="space-y-2">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Strategy</p>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Strategy</p>
                       <div className="flex flex-wrap gap-1.5">
                         {isCampaign && node.objective && (
                           <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs font-medium border border-blue-200/70 dark:border-blue-700/40">
@@ -2033,7 +2040,7 @@ export default function AdsManagerPage() {
                   {/* ── Creative preview (Ad only) ── */}
                   {isAd && (node.creative?.thumbnail_url || node.creative?.title || node.creative?.body) && (
                     <div className="space-y-2">
-                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Creative</p>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Creative</p>
                       <div className="rounded-2xl border overflow-hidden shadow-sm">
                         {node.creative.thumbnail_url && (
                           <img src={node.creative.thumbnail_url} className="w-full object-cover max-h-52" loading="lazy" />
@@ -2054,7 +2061,7 @@ export default function AdsManagerPage() {
 
                   {/* ── IDs ── */}
                   <div className="space-y-2">
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Details</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Details</p>
                     <div className="rounded-xl border divide-y overflow-hidden text-xs">
                       {[
                         { label: "ID",          value: node.id },

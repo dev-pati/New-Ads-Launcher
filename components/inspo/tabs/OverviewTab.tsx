@@ -11,9 +11,9 @@ import type { BrandAnalytics } from "@/lib/brand-spy-analytics"
 function StatCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: boolean }) {
   return (
     <div className="bg-card border border-border/60 rounded-2xl px-5 py-4">
-      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/70 mb-1">{label}</p>
       <p className={`text-2xl font-bold tabular-nums ${accent ? "text-emerald-600 dark:text-emerald-400" : ""}`}>{value}</p>
-      {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   )
 }
@@ -22,7 +22,7 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="text-[13px] font-semibold text-foreground mb-3">{title}</h3>
+      <h3 className="text-xs font-semibold text-foreground mb-3">{title}</h3>
       {children}
     </div>
   )
@@ -33,7 +33,7 @@ function ChartTooltip({ active, payload, label, formatter }: any) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-popover border border-border rounded-xl px-3 py-2 shadow-lg text-sm">
-      <p className="text-muted-foreground text-[11px] mb-1">{label}</p>
+      <p className="text-muted-foreground text-xs mb-1">{label}</p>
       <p className="font-semibold">{formatter ? formatter(payload[0].value) : payload[0].value}</p>
     </div>
   )
@@ -61,7 +61,7 @@ export function OverviewTab({ analytics }: Props) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         <div className="lg:col-span-2 bg-card border border-border/60 rounded-2xl p-5">
-          <p className="text-[13px] font-semibold text-foreground mb-4">Reach Over Time</p>
+          <p className="text-xs font-semibold text-foreground mb-4">Reach Over Time</p>
           <ResponsiveContainer width="100%" height={180}>
             <AreaChart data={analytics.reachTimeline} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
               <defs>
@@ -80,7 +80,7 @@ export function OverviewTab({ analytics }: Props) {
         </div>
 
         <div className="bg-card border border-border/60 rounded-2xl p-5">
-          <p className="text-[13px] font-semibold text-foreground mb-2">Media Type</p>
+          <p className="text-xs font-semibold text-foreground mb-2">Media Type</p>
           {analytics.mediaTypeBreakdown.length > 0 ? (
             <>
               <ResponsiveContainer width="100%" height={140}>
@@ -103,7 +103,7 @@ export function OverviewTab({ analytics }: Props) {
                 {analytics.mediaTypeBreakdown.map(item => (
                   <div key={item.type} className="flex items-center gap-1.5">
                     <span className="size-2.5 rounded-full shrink-0" style={{ background: item.color }} />
-                    <span className="text-[11px] capitalize text-foreground/70">{item.type} ({item.percentage}%)</span>
+                    <span className="text-xs capitalize text-foreground/70">{item.type} ({item.percentage}%)</span>
                   </div>
                 ))}
               </div>
@@ -120,7 +120,7 @@ export function OverviewTab({ analytics }: Props) {
 
           {/* Top countries */}
           <div className="bg-card border border-border/60 rounded-2xl p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Top Countries</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Top Countries</p>
             <div className="space-y-2.5">
               {demo.topCountries.map(c => (
                 <div key={c.country}>
@@ -129,7 +129,7 @@ export function OverviewTab({ analytics }: Props) {
                       <span>{c.flag}</span>
                       <span className="text-foreground/80">{c.country}</span>
                     </span>
-                    <span className="text-[12px] font-semibold tabular-nums">{c.percentage}%</span>
+                    <span className="text-xs font-semibold tabular-nums">{c.percentage}%</span>
                   </div>
                   <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                     <div className="h-full bg-primary/70 rounded-full" style={{ width: `${c.percentage}%` }} />
@@ -141,7 +141,7 @@ export function OverviewTab({ analytics }: Props) {
 
           {/* Gender */}
           <div className="bg-card border border-border/60 rounded-2xl p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Gender Split</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Gender Split</p>
             <div className="space-y-4">
               {[
                 { label: "Female", pct: demo.genderFemale, color: "#ec4899" },
@@ -150,7 +150,7 @@ export function OverviewTab({ analytics }: Props) {
                 <div key={g.label}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-foreground/80">{g.label}</span>
-                    <span className="text-[13px] font-bold tabular-nums">{g.pct}%</span>
+                    <span className="text-xs font-bold tabular-nums">{g.pct}%</span>
                   </div>
                   <div className="h-2 bg-muted rounded-full overflow-hidden">
                     <div className="h-full rounded-full transition-all" style={{ width: `${g.pct}%`, background: g.color }} />
@@ -162,7 +162,7 @@ export function OverviewTab({ analytics }: Props) {
 
           {/* Age */}
           <div className="bg-card border border-border/60 rounded-2xl p-5">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Age Distribution</p>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 mb-3">Age Distribution</p>
             <ResponsiveContainer width="100%" height={130}>
               <BarChart data={demo.ageGroups} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.05} />
@@ -181,7 +181,7 @@ export function OverviewTab({ analytics }: Props) {
         <div className="bg-card border border-border/60 rounded-2xl overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/50 text-muted-foreground text-[11px] uppercase tracking-wide">
+              <tr className="border-b border-border/50 text-muted-foreground text-xs uppercase tracking-wide">
                 <th className="text-left px-5 py-3 font-semibold">URL</th>
                 <th className="text-right px-5 py-3 font-semibold">Ads</th>
                 <th className="text-right px-5 py-3 font-semibold">Share</th>
@@ -193,13 +193,13 @@ export function OverviewTab({ analytics }: Props) {
                   <td className="px-5 py-3">
                     <a href={lp.url} target="_blank" rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
-                      className="text-primary hover:underline text-[12px] font-mono truncate block max-w-[320px]">
+                      className="text-primary hover:underline text-xs font-mono truncate block max-w-[320px]">
                       {lp.url}
                     </a>
                   </td>
                   <td className="px-5 py-3 text-right font-semibold tabular-nums">{lp.adsCount}</td>
                   <td className="px-5 py-3 text-right">
-                    <span className="text-[12px] font-semibold text-emerald-600 dark:text-emerald-400">{lp.distribution}%</span>
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{lp.distribution}%</span>
                   </td>
                 </tr>
               ))}
@@ -216,17 +216,17 @@ export function OverviewTab({ analytics }: Props) {
               <div className="relative aspect-[4/3] bg-neutral-100 dark:bg-neutral-900">
                 <img src={ad.mediaUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
                 {ad.views != null && (
-                  <span className="absolute top-2 right-2 bg-black/65 backdrop-blur-sm text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+                  <span className="absolute top-2 right-2 bg-black/65 backdrop-blur-sm text-emerald-400 text-xs font-bold px-1.5 py-0.5 rounded-md">
                     {formatViews(ad.views)}
                   </span>
                 )}
               </div>
               <div className="px-3 py-2.5">
-                <p className="text-[12px] text-foreground/80 line-clamp-2 leading-snug">
+                <p className="text-xs text-foreground/80 line-clamp-2 leading-snug">
                   {ad.headline || ad.primaryText}
                 </p>
                 {ad.runningDays && (
-                  <p className="text-[10px] text-muted-foreground mt-1">{ad.runningDays}d running</p>
+                  <p className="text-xs text-muted-foreground mt-1">{ad.runningDays}d running</p>
                 )}
               </div>
             </div>

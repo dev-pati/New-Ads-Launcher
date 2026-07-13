@@ -105,12 +105,12 @@ function CalGrid({
 
   return (
     <div className="w-[196px] select-none">
-      <p className="text-center text-[13px] font-semibold mb-3 text-[#1c2b33] dark:text-white">
+      <p className="text-center text-xs font-semibold mb-3 text-[#1c2b33] dark:text-white">
         {MONTHS[month]} {year}
       </p>
       <div className="grid grid-cols-7 mb-1">
         {DAYS.map(d => (
-          <div key={d} className="text-center text-[11px] text-muted-foreground font-medium py-1">{d}</div>
+          <div key={d} className="text-center text-xs text-muted-foreground font-medium py-1">{d}</div>
         ))}
       </div>
       <div className="grid grid-cols-7">
@@ -124,7 +124,7 @@ function CalGrid({
               onMouseEnter={() => onHover(date)}
               onMouseLeave={() => onHover(null)}
               className={cn(
-                "h-7 flex items-center justify-center text-[12px] cursor-pointer transition-colors",
+                "h-7 flex items-center justify-center text-xs cursor-pointer transition-colors",
                 dayClass(date)
               )}
             >
@@ -262,7 +262,7 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, onChange }:
                 key={p.value}
                 onClick={() => selectPreset(p.value)}
                 className={cn(
-                  "w-full text-left px-4 py-[7px] text-[13px] transition-colors",
+                  "w-full text-left px-4 py-[7px] text-xs transition-colors",
                   pending === p.value
                     ? "bg-[#e7f3ff] text-[#1877f2] font-semibold"
                     : "text-[#1c2b33] dark:text-foreground hover:bg-muted/40"

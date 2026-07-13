@@ -294,12 +294,12 @@ export default function UploadAdsPage() {
                   <div className="mb-2 flex items-start justify-between gap-2">
                     <p className="truncate text-sm font-semibold" title={c.file_name}>{c.file_name}</p>
                     {(c.fb_image_hash || c.fb_video_id) ? (
-                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 shrink-0 text-[10px] gap-0.5 h-5 px-1.5 font-medium border-emerald-200 border">
+                      <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 shrink-0 text-xs gap-0.5 h-5 px-1.5 font-medium border-emerald-200 border">
                         <IconCheck className="size-3" />
                         Ready
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 shrink-0 text-[10px] h-5 px-1.5 font-medium">
+                      <Badge variant="outline" className="text-amber-600 border-amber-200 bg-amber-50 shrink-0 text-xs h-5 px-1.5 font-medium">
                         Pending
                       </Badge>
                     )}
@@ -323,7 +323,7 @@ export default function UploadAdsPage() {
                   </div>
 
                   <div className="mt-3 pt-2.5 border-t flex items-center justify-between">
-                    <Badge variant="outline" className="text-[10px] font-normal bg-muted/30">
+                    <Badge variant="outline" className="text-xs font-normal bg-muted/30">
                       CTA: <span className="font-semibold ml-1">{c.cta ? c.cta.replace(/_/g, " ") : "LEARN MORE"}</span>
                     </Badge>
                   </div>

@@ -53,21 +53,21 @@ function AdCopyCard({
       {/* Top row */}
       <div className="flex items-center justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-[13px] font-bold text-slate-400 dark:text-muted-foreground w-4">
+          <span className="text-xs font-bold text-slate-400 dark:text-muted-foreground w-4">
             {item.rank}
           </span>
-          <span className="px-2.5 py-0.5 rounded-full text-white text-[12px] font-bold bg-green-500">
+          <span className="px-2.5 py-0.5 rounded-full text-white text-xs font-bold bg-green-500">
             {fmtSpend(item.spend)}
           </span>
           {item.copyCount > 1 && (
-            <span className="text-[11px] text-slate-400 dark:text-muted-foreground">
+            <span className="text-xs text-slate-400 dark:text-muted-foreground">
               {item.copyCount} ads
             </span>
           )}
         </div>
         <button
           onClick={() => onCreateFromCopy({ headline: item.headline, primaryText: item.primaryText })}
-          className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-[12px] font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
         >
           <IconSparkles className="size-3" />
           Create
@@ -78,7 +78,7 @@ function AdCopyCard({
       {item.headline && (
         <div className="mb-2 group/hl">
           <div className="flex items-center justify-between mb-0.5">
-            <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wide">Headline</p>
+            <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide">Headline</p>
             <button
               onClick={() => copyField("headline", item.headline)}
               className="opacity-0 group-hover/hl:opacity-100 transition-opacity"
@@ -88,7 +88,7 @@ function AdCopyCard({
                 : <IconCopy className="size-3 text-slate-400 hover:text-slate-600" />}
             </button>
           </div>
-          <p className="text-[13px] font-semibold text-slate-900 dark:text-white leading-snug">
+          <p className="text-xs font-semibold text-slate-900 dark:text-white leading-snug">
             {item.headline}
           </p>
         </div>
@@ -98,7 +98,7 @@ function AdCopyCard({
       {item.primaryText && (
         <div className="mb-3 group/pt">
           <div className="flex items-center justify-between mb-0.5">
-            <p className="text-[11px] font-semibold text-blue-500 uppercase tracking-wide">Primary Text</p>
+            <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide">Primary Text</p>
             <button
               onClick={() => copyField("primaryText", item.primaryText)}
               className="opacity-0 group-hover/pt:opacity-100 transition-opacity"
@@ -108,13 +108,13 @@ function AdCopyCard({
                 : <IconCopy className="size-3 text-slate-400 hover:text-slate-600" />}
             </button>
           </div>
-          <p className="text-[13px] text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
+          <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-line leading-relaxed">
             {displayText}
           </p>
           {longText && (
             <button
               onClick={() => setExpanded(e => !e)}
-              className="flex items-center gap-1 text-[12px] text-blue-600 font-medium mt-1 hover:underline"
+              className="flex items-center gap-1 text-xs text-blue-600 font-medium mt-1 hover:underline"
             >
               {expanded ? "Show less" : "Show"}
               <IconChevronDown className={cn("size-3 transition-transform", expanded && "rotate-180")} />
@@ -125,10 +125,10 @@ function AdCopyCard({
 
       {/* Ad info */}
       <div className="pt-2 border-t">
-        <p className="text-[11px] text-slate-400 dark:text-muted-foreground truncate">
+        <p className="text-xs text-slate-400 dark:text-muted-foreground truncate">
           Ad: {item.adName}
         </p>
-        <p className="text-[11px] text-slate-400 dark:text-muted-foreground">
+        <p className="text-xs text-slate-400 dark:text-muted-foreground">
           ID: {item.adId}
         </p>
       </div>
@@ -153,12 +153,12 @@ export function TopPerformingTab({ adAccountId, onCreateFromCopy }: Props) {
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold">Top Performing Ad Copy</h2>
             {items.length > 0 && (
-              <span className="flex items-center gap-1 text-[12px] text-slate-500 dark:text-muted-foreground">
+              <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-muted-foreground">
                 ↗ {items.length} Unique {items.length === 1 ? "Copy" : "Copies"}
               </span>
             )}
           </div>
-          <p className="text-[12px] text-slate-500 dark:text-muted-foreground">
+          <p className="text-xs text-slate-500 dark:text-muted-foreground">
             Discover your highest-spending ad copy to create winning templates
           </p>
         </div>
@@ -186,7 +186,7 @@ export function TopPerformingTab({ adAccountId, onCreateFromCopy }: Props) {
           </DropdownMenu>
 
           {isCached && cachedAt && (
-            <div className="flex items-center gap-1.5 h-8 px-3 border rounded-lg text-[12px] text-slate-500 dark:text-muted-foreground bg-muted/30">
+            <div className="flex items-center gap-1.5 h-8 px-3 border rounded-lg text-xs text-slate-500 dark:text-muted-foreground bg-muted/30">
               <IconDatabase className="size-3.5" />
               Cached · {cachedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </div>

@@ -276,7 +276,7 @@ export default function RateLimitPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold">App-Level Usage</p>
-                    <p className="text-[10px] text-muted-foreground">X-App-Usage header</p>
+                    <p className="text-xs text-muted-foreground">X-App-Usage header</p>
                   </div>
                 </div>
                 {data.appUsage ? (
@@ -289,7 +289,7 @@ export default function RateLimitPage() {
                   <p className="text-xs text-muted-foreground italic">Không có dữ liệu</p>
                 )}
                 <div className="pt-1 border-t">
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Giới hạn: 200 calls/giờ mỗi app token. Khi đạt 100% → error code 4.
                   </p>
                 </div>
@@ -304,11 +304,11 @@ export default function RateLimitPage() {
                     </div>
                     <div>
                       <p className="text-sm font-semibold">Ads Management Usage</p>
-                      <p className="text-[10px] text-muted-foreground">X-Business-Use-Case-Usage (ADS_MANAGEMENT)</p>
+                      <p className="text-xs text-muted-foreground">X-Business-Use-Case-Usage (ADS_MANAGEMENT)</p>
                     </div>
                   </div>
                   {data.snapshotAgeSeconds !== null && data.businessUsage && (
-                    <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                    <span className="text-xs text-muted-foreground tabular-nums shrink-0">
                       last known{" "}
                       {data.snapshotAgeSeconds < 60
                         ? `${data.snapshotAgeSeconds}s ago`
@@ -337,14 +337,14 @@ export default function RateLimitPage() {
                 ) : (
                   <div className="space-y-2">
                     <p className="text-xs text-muted-foreground italic">Chưa có dữ liệu</p>
-                    <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+                    <p className="text-xs text-muted-foreground/70 leading-relaxed">
                       Header này chỉ trả về khi gọi ad-account API (getAdAccounts, launch…).
                       Dữ liệu sẽ xuất hiện sau lần load đầu tiên.
                     </p>
                   </div>
                 )}
                 <div className="pt-1 border-t">
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Khi đạt 100% → "too many calls to this ad-account". Đây là lý do tại sao có thể bị block dù App Usage chỉ 4%.
                   </p>
                 </div>
@@ -382,7 +382,7 @@ export default function RateLimitPage() {
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">Business Usage — Chi tiết</span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-muted text-muted-foreground">{bizEntries.length} entries</span>
+                    <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-muted text-muted-foreground">{bizEntries.length} entries</span>
                   </div>
                   {bizExpanded ? <IconChevronUp className="size-4 text-muted-foreground" /> : <IconChevronDown className="size-4 text-muted-foreground" />}
                 </button>
@@ -390,7 +390,7 @@ export default function RateLimitPage() {
                   <div className="border-t divide-y">
                     {bizEntries.map((e, i) => (
                       <div key={i} className="px-5 py-3 flex items-center gap-4 flex-wrap text-sm">
-                        <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{e.bizId}</code>
+                        <code className="text-xs bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{e.bizId}</code>
                         <span className="font-medium text-xs">{e.type}</span>
                         <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
                           <span>Calls: <b className="text-foreground">{e.callCount}%</b></span>

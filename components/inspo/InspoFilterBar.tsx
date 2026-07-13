@@ -77,7 +77,7 @@ function MultiSelectDropdown({ label, options, selected, onChange }: DropdownPro
       <button
         onClick={() => setOpen(p => !p)}
         className={cn(
-          "flex items-center gap-2 h-9 px-3 text-[13px] rounded-xl border whitespace-nowrap transition-colors font-medium shadow-sm",
+          "flex items-center gap-2 h-9 px-3 text-xs rounded-xl border whitespace-nowrap transition-colors font-medium shadow-sm",
           active
             ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
             : "bg-white hover:bg-slate-50 border-[#dfe3ea] text-slate-950"
@@ -86,7 +86,7 @@ function MultiSelectDropdown({ label, options, selected, onChange }: DropdownPro
         <Icon className="size-4 text-current" />
         {label}
         {active && (
-          <span className="inline-flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-[9px] font-semibold leading-none">
+          <span className="inline-flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-xs font-semibold leading-none">
             {selected.length}
           </span>
         )}
@@ -99,7 +99,7 @@ function MultiSelectDropdown({ label, options, selected, onChange }: DropdownPro
             <button
               key={opt}
               onClick={() => toggle(opt)}
-              className="flex items-center gap-2 w-full px-3 py-2 text-[13px] hover:bg-slate-50 text-left transition-colors"
+              className="flex items-center gap-2 w-full px-3 py-2 text-xs hover:bg-slate-50 text-left transition-colors"
             >
               <span className={cn(
                 "size-4 rounded-[4px] border flex items-center justify-center shrink-0 transition-colors",
@@ -139,7 +139,7 @@ function ViewsDropdown({ value, onChange }: ViewsDropdownProps) {
       <button
         onClick={() => setOpen(p => !p)}
         className={cn(
-          "flex items-center gap-2 h-9 px-3 text-[13px] rounded-xl border whitespace-nowrap transition-colors font-medium shadow-sm",
+          "flex items-center gap-2 h-9 px-3 text-xs rounded-xl border whitespace-nowrap transition-colors font-medium shadow-sm",
           value !== "all"
             ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
             : "bg-white hover:bg-slate-50 border-[#dfe3ea] text-slate-950"

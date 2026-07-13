@@ -269,7 +269,7 @@ const fmtDay = (s: string) => {
 
 function Sparkline({ data }: { data: number[] }) {
   if (!data?.length || data.every(v => v === 0)) {
-    return <div className="h-12 flex items-center justify-center text-[10px] text-muted-foreground/30">No data</div>
+    return <div className="h-12 flex items-center justify-center text-xs text-muted-foreground/30">No data</div>
   }
   const max = Math.max(...data), min = Math.min(...data)
   const range = max - min || 1
@@ -648,11 +648,11 @@ export default function InsightsPage() {
 
         {/* FOLDERS section */}
         <div className="px-3 mt-3">
-          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider px-2 mb-1.5">Folders</p>
+          <p className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider px-2 mb-1.5">Folders</p>
 
           {/* REPORTS sub-folder */}
           <div className="mb-2">
-            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-2.5 py-1">Reports</p>
+            <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider px-2.5 py-1">Reports</p>
             <div className="space-y-0.5">
               {([
                 { id: "top-creatives" as ReportSection, label: "Top Creatives",  dot: "🏆" },
@@ -667,7 +667,7 @@ export default function InsightsPage() {
                   className={cn("flex items-center gap-2 w-full px-2.5 py-1.5 text-xs rounded-md transition-colors",
                     section === item.id ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   )}>
-                  <span className="text-[13px] shrink-0 w-4 text-center">{item.dot}</span>
+                  <span className="text-xs shrink-0 w-4 text-center">{item.dot}</span>
                   {item.label}
                 </button>
               ))}
@@ -676,7 +676,7 @@ export default function InsightsPage() {
 
           {/* SAVED REPORTS */}
           <div>
-            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider px-2.5 py-1">Saved Reports</p>
+            <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider px-2.5 py-1">Saved Reports</p>
             <p className="text-xs text-muted-foreground/40 px-2.5 py-1 italic">No saved reports yet.</p>
           </div>
         </div>
@@ -701,7 +701,7 @@ export default function InsightsPage() {
                 </div>
                 <div>
                   <h1 className="font-bold text-base leading-tight">Top Ads</h1>
-                  <p className="text-[11px] text-muted-foreground line-clamp-1 max-w-sm">
+                  <p className="text-xs text-muted-foreground line-clamp-1 max-w-sm">
                     Highest-spending ads ranked by spend with key performance metrics.
                   </p>
                 </div>
@@ -716,7 +716,7 @@ export default function InsightsPage() {
                   </button>
                   {accountPickerOpen && adAccounts.length > 0 && (
                     <div className="absolute top-full right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl py-1 min-w-[220px] max-h-72 overflow-y-auto">
-                      <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
+                      <p className="px-3 pt-1.5 pb-1 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
                       {adAccounts.map((acc: any) => (
                         <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setAccountPickerOpen(false) }}
                           className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 transition-colors",
@@ -824,7 +824,7 @@ export default function InsightsPage() {
                               return (
                                 <div key={f.key}>
                                   {showHeader && (
-                                    <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">
+                                    <p className="px-3 pt-2 pb-1 text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider">
                                       {cat}
                                     </p>
                                   )}
@@ -851,7 +851,7 @@ export default function InsightsPage() {
                         {pendingField!.type === "dynamic" ? (
                           <>
                             <div className="p-2 border-b">
-                              <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider mb-1.5 px-1">Values</p>
+                              <p className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-wider mb-1.5 px-1">Values</p>
                               <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40">
                                 <IconSearch className="size-3.5 text-muted-foreground/50 shrink-0" />
                                 <input value={valueSearch} onChange={e => setValueSearch(e.target.value)}
@@ -956,7 +956,7 @@ export default function InsightsPage() {
                       isActive ? "border-primary/40 bg-primary/10 text-primary" : "border-border bg-background hover:bg-muted/50"
                     )}
                   >
-                    <span className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                    <span className="w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
                       style={{ backgroundColor: def.color }}>{idx + 1}</span>
                     <button onClick={() => handleSortPill(key)} className="flex items-center gap-1">
                       {def.label}
@@ -1034,7 +1034,7 @@ export default function InsightsPage() {
             <div className="flex items-center justify-between px-6 py-3 border-b shrink-0">
               <div>
                 <h1 className="font-bold text-base">Custom Dashboard</h1>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Drag widgets to reorder · click × to remove</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Drag widgets to reorder · click × to remove</p>
               </div>
               <div className="flex items-center gap-2">
                 <div className="relative" ref={accountPickerRef}>
@@ -1046,7 +1046,7 @@ export default function InsightsPage() {
                   </button>
                   {accountPickerOpen && adAccounts.length > 0 && (
                     <div className="absolute top-full right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl py-1 min-w-[220px] max-h-72 overflow-y-auto">
-                      <p className="px-3 pt-1.5 pb-1 text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
+                      <p className="px-3 pt-1.5 pb-1 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
                       {adAccounts.map((acc: any) => (
                         <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setAccountPickerOpen(false) }}
                           className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 transition-colors",
@@ -1488,11 +1488,11 @@ function Top5RevenueWidget({ topAds, loading }: { topAds: TopAd[]; loading: bool
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium truncate">{ad.adName}</p>
-            <p className="text-[10px] text-muted-foreground truncate">{ad.campaignName || "—"}</p>
+            <p className="text-xs text-muted-foreground truncate">{ad.campaignName || "—"}</p>
           </div>
           <div className="text-right shrink-0 space-y-0.5">
             <p className="text-xs font-semibold">{ad.purchaseValue > 0 ? fmt$(ad.purchaseValue, 0) : "—"}</p>
-            <p className="text-[10px] text-muted-foreground">{ad.roas > 0 ? ad.roas.toFixed(2)+"x" : "—"} ROAS</p>
+            <p className="text-xs text-muted-foreground">{ad.roas > 0 ? ad.roas.toFixed(2)+"x" : "—"} ROAS</p>
           </div>
         </div>
       ))}
@@ -1519,7 +1519,7 @@ function WinnersWidget({ topAds, loading }: { topAds: TopAd[]; loading: boolean 
         </div>
       ))}
       {ads.length > max && (
-        <div className="size-9 rounded-md border-2 border-background bg-muted/60 flex items-center justify-center text-[10px] font-semibold text-muted-foreground shrink-0">
+        <div className="size-9 rounded-md border-2 border-background bg-muted/60 flex items-center justify-center text-xs font-semibold text-muted-foreground shrink-0">
           +{ads.length - max}
         </div>
       )}
@@ -1704,26 +1704,26 @@ function PacingWidget({ accountId }: { accountId: string }) {
       {/* Stats */}
       <div className="flex-1 grid grid-cols-2 gap-x-6 gap-y-3 content-start">
         <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Spent this month</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Spent this month</p>
           <p className="text-base font-bold">{fmt$(data.thisMonthSpend)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Daily budget</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Daily budget</p>
           <p className="text-base font-bold">{data.totalDailyBudget > 0 ? fmt$(data.totalDailyBudget) : "—"}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Avg daily spend</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Avg daily spend</p>
           <p className="text-base font-bold">{fmt$(data.avgDailySpend)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Projected month</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Projected month</p>
           <p className={cn("text-base font-bold", data.projectedMonthSpend > data.projectedMonthlyBudget && data.projectedMonthlyBudget > 0 ? "text-destructive" : "")}>
             {fmt$(data.projectedMonthSpend)}
           </p>
         </div>
         {data.lastMonthSpend > 0 && (
           <div className="col-span-2">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Last month spend</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Last month spend</p>
             <div className="flex items-center gap-2">
               <p className="text-base font-bold">{fmt$(data.lastMonthSpend)}</p>
               {data.thisMonthSpend > 0 && (
@@ -1777,11 +1777,11 @@ function TopAdCard({ ad, visibleMetrics }: { ad: TopAd; visibleMetrics: SortFiel
           #{ad.rank}
         </div>
         {ad.isVideo && (
-          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-violet-600 text-white">Video</div>
+          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-xs font-bold bg-violet-600 text-white">Video</div>
         )}
       </div>
       <div className="p-3 space-y-2">
-        <p className="text-[10px] text-muted-foreground font-medium truncate">{ad.campaignName || "—"}</p>
+        <p className="text-xs text-muted-foreground font-medium truncate">{ad.campaignName || "—"}</p>
         <p className="text-xs font-semibold line-clamp-2 leading-tight min-h-[2.4rem]">{ad.adName}</p>
         <div className="space-y-1.5 pt-1.5 border-t">
           {visibleMetrics.map(key => {
@@ -1791,9 +1791,9 @@ function TopAdCard({ ad, visibleMetrics }: { ad: TopAd; visibleMetrics: SortFiel
               <div key={key} className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <span className="size-2 rounded-full shrink-0" style={{ backgroundColor: m.color }} />
-                  <span className="text-[10px] text-muted-foreground">{m.label}</span>
+                  <span className="text-xs text-muted-foreground">{m.label}</span>
                 </div>
-                <span className="text-[11px] font-semibold">{m.value}</span>
+                <span className="text-xs font-semibold">{m.value}</span>
               </div>
             )
           })}

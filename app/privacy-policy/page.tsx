@@ -20,11 +20,11 @@ export default function PrivacyPolicyPage() {
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <Image src="/applogo.webp" alt={appName} width={26} height={26} className="rounded-md" />
-            <span className="text-[15px] font-bold tracking-tight">{appName}</span>
+            <span className="text-sm font-bold tracking-tight">{appName}</span>
           </Link>
           <Link
             href="/"
-            className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             ← Back to App
           </Link>
@@ -42,10 +42,10 @@ export default function PrivacyPolicyPage() {
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Privacy Policy</h1>
-              <p className="mt-1 text-[14px] text-muted-foreground">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Last updated: <span className="font-medium text-foreground">{lastUpdated}</span>
               </p>
-              <p className="mt-2 text-[13px] text-muted-foreground max-w-2xl">
+              <p className="mt-2 text-xs text-muted-foreground max-w-2xl">
                 {appName} by {company} is committed to protecting your privacy. This policy explains how we collect, use, and safeguard your information.
               </p>
             </div>
@@ -126,12 +126,12 @@ export default function PrivacyPolicyPage() {
                 { perm: "catalog_management", desc: "To access and manage your Meta product catalogs for dynamic product ads and catalog-based campaigns." },
               ].map(({ perm, desc }) => (
                 <div key={perm} className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
-                  <p className="text-[12px] font-mono font-semibold text-primary">{perm}</p>
-                  <p className="mt-1 text-[13px] text-muted-foreground">{desc}</p>
+                  <p className="text-xs font-mono font-semibold text-primary">{perm}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{desc}</p>
                 </div>
               ))}
             </div>
-            <p className="mt-4 text-[13px] font-medium text-foreground">
+            <p className="mt-4 text-xs font-medium text-foreground">
               We do not sell, rent, or share your Facebook data with any third parties. We do not use your Facebook data for any purpose unrelated to providing our services.
             </p>
           </Section>
@@ -217,13 +217,13 @@ export default function PrivacyPolicyPage() {
           <Section title="12. Contact Us">
             <p>If you have any questions, concerns, or requests regarding this Privacy Policy, please contact us:</p>
             <div className="mt-4 rounded-xl border border-border bg-muted/20 px-5 py-4 space-y-1.5">
-              <p className="text-[14px]"><span className="font-semibold">Company:</span> {company}</p>
-              <p className="text-[14px]"><span className="font-semibold">Product:</span> {appName}</p>
-              <p className="text-[14px]">
+              <p className="text-sm"><span className="font-semibold">Company:</span> {company}</p>
+              <p className="text-sm"><span className="font-semibold">Product:</span> {appName}</p>
+              <p className="text-sm">
                 <span className="font-semibold">Email:</span>{" "}
                 <a href={`mailto:${contactEmail}`} className="text-primary hover:underline">{contactEmail}</a>
               </p>
-              <p className="text-[14px]">
+              <p className="text-sm">
                 <span className="font-semibold">Website:</span>{" "}
                 <a href={websiteUrl} className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">{websiteUrl}</a>
               </p>
@@ -238,9 +238,9 @@ export default function PrivacyPolicyPage() {
         <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-3 px-6 py-6 sm:flex-row">
           <Link href="/" className="flex items-center gap-2">
             <Image src="/applogo.webp" alt="Logo" width={18} height={18} className="rounded" />
-            <span className="text-[13px] font-semibold">{appName}</span>
+            <span className="text-xs font-semibold">{appName}</span>
           </Link>
-          <div className="flex items-center gap-4 text-[12px] text-muted-foreground">
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <Link href="/privacy-policy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
             <span>&copy; {new Date().getFullYear()} {company}. All rights reserved.</span>
           </div>
@@ -256,7 +256,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="scroll-mt-20">
       <h2 className="text-lg font-bold tracking-tight border-b border-border/60 pb-2 mb-4">{title}</h2>
-      <div className="text-[14px] leading-relaxed text-foreground/80 space-y-2">
+      <div className="text-sm leading-relaxed text-foreground/80 space-y-2">
         {children}
       </div>
     </section>
@@ -266,8 +266,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function SubSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mt-4">
-      <h3 className="text-[14px] font-semibold text-foreground mb-2">{title}</h3>
-      <div className="text-[14px] leading-relaxed text-foreground/80">
+      <h3 className="text-sm font-semibold text-foreground mb-2">{title}</h3>
+      <div className="text-sm leading-relaxed text-foreground/80">
         {children}
       </div>
     </div>

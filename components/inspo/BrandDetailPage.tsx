@@ -66,7 +66,7 @@ function FilterDropdown<T extends string>({
   const current = options.find(o => o.value === value)
   return (
     <div className="relative group">
-      <button className="flex items-center gap-1 h-7 px-3 text-[12px] font-medium border border-border/60 rounded-lg bg-background hover:bg-muted transition-colors whitespace-nowrap">
+      <button className="flex items-center gap-1 h-7 px-3 text-xs font-medium border border-border/60 rounded-lg bg-background hover:bg-muted transition-colors whitespace-nowrap">
         {label && <span className="text-muted-foreground">{label}:</span>}
         <span className="text-foreground">{current?.label ?? value}</span>
         <IconChevronDown className="size-3 text-muted-foreground ml-0.5" />
@@ -79,7 +79,7 @@ function FilterDropdown<T extends string>({
             key={opt.value}
             onMouseDown={() => onChange(opt.value)}
             className={cn(
-              "w-full text-left px-3 py-2 text-[12px] transition-colors hover:bg-muted",
+              "w-full text-left px-3 py-2 text-xs transition-colors hover:bg-muted",
               opt.value === value ? "font-semibold text-primary" : "text-foreground"
             )}
           >

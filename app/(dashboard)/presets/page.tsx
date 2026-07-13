@@ -120,7 +120,7 @@ export default function PresetsPage() {
                   )}
                 </div>
                 {(p.campaign_name || p.adset_name) && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     From: {p.campaign_name} {p.adset_name ? `→ ${p.adset_name}` : ""}
                   </p>
                 )}

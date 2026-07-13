@@ -12,7 +12,7 @@ import { SaveToBoardButton } from "./SaveToBoardButton"
 function SectionLabel({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between px-5 pt-4 pb-1.5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{title}</p>
+      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">{title}</p>
       {action}
     </div>
   )
@@ -123,12 +123,12 @@ export function AdDetailLeftPanel({
       />
       <div className="px-5 pb-3">
         {ad.headline && (
-          <p className="text-[13px] font-semibold text-foreground mb-2 leading-snug">{ad.headline}</p>
+          <p className="text-xs font-semibold text-foreground mb-2 leading-snug">{ad.headline}</p>
         )}
-        <p className="text-[13px] text-foreground/80 leading-relaxed whitespace-pre-line">{ad.primaryText}</p>
+        <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-line">{ad.primaryText}</p>
         {ad.cta && (
           <div className="mt-3">
-            <span className="inline-block text-[11px] font-semibold border border-border rounded-lg px-3 py-1 text-foreground/70 bg-muted/50 uppercase tracking-wide">
+            <span className="inline-block text-xs font-semibold border border-border rounded-lg px-3 py-1 text-foreground/70 bg-muted/50 uppercase tracking-wide">
               {ad.cta}
             </span>
           </div>
@@ -139,13 +139,13 @@ export function AdDetailLeftPanel({
       <div className="px-5 pb-2">
         <button
           onClick={() => setJsonOpen(p => !p)}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground/50 hover:text-muted-foreground/80 transition-colors"
+          className="flex items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground/80 transition-colors"
         >
           {jsonOpen ? <IconChevronUp className="size-3" /> : <IconChevronDown className="size-3" />}
           Debug JSON (Ad ID: {ad.id})
         </button>
         {jsonOpen && (
-          <pre className="mt-1.5 text-[10px] bg-muted/60 rounded-lg px-3 py-2 overflow-x-auto text-muted-foreground leading-relaxed max-h-32">
+          <pre className="mt-1.5 text-xs bg-muted/60 rounded-lg px-3 py-2 overflow-x-auto text-muted-foreground leading-relaxed max-h-32">
             {JSON.stringify({ id: ad.id, platform: ad.platform, format: ad.format, tags: ad.tags }, null, 2)}
           </pre>
         )}
@@ -158,8 +158,8 @@ export function AdDetailLeftPanel({
       <div className="px-5 pb-3 space-y-2">
         {details.map(({ label, value }) => (
           <div key={label} className="flex items-center justify-between">
-            <span className="text-[13px] text-muted-foreground">{label}</span>
-            <span className="text-[13px] text-foreground capitalize font-medium">{value}</span>
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className="text-xs text-foreground capitalize font-medium">{value}</span>
           </div>
         ))}
       </div>
@@ -198,7 +198,7 @@ export function AdDetailLeftPanel({
         <div className="flex gap-2">
           <button
             onClick={copyScript}
-            className="flex-1 flex items-center justify-center gap-1.5 h-9 text-[13px] border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80"
+            className="flex-1 flex items-center justify-center gap-1.5 h-9 text-xs border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80"
           >
             {scriptCopied
               ? <IconCheck className="size-3.5 text-emerald-500" />
@@ -209,7 +209,7 @@ export function AdDetailLeftPanel({
           {ad.adSnapshotUrl && (
             <button
               onClick={() => window.open(ad.adSnapshotUrl, "_blank")}
-              className="flex-1 flex items-center justify-center gap-1.5 h-9 text-[13px] border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80"
+              className="flex-1 flex items-center justify-center gap-1.5 h-9 text-xs border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80"
             >
               <IconExternalLink className="size-3.5" />
               Meta
@@ -217,7 +217,7 @@ export function AdDetailLeftPanel({
           )}
           <button
             onClick={download}
-            className="flex-1 flex items-center justify-center gap-1.5 h-9 text-[13px] border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80"
+            className="flex-1 flex items-center justify-center gap-1.5 h-9 text-xs border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80"
           >
             <IconDownload className="size-3.5" />
             {ad.mediaType === "video" && !ad.mediaUrl.match(/\.(mp4|webm|mov|avi)(\?|$)/i) ? "Open" : "Download"}
@@ -225,7 +225,7 @@ export function AdDetailLeftPanel({
         </div>
 
         {/* Thumbnail */}
-        <button className="flex items-center justify-center gap-1.5 w-full h-9 text-[13px] border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80">
+        <button className="flex items-center justify-center gap-1.5 w-full h-9 text-xs border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80">
           <IconPhoto className="size-3.5" />
           Thumbnail
         </button>

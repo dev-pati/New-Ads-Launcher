@@ -113,7 +113,7 @@ function MilestoneCard({ m }: { m: Milestone }) {
 
       {/* Progress */}
       <div className="space-y-1">
-        <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{done ? "Completed!" : `${m.current} / ${m.threshold}`}</span>
           <span>{pct}%</span>
         </div>
@@ -229,7 +229,7 @@ export default function RewardsPage() {
                 <span className="text-sm font-normal text-muted-foreground"> / {milestones.length}</span>
               </p>
             </div>
-            <p className="text-[10px] text-muted-foreground">Complete all to earn {total} pts total</p>
+            <p className="text-xs text-muted-foreground">Complete all to earn {total} pts total</p>
           </div>
         </div>
 

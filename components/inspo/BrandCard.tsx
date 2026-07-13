@@ -41,11 +41,11 @@ export function BrandCard({ brand, onClick }: Props) {
         <BrandAvatar name={brand.brandName} src={brand.brandAvatar} />
 
         <div className="flex-1 min-w-0">
-          <p className="text-[14px] font-semibold text-foreground truncate group-hover:text-primary transition-colors">
+          <p className="text-sm font-semibold text-foreground truncate group-hover:text-primary transition-colors">
             {brand.brandName}
           </p>
           {brand.categories[0] && (
-            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{brand.categories[0]}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 truncate">{brand.categories[0]}</p>
           )}
 
           {/* Platforms */}
@@ -60,12 +60,12 @@ export function BrandCard({ brand, onClick }: Props) {
         {/* Media type badges */}
         <div className="flex flex-col gap-1 items-end shrink-0">
           {brand.mediaTypes.includes("video") && (
-            <span className="flex items-center gap-0.5 text-[9px] font-medium bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 px-1.5 py-0.5 rounded">
+            <span className="flex items-center gap-0.5 text-xs font-medium bg-violet-100 dark:bg-violet-950/40 text-violet-700 dark:text-violet-400 px-1.5 py-0.5 rounded">
               <IconVideo className="size-2.5" /> Video
             </span>
           )}
           {brand.mediaTypes.includes("image") && (
-            <span className="flex items-center gap-0.5 text-[9px] font-medium bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded">
+            <span className="flex items-center gap-0.5 text-xs font-medium bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded">
               <IconPhoto className="size-2.5" /> Image
             </span>
           )}
@@ -75,16 +75,16 @@ export function BrandCard({ brand, onClick }: Props) {
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-border/50">
         <div>
-          <p className="text-[10px] text-muted-foreground/70 uppercase font-medium">Ads</p>
-          <p className="text-[13px] font-bold tabular-nums">{brand.totalAds}</p>
+          <p className="text-xs text-muted-foreground/70 uppercase font-medium">Ads</p>
+          <p className="text-xs font-bold tabular-nums">{brand.totalAds}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground/70 uppercase font-medium">Reach</p>
-          <p className="text-[13px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatViews(brand.totalReach)}</p>
+          <p className="text-xs text-muted-foreground/70 uppercase font-medium">Reach</p>
+          <p className="text-xs font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatViews(brand.totalReach)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-muted-foreground/70 uppercase font-medium">Spend</p>
-          <p className="text-[13px] font-bold tabular-nums">{formatSpend(brand.totalSpend)}</p>
+          <p className="text-xs text-muted-foreground/70 uppercase font-medium">Spend</p>
+          <p className="text-xs font-bold tabular-nums">{formatSpend(brand.totalSpend)}</p>
         </div>
       </div>
     </div>

@@ -377,7 +377,7 @@ function CampaignViewer({ cell }: { cell: CellBase | undefined }) {
   const val = String(cell?.value || "")
   if (!val) return <span className="text-muted-foreground/40 text-xs">—</span>
   return (
-    <span className="inline-block max-w-full truncate rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-200" title={val}>
+    <span className="inline-block max-w-full truncate rounded bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-700 border border-blue-200" title={val}>
       {val}
     </span>
   )
@@ -388,7 +388,7 @@ function AdSetViewer({ cell }: { cell: CellBase | undefined }) {
   const val = String(cell?.value || "")
   if (!val) return <span className="text-muted-foreground/40 text-xs">—</span>
   return (
-    <span className="inline-block max-w-full truncate rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 border border-violet-200" title={val}>
+    <span className="inline-block max-w-full truncate rounded bg-violet-50 px-1.5 py-0.5 text-xs font-medium text-violet-700 border border-violet-200" title={val}>
       {val}
     </span>
   )

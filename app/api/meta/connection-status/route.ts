@@ -11,15 +11,15 @@ export const dynamic = "force-dynamic"
 const GRAPH = "https://graph.facebook.com/v25.0"
 
 const ERROR_MESSAGES: Record<number, string> = {
-  190:  "Token hết hạn hoặc bị thu hồi — cần đăng nhập lại Facebook",
-  200:  "Không đủ quyền truy cập",
-  294:  "Thiếu quyền manage_pages",
-  368:  "Tài khoản Facebook bị hạn chế hoặc bị khóa",
-  100:  "Tham số không hợp lệ",
-  4:    "Đạt giới hạn gọi API — thử lại sau",
-  17:   "Đạt giới hạn gọi API — thử lại sau",
-  341:  "Đạt giới hạn quảng cáo",
-  2500: "Lỗi xác thực — cần đăng nhập lại Facebook",
+  190:  "Token expired or revoked — please sign in to Facebook again",
+  200:  "Insufficient access permissions",
+  294:  "Missing manage_pages permission",
+  368:  "Facebook account is restricted or locked",
+  100:  "Invalid parameter",
+  4:    "API rate limit reached — try again later",
+  17:   "API rate limit reached — try again later",
+  341:  "Ad limit reached",
+  2500: "Authentication error — please sign in to Facebook again",
 }
 
 export async function GET() {
@@ -32,7 +32,7 @@ export async function GET() {
       return NextResponse.json({
         connected: false,
         status: "disconnected",
-        message: "Chưa kết nối tài khoản Facebook",
+        message: "No Facebook account connected",
         accountName: null,
       })
     }
@@ -49,7 +49,7 @@ export async function GET() {
       const subcode = data.error.error_subcode as number
       const message = ERROR_MESSAGES[code] ?? ERROR_MESSAGES[subcode]
         ?? data.error.message
-        ?? "Tài khoản Facebook gặp sự cố"
+        ?? "There is a problem with the Facebook account"
 
       // Classify severity
       const isBlocked  = [368, 190, 2500].includes(code)
@@ -78,7 +78,7 @@ export async function GET() {
     return NextResponse.json({
       connected:   false,
       status:      "error",
-      message:     "Không thể kiểm tra kết nối Facebook",
+      message:     "Unable to check Facebook connection",
       accountName: null,
     })
   }

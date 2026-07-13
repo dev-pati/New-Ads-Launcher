@@ -59,12 +59,12 @@ function BreakdownSubmenu({
               selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
             )}
           >
-            <span className="flex items-center gap-2.5 text-[13px] text-[#1c2b33] dark:text-foreground">
+            <span className="flex items-center gap-2.5 text-xs text-[#1c2b33] dark:text-foreground">
               <CheckBox active={selected.includes(opt.id)} />
               {opt.label}
             </span>
             {opt.description && (
-              <span className="text-[11px] text-muted-foreground mt-0.5 pl-[22px]">
+              <span className="text-xs text-muted-foreground mt-0.5 pl-[22px]">
                 {opt.description}
               </span>
             )}
@@ -200,7 +200,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                   value={search}
                   onChange={e => { setSearch(e.target.value); setActiveGroup(null) }}
                   placeholder="Search"
-                  className="w-full pl-8 pr-3 py-1.5 text-[13px] border rounded-lg outline-none focus:ring-1 focus:ring-ring bg-muted/20 dark:bg-muted/30"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border rounded-lg outline-none focus:ring-1 focus:ring-ring bg-muted/20 dark:bg-muted/30"
                 />
               </div>
             </div>
@@ -208,14 +208,14 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
             <div className="flex-1 overflow-y-auto pb-1.5">
               {searchResults ? (
                 searchResults.length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground text-center py-8">No results</p>
+                  <p className="text-xs text-muted-foreground text-center py-8">No results</p>
                 ) : (
                   searchResults.map(opt => (
                     <button
                       key={opt.id}
                       onClick={() => toggleOption(opt.id)}
                       className={cn(
-                        "w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
+                        "w-full flex items-center gap-2.5 px-3 py-[7px] text-xs text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
                         selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
                       )}
                     >
@@ -229,7 +229,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                   {/* View breakdown charts — disabled */}
                   <button
                     disabled
-                    className="w-full flex items-center gap-2 px-3 py-[7px] text-[13px] text-muted-foreground/50 cursor-not-allowed"
+                    className="w-full flex items-center gap-2 px-3 py-[7px] text-xs text-muted-foreground/50 cursor-not-allowed"
                   >
                     <svg className="size-3.5 shrink-0" viewBox="0 0 16 16" fill="currentColor">
                       <rect x="1" y="10" width="3" height="5" rx="0.5" opacity=".35"/>
@@ -242,7 +242,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                   <div className="mx-2.5 my-1 border-t" />
 
                   {/* Popular */}
-                  <p className="px-3 pt-1 pb-0.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  <p className="px-3 pt-1 pb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Popular
                   </p>
                   {POPULAR_BREAKDOWNS.map(opt => (
@@ -251,7 +251,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                       onClick={() => toggleOption(opt.id)}
                       onMouseEnter={scheduleCloseGroup}
                       className={cn(
-                        "w-full flex items-center gap-2.5 px-3 py-[7px] text-[13px] text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
+                        "w-full flex items-center gap-2.5 px-3 py-[7px] text-xs text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
                         selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
                       )}
                     >
@@ -270,7 +270,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                         key={group.id}
                         onMouseEnter={() => { cancelCloseGroup(); setActiveGroup(group.id) }}
                         className={cn(
-                          "w-full flex items-center justify-between px-3 py-[7px] text-[13px] text-left transition-colors",
+                          "w-full flex items-center justify-between px-3 py-[7px] text-xs text-left transition-colors",
                           activeGroup === group.id
                             ? "bg-[#f0f2f5] dark:bg-muted/60"
                             : "hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
@@ -284,7 +284,7 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                         </span>
                         <span className="flex items-center gap-1">
                           {selCount > 0 && (
-                            <span className="text-[11px] text-[#1877f2] font-bold">{selCount}</span>
+                            <span className="text-xs text-[#1877f2] font-bold">{selCount}</span>
                           )}
                           <IconChevronRight className="size-3.5 text-muted-foreground shrink-0" />
                         </span>
@@ -298,9 +298,9 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                   <div className="px-3 py-1.5 select-none">
                     <label className="flex items-center gap-2 opacity-40 cursor-not-allowed">
                       <input type="checkbox" disabled className="size-3.5 rounded border accent-[#1877f2]" />
-                      <span className="text-[13px] text-[#1c2b33] dark:text-foreground">Value rules</span>
+                      <span className="text-xs text-[#1c2b33] dark:text-foreground">Value rules</span>
                     </label>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 pl-[22px]">
+                    <p className="text-xs text-muted-foreground mt-0.5 pl-[22px]">
                       Ads and ad sets only
                     </p>
                   </div>

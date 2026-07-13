@@ -170,24 +170,24 @@ function CategoryCard({
           ) : (
             <>
               <div className="flex items-center gap-1.5">
-                <span className="size-5 rounded-full bg-slate-100 dark:bg-muted text-[11px] font-bold text-slate-500 dark:text-muted-foreground flex items-center justify-center shrink-0">
+                <span className="size-5 rounded-full bg-slate-100 dark:bg-muted text-xs font-bold text-slate-500 dark:text-muted-foreground flex items-center justify-center shrink-0">
                   {index + 1}
                 </span>
-                <p className="text-[13px] font-semibold text-slate-900 dark:text-white leading-tight">
+                <p className="text-xs font-semibold text-slate-900 dark:text-white leading-tight">
                   {cat.name}
                 </p>
                 {cat.isAI && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400">
+                  <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-600 dark:bg-purple-950/40 dark:text-purple-400">
                     AI
                   </span>
                 )}
                 {cat.autoDetect && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-600 dark:bg-green-950/40 dark:text-green-400">
+                  <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-600 dark:bg-green-950/40 dark:text-green-400">
                     Auto
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400 dark:text-muted-foreground mt-0.5 line-clamp-2">
+              <p className="text-xs text-slate-400 dark:text-muted-foreground mt-0.5 line-clamp-2">
                 {cat.description}
               </p>
             </>
@@ -218,7 +218,7 @@ function CategoryCard({
           {cat.options.map(opt => (
             <span
               key={opt.id}
-              className="group/opt flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-muted text-[12px] text-slate-700 dark:text-slate-300"
+              className="group/opt flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-muted text-xs text-slate-700 dark:text-slate-300"
             >
               {opt.value}
               <button
@@ -237,14 +237,14 @@ function CategoryCard({
               onChange={e => setOptInput(e.target.value)}
               autoFocus
               placeholder="Option..."
-              className="h-6 w-24 px-2 text-[12px] border rounded-full outline-none focus:ring-1 focus:ring-primary bg-background"
+              className="h-6 w-24 px-2 text-xs border rounded-full outline-none focus:ring-1 focus:ring-primary bg-background"
               onKeyDown={e => { if (e.key === "Enter") commitOption(); if (e.key === "Escape") { setAddingOpt(false); setOptInput("") } }}
               onBlur={commitOption}
             />
           ) : (
             <button
               onClick={() => { setAddingOpt(true); setTimeout(() => optRef.current?.focus(), 0) }}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed text-[12px] text-slate-400 hover:text-slate-600 hover:border-slate-400 transition-colors"
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full border border-dashed text-xs text-slate-400 hover:text-slate-600 hover:border-slate-400 transition-colors"
             >
               <IconPlus className="size-3" />Add option...
             </button>
@@ -253,7 +253,7 @@ function CategoryCard({
       )}
 
       {cat.isAI && (
-        <p className="mt-2 text-[11px] text-purple-500 dark:text-purple-400 italic">
+        <p className="mt-2 text-xs text-purple-500 dark:text-purple-400 italic">
           AI-generated values
         </p>
       )}
@@ -408,8 +408,8 @@ function TestNamingSection({ categories }: { categories: SchemaCategory[] }) {
   return (
     <div className="mt-6">
       <div className="mb-3">
-        <h3 className="text-[14px] font-bold text-slate-900 dark:text-white">Test AI Naming</h3>
-        <p className="text-[12px] text-slate-500 dark:text-muted-foreground">
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">Test AI Naming</h3>
+        <p className="text-xs text-slate-500 dark:text-muted-foreground">
           Upload files to test your naming schema
         </p>
       </div>
@@ -427,14 +427,14 @@ function TestNamingSection({ categories }: { categories: SchemaCategory[] }) {
           onClick={() => fileInput.current?.click()}
         >
           <IconUpload className="size-6 text-slate-400" />
-          <p className="text-[13px] font-medium text-slate-600 dark:text-slate-400">Drag & Drop</p>
-          <p className="text-[11px] text-slate-400">or click to select files</p>
+          <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Drag & Drop</p>
+          <p className="text-xs text-slate-400">or click to select files</p>
           <input ref={fileInput} type="file" multiple className="hidden" onChange={onFileInput} accept="image/*,video/*" />
         </div>
 
         <div className="border-2 border-dashed rounded-xl flex flex-col items-center justify-center p-8 gap-3">
           <IconLink className="size-6 text-slate-400" />
-          <p className="text-[13px] font-medium text-slate-600 dark:text-slate-400">Paste URLs</p>
+          <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Paste URLs</p>
           <div className="flex gap-2 w-full max-w-xs">
             <Input
               value={urlInput}
@@ -459,10 +459,10 @@ function TestNamingSection({ categories }: { categories: SchemaCategory[] }) {
               <div key={file.id} className="border rounded-xl p-4 bg-white dark:bg-card">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div>
-                    <p className="text-[12px] font-semibold text-slate-500 dark:text-muted-foreground uppercase tracking-wide">
+                    <p className="text-xs font-semibold text-slate-500 dark:text-muted-foreground uppercase tracking-wide">
                       Original
                     </p>
-                    <p className="text-[13px] text-slate-700 dark:text-slate-300">
+                    <p className="text-xs text-slate-700 dark:text-slate-300">
                       {file.name}{file.ext ? `.${file.ext}` : ""}
                     </p>
                   </div>
@@ -472,7 +472,7 @@ function TestNamingSection({ categories }: { categories: SchemaCategory[] }) {
                 </div>
 
                 {/* Auto-detected info */}
-                <div className="flex flex-wrap gap-2 mb-3 text-[11px]">
+                <div className="flex flex-wrap gap-2 mb-3 text-xs">
                   {file.type !== "other" && (
                     <span className="px-2 py-0.5 bg-slate-100 dark:bg-muted rounded-full capitalize">
                       {file.type}
@@ -496,14 +496,14 @@ function TestNamingSection({ categories }: { categories: SchemaCategory[] }) {
                     .filter(c => !c.isAI && !c.autoDetect && c.options.length > 0)
                     .map(cat => (
                       <div key={cat.id} className="flex flex-col gap-1">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">{cat.name}</p>
+                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{cat.name}</p>
                         <div className="flex flex-wrap gap-1">
                           {cat.options.map(opt => (
                             <button
                               key={opt.id}
                               onClick={() => setSelection(file.id, cat.id, opt.value)}
                               className={cn(
-                                "px-2 py-0.5 rounded-full text-[12px] border transition-colors",
+                                "px-2 py-0.5 rounded-full text-xs border transition-colors",
                                 file.selections[cat.id] === opt.value
                                   ? "bg-blue-600 text-white border-blue-600"
                                   : "border-slate-200 text-slate-600 dark:text-slate-400 hover:border-blue-300"
@@ -521,12 +521,12 @@ function TestNamingSection({ categories }: { categories: SchemaCategory[] }) {
                 {aiCategories.length > 0 && (
                   <div className="mb-3">
                     {file.aiLoading ? (
-                      <div className="flex items-center gap-2 text-[12px] text-purple-500">
+                      <div className="flex items-center gap-2 text-xs text-purple-500">
                         <IconLoader2 className="size-3.5 animate-spin" />
                         Generating AI values...
                       </div>
                     ) : file.aiError ? (
-                      <div className="flex items-center gap-2 text-[12px] text-amber-500">
+                      <div className="flex items-center gap-2 text-xs text-amber-500">
                         <IconAlertCircle className="size-3.5" />
                         AI unavailable — {file.aiError}
                       </div>
@@ -534,8 +534,8 @@ function TestNamingSection({ categories }: { categories: SchemaCategory[] }) {
                       <div className="flex flex-wrap gap-2">
                         {aiCategories.map(cat => (
                           <div key={cat.id} className="flex flex-col gap-1">
-                            <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wide">{cat.name} (AI)</p>
-                            <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 text-[12px]">
+                            <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide">{cat.name} (AI)</p>
+                            <span className="px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 text-xs">
                               {file.aiValues[cat.name] || "—"}
                             </span>
                           </div>
@@ -547,11 +547,11 @@ function TestNamingSection({ categories }: { categories: SchemaCategory[] }) {
 
                 {/* Generated filename */}
                 <div className="pt-3 border-t">
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                     Generated Filename
                   </p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-[12px] bg-slate-50 dark:bg-muted/30 px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 break-all">
+                    <code className="flex-1 text-xs bg-slate-50 dark:bg-muted/30 px-3 py-1.5 rounded-lg text-slate-700 dark:text-slate-300 break-all">
                       {filename}
                     </code>
                     <button
@@ -594,7 +594,7 @@ function AddCategoryInline({ onAdd }: { onAdd: (cat: Omit<SchemaCategory, "id">)
         className="h-full min-h-[120px] border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-blue-400 hover:text-blue-500 transition-colors p-4"
       >
         <IconPlus className="size-5" />
-        <span className="text-[13px] font-medium">Add Category</span>
+        <span className="text-xs font-medium">Add Category</span>
       </button>
     )
   }
@@ -603,7 +603,7 @@ function AddCategoryInline({ onAdd }: { onAdd: (cat: Omit<SchemaCategory, "id">)
     <div className="border-2 border-blue-400 rounded-xl p-4 bg-blue-50 dark:bg-blue-950/20 space-y-2">
       <Input value={name} onChange={e => setName(e.target.value)} placeholder="Category name (e.g., Brand)" autoFocus className="h-8 text-sm" onKeyDown={e => { if (e.key === "Enter") commit() }} />
       <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Description (optional)" className="h-8 text-xs" onKeyDown={e => { if (e.key === "Enter") commit() }} />
-      <label className="flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer">
+      <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
         <input type="checkbox" checked={isAI} onChange={e => setIsAI(e.target.checked)} className="rounded" />
         AI-generated value
       </label>
@@ -668,8 +668,8 @@ export function AINamingTab() {
               <IconSparkles className="size-4 text-blue-500" />
             </div>
             <div>
-              <h3 className="text-[14px] font-bold text-slate-900 dark:text-white">Naming Schema</h3>
-              <p className="text-[12px] text-slate-500 dark:text-muted-foreground font-mono">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">Naming Schema</h3>
+              <p className="text-xs text-slate-500 dark:text-muted-foreground font-mono">
                 Format: {formatPreview}
               </p>
             </div>
@@ -677,18 +677,18 @@ export function AINamingTab() {
 
           <div className="flex items-center gap-2">
             {saving && (
-              <div className="flex items-center gap-1.5 text-[12px] text-slate-400">
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
                 <IconLoader2 className="size-3 animate-spin" />Saving...
               </div>
             )}
             {!saving && lastSaved && (
-              <div className="flex items-center gap-1.5 text-[12px] text-slate-400">
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
                 <IconCheck className="size-3 text-green-500" />
                 Saved {lastSaved.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </div>
             )}
             {!saving && !lastSaved && (
-              <div className="flex items-center gap-1.5 text-[12px] text-slate-400">
+              <div className="flex items-center gap-1.5 text-xs text-slate-400">
                 <IconCloudDownload className="size-3" />
                 Auto-save on
               </div>
@@ -726,12 +726,12 @@ export function AINamingTab() {
               className="border-2 border-dashed rounded-xl p-4 text-left hover:border-blue-300 hover:bg-blue-50/50 dark:hover:bg-blue-950/10 transition-colors group"
             >
               <div className="flex items-center gap-1.5 mb-1">
-                <p className="text-[13px] font-semibold text-blue-500">{s.name}</p>
-                {s.isAI && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-500">AI</span>}
-                {s.autoDetect && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-600">Auto</span>}
+                <p className="text-xs font-semibold text-blue-500">{s.name}</p>
+                {s.isAI && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-500">AI</span>}
+                {s.autoDetect && <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-green-100 text-green-600">Auto</span>}
               </div>
-              <p className="text-[11px] text-slate-400 line-clamp-2">{s.description}</p>
-              <p className="text-[11px] text-blue-400 mt-2 group-hover:underline">+ Click to add</p>
+              <p className="text-xs text-slate-400 line-clamp-2">{s.description}</p>
+              <p className="text-xs text-blue-400 mt-2 group-hover:underline">+ Click to add</p>
             </button>
           ))}
 

@@ -64,11 +64,11 @@ export async function POST(request: NextRequest) {
     const viaRole: ViaRole | undefined = body?.viaRole
 
     if (!token) {
-      return NextResponse.json({ error: "Thiếu token" }, { status: 400 })
+      return NextResponse.json({ error: "Missing token" }, { status: 400 })
     }
     if (viaRole !== "launch" && viaRole !== "non_launch") {
       return NextResponse.json(
-        { error: "viaRole bắt buộc: 'launch' hoặc 'non_launch'" },
+        { error: "viaRole is required: 'launch' or 'non_launch'" },
         { status: 400 }
       )
     }
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       viaAccounts = await fetchViaAdAccounts(token)
     } catch (err) {
       if (err instanceof ViaTokenError) {
-        return NextResponse.json({ error: `Token không hợp lệ: ${err.meta.error}` }, { status: 400 })
+        return NextResponse.json({ error: `Invalid token: ${err.meta.error}` }, { status: 400 })
       }
       throw err
     }
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     if (existing && existing.connection_type === "oauth") {
       return NextResponse.json(
-        { error: "Facebook account này đang là OAuth connection của org — dùng account khác làm via." },
+        { error: "This Facebook account is the org's OAuth connection — use a different account as via." },
         { status: 409 }
       )
     }
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
 
     if (saveError || !connection) {
       console.error("[connections] save failed:", saveError)
-      return NextResponse.json({ error: "Không lưu được connection" }, { status: 500 })
+      return NextResponse.json({ error: "Failed to save connection" }, { status: 500 })
     }
 
     // Upsert ad accounts + gán slot theo role — CHỈ khi slot đang trống

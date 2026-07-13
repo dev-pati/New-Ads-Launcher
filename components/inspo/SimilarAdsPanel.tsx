@@ -32,8 +32,8 @@ export function SimilarAdsPanel({ ad, onAdClick, onCloneWithAI }: Props) {
       <div className="px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-[13px] font-semibold text-foreground">Similar Ads</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Ads similar to this one</p>
+            <p className="text-xs font-semibold text-foreground">Similar Ads</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Ads similar to this one</p>
           </div>
           <label className="flex items-center gap-1.5 cursor-pointer mt-0.5 shrink-0">
             <input
@@ -42,7 +42,7 @@ export function SimilarAdsPanel({ ad, onAdClick, onCloneWithAI }: Props) {
               onChange={e => setSameBrand(e.target.checked)}
               className="size-3.5 accent-primary rounded cursor-pointer"
             />
-            <span className="text-[11px] text-muted-foreground whitespace-nowrap">Same brand</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Same brand</span>
           </label>
         </div>
       </div>
@@ -82,19 +82,19 @@ export function SimilarAdsPanel({ ad, onAdClick, onCloneWithAI }: Props) {
 
               {/* Info */}
               <div className="flex-1 min-w-0 pt-0.5">
-                <p className="text-[11px] font-semibold text-foreground truncate leading-tight">{similar.brandName}</p>
-                <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5 leading-snug">
+                <p className="text-xs font-semibold text-foreground truncate leading-tight">{similar.brandName}</p>
+                <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5 leading-snug">
                   {similar.headline || similar.primaryText}
                 </p>
                 <div className="flex items-center gap-1.5 mt-1">
                   {similar.views != null && (
-                    <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                       {formatViews(similar.views)}
                     </span>
                   )}
                   {similar.cta && (
                     <span className={cn(
-                      "text-[9px] border border-border rounded px-1.5 py-0.5 text-foreground/60",
+                      "text-xs border border-border rounded px-1.5 py-0.5 text-foreground/60",
                       similar.views != null && "border-l border-border"
                     )}>
                       {similar.cta}
@@ -109,10 +109,10 @@ export function SimilarAdsPanel({ ad, onAdClick, onCloneWithAI }: Props) {
 
       {/* Generate Brand footer */}
       <div className="px-4 py-3 border-t border-border shrink-0 space-y-1">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">Generate Brand</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">Generate Brand</p>
         <button
           onClick={onCloneWithAI}
-          className="flex items-center justify-center gap-2 w-full h-9 bg-primary text-primary-foreground text-[13px] font-medium rounded-xl hover:bg-primary/90 transition-colors"
+          className="flex items-center justify-center gap-2 w-full h-9 bg-primary text-primary-foreground text-xs font-medium rounded-xl hover:bg-primary/90 transition-colors"
         >
           <IconSparkles className="size-3.5" />
           Clone with AI for {ad.mediaType === "video" ? "videos" : "images"}

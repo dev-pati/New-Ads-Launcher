@@ -25,12 +25,12 @@ export function TagAnalysisTab({ tags, label }: Props) {
           {/* Header */}
           <div className="flex items-start justify-between gap-2 mb-3">
             <div>
-              <p className="text-[14px] font-semibold text-foreground">{tag.label}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
+              <p className="text-sm font-semibold text-foreground">{tag.label}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {tag.count} ad{tag.count !== 1 ? "s" : ""} · {tag.percentage}% of total
               </p>
             </div>
-            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
               {formatViews(tag.totalReach)}
             </span>
           </div>
@@ -57,8 +57,8 @@ export function TagAnalysisTab({ tags, label }: Props) {
                 className="size-10 rounded-lg object-cover shrink-0"
               />
               <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-muted-foreground/70 uppercase font-medium mb-0.5">Top Creative</p>
-                <p className="text-[11px] text-foreground/80 truncate leading-tight">
+                <p className="text-xs text-muted-foreground/70 uppercase font-medium mb-0.5">Top Creative</p>
+                <p className="text-xs text-foreground/80 truncate leading-tight">
                   {tag.topAd.headline || tag.topAd.primaryText}
                 </p>
               </div>

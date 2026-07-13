@@ -328,7 +328,7 @@ export function AdAccountsManager() {
                   <h2 className="text-lg font-bold text-[#1C2B33]">Ad Accounts</h2>
                   <span className="text-sm font-semibold text-[#8595A4]">({accounts.length})</span>
                 </div>
-                <p className="text-[11px] text-[#8595A4] mt-0.5">Last synced: {formatLastSynced(lastSynced)}</p>
+                <p className="text-xs text-[#8595A4] mt-0.5">Last synced: {formatLastSynced(lastSynced)}</p>
               </div>
 
               <div className="relative w-72 shrink-0">
@@ -356,18 +356,18 @@ export function AdAccountsManager() {
             {/* Row 2: summary chips + filters + date */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Summary badges */}
-              <span className="rounded-full bg-[#E8F3FF] px-2.5 py-0.5 text-[11px] font-bold text-[#0064E0]">Own {ownCount}</span>
-              <span className="rounded-full bg-[#F1F4F7] px-2.5 py-0.5 text-[11px] font-bold text-[#465A69]">Agency {agencyCount}</span>
+              <span className="rounded-full bg-[#E8F3FF] px-2.5 py-0.5 text-xs font-bold text-[#0064E0]">Own {ownCount}</span>
+              <span className="rounded-full bg-[#F1F4F7] px-2.5 py-0.5 text-xs font-bold text-[#465A69]">Agency {agencyCount}</span>
               {personalCount > 0 && (
-                <span className="rounded-full bg-[rgba(120,86,255,0.10)] px-2.5 py-0.5 text-[11px] font-bold text-[#5C3FB5]">Personal {personalCount}</span>
+                <span className="rounded-full bg-[rgba(120,86,255,0.10)] px-2.5 py-0.5 text-xs font-bold text-[#5C3FB5]">Personal {personalCount}</span>
               )}
-              <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-[11px] font-bold text-[#007D1E]">Active {activeCount}</span>
+              <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-xs font-bold text-[#007D1E]">Active {activeCount}</span>
 
               <div className="mx-1 h-4 w-px bg-[#DEE3E9]" />
 
               {/* TYPE filter */}
               <div className="flex items-center gap-0.5 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] p-0.5">
-                <span className="px-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#8595A4]">Type</span>
+                <span className="px-2.5 text-xs font-extrabold uppercase tracking-wide text-[#8595A4]">Type</span>
                 {(["all", "agency", "own"] as AccountOwnershipFilter[]).map(t => (
                   <button key={t} onClick={() => setOwnershipFilter(t)} className={FILTER_BTN(ownershipFilter === t)}>
                     {t === "all" ? "All" : t === "agency" ? "Agency" : "Own"}
@@ -377,7 +377,7 @@ export function AdAccountsManager() {
 
               {/* STATUS filter */}
               <div className="flex items-center gap-0.5 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] p-0.5">
-                <span className="px-2.5 text-[10px] font-extrabold uppercase tracking-wide text-[#8595A4]">Status</span>
+                <span className="px-2.5 text-xs font-extrabold uppercase tracking-wide text-[#8595A4]">Status</span>
                 {(["all", "active", "disabled"] as AccountStatusFilter[]).map(s => (
                   <button key={s} onClick={() => setStatusFilter(s)}
                     className={cn(FILTER_BTN(statusFilter === s), "gap-1.5")}>
@@ -399,7 +399,7 @@ export function AdAccountsManager() {
                   hasAcctDateFilter ? "border-[#0064E0] bg-[#E8F3FF]" : "border-[#DEE3E9] bg-[#F7F8FA]"
                 )}>
                   <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")} />
-                  <span className={cn("text-[10px] font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")}>From</span>
+                  <span className={cn("text-xs font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")}>From</span>
                   <input
                     type="date"
                     value={acctDateFrom}
@@ -414,7 +414,7 @@ export function AdAccountsManager() {
                   hasAcctDateFilter ? "border-[#0064E0] bg-[#E8F3FF]" : "border-[#DEE3E9] bg-[#F7F8FA]"
                 )}>
                   <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")} />
-                  <span className={cn("text-[10px] font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")}>To</span>
+                  <span className={cn("text-xs font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")}>To</span>
                   <input
                     type="date"
                     value={acctDateTo}
@@ -445,7 +445,7 @@ export function AdAccountsManager() {
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-lg font-bold text-[#1C2B33]">Account Spending Limit</h2>
-                <p className="text-[11px] text-[#8595A4] mt-0.5">
+                <p className="text-xs text-[#8595A4] mt-0.5">
                   {selectedAccount ? `${selectedAccount.name} · ${selectedAccount.account_id}` : "Select an ad account"}
                 </p>
               </div>
@@ -507,7 +507,7 @@ export function AdAccountsManager() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] px-3 py-1.5">
                 <IconCalendar className="size-3.5 shrink-0 text-[#8595A4]" />
-                <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#8595A4]">From</span>
+                <span className="text-xs font-extrabold uppercase tracking-wide text-[#8595A4]">From</span>
                 <input
                   type="date"
                   value={dateFrom}
@@ -519,7 +519,7 @@ export function AdAccountsManager() {
 
               <div className="flex items-center gap-2 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] px-3 py-1.5">
                 <IconCalendar className="size-3.5 shrink-0 text-[#8595A4]" />
-                <span className="text-[10px] font-extrabold uppercase tracking-wide text-[#8595A4]">To</span>
+                <span className="text-xs font-extrabold uppercase tracking-wide text-[#8595A4]">To</span>
                 <input
                   type="date"
                   value={dateTo}
@@ -566,7 +566,7 @@ export function AdAccountsManager() {
               <thead>
                 <tr className="border-b border-[#EAECEF] bg-[#F7F8FA]">
                   {["#", "Account ID", "Name", "Type", "Owner", "Status", "Currency", "Timezone", "Spend Cap", "Remaining", "Spent"].map(label => (
-                    <th key={label} className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#8595A4]">
+                    <th key={label} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#8595A4]">
                       <span className="flex items-center gap-1">
                         {label}
                         {["Spend Cap", "Remaining", "Spent"].includes(label) && (
@@ -602,7 +602,7 @@ export function AdAccountsManager() {
                         <td className="px-5 py-3.5 font-mono text-xs text-[#465A69]">{snap.fb_account_id}</td>
                         <td className="px-5 py-3.5 text-sm font-semibold text-[#1C2B33]">{snap.name || "-"}</td>
                         <td className="px-5 py-3.5">
-                          <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                          <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold",
                             snap.ownership === "own" ? "bg-[#E8F3FF] text-[#0064E0]"
                               : snap.ownership === "agency" ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
                               : "bg-[rgba(120,86,255,0.10)] text-[#5C3FB5]"
@@ -612,7 +612,7 @@ export function AdAccountsManager() {
                         </td>
                         <td className="px-5 py-3.5 text-sm text-[#465A69]">{snap.owner_business_name || "-"}</td>
                         <td className="px-5 py-3.5">
-                          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold",
                             isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
                           )}>
                             <span className={cn("size-1.5 rounded-full", isActive ? "bg-[#31A24C]" : "bg-[#E41E3F]")} />
@@ -640,7 +640,7 @@ export function AdAccountsManager() {
                         <td className="px-5 py-3.5 font-mono text-xs text-[#465A69]">{account.account_id}</td>
                         <td className="px-5 py-3.5 text-sm font-semibold text-[#1C2B33]">{account.name}</td>
                         <td className="px-5 py-3.5">
-                          <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                          <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold",
                             account.ownership === "own" ? "bg-[#E8F3FF] text-[#0064E0]"
                               : account.ownership === "agency" ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
                               : "bg-[rgba(120,86,255,0.10)] text-[#5C3FB5]"
@@ -652,7 +652,7 @@ export function AdAccountsManager() {
                           {account.owner_business?.name || account.owner_business?.id || account.business?.name || account.business?.id || "-"}
                         </td>
                         <td className="px-5 py-3.5">
-                          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold",
+                          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold",
                             isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
                           )}>
                             <span className={cn("size-1.5 rounded-full", isActive ? "bg-[#31A24C]" : "bg-[#E41E3F]")} />
@@ -689,7 +689,7 @@ export function AdAccountsManager() {
             <thead>
               <tr className="border-b border-[#EAECEF] bg-[#F7F8FA]">
                 {["Start date", "End date", "Activity"].map(label => (
-                  <th key={label} className="px-5 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-[#8595A4]">
+                  <th key={label} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#8595A4]">
                     {label}
                   </th>
                 ))}
@@ -717,7 +717,7 @@ export function AdAccountsManager() {
                   <td className="px-5 py-3.5 text-sm text-[#1C2B33]">
                     {row.endDate
                       ? formatDateTime(row.endDate)
-                      : <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-[11px] font-bold text-[#007D1E]">Current</span>
+                      : <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-xs font-bold text-[#007D1E]">Current</span>
                     }
                   </td>
                   <td className="px-5 py-3.5 text-sm font-medium text-[#1C2B33]">

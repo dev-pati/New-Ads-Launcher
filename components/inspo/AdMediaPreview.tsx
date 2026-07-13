@@ -101,7 +101,7 @@ export function AdMediaPreview({ ad, hasPrev, hasNext, onPrev, onNext }: Props) 
 
                 {/* Duration badge */}
                 {ad.duration && (
-                  <span className="absolute top-3 left-3 bg-black/70 text-white text-[11px] font-mono font-medium px-2 py-0.5 rounded-md z-10">
+                  <span className="absolute top-3 left-3 bg-black/70 text-white text-xs font-mono font-medium px-2 py-0.5 rounded-md z-10">
                     {ad.duration}
                   </span>
                 )}
@@ -168,7 +168,7 @@ export function AdMediaPreview({ ad, hasPrev, hasNext, onPrev, onNext }: Props) 
           href={previewUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-[13px] font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
         >
           {/* Meta infinity logo simplified */}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

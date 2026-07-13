@@ -203,20 +203,20 @@ function SelectField({ label, value, options, onChange, description, required }:
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[12px] font-semibold text-foreground/80">
+      <label className="text-xs font-semibold text-foreground/80">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
       <div className="relative">
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+          className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
         >
           {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
         <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
       </div>
-      {description && <p className="text-[11px] text-muted-foreground leading-relaxed">{description}</p>}
+      {description && <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>}
     </div>
   )
 }
@@ -236,7 +236,7 @@ function MetricConditionRow({ cond, onChange, onRemove, canRemove }: {
           <select
             value={cond.metric}
             onChange={e => onChange({ ...cond, metric: e.target.value })}
-            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-1 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-1 focus:ring-primary/30 text-foreground"
           >
             <option value="">Select metric</option>
             {METRICS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
@@ -255,7 +255,7 @@ function MetricConditionRow({ cond, onChange, onRemove, canRemove }: {
           <select
             value={cond.operator}
             onChange={e => onChange({ ...cond, operator: e.target.value as MetricCondition["operator"] })}
-            className="w-full h-9 pl-2 pr-7 text-[12px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-1 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-2 pr-7 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-1 focus:ring-primary/30 text-foreground"
           >
             <option value="">Select direction</option>
             {OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -266,13 +266,13 @@ function MetricConditionRow({ cond, onChange, onRemove, canRemove }: {
           type="number"
           value={cond.value}
           onChange={e => onChange({ ...cond, value: parseFloat(e.target.value) || 0 })}
-          className="w-16 h-9 px-2 text-[13px] text-center bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 tabular-nums"
+          className="w-16 h-9 px-2 text-xs text-center bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 tabular-nums"
         />
         <div className="relative w-16">
           <select
             value={cond.unit}
             onChange={e => onChange({ ...cond, unit: e.target.value as MetricCondition["unit"] })}
-            className="w-full h-9 pl-2 pr-6 text-[12px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-1 focus:ring-primary/30"
+            className="w-full h-9 pl-2 pr-6 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-1 focus:ring-primary/30"
           >
             <option value="%">%</option>
             <option value="$">$</option>
@@ -321,7 +321,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
   }
 
   if (connected === null) return (
-    <div className="flex items-center gap-2 text-[12px] text-muted-foreground py-2">
+    <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
       <IconLoader2 className="size-3.5 animate-spin" /> Checking Google Drive…
     </div>
   )
@@ -331,13 +331,13 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
       <div className="flex items-center gap-2.5">
         <IconBrandGoogleDrive className="size-5 text-[#34A853] shrink-0" />
         <div>
-          <p className="text-[13px] font-semibold">Connect Google Drive</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Required to use Google Drive trigger</p>
+          <p className="text-xs font-semibold">Connect Google Drive</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Required to use Google Drive trigger</p>
         </div>
       </div>
       <a
         href="/connect"
-        className="flex items-center justify-center h-8 w-full rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors"
+        className="flex items-center justify-center h-8 w-full rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
       >
         Connect Google Drive
       </a>
@@ -349,7 +349,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
       {/* Connected badge */}
       <div className="flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 rounded-xl">
         <div className="size-1.5 rounded-full bg-green-500 shrink-0" />
-        <p className="text-[12px] text-green-700 dark:text-green-400 font-medium">Google Drive Connected</p>
+        <p className="text-xs text-green-700 dark:text-green-400 font-medium">Google Drive Connected</p>
       </div>
 
       {/* Trigger Event */}
@@ -370,7 +370,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
 
       {/* Google Drive Folder */}
       <div className="space-y-2">
-        <label className="text-[12px] font-semibold text-foreground/80">
+        <label className="text-xs font-semibold text-foreground/80">
           Google Drive Folder <span className="text-red-500">*</span>
         </label>
 
@@ -378,7 +378,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
         {config.driveFolderId && config.driveFolderName && (
           <div className="flex items-center gap-2 px-3 py-2 bg-background border border-primary/30 rounded-lg">
             <IconBrandGoogleDrive className="size-4 text-[#34A853] shrink-0" />
-            <span className="text-[13px] flex-1 truncate">{config.driveFolderName}</span>
+            <span className="text-xs flex-1 truncate">{config.driveFolderName}</span>
             <button
               onClick={() => onChange({ ...config, driveFolderId: undefined, driveFolderName: undefined })}
               className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
@@ -393,7 +393,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
           <button
             onClick={loadFolders}
             disabled={loadingFolders}
-            className="w-full flex items-center gap-2 h-9 px-3 border border-dashed border-border rounded-lg text-[13px] text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+            className="w-full flex items-center gap-2 h-9 px-3 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
           >
             {loadingFolders
               ? <><IconLoader2 className="size-4 animate-spin" /> Loading folders…</>
@@ -412,7 +412,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
                   onChange({ ...config, driveFolderId: f.id, driveFolderName: f.name })
                   setBrowseOpen(false)
                 }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[13px] text-left hover:bg-muted/60 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-muted/60 transition-colors"
               >
                 <IconBrandGoogleDrive className="size-3.5 text-[#34A853] shrink-0" />
                 {f.name}
@@ -424,7 +424,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
         {/* Paste URL/ID collapsible */}
         <button
           onClick={() => setShowPaste(v => !v)}
-          className="flex items-center gap-1.5 text-[12px] text-primary/80 hover:text-primary transition-colors font-medium"
+          className="flex items-center gap-1.5 text-xs text-primary/80 hover:text-primary transition-colors font-medium"
         >
           <IconChevronDown className={cn("size-3.5 transition-transform", showPaste && "rotate-180")} />
           Or paste folder URL / ID
@@ -436,9 +436,9 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
               placeholder="https://drive.google.com/drive/folders/..."
               value={config.driveFolderUrl ?? config.driveFolderId ?? ""}
               onChange={e => handlePasteUrl(e.target.value)}
-              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Paste the full URL or just the folder ID
             </p>
           </div>
@@ -461,9 +461,9 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
 
           {/* Upload all on first run toggle */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Upload all files on first run</label>
+            <label className="text-xs font-semibold text-foreground/80">Upload all files on first run</label>
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] text-muted-foreground leading-snug">
+              <p className="text-xs text-muted-foreground leading-snug">
                 {config.driveUploadAllOnFirstRun
                   ? "All existing files in the folder will be processed on the first run."
                   : "Only new files added after this automation is activated will be processed."}
@@ -491,12 +491,12 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
         <>
           {/* Folder Name Filter */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Folder Name Filter</label>
+            <label className="text-xs font-semibold text-foreground/80">Folder Name Filter</label>
             <div className="relative">
               <select
                 value={config.driveFolderNameFilter ?? "all"}
                 onChange={e => onChange({ ...config, driveFolderNameFilter: e.target.value as TriggerConfig["driveFolderNameFilter"], driveFolderNameFilterValue: undefined })}
-                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
               >
                 <option value="all">All Folders</option>
                 <option value="name_contains">Name Contains</option>
@@ -513,7 +513,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
                 placeholder="Enter folder name…"
                 value={config.driveFolderNameFilterValue ?? ""}
                 onChange={e => onChange({ ...config, driveFolderNameFilterValue: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
               />
             )}
           </div>
@@ -522,8 +522,8 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
           <div className="space-y-1.5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1">
-                <label className="text-[12px] font-semibold text-foreground/80">Enable Recursive Search</label>
-                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                <label className="text-xs font-semibold text-foreground/80">Enable Recursive Search</label>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
                   Search for new folders within all subfolders, not just the top level. Only triggers when a new folder containing files is found — adding files to existing folders will not trigger.
                 </p>
               </div>
@@ -545,16 +545,16 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
 
           {/* Minimum Files Required */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Minimum Files Required</label>
+            <label className="text-xs font-semibold text-foreground/80">Minimum Files Required</label>
             <input
               type="number"
               min={0}
               placeholder="e.g., 1"
               value={config.driveMinFilesRequired ?? ""}
               onChange={e => onChange({ ...config, driveMinFilesRequired: parseInt(e.target.value) || 0 })}
-              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Only trigger when the folder contains at least this many files (0 = no minimum)
             </p>
           </div>
@@ -577,7 +577,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
       {/* Multi-placement note when all_as_one */}
       {(config.driveBatchStrategy ?? "all_as_one") !== "one_per_file" && (
         <div className="px-3 py-2.5 bg-primary/5 border border-primary/15 rounded-xl">
-          <p className="text-[11px] text-primary/80 leading-relaxed">
+          <p className="text-xs text-primary/80 leading-relaxed">
             <span className="font-semibold">Multi-Placement:</span> Files sharing the same base name with dimension suffixes (e.g. creative_1x1.mp4 + creative_9x16.mp4) are auto-grouped into a single multi-placement ad. Works with videos and images. Disabled when Batch Strategy is &quot;One ad per file&quot;.
           </p>
         </div>
@@ -596,7 +596,7 @@ function GoogleDriveTriggerSetup({ config, onChange }: {
 
       {/* Note */}
       <div className="px-3 py-2.5 bg-primary/5 border border-primary/15 rounded-xl">
-        <p className="text-[11px] text-primary/80 leading-relaxed">
+        <p className="text-xs text-primary/80 leading-relaxed">
           <span className="font-semibold">Note:</span>{" "}
           {config.event === "drive_new_folder_in_folder"
             ? "This parent folder will be checked once per day for new subfolders. Folders that have already been processed will not be processed again."
@@ -640,7 +640,7 @@ function MediaLibrarySetup({ config, onChange }: {
   }, [config.mediaBoard])
 
   if (connected === null) return (
-    <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <IconLoader2 className="size-3.5 animate-spin" /> Checking Google Drive…
     </div>
   )
@@ -650,13 +650,13 @@ function MediaLibrarySetup({ config, onChange }: {
       <div className="flex items-center gap-2.5">
         <IconBrandGoogleDrive className="size-5 text-[#34A853] shrink-0" />
         <div>
-          <p className="text-[13px] font-semibold">Connect Google Drive</p>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Required to use Media Library trigger</p>
+          <p className="text-xs font-semibold">Connect Google Drive</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Required to use Media Library trigger</p>
         </div>
       </div>
       <a
         href="/connect"
-        className="flex items-center justify-center h-8 w-full rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors"
+        className="flex items-center justify-center h-8 w-full rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
       >
         Connect Google Drive
       </a>
@@ -670,12 +670,12 @@ function MediaLibrarySetup({ config, onChange }: {
     <>
       {/* Board */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Board</label>
+        <label className="text-xs font-semibold text-foreground/80">Board</label>
         <div className="relative">
           <select
             value={boardOp}
             onChange={e => onChange({ ...config, mediaBoard: e.target.value as TriggerConfig["mediaBoard"], mediaBoardId: undefined, mediaBoardName: undefined })}
-            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
           >
             <option value="all">All Boards</option>
             <option value="name_contains">Name contains</option>
@@ -688,7 +688,7 @@ function MediaLibrarySetup({ config, onChange }: {
           <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
         </div>
         {boardOp === "all" && (
-          <p className="text-[11px] text-muted-foreground">Triggers for uploads to any board</p>
+          <p className="text-xs text-muted-foreground">Triggers for uploads to any board</p>
         )}
 
         {/* Name filter text input */}
@@ -698,7 +698,7 @@ function MediaLibrarySetup({ config, onChange }: {
             placeholder="Enter folder name…"
             value={config.mediaBoardFilter ?? ""}
             onChange={e => onChange({ ...config, mediaBoardFilter: e.target.value })}
-            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+            className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
           />
         )}
 
@@ -711,7 +711,7 @@ function MediaLibrarySetup({ config, onChange }: {
                 const folder = folders.find(f => f.id === e.target.value)
                 onChange({ ...config, mediaBoardId: folder?.id, mediaBoardName: folder?.name })
               }}
-              className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+              className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
               disabled={loadingFolders}
             >
               <option value="">{loadingFolders ? "Loading folders…" : "Select a folder"}</option>
@@ -726,12 +726,12 @@ function MediaLibrarySetup({ config, onChange }: {
 
       {/* Asset Name */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Asset Name</label>
+        <label className="text-xs font-semibold text-foreground/80">Asset Name</label>
         <div className="relative">
           <select
             value={config.mediaAssetName ?? "all"}
             onChange={e => onChange({ ...config, mediaAssetName: e.target.value as TriggerConfig["mediaAssetName"], mediaNameFilter: undefined })}
-            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
           >
             <option value="all">All Names</option>
             <option value="name_contains">Name contains</option>
@@ -748,22 +748,22 @@ function MediaLibrarySetup({ config, onChange }: {
             placeholder="Enter asset name…"
             value={config.mediaNameFilter ?? ""}
             onChange={e => onChange({ ...config, mediaNameFilter: e.target.value })}
-            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+            className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
           />
         )}
         {(!config.mediaAssetName || config.mediaAssetName === "all") && (
-          <p className="text-[11px] text-muted-foreground">Triggers for assets with any name</p>
+          <p className="text-xs text-muted-foreground">Triggers for assets with any name</p>
         )}
       </div>
 
       {/* Media Type */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Media Type</label>
+        <label className="text-xs font-semibold text-foreground/80">Media Type</label>
         <div className="relative">
           <select
             value={config.mediaType ?? "all"}
             onChange={e => onChange({ ...config, mediaType: e.target.value as TriggerConfig["mediaType"] })}
-            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
           >
             <option value="all">All Media</option>
             <option value="images">Images Only</option>
@@ -775,19 +775,19 @@ function MediaLibrarySetup({ config, onChange }: {
 
       {/* Trigger Timing */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Trigger Timing</label>
+        <label className="text-xs font-semibold text-foreground/80">Trigger Timing</label>
         <div className="relative">
           <select
             value={config.triggerTiming ?? "immediately"}
             onChange={e => onChange({ ...config, triggerTiming: e.target.value as TriggerConfig["triggerTiming"] })}
-            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
           >
             <option value="immediately">Immediately on Upload</option>
             <option value="on_approved">When Media is Approved</option>
           </select>
           <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
         </div>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {config.triggerTiming === "on_approved"
             ? "Automation will run when media is approved."
             : "Automation will run immediately when media is added to the board"}
@@ -796,12 +796,12 @@ function MediaLibrarySetup({ config, onChange }: {
 
       {/* Asset Status */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Asset Status</label>
+        <label className="text-xs font-semibold text-foreground/80">Asset Status</label>
         <div className="relative">
           <select
             value={config.assetStatus ?? "all"}
             onChange={e => onChange({ ...config, assetStatus: e.target.value as TriggerConfig["assetStatus"] })}
-            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
           >
             <option value="all">All Status</option>
             <option value="approved">Approved</option>
@@ -810,14 +810,14 @@ function MediaLibrarySetup({ config, onChange }: {
           </select>
           <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
         </div>
-        <p className="text-[11px] text-muted-foreground">Filter by asset approval status (default: all)</p>
+        <p className="text-xs text-muted-foreground">Filter by asset approval status (default: all)</p>
       </div>
 
       {/* Asset Grouping toggle */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Asset Grouping</label>
+        <label className="text-xs font-semibold text-foreground/80">Asset Grouping</label>
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] text-muted-foreground leading-snug">
+          <p className="text-xs text-muted-foreground leading-snug">
             {config.assetGrouping
               ? "Enabled — uploads are grouped before triggering"
               : "Disabled — each upload triggers actions immediately"}
@@ -857,8 +857,8 @@ function DataMappingSection({ config, onChange }: {
   return (
     <div className="space-y-2">
       <div>
-        <p className="text-[12px] font-semibold text-foreground/80">Data Mapping</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">Map cells to data fields (optional)</p>
+        <p className="text-xs font-semibold text-foreground/80">Data Mapping</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Map cells to data fields (optional)</p>
       </div>
       <div className="space-y-2">
         {mappings.map((m, i) => (
@@ -867,13 +867,13 @@ function DataMappingSection({ config, onChange }: {
               placeholder="Label"
               value={m.label}
               onChange={e => update(i, "label", e.target.value)}
-              className="flex-1 h-8 px-2.5 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
+              className="flex-1 h-8 px-2.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
             />
             <input
               placeholder="Cell"
               value={m.cell}
               onChange={e => update(i, "cell", e.target.value)}
-              className="w-20 h-8 px-2.5 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
+              className="w-20 h-8 px-2.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground/40"
             />
             <button
               onClick={() => onChange({ ...config, sheetsDataMappings: mappings.filter((_, j) => j !== i) })}
@@ -886,7 +886,7 @@ function DataMappingSection({ config, onChange }: {
       </div>
       <button
         onClick={() => onChange({ ...config, sheetsDataMappings: [...mappings, { label: "", cell: "" }] })}
-        className="flex items-center gap-1.5 text-[12px] text-primary hover:underline font-medium"
+        className="flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
       >
         <IconPlus className="size-3.5" />
         Add Mapping
@@ -929,14 +929,14 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
     <>
       {/* Trigger Event */}
       <div className="space-y-1.5">
-        <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70">
+        <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/70">
           Trigger Event
         </label>
         <div className="relative">
           <select
             value={event}
             onChange={e => onChange({ ...config, event: e.target.value as TriggerConfig["event"] })}
-            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
           >
             <option value="">Choose an event</option>
             <option value="sheets_cell_changed">Cell Value Changed</option>
@@ -948,13 +948,13 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
       </div>
 
       <div className="pt-1 border-t border-border/60 space-y-4">
-        <p className="text-[13px] font-semibold text-foreground/90">Configure Google Sheets Trigger</p>
+        <p className="text-xs font-semibold text-foreground/90">Configure Google Sheets Trigger</p>
 
         {/* Service Account Access */}
         <div className="rounded-xl border border-border bg-muted/20 p-3.5 space-y-2.5">
-          <p className="text-[12px] font-semibold text-foreground/80">Service Account Access</p>
+          <p className="text-xs font-semibold text-foreground/80">Service Account Access</p>
           <div className="flex items-center gap-2 px-3 py-2 bg-background border border-border rounded-lg">
-            <code className="flex-1 text-[11px] text-foreground/70 truncate font-mono select-all">
+            <code className="flex-1 text-xs text-foreground/70 truncate font-mono select-all">
               {SHEETS_SERVICE_ACCOUNT}
             </code>
             <button
@@ -967,14 +967,14 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
                 : <IconCopy className="size-3.5" />}
             </button>
           </div>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             Share your spreadsheet with this email and grant <span className="font-semibold">Viewer</span> access to allow reading sheet data.
           </p>
         </div>
 
         {/* Spreadsheet ID or URL */}
         <div className="space-y-1.5">
-          <label className="text-[12px] font-semibold text-foreground/80">
+          <label className="text-xs font-semibold text-foreground/80">
             Spreadsheet ID or URL <span className="text-red-500">*</span>
           </label>
           <input
@@ -982,24 +982,24 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
             placeholder="Paste spreadsheet URL or ID"
             value={config.sheetsSpreadsheetId ?? ""}
             onChange={e => handleSpreadsheetInput(e.target.value)}
-            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+            className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Paste the full URL or just the ID from docs.google.com/spreadsheets/d/<strong>[ID]</strong>/edit
           </p>
         </div>
 
         {/* Sheet Name */}
         <div className="space-y-1.5">
-          <label className="text-[12px] font-semibold text-foreground/80">Sheet Name</label>
+          <label className="text-xs font-semibold text-foreground/80">Sheet Name</label>
           <input
             type="text"
             placeholder="Sheet1"
             value={config.sheetsSheetName ?? "Sheet1"}
             onChange={e => onChange({ ...config, sheetsSheetName: e.target.value })}
-            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <p className="text-[11px] text-muted-foreground">The name of the sheet tab (default: Sheet1)</p>
+          <p className="text-xs text-muted-foreground">The name of the sheet tab (default: Sheet1)</p>
         </div>
 
         {/* Watch Mode — Cell Value Changed only */}
@@ -1020,11 +1020,11 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
         {event === "sheets_cell_changed" && watchMode === "single_cell" && (
           <div className="p-3.5 border border-border rounded-xl space-y-3 bg-muted/20">
             <div>
-              <p className="text-[12px] font-semibold text-foreground/80">Trigger Condition</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Automation runs when this cell matches the condition</p>
+              <p className="text-xs font-semibold text-foreground/80">Trigger Condition</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Automation runs when this cell matches the condition</p>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">
+              <label className="text-xs font-semibold text-foreground/80">
                 Trigger Cell <span className="text-red-500">*</span>
               </label>
               <input
@@ -1032,9 +1032,9 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
                 placeholder="C5"
                 value={config.sheetsTriggerCell ?? ""}
                 onChange={e => onChange({ ...config, sheetsTriggerCell: e.target.value })}
-                className="w-28 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                className="w-28 h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
               />
-              <p className="text-[11px] text-muted-foreground">Cell reference to watch (e.g., C5, D10, AA1)</p>
+              <p className="text-xs text-muted-foreground">Cell reference to watch (e.g., C5, D10, AA1)</p>
             </div>
             <SelectField
               label="Condition"
@@ -1044,7 +1044,7 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
             />
             {needsValue && (
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">
+                <label className="text-xs font-semibold text-foreground/80">
                   Value <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1052,9 +1052,9 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
                   placeholder="TRUE"
                   value={config.sheetsConditionValue ?? ""}
                   onChange={e => onChange({ ...config, sheetsConditionValue: e.target.value })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
                 />
-                <p className="text-[11px] text-muted-foreground">Trigger when cell equals this value</p>
+                <p className="text-xs text-muted-foreground">Trigger when cell equals this value</p>
               </div>
             )}
           </div>
@@ -1065,21 +1065,21 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
           <>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Header Row</label>
+                <label className="text-xs font-semibold text-foreground/80">Header Row</label>
                 <input
                   type="number" min={1}
                   value={config.sheetsHeaderRow ?? 1}
                   onChange={e => onChange({ ...config, sheetsHeaderRow: parseInt(e.target.value) || 1 })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Data Start Row</label>
+                <label className="text-xs font-semibold text-foreground/80">Data Start Row</label>
                 <input
                   type="number" min={1}
                   value={config.sheetsDataStartRow ?? 2}
                   onChange={e => onChange({ ...config, sheetsDataStartRow: parseInt(e.target.value) || 2 })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
                 />
               </div>
             </div>
@@ -1096,7 +1096,7 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
             <div className="space-y-1">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[12px] font-semibold text-foreground/80">Process existing rows on first run</p>
+                  <p className="text-xs font-semibold text-foreground/80">Process existing rows on first run</p>
                 </div>
                 <button
                   type="button"
@@ -1112,7 +1112,7 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
                   )} />
                 </button>
               </div>
-              <p className="text-[11px] text-muted-foreground">Existing rows will be recorded but not processed on the first run. Only new rows added after the first run will trigger actions.</p>
+              <p className="text-xs text-muted-foreground">Existing rows will be recorded but not processed on the first run. Only new rows added after the first run will trigger actions.</p>
             </div>
           </>
         )}
@@ -1122,52 +1122,52 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
           <>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Header Row</label>
+                <label className="text-xs font-semibold text-foreground/80">Header Row</label>
                 <input
                   type="number" min={1}
                   value={config.sheetsHeaderRow ?? 1}
                   onChange={e => onChange({ ...config, sheetsHeaderRow: parseInt(e.target.value) || 1 })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Data Start Row</label>
+                <label className="text-xs font-semibold text-foreground/80">Data Start Row</label>
                 <input
                   type="number" min={1}
                   value={config.sheetsDataStartRow ?? 2}
                   onChange={e => onChange({ ...config, sheetsDataStartRow: parseInt(e.target.value) || 2 })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Catalog Selection Mode <span className="text-red-500">*</span></label>
+              <label className="text-xs font-semibold text-foreground/80">Catalog Selection Mode <span className="text-red-500">*</span></label>
               <div className="relative">
                 <select
                   value={config.sheetsCatalogSelectionMode ?? "single"}
                   onChange={e => onChange({ ...config, sheetsCatalogSelectionMode: e.target.value as any })}
-                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                  className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
                 >
                   <option value="single">Single Catalog (all products go to one catalog)</option>
                   <option value="per_row">Per Row (catalog ID from a sheet column)</option>
                 </select>
                 <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
               </div>
-              <p className="text-[11px] text-muted-foreground">Select a catalog below — all products from the sheet will be added to this catalog.</p>
+              <p className="text-xs text-muted-foreground">Select a catalog below — all products from the sheet will be added to this catalog.</p>
             </div>
 
             {config.sheetsCatalogSelectionMode !== "per_row" && (
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Catalog <span className="text-red-500">*</span></label>
+                <label className="text-xs font-semibold text-foreground/80">Catalog <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   placeholder="Catalog ID"
                   value={config.sheetsCatalogId ?? ""}
                   onChange={e => onChange({ ...config, sheetsCatalogId: e.target.value })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
                 />
-                <p className="text-[11px] text-muted-foreground">Enter your Meta Catalog ID</p>
+                <p className="text-xs text-muted-foreground">Enter your Meta Catalog ID</p>
               </div>
             )}
 
@@ -1182,7 +1182,7 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
 
             <div className="space-y-1">
               <div className="flex items-center justify-between">
-                <p className="text-[12px] font-semibold text-foreground/80">Process existing rows on first run</p>
+                <p className="text-xs font-semibold text-foreground/80">Process existing rows on first run</p>
                 <button
                   type="button"
                   onClick={() => onChange({ ...config, sheetsProcessExistingRows: !(config.sheetsProcessExistingRows ?? false) })}
@@ -1197,7 +1197,7 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
                   )} />
                 </button>
               </div>
-              <p className="text-[11px] text-muted-foreground">Only new rows added after the first run will trigger product creation.</p>
+              <p className="text-xs text-muted-foreground">Only new rows added after the first run will trigger product creation.</p>
             </div>
           </>
         )}
@@ -1206,7 +1206,7 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
         {(event === "sheets_new_row_launch" || event === "sheets_new_row_catalog") && (
           <button
             disabled={!config.sheetsSpreadsheetId}
-            className="w-full h-9 flex items-center justify-center gap-2 text-[13px] border border-border rounded-lg text-muted-foreground hover:bg-muted/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="w-full h-9 flex items-center justify-center gap-2 text-xs border border-border rounded-lg text-muted-foreground hover:bg-muted/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             <IconRefresh className="size-3.5" />
             Load Columns
@@ -1218,7 +1218,7 @@ function GoogleSheetsTriggerSetup({ config, onChange }: {
 
         {/* Note */}
         <div className="px-3 py-2.5 bg-primary/5 border border-primary/15 rounded-xl">
-          <p className="text-[11px] text-primary/80">
+          <p className="text-xs text-primary/80">
             <span className="font-semibold">Note:</span> This cell will be checked daily at midnight UTC.
           </p>
         </div>
@@ -1259,8 +1259,8 @@ function ScheduleTriggerSetup({ config, onChange }: {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-[13px] font-semibold text-foreground">Schedule Configuration</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5">Set when and how often this automation should run.</p>
+        <p className="text-xs font-semibold text-foreground">Schedule Configuration</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Set when and how often this automation should run.</p>
       </div>
 
       {/* Frequency */}
@@ -1279,27 +1279,27 @@ function ScheduleTriggerSetup({ config, onChange }: {
       {freq === "one_time" && (
         <>
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Scheduled Date <span className="text-red-500">*</span></label>
+            <label className="text-xs font-semibold text-foreground/80">Scheduled Date <span className="text-red-500">*</span></label>
             <input type="date"
               value={config.scheduleDate ?? ""}
               onChange={e => onChange({ ...config, scheduleDate: e.target.value })}
-              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Time <span className="text-red-500">*</span></label>
+            <label className="text-xs font-semibold text-foreground/80">Time <span className="text-red-500">*</span></label>
             <input type="time"
               value={config.scheduleTime ?? "09:00"}
               onChange={e => onChange({ ...config, scheduleTime: e.target.value })}
-              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Timezone</label>
+            <label className="text-xs font-semibold text-foreground/80">Timezone</label>
             <select
               value={config.scheduleTimezone ?? "UTC"}
               onChange={e => onChange({ ...config, scheduleTimezone: e.target.value })}
-              className="w-full h-9 px-2 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full h-9 px-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               <option value="UTC">UTC</option>
               <option value="Asia/Ho_Chi_Minh">Vietnam (UTC+7)</option>
@@ -1310,7 +1310,7 @@ function ScheduleTriggerSetup({ config, onChange }: {
               <option value="America/Los_Angeles">Los Angeles (UTC-8/-7)</option>
               <option value="Europe/London">London (UTC+0/+1)</option>
             </select>
-            <p className="text-[11px] text-muted-foreground">Giờ hiện tại là UTC. Chọn timezone để cron chạy đúng giờ địa phương.</p>
+            <p className="text-xs text-muted-foreground">Giờ hiện tại là UTC. Chọn timezone để cron chạy đúng giờ địa phương.</p>
           </div>
         </>
       )}
@@ -1339,20 +1339,20 @@ function ScheduleTriggerSetup({ config, onChange }: {
       {freq !== "one_time" && (
         <>
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Time <span className="text-red-500">*</span></label>
+            <label className="text-xs font-semibold text-foreground/80">Time <span className="text-red-500">*</span></label>
             <input type="time"
               value={config.scheduleTime ?? "09:00"}
               onChange={e => onChange({ ...config, scheduleTime: e.target.value })}
-              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
-            <p className="text-[11px] text-muted-foreground">{timeDesc}</p>
+            <p className="text-xs text-muted-foreground">{timeDesc}</p>
           </div>
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Timezone</label>
+            <label className="text-xs font-semibold text-foreground/80">Timezone</label>
             <select
               value={config.scheduleTimezone ?? "UTC"}
               onChange={e => onChange({ ...config, scheduleTimezone: e.target.value })}
-              className="w-full h-9 px-2 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full h-9 px-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             >
               <option value="UTC">UTC</option>
               <option value="Asia/Ho_Chi_Minh">Vietnam (UTC+7)</option>
@@ -1370,26 +1370,26 @@ function ScheduleTriggerSetup({ config, onChange }: {
       {/* Start Date — for daily/weekly/monthly */}
       {freq !== "one_time" && (
         <div className="space-y-1.5">
-          <label className="text-[12px] font-semibold text-foreground/80">Start Date <span className="text-red-500">*</span></label>
+          <label className="text-xs font-semibold text-foreground/80">Start Date <span className="text-red-500">*</span></label>
           <input type="date"
             value={config.scheduleStartDate ?? ""}
             onChange={e => onChange({ ...config, scheduleStartDate: e.target.value })}
-            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <p className="text-[11px] text-muted-foreground">The automation will start running from this date.</p>
+          <p className="text-xs text-muted-foreground">The automation will start running from this date.</p>
         </div>
       )}
 
       {/* End Date — optional for daily/weekly/monthly */}
       {freq !== "one_time" && (
         <div className="space-y-1.5">
-          <label className="text-[12px] font-semibold text-foreground/80">End Date <span className="text-muted-foreground font-normal">(optional)</span></label>
+          <label className="text-xs font-semibold text-foreground/80">End Date <span className="text-muted-foreground font-normal">(optional)</span></label>
           <input type="date"
             value={config.scheduleEndDate ?? ""}
             onChange={e => onChange({ ...config, scheduleEndDate: e.target.value || undefined })}
-            className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+            className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
-          <p className="text-[11px] text-muted-foreground">Leave empty to run indefinitely.</p>
+          <p className="text-xs text-muted-foreground">Leave empty to run indefinitely.</p>
         </div>
       )}
     </div>
@@ -1452,12 +1452,12 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
     <>
       {/* Trigger Event */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">Trigger Event</label>
+        <label className="text-xs font-semibold text-foreground/80">Trigger Event</label>
         <div className="relative">
           <select
             value={event}
             onChange={e => onChange({ ...config, event: e.target.value as TriggerConfig["event"], campaignFilter: "all", specificCampaignId: undefined, specificCampaignName: undefined, campaignNameFilterValue: undefined })}
-            className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+            className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
           >
             <option value="">Choose an event</option>
             <option value="ad_approved">Ad Approved</option>
@@ -1469,7 +1469,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
           <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
         </div>
         {event && (
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             {event === "performance_monitoring" && "Detect when metrics change by a percentage between consecutive time periods. For example: \"Spend increased by 20% AND CPA increased by 15% day over day.\""}
             {event === "campaign_status_change"  && "Triggers when campaigns match a specific status. Use this to detect when campaigns become active, get paused, or encounter issues."}
             {event === "ad_approved"             && "Fires when a Meta ad is approved and moves to active status."}
@@ -1481,11 +1481,11 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
 
       {/* Ad Account(s) */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">
+        <label className="text-xs font-semibold text-foreground/80">
           Ad Account <span className="text-red-500">*</span>
         </label>
         {loadingAccounts ? (
-          <div className="flex items-center gap-2 h-9 px-3 border border-border rounded-lg text-[13px] text-muted-foreground">
+          <div className="flex items-center gap-2 h-9 px-3 border border-border rounded-lg text-xs text-muted-foreground">
             <IconLoader2 className="size-3.5 animate-spin shrink-0" /> Loading accounts…
           </div>
         ) : metaConnected === false ? (
@@ -1493,20 +1493,20 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
             <div className="flex items-center gap-2.5">
               <IconBrandMeta className="size-5 text-[#1877F2] shrink-0" />
               <div>
-                <p className="text-[13px] font-semibold">Connect Meta</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Required to use Meta trigger</p>
+                <p className="text-xs font-semibold">Connect Meta</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Required to use Meta trigger</p>
               </div>
             </div>
             <a
               href="/connect"
-              className="flex items-center justify-center h-8 w-full rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary/90 transition-colors"
+              className="flex items-center justify-center h-8 w-full rounded-lg bg-primary text-primary-foreground text-xs font-semibold hover:bg-primary/90 transition-colors"
             >
               Connect Meta
             </a>
           </div>
         ) : adAccounts.length === 0 ? (
           <div className="px-3 py-2.5 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-            <p className="text-[12px] text-amber-700 dark:text-amber-400">No ad accounts found in your Meta account. Make sure you have access to at least one ad account.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">No ad accounts found in your Meta account. Make sure you have access to at least one ad account.</p>
           </div>
         ) : (
           <div className="relative">
@@ -1514,7 +1514,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
             <button
               type="button"
               onClick={() => setOpenAccountPicker(v => !v)}
-              className="w-full flex items-center gap-2 h-9 px-3 border border-border rounded-lg bg-background text-[13px] text-left hover:border-primary/50 transition-colors"
+              className="w-full flex items-center gap-2 h-9 px-3 border border-border rounded-lg bg-background text-xs text-left hover:border-primary/50 transition-colors"
             >
               <div className="size-5 rounded-full bg-[#0064E0]/10 flex items-center justify-center shrink-0">
                 <IconBrandMeta className="size-3 text-[#0064E0]" />
@@ -1539,7 +1539,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                       value={searchAccount}
                       onChange={e => setSearchAccount(e.target.value)}
                       placeholder="Search account…"
-                      className="w-full pl-8 pr-3 py-1.5 text-[13px] bg-muted/40 border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                      className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/40 border border-border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
                     />
                   </div>
                 </div>
@@ -1572,8 +1572,8 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                             <IconBrandMeta className="size-3 text-[#0064E0]" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium truncate">{displayName}</p>
-                            <p className="text-[11px] text-muted-foreground">{actId}</p>
+                            <p className="text-xs font-medium truncate">{displayName}</p>
+                            <p className="text-xs text-muted-foreground">{actId}</p>
                           </div>
                         </button>
                       )
@@ -1601,12 +1601,12 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
           {showCampaignFilter && (
             <div className="space-y-2">
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Campaign Filter</label>
+                <label className="text-xs font-semibold text-foreground/80">Campaign Filter</label>
                 <div className="relative">
                   <select
                     value={campaignFilter}
                     onChange={e => onChange({ ...config, campaignFilter: e.target.value as TriggerConfig["campaignFilter"], specificCampaignId: undefined, specificCampaignName: undefined, campaignNameFilterValue: undefined })}
-                    className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                    className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
                   >
                     <option value="all">All Campaigns</option>
                     <option value="specific">Select Specific Campaign</option>
@@ -1620,17 +1620,17 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
               {/* Select specific campaign */}
               {campaignFilter === "specific" && (
                 <div className="space-y-1.5">
-                  <label className="text-[12px] font-semibold text-foreground/80">Campaign <span className="text-red-500">*</span></label>
+                  <label className="text-xs font-semibold text-foreground/80">Campaign <span className="text-red-500">*</span></label>
                   {config.specificCampaignId && config.specificCampaignName ? (
                     <div className="flex items-center gap-2 h-9 px-3 bg-background border border-primary/30 rounded-lg">
                       <div className="size-2 rounded-full bg-green-500 shrink-0" />
-                      <span className="flex-1 text-[13px] truncate">{config.specificCampaignName}</span>
+                      <span className="flex-1 text-xs truncate">{config.specificCampaignName}</span>
                       <button onClick={() => onChange({ ...config, specificCampaignId: undefined, specificCampaignName: undefined })} className="text-muted-foreground hover:text-destructive shrink-0"><IconX className="size-3.5" /></button>
                     </div>
                   ) : (
                     <button
                       onClick={() => setShowCampaignPicker(true)}
-                      className="w-full flex items-center justify-between h-9 px-3 border border-dashed border-border rounded-lg text-[13px] text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
+                      className="w-full flex items-center justify-between h-9 px-3 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
                     >
                       <span>Select a campaign…</span>
                       <IconChevronDown className="size-3.5 shrink-0" />
@@ -1642,13 +1642,13 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
               {/* Name filter input */}
               {(campaignFilter === "name_contains" || campaignFilter === "name_equals") && (
                 <div className="space-y-1.5">
-                  <label className="text-[12px] font-semibold text-foreground/80">Campaign Name</label>
+                  <label className="text-xs font-semibold text-foreground/80">Campaign Name</label>
                   <input
                     type="text"
                     placeholder="e.g., Scaling, Prospecting"
                     value={config.campaignNameFilterValue ?? ""}
                     onChange={e => onChange({ ...config, campaignNameFilterValue: e.target.value })}
-                    className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                    className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
                   />
                 </div>
               )}
@@ -1658,10 +1658,10 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
           {/* Metric Conditions */}
           <div className="space-y-2">
             <div>
-              <label className="text-[12px] font-semibold text-foreground/80">
+              <label className="text-xs font-semibold text-foreground/80">
                 Metric Conditions <span className="text-red-500">*</span>
               </label>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Define one or more metric conditions. Using AND logic between conditions.</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Define one or more metric conditions. Using AND logic between conditions.</p>
             </div>
             <div className="space-y-1.5">
               {conditions.map((cond, i) => (
@@ -1669,7 +1669,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                   {i > 0 && (
                     <div className="flex items-center gap-2 my-1.5">
                       <div className="h-px flex-1 bg-border/60" />
-                      <div className="px-2 py-0.5 rounded border border-border text-[10px] font-semibold text-muted-foreground">
+                      <div className="px-2 py-0.5 rounded border border-border text-xs font-semibold text-muted-foreground">
                         AND
                       </div>
                       <div className="h-px flex-1 bg-border/60" />
@@ -1686,7 +1686,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
             </div>
             <button
               onClick={() => onChange({ ...config, metricConditions: [...conditions, { metric: "", operator: "decreases_by", value: 20, unit: "%" }] })}
-              className="flex items-center gap-1.5 text-[12px] text-primary hover:underline font-medium mt-1"
+              className="flex items-center gap-1.5 text-xs text-primary hover:underline font-medium mt-1"
             >
               <IconPlus className="size-3.5" />
               Add condition
@@ -1719,8 +1719,8 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
       {event === "ad_approved" && (
         <div className="pt-1 border-t border-border/60 space-y-4">
           <div>
-            <p className="text-[13px] font-semibold text-foreground">Ad Approved Trigger</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+            <p className="text-xs font-semibold text-foreground">Ad Approved Trigger</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
               Triggers when ads transition from review to active (approved). Checks for recently approved ads based on the lookback window.
             </p>
           </div>
@@ -1728,12 +1728,12 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
           {/* Campaign Filter */}
           <div className="space-y-2">
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Campaign Filter</label>
+              <label className="text-xs font-semibold text-foreground/80">Campaign Filter</label>
               <div className="relative">
                 <select
                   value={config.campaignFilter ?? "all"}
                   onChange={e => onChange({ ...config, campaignFilter: e.target.value as TriggerConfig["campaignFilter"], campaignNameFilterValue: undefined })}
-                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                  className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
                 >
                   <option value="all">All Campaigns</option>
                   <option value="name_contains">Name Contains</option>
@@ -1748,7 +1748,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                 placeholder="e.g., Scaling, Prospecting"
                 value={config.campaignNameFilterValue ?? ""}
                 onChange={e => onChange({ ...config, campaignNameFilterValue: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
               />
             )}
           </div>
@@ -1756,12 +1756,12 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
           {/* Ad Set Filter */}
           <div className="space-y-2">
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Ad Set Filter</label>
+              <label className="text-xs font-semibold text-foreground/80">Ad Set Filter</label>
               <div className="relative">
                 <select
                   value={config.adSetFilter ?? "all"}
                   onChange={e => onChange({ ...config, adSetFilter: e.target.value as TriggerConfig["adSetFilter"], adSetNameFilterValue: undefined })}
-                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                  className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
                 >
                   <option value="all">All Ad Sets</option>
                   <option value="name_contains">Name Contains</option>
@@ -1776,21 +1776,21 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                 placeholder="e.g., US || Broad, Retargeting"
                 value={config.adSetNameFilterValue ?? ""}
                 onChange={e => onChange({ ...config, adSetNameFilterValue: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
               />
             )}
           </div>
 
           {/* Lookback Window */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">
+            <label className="text-xs font-semibold text-foreground/80">
               Lookback Window <span className="text-red-500">*</span>
             </label>
             <div className="relative">
               <select
                 value={config.lookbackWindow ?? "24h"}
                 onChange={e => onChange({ ...config, lookbackWindow: e.target.value as TriggerConfig["lookbackWindow"] })}
-                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
               >
                 <option value="1h">Last 1 hour</option>
                 <option value="6h">Last 6 hours</option>
@@ -1800,7 +1800,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
               </select>
               <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
             </div>
-            <p className="text-[11px] text-muted-foreground">How far back to look for recently approved ads</p>
+            <p className="text-xs text-muted-foreground">How far back to look for recently approved ads</p>
           </div>
         </div>
       )}
@@ -1809,19 +1809,19 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
       {event === "campaign_status_change" && (
         <div className="pt-1 border-t border-border/60 space-y-4">
           <div>
-            <p className="text-[13px] font-semibold text-foreground">Campaign Status Change Trigger</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">Triggers when campaigns match a specific status. Use this to detect when campaigns become active, get paused, or encounter issues.</p>
+            <p className="text-xs font-semibold text-foreground">Campaign Status Change Trigger</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">Triggers when campaigns match a specific status. Use this to detect when campaigns become active, get paused, or encounter issues.</p>
           </div>
 
           {/* Campaign Filter */}
           <div className="space-y-2">
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Campaign Filter</label>
+              <label className="text-xs font-semibold text-foreground/80">Campaign Filter</label>
               <div className="relative">
                 <select
                   value={campaignFilter}
                   onChange={e => onChange({ ...config, campaignFilter: e.target.value as TriggerConfig["campaignFilter"], campaignNameFilterValue: undefined, specificCampaignId: undefined, specificCampaignName: undefined })}
-                  className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                  className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
                 >
                   <option value="all">All Campaigns</option>
                   <option value="name_contains">Name Contains</option>
@@ -1834,13 +1834,13 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
             {/* Name filter */}
             {(campaignFilter === "name_contains" || campaignFilter === "name_equals") && (
               <div className="space-y-1.5">
-                <label className="text-[12px] font-semibold text-foreground/80">Campaign Name</label>
+                <label className="text-xs font-semibold text-foreground/80">Campaign Name</label>
                 <input
                   type="text"
                   placeholder="e.g., Scaling, Prospecting"
                   value={config.campaignNameFilterValue ?? ""}
                   onChange={e => onChange({ ...config, campaignNameFilterValue: e.target.value })}
-                  className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+                  className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
                 />
               </div>
             )}
@@ -1868,28 +1868,28 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
       {event === "spend_threshold" && (
         <div className="pt-1 border-t border-border/60 space-y-4">
           <div>
-            <p className="text-[13px] font-semibold text-foreground">Performance Threshold</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+            <p className="text-xs font-semibold text-foreground">Performance Threshold</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
               Finds ads matching performance criteria and triggers an action. Define conditions like ROAS &gt; 2 AND Spend &gt; $200.
             </p>
           </div>
 
           {/* Check Frequency */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Check Frequency <span className="text-red-500">*</span></label>
-            <div className="h-9 px-3 flex items-center border border-border rounded-lg bg-muted/30 text-[13px] text-muted-foreground">Daily</div>
-            <p className="text-[11px] text-muted-foreground">This automation will automatically run once per day.</p>
+            <label className="text-xs font-semibold text-foreground/80">Check Frequency <span className="text-red-500">*</span></label>
+            <div className="h-9 px-3 flex items-center border border-border rounded-lg bg-muted/30 text-xs text-muted-foreground">Daily</div>
+            <p className="text-xs text-muted-foreground">This automation will automatically run once per day.</p>
           </div>
 
           {/* Campaign Filter */}
           <div className="space-y-2">
-            <label className="text-[12px] font-semibold text-foreground/80">Campaign Filter</label>
-            <p className="text-[11px] text-muted-foreground -mt-1">Optionally filter by campaign name</p>
+            <label className="text-xs font-semibold text-foreground/80">Campaign Filter</label>
+            <p className="text-xs text-muted-foreground -mt-1">Optionally filter by campaign name</p>
             <div className="relative">
               <select
                 value={config.campaignFilter ?? "all"}
                 onChange={e => onChange({ ...config, campaignFilter: e.target.value as any, campaignNameFilterValue: undefined })}
-                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
               >
                 <option value="all">All Campaigns</option>
                 <option value="name_contains">Name Contains</option>
@@ -1899,19 +1899,19 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
             {config.campaignFilter === "name_contains" && (
               <input type="text" placeholder="e.g., Scaling, LAB" value={config.campaignNameFilterValue ?? ""}
                 onChange={e => onChange({ ...config, campaignNameFilterValue: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60" />
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60" />
             )}
           </div>
 
           {/* Ad Set Filter */}
           <div className="space-y-2">
-            <label className="text-[12px] font-semibold text-foreground/80">Ad Set Filter</label>
-            <p className="text-[11px] text-muted-foreground -mt-1">Find ads in ad sets matching your filter</p>
+            <label className="text-xs font-semibold text-foreground/80">Ad Set Filter</label>
+            <p className="text-xs text-muted-foreground -mt-1">Find ads in ad sets matching your filter</p>
             <div className="relative">
               <select
                 value={config.thresholdAdSetFilter ?? "all"}
                 onChange={e => onChange({ ...config, thresholdAdSetFilter: e.target.value as any, thresholdAdSetFilterValue: undefined })}
-                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
               >
                 <option value="all">All Ad Sets</option>
                 <option value="name_contains">Ad set name contains...</option>
@@ -1921,18 +1921,18 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
             {config.thresholdAdSetFilter === "name_contains" && (
               <input type="text" placeholder="e.g., US || Broad" value={config.thresholdAdSetFilterValue ?? ""}
                 onChange={e => onChange({ ...config, thresholdAdSetFilterValue: e.target.value })}
-                className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60" />
+                className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60" />
             )}
           </div>
 
           {/* Ad Status */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Ad Status</label>
+            <label className="text-xs font-semibold text-foreground/80">Ad Status</label>
             <div className="relative">
               <select
                 value={config.thresholdAdStatus ?? "all"}
                 onChange={e => onChange({ ...config, thresholdAdStatus: e.target.value as any })}
-                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
               >
                 <option value="all">All (with spend)</option>
                 <option value="active">Active</option>
@@ -1945,8 +1945,8 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
           {/* Performance Criteria */}
           <div className="pt-2 border-t border-border/40 space-y-4">
             <div>
-              <p className="text-[13px] font-semibold text-foreground">Performance Criteria</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Define conditions that must be met (e.g., ROAS &gt; 2 AND Spend &gt; $200)</p>
+              <p className="text-xs font-semibold text-foreground">Performance Criteria</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Define conditions that must be met (e.g., ROAS &gt; 2 AND Spend &gt; $200)</p>
             </div>
 
             {/* Performance Period */}
@@ -1968,23 +1968,23 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                   onChange={e => onChange({ ...config, thresholdIncludeToday: e.target.checked })}
                   className="size-3.5 rounded accent-primary"
                 />
-                <span className="text-[12px] font-medium text-foreground">Include today&apos;s partial data</span>
+                <span className="text-xs font-medium text-foreground">Include today&apos;s partial data</span>
               </label>
-              <p className="text-[11px] text-muted-foreground pl-5">Use live Meta insights through today, even though conversions and CPA may still change.</p>
+              <p className="text-xs text-muted-foreground pl-5">Use live Meta insights through today, even though conversions and CPA may still change.</p>
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[12px] font-semibold text-foreground/80">Exclude Recent Days</label>
+              <label className="text-xs font-semibold text-foreground/80">Exclude Recent Days</label>
               <div className="flex items-center gap-2">
                 <input
                   type="number" min={0} max={30}
                   value={config.thresholdExcludeRecentDays ?? 0}
                   onChange={e => onChange({ ...config, thresholdExcludeRecentDays: parseInt(e.target.value) || 0 })}
-                  className="w-20 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                  className="w-20 h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
                 />
-                <span className="text-[13px] text-muted-foreground">days</span>
+                <span className="text-xs text-muted-foreground">days</span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Skip the most recent days from performance data</p>
+              <p className="text-xs text-muted-foreground">Skip the most recent days from performance data</p>
             </div>
 
             {/* Lookback Period */}
@@ -1999,12 +1999,12 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
             {/* Conditions */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label className="text-[12px] font-semibold text-foreground/80">Conditions <span className="text-red-500">*</span></label>
+                <label className="text-xs font-semibold text-foreground/80">Conditions <span className="text-red-500">*</span></label>
                 <div className="relative">
                   <select
                     value={config.thresholdConditionLevel ?? "per_ad"}
                     onChange={e => onChange({ ...config, thresholdConditionLevel: e.target.value as any })}
-                    className="h-7 pl-2 pr-6 text-[11px] bg-background border border-border rounded-md appearance-none focus:outline-none text-foreground"
+                    className="h-7 pl-2 pr-6 text-xs bg-background border border-border rounded-md appearance-none focus:outline-none text-foreground"
                   >
                     {CONDITION_LEVELS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
@@ -2022,7 +2022,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                         updated[i] = { ...cond, metric: e.target.value }
                         onChange({ ...config, thresholdConditions: updated })
                       }}
-                      className="w-full h-8 pl-2 pr-6 text-[12px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                      className="w-full h-8 pl-2 pr-6 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
                     >
                       {(() => {
                         const groups = [...new Set(THRESHOLD_METRICS.map(m => m.group))]
@@ -2045,7 +2045,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                         updated[i] = { ...cond, operator: e.target.value }
                         onChange({ ...config, thresholdConditions: updated })
                       }}
-                      className="w-full h-8 pl-2 pr-5 text-[12px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground font-mono text-center"
+                      className="w-full h-8 pl-2 pr-5 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground font-mono text-center"
                     >
                       {THRESHOLD_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
@@ -2059,7 +2059,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                       updated[i] = { ...cond, value: parseFloat(e.target.value) || 0 }
                       onChange({ ...config, thresholdConditions: updated })
                     }}
-                    className="w-20 h-8 px-2 text-[12px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                    className="w-20 h-8 px-2 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
                   />
                   {(config.thresholdConditions ?? []).length > 1 && (
                     <button onClick={() => {
@@ -2075,7 +2075,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
               {(config.thresholdConditions ?? []).length > 1 && (
                 <div className="flex items-center gap-2 my-1">
                   <div className="h-px flex-1 bg-border/60" />
-                  <span className="text-[10px] font-semibold text-muted-foreground border border-border px-2 py-0.5 rounded">AND</span>
+                  <span className="text-xs font-semibold text-muted-foreground border border-border px-2 py-0.5 rounded">AND</span>
                   <div className="h-px flex-1 bg-border/60" />
                 </div>
               )}
@@ -2085,7 +2085,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
                   const existing = config.thresholdConditions ?? [{ metric: "spend", operator: ">", value: 0 }]
                   onChange({ ...config, thresholdConditions: [...existing, { metric: "spend", operator: ">", value: 0 }] })
                 }}
-                className="flex items-center gap-1.5 text-[12px] text-primary hover:underline font-medium"
+                className="flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
               >
                 <IconPlus className="size-3.5" />
                 Add Condition
@@ -2093,7 +2093,7 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
             </div>
 
             {/* Rule summary */}
-            <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 text-[11px] text-muted-foreground">
+            <div className="rounded-lg bg-muted/30 border border-border px-3 py-2 text-xs text-muted-foreground">
               Rule: Find ads where{" "}
               {(config.thresholdConditions ?? [{ metric: "spend", operator: ">", value: 0 }]).map((c, i) => (
                 <span key={i}>
@@ -2111,8 +2111,8 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
       {event === "best_performing_organic_post" && (
         <div className="pt-1 border-t border-border/60 space-y-4">
           <div>
-            <p className="text-[13px] font-semibold text-foreground">Best Performing Organic Post Trigger</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+            <p className="text-xs font-semibold text-foreground">Best Performing Organic Post Trigger</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
               Picks the best-performing organic post from a Facebook Page on each run, then emits it as the trigger output. Pair with a Launch Ad action to auto-promote the winner.
             </p>
           </div>
@@ -2126,12 +2126,12 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
 
           {/* Ranking Metric */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Ranking Metric <span className="text-red-500">*</span></label>
+            <label className="text-xs font-semibold text-foreground/80">Ranking Metric <span className="text-red-500">*</span></label>
             <div className="relative">
               <select
                 value={config.organicRankingMetric ?? "engagement"}
                 onChange={e => onChange({ ...config, organicRankingMetric: e.target.value as any })}
-                className="w-full h-9 pl-3 pr-8 text-[13px] bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
+                className="w-full h-9 pl-3 pr-8 text-xs bg-background border border-border rounded-lg appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30 text-foreground"
               >
                 <option value="engagement">Engagement (reactions + comments + shares)</option>
                 <option value="reach">Reach</option>
@@ -2140,49 +2140,49 @@ function MetaTriggerSetup({ config, onChange, conditions, updateCondition, remov
               </select>
               <IconChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
             </div>
-            <p className="text-[11px] text-muted-foreground">Engagement works for FB and IG. Reach, impressions, and video views are FB-only.</p>
+            <p className="text-xs text-muted-foreground">Engagement works for FB and IG. Reach, impressions, and video views are FB-only.</p>
           </div>
 
           {/* Lookback Window (days) */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Lookback Window (days)</label>
+            <label className="text-xs font-semibold text-foreground/80">Lookback Window (days)</label>
             <div className="flex items-center gap-2">
               <input
                 type="number" min={1} max={90}
                 value={config.organicLookbackDays ?? 7}
                 onChange={e => onChange({ ...config, organicLookbackDays: parseInt(e.target.value) || 7 })}
-                className="w-20 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                className="w-20 h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
               />
-              <span className="text-[13px] text-muted-foreground">days</span>
+              <span className="text-xs text-muted-foreground">days</span>
             </div>
-            <p className="text-[11px] text-muted-foreground">Only consider posts from the last N days. Default: 7.</p>
+            <p className="text-xs text-muted-foreground">Only consider posts from the last N days. Default: 7.</p>
           </div>
 
           {/* Minimum Metric Value */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Minimum Metric Value</label>
+            <label className="text-xs font-semibold text-foreground/80">Minimum Metric Value</label>
             <input
               type="number" min={0}
               value={config.organicMinMetricValue ?? 0}
               onChange={e => onChange({ ...config, organicMinMetricValue: parseInt(e.target.value) || 0 })}
-              className="w-full h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
-            <p className="text-[11px] text-muted-foreground">Skip promotion when the top post falls below this. 0 disables the floor.</p>
+            <p className="text-xs text-muted-foreground">Skip promotion when the top post falls below this. 0 disables the floor.</p>
           </div>
 
           {/* Number of Top Posts */}
           <div className="space-y-1.5">
-            <label className="text-[12px] font-semibold text-foreground/80">Number of Top Posts to Promote</label>
+            <label className="text-xs font-semibold text-foreground/80">Number of Top Posts to Promote</label>
             <div className="flex items-center gap-2">
               <input
                 type="number" min={1} max={10}
                 value={config.organicTopPostsCount ?? 1}
                 onChange={e => onChange({ ...config, organicTopPostsCount: parseInt(e.target.value) || 1 })}
-                className="w-20 h-9 px-3 text-[13px] bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
+                className="w-20 h-9 px-3 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 text-center"
               />
-              <span className="text-[13px] text-muted-foreground">posts</span>
+              <span className="text-xs text-muted-foreground">posts</span>
             </div>
-            <p className="text-[11px] text-muted-foreground">Each run, promote up to N highest-ranking posts.</p>
+            <p className="text-xs text-muted-foreground">Each run, promote up to N highest-ranking posts.</p>
           </div>
 
           {/* Check Frequency */}
@@ -2234,11 +2234,11 @@ function OrganicPagePicker({ adAccountId, config, onChange }: {
 
   return (
     <div className="space-y-1.5">
-      <label className="text-[12px] font-semibold text-foreground/80">Facebook Page <span className="text-red-500">*</span></label>
+      <label className="text-xs font-semibold text-foreground/80">Facebook Page <span className="text-red-500">*</span></label>
       {!adAccountId ? (
-        <p className="text-[11px] text-amber-600 dark:text-amber-400">Select an ad account above first.</p>
+        <p className="text-xs text-amber-600 dark:text-amber-400">Select an ad account above first.</p>
       ) : loading ? (
-        <div className="flex items-center gap-2 h-9 px-3 border border-border rounded-lg text-[13px] text-muted-foreground">
+        <div className="flex items-center gap-2 h-9 px-3 border border-border rounded-lg text-xs text-muted-foreground">
           <IconLoader2 className="size-3.5 animate-spin shrink-0" /> Loading pages…
         </div>
       ) : (
@@ -2246,7 +2246,7 @@ function OrganicPagePicker({ adAccountId, config, onChange }: {
           <button
             type="button"
             onClick={() => setOpen(v => !v)}
-            className="w-full flex items-center gap-2 h-9 px-3 border border-border rounded-lg bg-background text-[13px] text-left hover:border-primary/50 transition-colors"
+            className="w-full flex items-center gap-2 h-9 px-3 border border-border rounded-lg bg-background text-xs text-left hover:border-primary/50 transition-colors"
           >
             {selected ? (
               <>
@@ -2264,7 +2264,7 @@ function OrganicPagePicker({ adAccountId, config, onChange }: {
                 <button
                   key={p.id}
                   onClick={() => { onChange({ ...config, organicPageId: p.id, organicPageName: p.name }); setOpen(false) }}
-                  className={cn("w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-muted/50 transition-colors",
+                  className={cn("w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-muted/50 transition-colors",
                     p.id === config.organicPageId && "text-primary font-medium")}
                 >
                   {p.picture_url && <img src={p.picture_url} className="size-5 rounded-full shrink-0 object-cover" alt="" />}
@@ -2275,13 +2275,13 @@ function OrganicPagePicker({ adAccountId, config, onChange }: {
             </div>
           )}
           {open && pages.length === 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl p-3 text-[12px] text-muted-foreground text-center">
+            <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl p-3 text-xs text-muted-foreground text-center">
               No pages found for this ad account.
             </div>
           )}
         </div>
       )}
-      <p className="text-[11px] text-muted-foreground">Determines which page's organic posts will be ranked.</p>
+      <p className="text-xs text-muted-foreground">Determines which page's organic posts will be ranked.</p>
     </div>
   )
 }
@@ -2331,8 +2331,8 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
       <div className="bg-background rounded-2xl shadow-2xl w-[640px] max-h-[80vh] flex flex-col border border-border">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <p className="text-[15px] font-semibold text-foreground">
-            Select Campaign{total > 0 ? <span className="text-muted-foreground font-normal text-[13px] ml-1.5">({total} total)</span> : ""}
+          <p className="text-sm font-semibold text-foreground">
+            Select Campaign{total > 0 ? <span className="text-muted-foreground font-normal text-xs ml-1.5">({total} total)</span> : ""}
           </p>
           <button onClick={onClose} className="size-7 flex items-center justify-center rounded-lg hover:bg-muted text-muted-foreground transition-colors">
             <IconX className="size-4" />
@@ -2349,12 +2349,12 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
               placeholder="Search campaigns by name..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 text-[13px] bg-muted/40 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
+              className="w-full h-9 pl-9 pr-3 text-xs bg-muted/40 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/60"
             />
           </div>
           <button
             onClick={() => { setCampaigns([]); setLoading(true); fetch(`/api/meta/campaigns?limit=50${adAccountId ? `&ad_account_id=${adAccountId}` : ""}`).then(r=>r.json()).then(d=>{setCampaigns(d.campaigns??d.data??[]);setTotal(d.total??(d.campaigns??d.data??[]).length)}).catch(()=>setCampaigns([])).finally(()=>setLoading(false)) }}
-            className="h-9 px-3 flex items-center gap-1.5 text-[12px] border border-border rounded-lg hover:bg-muted transition-colors shrink-0"
+            className="h-9 px-3 flex items-center gap-1.5 text-xs border border-border rounded-lg hover:bg-muted transition-colors shrink-0"
           >
             <IconRefresh className="size-3.5" /> Refresh
           </button>
@@ -2363,16 +2363,16 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
         {/* Table */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground text-[13px]">
+            <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground text-xs">
               <IconLoader2 className="size-4 animate-spin" /> Loading campaigns…
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground text-[13px]">
+            <div className="flex flex-col items-center justify-center py-16 gap-2 text-muted-foreground text-xs">
               <p>No campaigns found</p>
-              {search && <button onClick={() => setSearch("")} className="text-primary hover:underline text-[12px]">Clear search</button>}
+              {search && <button onClick={() => setSearch("")} className="text-primary hover:underline text-xs">Clear search</button>}
             </div>
           ) : (
-            <table className="w-full text-[12px]">
+            <table className="w-full text-xs">
               <thead className="sticky top-0 bg-muted/70 backdrop-blur-sm">
                 <tr className="border-b border-border">
                   <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Name</th>
@@ -2402,7 +2402,7 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
                       {c.spend ? `$${Number(c.spend).toLocaleString()}` : "—"}
                     </td>
                     <td className="px-3 py-3 text-center">
-                      <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-semibold",
+                      <span className={cn("px-1.5 py-0.5 rounded text-xs font-semibold",
                         c.status === "ACTIVE"
                           ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                           : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
@@ -2426,7 +2426,7 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[13px] font-semibold text-foreground/90">{children}</p>
+    <p className="text-xs font-semibold text-foreground/90">{children}</p>
   )
 }
 
@@ -2461,7 +2461,7 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
     <div className="space-y-5 p-5">
       {/* APP */}
       <div className="space-y-1.5">
-        <label className="text-[12px] font-semibold text-foreground/80">App</label>
+        <label className="text-xs font-semibold text-foreground/80">App</label>
         <div className="flex items-center justify-between h-9 px-3 bg-background border border-border rounded-lg">
           <div className="flex items-center gap-2">
             <div
@@ -2470,11 +2470,11 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
             >
               <AppIcon className="size-3.5" style={{ color: appMeta.iconColor }} />
             </div>
-            <span className="text-[13px] font-medium">{appMeta.label}</span>
+            <span className="text-xs font-medium">{appMeta.label}</span>
           </div>
           <button
             onClick={onChangeApp}
-            className="text-[11px] text-primary hover:underline font-medium"
+            className="text-xs text-primary hover:underline font-medium"
           >
             Change
           </button>
@@ -2506,8 +2506,8 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
           <div className="flex items-center gap-3 p-4 bg-muted/40 border border-border rounded-xl">
             <IconHandClick className="size-5 text-muted-foreground shrink-0" />
             <div>
-              <p className="text-[13px] font-medium">No configuration required</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">This automation runs when you click Run manually.</p>
+              <p className="text-xs font-medium">No configuration required</p>
+              <p className="text-xs text-muted-foreground mt-0.5">This automation runs when you click Run manually.</p>
             </div>
           </div>
         )}
@@ -2532,8 +2532,8 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
           <div className="flex items-center gap-3 p-4 bg-muted/40 border border-border rounded-xl">
             <AppIcon className="size-5 text-muted-foreground shrink-0" style={{ color: appMeta.iconColor }} />
             <div>
-              <p className="text-[13px] font-medium">{appMeta.label} trigger configured</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Trigger is ready. Add an action step below.</p>
+              <p className="text-xs font-medium">{appMeta.label} trigger configured</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Trigger is ready. Add an action step below.</p>
             </div>
           </div>
         )}
@@ -2546,7 +2546,7 @@ function SetupTab({ config, onChange, adAccountName, onChangeApp }: {
 
 function Chip({ label }: { label: string }) {
   return (
-    <span className="px-2 py-0.5 rounded-full bg-muted border border-border/60 text-[10px] font-medium text-foreground/80">
+    <span className="px-2 py-0.5 rounded-full bg-muted border border-border/60 text-xs font-medium text-foreground/80">
       {label}
     </span>
   )
@@ -2838,15 +2838,15 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
     <div className="p-5 space-y-5">
       {/* 1. Fires when */}
       <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
           1. Fires when
         </p>
-        <p className="text-[12px] font-medium text-foreground">
+        <p className="text-xs font-medium text-foreground">
           {appMeta.label} · {eventLabel || "—"}
         </p>
         {!hasChips && (
           <div className="border border-border rounded-lg px-3 py-2 mt-1">
-            <p className="text-[12px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Configure this step in Setup to see what it&apos;ll do.
             </p>
           </div>
@@ -2861,17 +2861,17 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
       {/* Google Drive: Test Node UI */}
       {isDrive && (
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-500">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-500">
             Test with live data
           </p>
 
           {testLog ? (
             <div className="rounded-xl bg-zinc-900 p-3 space-y-0.5">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] text-zinc-400 font-semibold">Debug Logs</p>
+                <p className="text-xs text-zinc-400 font-semibold">Debug Logs</p>
                 <button
                   onClick={() => navigator.clipboard.writeText(testLog.join("\n")).catch(() => {})}
-                  className="text-[11px] text-zinc-400 hover:text-white transition-colors"
+                  className="text-xs text-zinc-400 hover:text-white transition-colors"
                 >
                   Copy
                 </button>
@@ -2883,18 +2883,18 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
                       <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </div>
-                  <p className="text-[12px] text-green-400 font-semibold">Test Successful!</p>
+                  <p className="text-xs text-green-400 font-semibold">Test Successful!</p>
                 </div>
               )}
               {testLog.map((line, i) => (
-                <p key={i} className={cn("text-[11px] font-mono", line.includes("ERROR") ? "text-red-400" : "text-emerald-400")}>
+                <p key={i} className={cn("text-xs font-mono", line.includes("ERROR") ? "text-red-400" : "text-emerald-400")}>
                   {line}
                 </p>
               ))}
             </div>
           ) : (
             <div className="border border-border rounded-xl px-4 py-6 text-center">
-              <p className="text-[13px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Test your node configuration to ensure it works correctly.
               </p>
             </div>
@@ -2903,7 +2903,7 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
           <button
             onClick={handleDriveTestNode}
             disabled={finding}
-            className="w-full h-10 bg-primary text-primary-foreground rounded-xl text-[13px] font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+            className="w-full h-10 bg-primary text-primary-foreground rounded-xl text-xs font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
           >
             {finding ? <><IconLoader2 className="size-3.5 animate-spin" /> Testing…</> : "Test Node"}
           </button>
@@ -2913,7 +2913,7 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
       {/* Google Sheets: Test Node UI */}
       {isSheets && (
         <div className="space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-500">
+          <p className="text-xs font-semibold uppercase tracking-wider text-amber-500">
             Test with live data
           </p>
 
@@ -2921,23 +2921,23 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
           {testLog ? (
             <div className="rounded-xl bg-zinc-900 p-3 space-y-0.5">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-[11px] text-zinc-400 font-semibold">Debug Logs</p>
+                <p className="text-xs text-zinc-400 font-semibold">Debug Logs</p>
                 <button
                   onClick={() => navigator.clipboard.writeText(testLog.join("\n")).catch(() => {})}
-                  className="text-[11px] text-zinc-400 hover:text-white transition-colors"
+                  className="text-xs text-zinc-400 hover:text-white transition-colors"
                 >
                   Copy
                 </button>
               </div>
               {testLog.map((line, i) => (
-                <p key={i} className={cn("text-[11px] font-mono", line.includes("ERROR") ? "text-red-400" : "text-emerald-400")}>
+                <p key={i} className={cn("text-xs font-mono", line.includes("ERROR") ? "text-red-400" : "text-emerald-400")}>
                   {line}
                 </p>
               ))}
             </div>
           ) : (
             <div className="border border-border rounded-xl px-4 py-6 text-center">
-              <p className="text-[13px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Test your node configuration to ensure it works correctly.
               </p>
             </div>
@@ -2946,7 +2946,7 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
           <button
             onClick={handleTestNode}
             disabled={finding}
-            className="w-full h-10 bg-primary text-primary-foreground rounded-xl text-[13px] font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+            className="w-full h-10 bg-primary text-primary-foreground rounded-xl text-xs font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
           >
             {finding ? <><IconLoader2 className="size-3.5 animate-spin" /> Testing…</> : "Test Node"}
           </button>
@@ -2956,15 +2956,15 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
       {/* Schedule trigger preview */}
       {config.appId === "schedule" && (
         <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Next Run</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">Next Run</p>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-[12px] font-medium">{config.scheduleFrequency ?? "daily"}</span>
-            <span className="px-2.5 py-1 rounded-full bg-muted text-foreground text-[12px] font-medium">{config.scheduleTime ?? "09:00"}</span>
-            <span className="px-2.5 py-1 rounded-full bg-muted text-foreground text-[12px] font-medium">{config.scheduleTimezone ?? "UTC"}</span>
-            {config.scheduleStartDate && <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-[12px]">From {config.scheduleStartDate}</span>}
-            {config.scheduleEndDate && <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-[12px]">Until {config.scheduleEndDate}</span>}
+            <span className="px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium">{config.scheduleFrequency ?? "daily"}</span>
+            <span className="px-2.5 py-1 rounded-full bg-muted text-foreground text-xs font-medium">{config.scheduleTime ?? "09:00"}</span>
+            <span className="px-2.5 py-1 rounded-full bg-muted text-foreground text-xs font-medium">{config.scheduleTimezone ?? "UTC"}</span>
+            {config.scheduleStartDate && <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">From {config.scheduleStartDate}</span>}
+            {config.scheduleEndDate && <span className="px-2.5 py-1 rounded-full bg-muted text-muted-foreground text-xs">Until {config.scheduleEndDate}</span>}
           </div>
-          <p className="text-[12px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Automation sẽ tự động chạy theo lịch. MacMini cron check mỗi 5 phút và kích hoạt trong window 5 phút quanh giờ đã set.
           </p>
         </div>
@@ -2972,34 +2972,34 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
 
       {/* Test with live data — not for Sheets/Drive/Schedule (no live records to preview) */}
       {!isSheets && !isDrive && config.appId !== "schedule" && <div className="space-y-2">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
           Test with live data
         </p>
-        <p className="text-[12px] text-muted-foreground leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           Preview which {config.appId === "media_library" ? "assets" : "records"} match your trigger configuration. Use the{" "}
           <span className="font-medium text-foreground">Run</span> button in the header to execute with the latest match.
         </p>
 
         {/* Error */}
         {findError && (
-          <p className="text-[12px] text-red-500">{findError}</p>
+          <p className="text-xs text-red-500">{findError}</p>
         )}
 
         {/* Results */}
         {matches && (
           <div className="space-y-2 pt-1">
-            <p className="text-[12px] font-semibold text-foreground">
+            <p className="text-xs font-semibold text-foreground">
               Recent matches ({matches.length}):
             </p>
             {config.appId === "media_library" && (
-              <p className="text-[11px] text-primary/80">
+              <p className="text-xs text-primary/80">
                 {config.mediaBoard === "specific" && config.mediaBoardName
                   ? `Files from folder: ${config.mediaBoardName}`
                   : "Files from your Google Drive"}
               </p>
             )}
             {matches.length === 0 ? (
-              <p className="text-[12px] text-muted-foreground italic">No matching records found.</p>
+              <p className="text-xs text-muted-foreground italic">No matching records found.</p>
             ) : (
               <div className="space-y-1.5">
                 {matches.map(m => {
@@ -3028,8 +3028,8 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
                         }
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={cn("text-[12px] font-medium truncate", isSelected ? "text-primary" : "text-foreground")}>{name}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
+                        <p className={cn("text-xs font-medium truncate", isSelected ? "text-primary" : "text-foreground")}>{name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
                           {type} • {m.status ?? "raw"} • {date}
                         </p>
                       </div>
@@ -3050,10 +3050,10 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
             {testLog && (
               <div className="rounded-xl bg-zinc-900 p-3 space-y-0.5 mt-2">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] text-zinc-400 font-semibold">Debug Logs</p>
+                  <p className="text-xs text-zinc-400 font-semibold">Debug Logs</p>
                   <button
                     onClick={() => navigator.clipboard.writeText(testLog.join("\n")).catch(() => {})}
-                    className="text-[11px] text-zinc-400 hover:text-white transition-colors"
+                    className="text-xs text-zinc-400 hover:text-white transition-colors"
                   >
                     Copy
                   </button>
@@ -3065,11 +3065,11 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
                         <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </div>
-                    <p className="text-[12px] text-green-400 font-semibold">Test Successful!</p>
+                    <p className="text-xs text-green-400 font-semibold">Test Successful!</p>
                   </div>
                 )}
                 {testLog.map((line, i) => (
-                  <p key={i} className={cn("text-[11px] font-mono", line.includes("ERROR") ? "text-red-400" : "text-emerald-400")}>
+                  <p key={i} className={cn("text-xs font-mono", line.includes("ERROR") ? "text-red-400" : "text-emerald-400")}>
                     {line}
                   </p>
                 ))}
@@ -3081,7 +3081,7 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
               <button
                 onClick={() => handleTestWithMatch(selectedMatch)}
                 disabled={testing}
-                className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-[13px] font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70 mt-1"
+                className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-xs font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70 mt-1"
               >
                 {testing
                   ? <><IconLoader2 className="size-3.5 animate-spin" /> Testing…</>
@@ -3097,7 +3097,7 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
           <button
             onClick={handleFindRecords}
             disabled={finding}
-            className="w-full h-9 bg-background border border-border text-foreground rounded-xl text-[13px] font-semibold hover:bg-muted/60 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+            className="w-full h-9 bg-background border border-border text-foreground rounded-xl text-xs font-semibold hover:bg-muted/60 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
           >
             {finding
               ? <><IconLoader2 className="size-3.5 animate-spin" /> Refreshing…</>
@@ -3108,7 +3108,7 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
           <button
             onClick={handleFindRecords}
             disabled={finding}
-            className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-[13px] font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+            className="w-full h-9 bg-primary text-primary-foreground rounded-xl text-xs font-semibold hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
           >
             {finding
               ? <><IconLoader2 className="size-3.5 animate-spin" /> Searching…</>
@@ -3121,10 +3121,10 @@ function PreviewTab({ config, automationId }: { config: TriggerConfig; automatio
       {/* Comparing window — Meta only */}
       {config.appId === "meta" && (
         <div className="space-y-0.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
             Comparing · {windowLabel.toUpperCase()}
           </p>
-          <p className="text-[13px] text-primary/80 font-medium">
+          <p className="text-xs text-primary/80 font-medium">
             {fmt(yesterday)} vs {fmt(today)}
           </p>
         </div>
@@ -3163,10 +3163,10 @@ export function TriggerConfigPanel({ stepIndex, config, onChange, adAccountName,
             <AppIcon className="size-5" style={{ color: appMeta.iconColor }} />
           </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
+            <p className="text-xs font-semibold text-foreground leading-tight truncate">
               {stepIndex}. {eventLabel ?? "Trigger"}
             </p>
-            <p className="text-[11px] text-muted-foreground/70 leading-tight mt-0.5">
+            <p className="text-xs text-muted-foreground/70 leading-tight mt-0.5">
               When does this step fire?
             </p>
           </div>
@@ -3188,7 +3188,7 @@ export function TriggerConfigPanel({ stepIndex, config, onChange, adAccountName,
             key={t}
             onClick={() => setActiveTab(t)}
             className={cn(
-              "flex-1 py-2.5 text-[13px] font-medium transition-colors capitalize",
+              "flex-1 py-2.5 text-xs font-medium transition-colors capitalize",
               activeTab === t ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >

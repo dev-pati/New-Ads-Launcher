@@ -734,7 +734,7 @@ export default function AssetsPage() {
               <item.icon className="size-4 shrink-0" />
               <span className="flex-1 text-left">{item.label}</span>
               {item.count !== undefined && item.count > 0 && (
-                <span className="text-[10px] bg-muted/80 text-muted-foreground rounded-full px-1.5 py-0.5 leading-none">
+                <span className="text-xs bg-muted/80 text-muted-foreground rounded-full px-1.5 py-0.5 leading-none">
                   {item.count}
                 </span>
               )}
@@ -744,7 +744,7 @@ export default function AssetsPage() {
 
         {/* Saved Searches */}
         <div className="px-4 mt-3">
-          <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">Saved Searches</p>
+          <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1.5">Saved Searches</p>
           {savedSearches.length === 0 ? (
             <p className="text-xs text-muted-foreground/40 py-1">No saved searches yet</p>
           ) : savedSearches.map(s => (
@@ -765,7 +765,7 @@ export default function AssetsPage() {
         {/* Boards list */}
         <div className="px-4 mt-4 flex-1">
           <div className="flex items-center justify-between mb-1.5">
-            <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">Boards</p>
+            <p className="text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Boards</p>
             <button onClick={() => setCreateBoardOpen(true)} className="text-muted-foreground hover:text-foreground">
               <IconPlus className="size-3.5" />
             </button>
@@ -785,7 +785,7 @@ export default function AssetsPage() {
             >
               <IconFolder className="size-3.5 shrink-0" />
               <span className="flex-1 text-left truncate">{b.name}</span>
-              <span className="text-[10px] opacity-60">{b.asset_count}</span>
+              <span className="text-xs opacity-60">{b.asset_count}</span>
             </button>
           ))}
         </div>
@@ -872,7 +872,7 @@ export default function AssetsPage() {
                                 <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
                                   <div className="h-full bg-primary transition-all" style={{ width: `${item.progress}%` }} />
                                 </div>
-                                <span className="text-[10px] text-primary">{item.progress}%</span>
+                                <span className="text-xs text-primary">{item.progress}%</span>
                               </div>
                             )}
                           </>
@@ -994,7 +994,7 @@ export default function AssetsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <p className="font-medium text-sm">{r.title}</p>
-                        <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium", STATUS_COLORS[r.status])}>
+                        <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", STATUS_COLORS[r.status])}>
                           {STATUS_LABEL[r.status]}
                         </span>
                       </div>
@@ -1243,7 +1243,7 @@ export default function AssetsPage() {
                           )}
                           {/* Status */}
                           <div className={cn(
-                            "absolute top-2 right-2 text-[9px] px-1.5 py-0.5 rounded-full font-semibold",
+                            "absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded-full font-semibold",
                             isReady
                               ? "bg-emerald-500/90 text-white"
                               : c.status === "processing"
@@ -1266,7 +1266,7 @@ export default function AssetsPage() {
                         </div>
                         {/* File name */}
                         <div className="px-2 py-1.5 bg-card border-t border-border/50">
-                          <p className="text-[11px] text-foreground/80 truncate leading-tight">
+                          <p className="text-xs text-foreground/80 truncate leading-tight">
                             {c.file_name.replace(/\.[^/.]+$/, "")}
                           </p>
                         </div>
@@ -1289,10 +1289,10 @@ export default function AssetsPage() {
                             {selected.size === displayList.length && <IconCheck className="size-2.5 text-primary-foreground" />}
                           </div>
                         </th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Name</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
-                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Date Added</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Name</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date Added</th>
                         <th className="w-8 px-3 py-2.5"></th>
                       </tr>
                     </thead>
@@ -1317,7 +1317,7 @@ export default function AssetsPage() {
                             </td>
                             <td className="px-3 py-2.5 text-xs text-muted-foreground capitalize">{c.media_type}</td>
                             <td className="px-3 py-2.5">
-                              <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-medium",
+                              <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium",
                                 isReady
                                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
                                   : c.status === "processing"

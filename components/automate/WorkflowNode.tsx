@@ -128,10 +128,10 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
           {/* Header row: step + badge + status dot + dots menu */}
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="size-5 rounded-full bg-[#F3F4F6] dark:bg-muted flex items-center justify-center text-[10px] font-bold text-[#6B7280] dark:text-muted-foreground shrink-0">
+              <span className="size-5 rounded-full bg-[#F3F4F6] dark:bg-muted flex items-center justify-center text-xs font-bold text-[#6B7280] dark:text-muted-foreground shrink-0">
                 {data.stepIndex}
               </span>
-              <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", badge.color)}>
+              <span className={cn("px-2 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wide", badge.color)}>
                 {badge.label}
               </span>
             </div>
@@ -156,7 +156,7 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
                     <div className="nodrag nopan absolute right-0 top-full mt-1 z-50 bg-white dark:bg-card border border-border rounded-xl shadow-lg overflow-hidden min-w-[130px]">
                       <button
                         onClick={(e) => { e.stopPropagation(); setMenuOpen(false); data.onDelete!(id) }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-[13px] font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors"
                       >
                         <IconTrash className="size-4" />
                         Delete
@@ -181,16 +181,16 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
             </div>
             <div className="flex-1 min-w-0">
               {isEmpty ? (
-                <p className="text-[14px] font-semibold text-[#9CA3AF] dark:text-muted-foreground leading-tight">
+                <p className="text-sm font-semibold text-[#9CA3AF] dark:text-muted-foreground leading-tight">
                   Choose an app
                 </p>
               ) : (
                 <>
-                  <p className="text-[13px] font-semibold text-foreground leading-tight truncate">
+                  <p className="text-xs font-semibold text-foreground leading-tight truncate">
                     {data.appName} · {data.eventLabel}
                   </p>
                   {data.subtitle && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{data.subtitle}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{data.subtitle}</p>
                   )}
                 </>
               )}
@@ -201,7 +201,7 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
           {!isEmpty && data.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">
               {data.tags.map((tag, i) => (
-                <span key={i} className="px-2.5 py-0.5 rounded-full bg-[#F3F4F6] dark:bg-muted text-[11px] font-medium text-[#6B7280] dark:text-muted-foreground">
+                <span key={i} className="px-2.5 py-0.5 rounded-full bg-[#F3F4F6] dark:bg-muted text-xs font-medium text-[#6B7280] dark:text-muted-foreground">
                   {tag}
                 </span>
               ))}

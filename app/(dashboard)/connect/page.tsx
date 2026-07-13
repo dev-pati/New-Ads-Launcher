@@ -683,16 +683,16 @@ export default function ConnectPage() {
                 <h3 className="text-sm font-semibold mb-3">Current Workspace</h3>
                 <div className="flex items-center gap-6">
                   <div>
-                    <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Ad Accounts</p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Ad Accounts</p>
                     <p className="text-sm font-semibold mt-0.5">{adAccountCount} connected</p>
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Platform</p>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Platform</p>
                     <p className="text-sm font-semibold mt-0.5">Meta/Facebook</p>
                   </div>
                   {fbName && (
                     <div>
-                      <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Connected as</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Connected as</p>
                       <p className="text-sm font-semibold mt-0.5">{fbName}</p>
                     </div>
                   )}
@@ -708,11 +708,11 @@ export default function ConnectPage() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
-                    <th className="px-5 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-16">LOGO</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">NAME</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">DESCRIPTION</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-28">STATUS</th>
-                    <th className="px-5 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wide w-36">ACTION</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-16">LOGO</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">NAME</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">DESCRIPTION</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">STATUS</th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-36">ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -729,7 +729,7 @@ export default function ConnectPage() {
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{channel.name}</span>
                             {channel.beta && (
-                              <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-semibold">BETA</span>
+                              <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded-full font-semibold">BETA</span>
                             )}
                           </div>
                         </td>

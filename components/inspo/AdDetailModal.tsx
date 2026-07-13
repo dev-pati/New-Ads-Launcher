@@ -95,7 +95,7 @@ export function AdDetailModal({
         {/* Left: brand */}
         <div className="flex items-center gap-2.5 min-w-0">
           <BrandAvatar name={ad.brandName} src={ad.brandAvatar} />
-          <span className="text-[15px] font-semibold text-foreground truncate max-w-[240px]">
+          <span className="text-sm font-semibold text-foreground truncate max-w-[240px]">
             {ad.brandName}
           </span>
         </div>
