@@ -340,22 +340,26 @@ export async function POST(request: NextRequest) {
         await admin.from("creatives")
           .update({ file_url: publicUrl, storage_path: storagePath })
           .eq("id", creativeId)
+      } catch (e: any) {
+        // Supabase copy itself failed — the cron can't recover from this (no file_url to retry from).
+        console.error(`[import-drive] Supabase cache upload failed for ${creativeId}:`, e.message)
+        await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)
+        return
+      }
 
+      try {
         // Meta fetches the video itself from the public Supabase URL — no re-upload through server
         const conn = await getFacebookConnection(orgIdForChunks)
-        if (!conn?.access_token) {
-          console.error(`[import-drive] no Facebook connection for org ${orgIdForChunks}`)
-          await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)
-          return
-        }
+        if (!conn?.access_token) throw new Error(`no Facebook connection for org ${orgIdForChunks}`)
         const metaData = await uploadVideoUrlToMeta(normAccountId, conn.access_token, publicUrl, fileName)
         await admin.from("creatives")
           .update({ fb_video_id: metaData.videoId, status: "processing" })
           .eq("id", creativeId)
         console.log(`[import-drive] video ${creativeId} uploaded to Meta: ${metaData.videoId}`)
       } catch (e: any) {
-        console.error(`[import-drive] background upload failed for ${creativeId}:`, e.message)
-        await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)
+        // Meta upload failed but the file is safely on Supabase — leave status "pending" so
+        // /api/cron/upload-to-facebook (which reads file_url, not the Drive file) retries it.
+        console.warn(`[import-drive] Meta upload failed for ${creativeId}, left pending for cron retry:`, e.message)
       }
     })
 

@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     .from("creatives")
     .select("id, org_id, ad_account_id, file_url, file_name, media_type")
     .eq("status", "pending")
+    .not("file_url", "eq", "")
     .order("created_at", { ascending: true })
     .limit(50)
 

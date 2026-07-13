@@ -14945,6 +14945,10 @@ export default function LaunchPage() {
     }
     if (selectedAdSets.length === 0) return fail("No ad set selected — please select at least 1 ad set", ["adsets"])
     if (selectedMediaIds.size === 0) return fail("No creative selected — please select at least 1 image/video", ["creatives"])
+    const erroredCreatives = selectedCreatives.filter(c => c.status === "error")
+    if (erroredCreatives.length > 0) {
+      return fail(`${erroredCreatives.length} media failed to upload. Please remove them or re-upload.`, ["creatives"])
+    }
     const pendingCreatives = selectedCreatives.filter(c => c.status !== "ready")
     if (pendingCreatives.length > 0) {
       return fail(`${pendingCreatives.length} media still uploading/processing on Meta — please wait until they show "ready" then try again`, ["creatives"])
