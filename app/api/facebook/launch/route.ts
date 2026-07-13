@@ -184,44 +184,67 @@ async function createAdsInAdset(
     const allTitles = Array.from(new Set([title, ...pcHeadlines, ...(textOverride?.headlines || [])].map((s: string) => s.trim()).filter(Boolean)))
     const allBodies = Array.from(new Set([body, ...pcPrimaryTexts, ...(textOverride?.primaryTexts || [])].map((s: string) => s.trim()).filter(Boolean)))
     const allDescs = Array.from(new Set([description].map((s: string) => s.trim()).filter(Boolean)))
-    const hasVariations = allBodies.length > 1 || allTitles.length > 1 || allDescs.length > 1
 
+    // Option B (Manual Split): build the Cartesian product of primary text × headline × description
+    // and create ONE standard static ad per combination. No asset_feed_spec / text_variations, so the
+    // ad set stays standard (no 1-ad limit) and each combo is visible as its own ad in Ads Manager.
+    const titleCombos = allTitles.length ? allTitles : [title]
+    const bodyCombos = allBodies.length ? allBodies : [body]
+    const descCombos = allDescs.length ? allDescs : [description]
+    const variants: { vTitle: string; vBody: string; vDesc: string }[] = []
+    for (const vBody of bodyCombos) {
+      for (const vTitle of titleCombos) {
+        for (const vDesc of descCombos) {
+          variants.push({ vTitle, vBody, vDesc })
+        }
+      }
+    }
+
+    let thumbnailUrl: string | undefined = creative.fb_thumbnail_url || undefined
     try {
       // Facebook v25 requires image_url in video_data — fetch thumbnail if not stored
-      let thumbnailUrl: string | undefined = creative.fb_thumbnail_url || undefined
       if (creative.fb_video_id && !thumbnailUrl) {
         thumbnailUrl = (await getVideoThumbnail(creative.fb_video_id, token, { skipProof: tokenOpts?.isManual })) || undefined
       }
-
-      const ad = await createAd(adAccountId, token, {
-        name: resolveName(baseName, startIndex + i),
-        adset_id: adsetId,
-        page_id: pageId,
-        image_hash: creative.fb_image_hash || undefined,
-        video_id: creative.fb_video_id || undefined,
-        thumbnail_url: thumbnailUrl,
-        title,
-        body,
-        description,
-        cta,
-        link_url,
-        display_url,
-        status: adStatus,
-        degrees_of_freedom_spec: creative.fb_video_id ? vidDof : imgDof,
-        ...(hasVariations ? { text_variations: { bodies: allBodies, titles: allTitles, descriptions: allDescs } } : {}),
-      }, tokenOpts)
-      await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
-      results.push({
-        creativeId: creative.id,
-        adId: ad.id,
-        adName: resolveName(baseName, startIndex + i),
-        fileName: creative.file_name,
-        adSetId: adsetId,
-        thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || null,
-        mediaType: creative.media_type || "image",
-      })
     } catch (err: any) {
-      errors.push({ creativeId: creative.id, error: err.message })
+      errors.push({ creativeId: creative.id, error: `Thumbnail fetch failed: ${err.message}` })
+    }
+
+    const baseAdName = resolveName(baseName, startIndex + i)
+    for (let vi = 0; vi < variants.length; vi++) {
+      const { vTitle, vBody, vDesc } = variants[vi]
+      try {
+        const ad = await createAd(adAccountId, token, {
+          name: variants.length > 1 ? `${baseAdName} (v${vi + 1})` : baseAdName,
+          adset_id: adsetId,
+          page_id: pageId,
+          image_hash: creative.fb_image_hash || undefined,
+          video_id: creative.fb_video_id || undefined,
+          thumbnail_url: thumbnailUrl,
+          title: vTitle,
+          body: vBody,
+          description: vDesc,
+          cta,
+          link_url,
+          display_url,
+          status: adStatus,
+          degrees_of_freedom_spec: creative.fb_video_id ? vidDof : imgDof,
+        }, tokenOpts)
+        if (vi === 0) {
+          await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+        }
+        results.push({
+          creativeId: creative.id,
+          adId: ad.id,
+          adName: variants.length > 1 ? `${baseAdName} (v${vi + 1})` : baseAdName,
+          fileName: variants.length > 1 ? `${creative.file_name} (v${vi + 1})` : creative.file_name,
+          adSetId: adsetId,
+          thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || null,
+          mediaType: creative.media_type || "image",
+        })
+      } catch (err: any) {
+        errors.push({ creativeId: creative.id, error: err.message })
+      }
     }
   }
   return { results, errors }
@@ -358,19 +381,11 @@ export async function POST(request: NextRequest) {
       return false
     })()
 
-    // Text variations (asset_feed_spec) require a Dynamic Creative ad set (is_dynamic_creative=true),
-    // which Meta restricts to exactly 1 active ad. We can't target an existing ad set because the
-    // flag is set-on-create only, and we can't fit multiple creatives into one DC ad set.
-    if (hasTextVariations && adsetMode === "existing") {
-      return NextResponse.json({
-        error: "Multiple text options require a Dynamic Creative ad set, which must be newly created and only holds one creative each. Switch ad set mode to 'Per creative' (or 'New') and try again.",
-        code: "VARIATIONS_NEED_NEW_ADSET",
-      }, { status: 400 })
-    }
-    const isDynamicCreative = hasTextVariations
-    // Dynamic Creative ad sets hold at most 1 active ad, so each creative needs its own ad set.
-    // Force "per_creative" semantics regardless of what the user picked (existing was blocked above).
-    const effectiveAdsetMode = hasTextVariations && (adsetMode === "new" || adsetMode === "auto_divide") ? "per_creative" : adsetMode
+    // Option B (Manual Split): variations are NEVER sent to Meta as asset_feed_spec/Dynamic Creative.
+    // Instead each text combination becomes its own standard static ad (see createAdsInAdset).
+    // This keeps ad sets standard, has no 1-ad/ad-set limit, and shows each combo as a distinct ad
+    // in Ads Manager — at the cost of losing Meta's auto-mix optimization across text.
+    const effectiveAdsetMode = adsetMode
 
     const today = new Date()
     const dateStr = `${String(today.getMonth()+1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}/${today.getFullYear()}`
@@ -506,7 +521,7 @@ export async function POST(request: NextRequest) {
       }
       if (effectiveAdsetMode === "new") {
         const name = newAdsetName || template.adset.name
-        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts, hasTextVariations)
+        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
         launchedAdsets.set(s.id, name || s.id)
         return s.id
       }
@@ -515,7 +530,7 @@ export async function POST(request: NextRequest) {
       }
       if (effectiveAdsetMode === "auto_divide") {
         const name = applyPattern(autoDividePattern || "Ad Set {index:01}", { index, date: dateStr, shortDate: shortDateStr })
-        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts, hasTextVariations)
+        const s = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
         launchedAdsets.set(s.id, name)
         return s.id
       }
@@ -590,7 +605,7 @@ export async function POST(request: NextRequest) {
         }, tokenOpts)
         for (const adsetConfig of campConfig.adsets) {
           if (!adsetConfig.creativeIds?.length) continue
-          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts, hasTextVariations)
+          const adset = await buildAdset(adAccountId, token, template, camp.id, adsetConfig.name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
           launchedAdsets.set(adset.id, adsetConfig.name)
           const adsetCreatives = creatives.filter((c: any) => adsetConfig.creativeIds.includes(c.id))
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
@@ -652,7 +667,7 @@ export async function POST(request: NextRequest) {
           const creative = campaignCreatives[i]
           const filename = creative.file_name.replace(/\.[^/.]+$/, "")
           const name = applyPattern(adsetNamePattern || "{filename}", { filename, index: i + 1, date: dateStr, shortDate: shortDateStr })
-          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts, hasTextVariations)
+          const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
           launchedAdsets.set(adset.id, name)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
           const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)

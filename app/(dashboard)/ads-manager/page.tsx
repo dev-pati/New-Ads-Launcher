@@ -79,6 +79,7 @@ interface Ad {
   adset_id: string
   campaign_id: string
   creative?: { id: string; title?: string; body?: string; image_url?: string; thumbnail_url?: string }
+  creative_variations?: { bodies: string[]; titles: string[]; descriptions: string[] }
   insights?: { data: Insight[] }
 }
 
@@ -1639,7 +1640,14 @@ export default function AdsManagerPage() {
                           )}
                         </td>
                         <td className="px-3 py-2.5">
-                          {thumb ? <img src={thumb} alt="" className="size-12 rounded object-cover border" loading="lazy" /> : <div className="size-12 rounded bg-muted border flex items-center justify-center text-xs text-muted-foreground">No img</div>}
+                          <div className="relative inline-block">
+                            {thumb ? <img src={thumb} alt="" className="size-12 rounded object-cover border" loading="lazy" /> : <div className="size-12 rounded bg-muted border flex items-center justify-center text-xs text-muted-foreground">No img</div>}
+                            {a.creative_variations && (
+                              <span className="absolute -top-1.5 -right-1.5 bg-[#1877f2] text-white text-[9px] font-bold rounded-full px-1.5 py-0.5 leading-none shadow" title="Multiple text options">
+                                {(a.creative_variations.bodies.length + a.creative_variations.titles.length + a.creative_variations.descriptions.length)}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>)}
                       </tr>
@@ -2046,12 +2054,47 @@ export default function AdsManagerPage() {
                           <img src={node.creative.thumbnail_url} className="w-full object-cover max-h-52" loading="lazy" />
                         )}
                         {(node.creative.title || node.creative.body) && (
-                          <div className="px-3.5 py-3 space-y-1 bg-neutral-50 dark:bg-neutral-900 border-t">
-                            {node.creative.title && (
-                              <p className="text-sm font-semibold leading-snug line-clamp-2 text-foreground">{node.creative.title}</p>
-                            )}
-                            {node.creative.body && (
-                              <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{node.creative.body}</p>
+                          <div className="px-3.5 py-3 space-y-3 bg-neutral-50 dark:bg-neutral-900 border-t">
+                            <div className="space-y-1">
+                              {node.creative.title && (
+                                <p className="text-sm font-semibold leading-snug line-clamp-2 text-foreground">{node.creative.title}</p>
+                              )}
+                              {node.creative.body && (
+                                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{node.creative.body}</p>
+                              )}
+                            </div>
+
+                            {node.creative_variations && (
+                              <div className="pt-2 border-t border-dashed space-y-2">
+                                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Additional Variations</p>
+
+                                {node.creative_variations.titles.length > 1 && (
+                                  <div className="space-y-1">
+                                    <span className="text-[10px] text-muted-foreground">Headlines:</span>
+                                    {node.creative_variations.titles.slice(1).map((t: string, i: number) => (
+                                      <p key={i} className="text-xs font-medium text-foreground bg-white dark:bg-black border rounded px-2 py-1 line-clamp-1">{t}</p>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {node.creative_variations.bodies.length > 1 && (
+                                  <div className="space-y-1">
+                                    <span className="text-[10px] text-muted-foreground">Primary Texts:</span>
+                                    {node.creative_variations.bodies.slice(1).map((b: string, i: number) => (
+                                      <p key={i} className="text-xs text-muted-foreground bg-white dark:bg-black border rounded px-2 py-1 line-clamp-2">{b}</p>
+                                    ))}
+                                  </div>
+                                )}
+
+                                {node.creative_variations.descriptions.length > 1 && (
+                                  <div className="space-y-1">
+                                    <span className="text-[10px] text-muted-foreground">Descriptions:</span>
+                                    {node.creative_variations.descriptions.slice(1).map((d: string, i: number) => (
+                                      <p key={i} className="text-xs text-muted-foreground bg-white dark:bg-black border rounded px-2 py-1 line-clamp-1">{d}</p>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             )}
                           </div>
                         )}

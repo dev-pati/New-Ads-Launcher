@@ -7022,7 +7022,7 @@ function DuplicateAdSetModal({
                 )}
               </div>
 
-              {/* 2-column toggles */}
+              {/* Toggles */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="border rounded-xl p-3">
                   <div className="flex items-start justify-between mb-1">
@@ -8833,7 +8833,7 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove, invalid 
       </div>
 
       <div className="p-3 space-y-2">
-        {selectedAdSets.length > 0 && (
+	        {selectedAdSets.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {selectedAdSets.map(a => (
               <span key={a.id} className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium border border-primary/20">
@@ -12763,7 +12763,7 @@ function RecordCard(props: CoreRowViewProps) {
               onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
               placeholder="Primary text..."
               rows={3}
-              className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
+              className="w-full text-xs bg-muted/20 border border-border/70 focus:border-primary/50 hover:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed transition-colors"
             />
           </div>
           <div>
@@ -12772,7 +12772,7 @@ function RecordCard(props: CoreRowViewProps) {
               value={row.adName}
               onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
               placeholder="Ad name..."
-              className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+              className="w-full text-xs bg-muted/20 border border-border/70 focus:border-primary/50 hover:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 transition-colors"
             />
           </div>
           <div>
@@ -12781,7 +12781,7 @@ function RecordCard(props: CoreRowViewProps) {
               value={row.headline}
               onChange={e => onUpdateRow(row.id, "headline", e.target.value)}
               placeholder="Headline..."
-              className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40"
+              className="w-full text-xs bg-muted/20 border border-border/70 focus:border-primary/50 hover:border-border rounded px-2 py-1.5 outline-none placeholder:text-muted-foreground/40 transition-colors"
             />
           </div>
           <div>
@@ -13177,9 +13177,9 @@ function TableMode({
                         value={row.primaryText}
                         onChange={e => onUpdateRow(row.id, "primaryText", e.target.value)}
                         placeholder="Primary text..."
-                        rows={4}
+                        rows={2}
                         className="w-full text-xs bg-muted/20 border border-transparent focus:border-border rounded px-2 py-1.5 outline-none resize-y placeholder:text-muted-foreground/40 leading-relaxed"
-                        style={{ minHeight: 104 }}
+                        style={{ minHeight: 52 }}
                       />
                       {exp.primary && ptVars.map((v, vi) => (
                         <div key={vi} className="flex items-start gap-1">
@@ -14956,6 +14956,14 @@ export default function LaunchPage() {
     if (!webLink.trim()) return fail("Destination URL is required when the CTA uses a link.", ["webLink"])
     if (!/^https?:\/\//.test(webLink.trim())) return fail("URL must start with http:// or https://.", ["webLink"])
     if (!selectedPageId) return fail("Select a Facebook Page.", ["page"])
+
+    // Multiple text variations require a Dynamic Creative ad set (Meta hard constraint).
+    const hasTextVariations =
+      primaryTexts.filter(t => t.trim()).length > 1 ||
+      headlines.filter(h => h.trim()).length > 1 ||
+      descriptions.filter(d => d.trim()).length > 1
+
+
     setError("")
     setValidationErrors({})
     return true

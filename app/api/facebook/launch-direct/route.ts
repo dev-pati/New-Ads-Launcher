@@ -470,17 +470,22 @@ export async function POST(request: NextRequest) {
           const allBodies = Array.from(new Set([rowBody,  ...(primaryTextVariations  || [])].map((s: string) => s.trim()).filter(Boolean)))
           const allTitles = Array.from(new Set([rowTitle, ...(headlineVariations || [])].map((s: string) => s.trim()).filter(Boolean)))
           const allDescs  = Array.from(new Set([rowDesc,  ...(descriptionVariations || [])].map((s: string) => s.trim()).filter(Boolean)))
-          const combos = allBodies.length || allTitles.length || 1
           const bodyList  = allBodies.length  ? allBodies  : [rowBody]
           const titleList = allTitles.length ? allTitles : [rowTitle]
           const descList  = allDescs.length  ? allDescs  : [rowDesc]
+          const variants: { vBody: string; vTitle: string; vDesc: string }[] = []
+          for (const vBody of bodyList) {
+            for (const vTitle of titleList) {
+              for (const vDesc of descList) {
+                variants.push({ vBody, vTitle, vDesc })
+              }
+            }
+          }
 
-          for (let vi = 0; vi < combos; vi++) {
+          for (let vi = 0; vi < variants.length; vi++) {
             try {
-              const vBody  = bodyList[vi]  ?? bodyList[0]
-              const vTitle = titleList[vi] ?? titleList[0]
-              const vDesc  = descList[vi]  ?? descList[0]
-              const vName = combos > 1 ? `${adName} (v${vi + 1})` : adName
+              const { vBody, vTitle, vDesc } = variants[vi]
+              const vName = variants.length > 1 ? `${adName} (v${vi + 1})` : adName
               const ad = await createAd(adAccountId, token, {
                 name: vName,
                 adset_id: adSetId,
@@ -513,7 +518,7 @@ export async function POST(request: NextRequest) {
                 adSetId,
                 adSetName: adSetNameMap.get(adSetId) || adSetId,
                 creativeId: creative.id,
-                fileName: combos > 1 ? `${creative.file_name} (v${vi + 1})` : creative.file_name,
+                fileName: variants.length > 1 ? `${creative.file_name} (v${vi + 1})` : creative.file_name,
                 thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || null,
                 mediaType: creative.media_type || "image",
               })
@@ -521,7 +526,7 @@ export async function POST(request: NextRequest) {
               errors.push({
                 adSetId,
                 creativeId: creative.id,
-                fileName: combos > 1 ? `${creative.file_name} (v${vi + 1})` : creative.file_name,
+                fileName: variants.length > 1 ? `${creative.file_name} (v${vi + 1})` : creative.file_name,
                 error: err.message || "Failed to create ad",
               })
             }

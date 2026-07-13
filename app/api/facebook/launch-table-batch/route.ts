@@ -194,41 +194,64 @@ export async function POST(request: NextRequest) {
             const rowTitle = (headline || creative.headline || "").trim()
             const rowBody  = (primaryText || creative.primary_text || "").trim()
             const rowDesc  = (description || creative.description || "").trim()
+
             const allBodies = Array.from(new Set([rowBody,  ...(primaryTextVariations || [])].map((s: string) => s.trim()).filter(Boolean)))
             const allTitles = Array.from(new Set([rowTitle, ...(headlineVariations    || [])].map((s: string) => s.trim()).filter(Boolean)))
             const allDescs  = Array.from(new Set([rowDesc,  ...(descriptionVariations || [])].map((s: string) => s.trim()).filter(Boolean)))
-            const hasVariations = allBodies.length > 1 || allTitles.length > 1 || allDescs.length > 1
 
-            const ad = await createAd(adAccountId, token, {
-              name: adName,
-              adset_id: adSetId,
-              page_id: pageId,
-              instagram_actor_id: instagramAccountId || undefined,
-              image_hash: creative.fb_image_hash || undefined,
-              video_id: creative.fb_video_id || undefined,
-              thumbnail_url: thumbnailUrl,
-              title: rowTitle,
-              body: rowBody,
-              description: rowDesc,
-              cta: cta || creative.cta || "LEARN_MORE",
-              link_url: webLink || creative.link_url || "",
-              status: adStatus,
-              branded_content_sponsor_page_id: partnerPageId || undefined,
-              partnership_display_mode: partnershipDisplayMode || undefined,
-              multilanguage: multilanguage || undefined,
-              catalog_ads: catalogAds || undefined,
-              collection_ads: collectionAds || undefined,
-              ...(hasVariations ? { text_variations: { bodies: allBodies, titles: allTitles, descriptions: allDescs } } : {}),
-              sitelinks: sitelinks?.length > 0 ? sitelinks : undefined,
-              degrees_of_freedom_spec: degreesOfFreedom,
-            }, tokenOpts)
-            await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
-            created.push({
-              adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId,
-              creativeId: creative.id, fileName: creative.file_name,
-              thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || null,
-              mediaType: creative.media_type || "image",
-            })
+            const bodyList  = allBodies.length  ? allBodies  : [rowBody]
+            const titleList = allTitles.length ? allTitles : [rowTitle]
+            const descList  = allDescs.length  ? allDescs  : [rowDesc]
+            const variants: { vBody: string; vTitle: string; vDesc: string }[] = []
+            for (const vBody of bodyList) {
+              for (const vTitle of titleList) {
+                for (const vDesc of descList) {
+                  variants.push({ vBody, vTitle, vDesc })
+                }
+              }
+            }
+
+            for (let vi = 0; vi < variants.length; vi++) {
+              try {
+                const { vBody, vTitle, vDesc } = variants[vi]
+                const vName = variants.length > 1 ? `${adName} (v${vi + 1})` : adName
+                const ad = await createAd(adAccountId, token, {
+                  name: vName,
+                  adset_id: adSetId,
+                  page_id: pageId,
+                  instagram_actor_id: instagramAccountId || undefined,
+                  image_hash: creative.fb_image_hash || undefined,
+                  video_id: creative.fb_video_id || undefined,
+                  thumbnail_url: thumbnailUrl,
+                  title: vTitle,
+                  body: vBody,
+                  description: vDesc,
+                  cta: cta || creative.cta || "LEARN_MORE",
+                  link_url: webLink || creative.link_url || "",
+                  status: adStatus,
+                  branded_content_sponsor_page_id: partnerPageId || undefined,
+                  partnership_display_mode: partnershipDisplayMode || undefined,
+                  multilanguage: multilanguage || undefined,
+                  catalog_ads: catalogAds || undefined,
+                  collection_ads: collectionAds || undefined,
+                  sitelinks: sitelinks?.length > 0 ? sitelinks : undefined,
+                  degrees_of_freedom_spec: degreesOfFreedom,
+                }, tokenOpts)
+
+                if (vi === 0) {
+                  await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+                }
+
+                created.push({
+                  adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId,
+                  creativeId: creative.id, fileName: variants.length > 1 ? `${creative.file_name} (v${vi + 1})` : creative.file_name,
+                  thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || null,
+                  mediaType: creative.media_type || "image",
+                })
+              } catch (err: any) {
+                errors.push({ adSetId, creativeId: creative.id, fileName: variants.length > 1 ? `${creative.file_name} (v${vi + 1})` : creative.file_name, error: err.message || "Failed to create ad" })
+              }
+            }
           } catch (err: any) {
             errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed to create ad" })
           }
