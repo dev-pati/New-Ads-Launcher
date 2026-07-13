@@ -4467,7 +4467,7 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
   const [links, setLinks] = useState("")
   const [includeSubfolders, setIncludeSubfolders] = useState(false)
   const [importing, setImporting] = useState(false)
-  const [results, setResults] = useState<{ name: string; status: "done" | "error"; error?: string }[]>([])
+  const [results, setResults] = useState<{ name: string; status: "importing" | "done" | "error"; error?: string }[]>([])
 
   const extractFileId = (url: string): { id: string; type: "file" | "folder" } | null => {
     const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
@@ -4521,6 +4521,7 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
         let cursor = 0
         const concurrency = 2
         const importOne = async (file: { id: string; name: string; mimeType: string }) => {
+          setResults(p => [...p, { name: file.name, status: "importing" }])
           try {
             const res = await fetch("/api/google/import-drive", {
               method: "POST",
@@ -4530,9 +4531,9 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
             const d = await res.json()
             if (!res.ok) throw new Error(d.error || "Import failed")
             newCreatives.push(d.creative)
-            setResults(p => [...p, { name: file.name, status: "done" }])
+            setResults(p => p.map(r => r.name === file.name && r.status === "importing" ? { name: file.name, status: "done" } : r))
           } catch (e: any) {
-            setResults(p => [...p, { name: file.name, status: "error", error: e.message }])
+            setResults(p => p.map(r => r.name === file.name && r.status === "importing" ? { name: file.name, status: "error", error: e.message } : r))
           }
         }
 
@@ -4600,9 +4601,12 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
             <div key={i} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-muted/30 border">
               {r.status === "done"
                 ? <IconCheck className="size-3.5 text-green-500 shrink-0" />
-                : <IconX className="size-3.5 text-destructive shrink-0" />
+                : r.status === "importing"
+                  ? <IconLoader2 className="size-3.5 animate-spin text-muted-foreground shrink-0" />
+                  : <IconX className="size-3.5 text-destructive shrink-0" />
               }
-              <span className="truncate flex-1">{r.name}</span>
+              <span className={cn("truncate flex-1", r.status === "importing" && "text-muted-foreground")}>{r.name}</span>
+              {r.status === "importing" && <span className="text-muted-foreground shrink-0">Importing…</span>}
               {r.error && <span className="text-destructive shrink-0">{r.error}</span>}
             </div>
           ))}
