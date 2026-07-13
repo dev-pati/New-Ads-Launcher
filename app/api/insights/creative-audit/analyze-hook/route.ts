@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
+import { getGeminiApiKey } from "@/lib/get-ai-key"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,8 +16,8 @@ export async function POST(request: NextRequest) {
     const { thumbnailUrl, adName, hookRate } = await request.json()
     if (!thumbnailUrl) return NextResponse.json({ error: "thumbnailUrl required" }, { status: 400 })
 
-    const apiKey = process.env.GEMINI_API_KEY
-    if (!apiKey) return NextResponse.json({ error: "GEMINI_API_KEY not configured" }, { status: 500 })
+    const apiKey = await getGeminiApiKey(ctx.orgId)
+    if (!apiKey) return NextResponse.json({ error: "No Gemini key configured. Add one in Settings → AI Keys." }, { status: 503 })
 
     // Fetch image and convert to base64
     const imgRes = await fetch(thumbnailUrl)
@@ -54,6 +55,15 @@ Example: ["Bold close-up face with direct eye contact creates immediate personal
     })
 
     const geminiData = await geminiRes.json()
+
+    if (!geminiRes.ok) {
+      const apiMsg = geminiData?.error?.message || `Gemini request failed (${geminiRes.status})`
+      if (geminiRes.status === 429 || /quota|rate limit/i.test(apiMsg)) {
+        return NextResponse.json({ error: "AI quota exceeded. Check your Gemini API key billing." }, { status: 429 })
+      }
+      return NextResponse.json({ error: apiMsg }, { status: 502 })
+    }
+
     const raw = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text || ""
 
     // Parse JSON array from response

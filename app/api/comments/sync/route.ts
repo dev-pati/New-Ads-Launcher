@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getGeminiApiKey } from "@/lib/get-ai-key"
 import { getDarkPostAds } from "@/lib/facebook"
 import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
 import { normalizeMetaError } from "@/lib/meta-error"
@@ -175,7 +176,7 @@ export async function POST(request: NextRequest) {
     }
 
     const accessToken = pageToken.token
-    const apiKey  = process.env.GEMINI_API_KEY
+    const apiKey  = (await getGeminiApiKey(ctx.orgId)) ?? undefined
     const postFields = "id,message,story,created_time,permalink_url,full_picture,reactions.summary(true),comments.summary(true),shares"
     const commentFields = "id,message,from,created_time,can_hide,is_hidden,like_count,comment_count"
 
