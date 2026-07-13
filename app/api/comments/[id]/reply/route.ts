@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth"
 import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
 import { normalizeMetaError } from "@/lib/meta-error"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { logPageManageActivity } from "@/lib/page-manage-activity"
 
 export const dynamic = "force-dynamic"
 const GRAPH = "https://graph.facebook.com/v25.0"
@@ -44,6 +45,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     await supabase.from("comments").update({ is_replied: true, draft_reply: message }).eq("id", id)
+
+    await logPageManageActivity(supabase, {
+      actorId: ctx.user.id,
+      orgId: ctx.orgId,
+      pageId: String(page_id),
+      module: "comment",
+      action: "reply",
+      targetRef: comment.fb_comment_id,
+    })
 
     return NextResponse.json({ success: true, reply_id: data.id })
   } catch (err: any) {

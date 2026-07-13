@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getAuthContext } from "@/lib/auth"
-import { getOpenAIApiKey } from "@/lib/get-ai-key"
+import { getOpenAIApiKey, getGeminiApiKey } from "@/lib/get-ai-key"
 import { normalizePageManagerSettings, type QuickReplyTemplate } from "@/lib/page-manager-settings"
 
 export const runtime = "nodejs"
@@ -33,11 +34,17 @@ function normalizeForRules(value: string) {
 
 function detectCustomerLanguage(message: string, defaultLanguage: string): "vi" | "en" {
   const text = normalizeForRules(message)
-  if (defaultLanguage === "vi") return "vi"
-  if (/\b(gia|bao nhieu|con hang|het hang|giao hang|van chuyen|tu van|mua|ship|cho minh|minh muon|cam on|xin chao|chao)\b/i.test(text)) {
-    return "vi"
-  }
-  return "en"
+
+  const viKeywords = /\b(gia|bao nhieu|con hang|het hang|giao hang|van chuyen|tu van|mua|ship|cho minh|minh muon|cam on|xin chao|chao|alo|nhieu|ko|k|dc|đc)\b/i
+  const enKeywords = /\b(price|cost|how much|stock|available|shipping|delivery|buy|thank|hello|hi|hey|what|when|where|please)\b/i
+
+  const isVi = viKeywords.test(text)
+  const isEn = enKeywords.test(text)
+
+  if (isVi && !isEn) return "vi"
+  if (isEn && !isVi) return "en"
+
+  return (defaultLanguage === "vi" || defaultLanguage === "en") ? defaultLanguage : "en"
 }
 
 function detectGuardrails(message: string, defaultLanguage: string): GuardrailResult {
@@ -154,16 +161,16 @@ function chooseTemplate(intent: string, templates: QuickReplyTemplate[]) {
 function fallbackReply(intent: string, language: "vi" | "en", handoffMessage: string) {
   if (intent === "support_escalation" || intent === "medical_sensitive") {
     return handoffMessage || (language === "vi"
-      ? "Cam on ban da nhan tin. Minh se chuyen hoi thoai nay cho nhan su phu trach de ho tro chinh xac hon."
+      ? "Cảm ơn bạn đã nhắn tin. Mình sẽ chuyển hội thoại này cho nhân sự phụ trách để hỗ trợ chính xác hơn."
       : "Thanks for reaching out. I will route this conversation to the right team member for accurate support.")
   }
 
   if (language === "vi") {
-    if (intent === "pricing") return "Cam on ban da quan tam. Ban muon xem gia cua san pham hoac combo nao de minh gui thong tin phu hop?"
-    if (intent === "shipping") return "Cam on ban. Thoi gian giao hang tuy thuoc vao khu vuc. Ban cho minh xin tinh/thanh pho hoac ma ZIP de minh ho tro uoc tinh nhe."
-    if (intent === "availability") return "Cam on ban. Ban cho minh biet san pham hoac phien ban nao ban dang quan tam de minh kiem tra tinh trang con hang nhe."
-    if (intent === "greeting") return "Xin chao, cam on ban da nhan tin. Minh co the ho tro gi cho ban hom nay?"
-    return "Cam on ban da nhan tin. Ban cho minh them mot chut thong tin de minh ho tro dung nhu cau nhe."
+    if (intent === "pricing") return "Cảm ơn bạn đã quan tâm. Bạn muốn xem giá của sản phẩm hoặc combo nào để mình gửi thông tin phù hợp?"
+    if (intent === "shipping") return "Cảm ơn bạn. Thời gian giao hàng tùy thuộc vào khu vực. Bạn cho mình xin tỉnh/thành phố hoặc mã ZIP để mình hỗ trợ ước tính nhé."
+    if (intent === "availability") return "Cảm ơn bạn. Bạn cho mình biết sản phẩm hoặc phiên bản nào bạn đang quan tâm để mình kiểm tra tình trạng còn hàng nhé."
+    if (intent === "greeting") return "Xin chào, cảm ơn bạn đã nhắn tin. Mình có thể hỗ trợ gì cho bạn hôm nay?"
+    return "Cảm ơn bạn đã nhắn tin. Bạn cho mình thêm một chút thông tin để mình hỗ trợ đúng nhu cầu nhé."
   }
 
   if (intent === "pricing") return "Thanks for reaching out. Which product or bundle are you interested in? I can send the right pricing details."
@@ -219,6 +226,47 @@ export async function POST(request: NextRequest) {
       : "Rule-based fallback generated a safe draft."
     let model = "rule_fallback"
 
+    const systemInstruction = [
+      "You are an AI customer support assistant inside a Fanpage Manager inbox.",
+      "Return strict JSON only.",
+      "Write a short, natural, operator-ready reply in the customer's language. If the customer messages in Vietnamese, you MUST reply in Vietnamese. If in English, reply in English.",
+      "CRITICAL: Always use proper, fully-accented Vietnamese (tiếng Việt có dấu đầy đủ) when responding in Vietnamese. Never output tone-less Vietnamese (tiếng Việt không dấu) under any circumstances.",
+      "Use only facts from page_context or quick_reply_templates. Never invent exact prices, shipping time, stock status, discounts, refund promises, medical claims, legal claims, or payment commitments.",
+      "If the customer asks about pricing/shipping/stock and the exact answer is not provided, ask one clear follow-up question.",
+      "If the message is complaint, refund, scam/fake accusation, medical/health-sensitive, legal, payment risk, or unsafe, recommend escalation and draft a calm handoff reply.",
+      "Do not mention internal policy, confidence, model, or automation.",
+    ].join(" ")
+
+    const userPayload = JSON.stringify({
+      customer_message: message,
+      detected_intent: guardrails.intent,
+      detected_risk: guardrails.riskLevel,
+      customer_name: customerName,
+      customer_language: guardrails.customerLanguage,
+      page_context: context || "No additional product context provided.",
+      handoff_message: settings.conversations.handoffMessage,
+      quick_reply_templates: settings.quickReplyTemplates.templates.slice(0, 12),
+      preferred_template: template,
+      required_json_shape: {
+        intent: "pricing|shipping|availability|support_escalation|medical_sensitive|greeting|general_question",
+        confidence: "number 1-100",
+        draftReply: "short customer-facing reply text",
+        reason: "short internal reason",
+      },
+    })
+
+    const applyParsed = (parsed: any, sourceModel: string) => {
+      if (!parsed) return
+      intent = typeof parsed.intent === "string" ? parsed.intent : intent
+      confidence = clampConfidence(parsed.confidence, confidence)
+      draftReply = typeof parsed.draftReply === "string" && parsed.draftReply.trim()
+        ? parsed.draftReply.trim().slice(0, 1200)
+        : draftReply
+      reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : "AI generated a safe customer reply."
+      model = sourceModel
+    }
+
+    // Provider cascade: OpenAI (preferred) → Gemini → rule-based fallback.
     const openaiKey = await getOpenAIApiKey(ctx.orgId)
     if (openaiKey) {
       try {
@@ -228,58 +276,36 @@ export async function POST(request: NextRequest) {
           temperature: 0.25,
           response_format: { type: "json_object" },
           messages: [
-            {
-              role: "system",
-              content: [
-                "You are an AI customer support assistant inside a Fanpage Manager inbox.",
-                "Return strict JSON only.",
-                "Write a short, natural, operator-ready reply in the customer's language.",
-                "Use only facts from page_context or quick_reply_templates. Never invent exact prices, shipping time, stock status, discounts, refund promises, medical claims, legal claims, or payment commitments.",
-                "If the customer asks about pricing/shipping/stock and the exact answer is not provided, ask one clear follow-up question.",
-                "If the message is complaint, refund, scam/fake accusation, medical/health-sensitive, legal, payment risk, or unsafe, recommend escalation and draft a calm handoff reply.",
-                "Do not mention internal policy, confidence, model, or automation.",
-              ].join(" "),
-            },
-            {
-              role: "user",
-              content: JSON.stringify({
-                customer_message: message,
-                detected_intent: guardrails.intent,
-                detected_risk: guardrails.riskLevel,
-                customer_name: customerName,
-                customer_language: guardrails.customerLanguage,
-                page_context: context || "No additional product context provided.",
-                handoff_message: settings.conversations.handoffMessage,
-                quick_reply_templates: settings.quickReplyTemplates.templates.slice(0, 12),
-                preferred_template: template,
-                required_json_shape: {
-                  intent: "pricing|shipping|availability|support_escalation|medical_sensitive|greeting|general_question",
-                  confidence: "number 1-100",
-                  draftReply: "short customer-facing reply text",
-                  reason: "short internal reason",
-                },
-              }),
-            },
+            { role: "system", content: systemInstruction },
+            { role: "user", content: userPayload },
           ],
         })
-
-        const parsed = parseJsonObject(completion.choices[0]?.message?.content || "")
-        if (parsed) {
-          intent = typeof parsed.intent === "string" ? parsed.intent : intent
-          confidence = clampConfidence(parsed.confidence, confidence)
-          draftReply = typeof parsed.draftReply === "string" && parsed.draftReply.trim()
-            ? parsed.draftReply.trim().slice(0, 1200)
-            : draftReply
-          reason = typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : "AI generated a safe customer reply."
-          model = "gpt-4o-mini"
-        }
+        applyParsed(parseJsonObject(completion.choices[0]?.message?.content || ""), "gpt-4o-mini")
       } catch (err) {
-        reason = `AI provider failed; using safe fallback. ${err instanceof Error ? err.message : ""}`.trim()
+        reason = `OpenAI failed; trying fallback. ${err instanceof Error ? err.message : ""}`.trim()
       }
-    } else {
-      reason = template
-        ? `No OpenAI key configured; using matched template: ${template.name}.`
-        : "No OpenAI key configured; using rule fallback."
+    }
+
+    if (model === "rule_fallback") {
+      const geminiKey = await getGeminiApiKey(ctx.orgId)
+      if (geminiKey) {
+        try {
+          const genAI = new GoogleGenerativeAI(geminiKey)
+          const gModel = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash",
+            systemInstruction,
+            generationConfig: { temperature: 0.25, responseMimeType: "application/json" },
+          })
+          const result = await gModel.generateContent(userPayload)
+          applyParsed(parseJsonObject(result.response.text()), "gemini-2.0-flash")
+        } catch (err) {
+          reason = `AI provider failed; using safe fallback. ${err instanceof Error ? err.message : ""}`.trim()
+        }
+      } else if (!openaiKey) {
+        reason = template
+          ? `No AI key configured; using matched template: ${template.name}.`
+          : "No AI key configured; using rule fallback."
+      }
     }
 
     const riskLevel = guardrails.riskLevel

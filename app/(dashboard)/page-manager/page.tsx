@@ -520,7 +520,7 @@ const PAGES: PageItem[] = [
     inbox: 0,
     comments: 0,
     posts: 11,
-    note: "Comment sync will stay blocked until page permissions are approved.",
+    note: "Comment sync uses the selected Page token after Facebook reconnect.",
   },
 ]
 
@@ -663,7 +663,7 @@ const RULES: RuleItem[] = [
   { name: "Hide toxic replies", trigger: "Spam / phone number / competitor mention", action: "Auto hide comment", status: "active" },
   { name: "Lead capture", trigger: "Question + pricing intent", action: "Send template reply", status: "active" },
   { name: "Escalate support", trigger: "Negative sentiment", action: "Assign to support queue", status: "draft" },
-  { name: "Review gate", trigger: "Comment contains offer code", action: "Route to approval", status: "blocked" },
+  { name: "Review gate", trigger: "Comment contains offer code", action: "Route to approval", status: "active" },
 ]
 
 const PAGE_MANAGER_TABS = [
@@ -678,9 +678,10 @@ const PERMISSIONS = [
   { key: "business_management", label: "Business Managers", state: "ready" },
   { key: "pages_show_list", label: "Page list access", state: "ready" },
   { key: "pages_read_engagement", label: "Comment sync", state: "ready" },
-  { key: "pages_manage_engagement", label: "Reply / hide comments", state: "pending" },
+  { key: "pages_manage_engagement", label: "Reply / hide comments", state: "ready" },
   { key: "pages_messaging", label: "Inbox / Messenger", state: "ready" },
   { key: "pages_manage_metadata", label: "Messenger webhooks", state: "ready" },
+  { key: "pages_manage_posts", label: "Publish Page posts", state: "ready" },
   { key: "ads_management", label: "Ads management (Ad Comments)", state: "ready" },
 ]
 
@@ -1115,7 +1116,7 @@ function PageTag({ page }: { page: PageItem }) {
   return (
     <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2">
       <div className="size-8 rounded-lg bg-primary/10 flex items-center justify-center overflow-hidden shrink-0">
-        {page.picture ? <img src={page.picture} alt="" className="size-full object-cover" /> : <IconBrandFacebook className="size-4 text-[#1877F2]" />}
+        {page.picture || page.id ? <img src={page.picture || `/api/facebook/page-picture?page_id=${page.id}`} alt="" className="size-full object-cover" /> : <IconBrandFacebook className="size-4 text-[#1877F2]" />}
       </div>
       <div className="min-w-0">
         <div className="text-sm font-medium truncate">{page.name}</div>
@@ -1341,6 +1342,12 @@ export default function PageManagerPage() {
   const [metaDarkPostsMeta, setMetaDarkPostsMeta] = useState<DarkPostsMeta | null>(null)
   const [metaDarkPostsLoading, setMetaDarkPostsLoading] = useState(false)
   const [metaDarkPostsError, setMetaDarkPostsError] = useState("")
+  const [composerOpen, setComposerOpen] = useState(false)
+  const [composerMessage, setComposerMessage] = useState("")
+  const [composerImageUrl, setComposerImageUrl] = useState("")
+  const [composerLoading, setComposerLoading] = useState(false)
+  const [composerError, setComposerError] = useState("")
+  const [composerSuccess, setComposerSuccess] = useState("")
   const [selectedPostKey, setSelectedPostKey] = useState("")
   const [darkPostInsights, setDarkPostInsights] = useState<Record<string, AdInsight>>({})
   const [darkPostInsightsLoading, setDarkPostInsightsLoading] = useState(false)
@@ -2798,6 +2805,58 @@ export default function PageManagerPage() {
     }
   }, [adAccounts, darkPostPageScope, datePreset, selectedAdAccountId, selectedPage?.id, selectedPage?.name])
 
+  const publishPost = useCallback(async () => {
+    const pageId = selectedPage?.id
+    if (!pageId || /^p-\d+$/.test(pageId)) {
+      setComposerError("Select a real connected Page first.")
+      return
+    }
+    const message = composerMessage.trim()
+    const imageUrl = composerImageUrl.trim()
+    if (!message && !imageUrl) {
+      setComposerError("Add a caption or a public image URL.")
+      return
+    }
+
+    setComposerLoading(true)
+    setComposerError("")
+    setComposerSuccess("")
+    try {
+      const res = await fetch("/api/page-manager/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          page_id: pageId,
+          message: message || undefined,
+          image_url: imageUrl || undefined,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) throw new Error(data.error || "Unable to publish post.")
+
+      const postId = data.post_id ? String(data.post_id) : `local:${Date.now()}`
+      setPageInsightPosts(prev => [
+        {
+          id: postId,
+          message: message || (imageUrl ? "Photo post" : ""),
+          created_time: new Date().toISOString(),
+          full_picture: imageUrl || null,
+          permalink_url: null,
+        },
+        ...prev,
+      ])
+      setComposerSuccess(`Published${data.post_id ? ` · ${data.post_id}` : ""}.`)
+      setComposerMessage("")
+      setComposerImageUrl("")
+      setComposerOpen(false)
+      void loadPosts(true)
+    } catch (err: any) {
+      setComposerError(err?.message || "Unable to publish post.")
+    } finally {
+      setComposerLoading(false)
+    }
+  }, [composerImageUrl, composerMessage, loadPosts, selectedPage?.id])
+
   const loadMoreDarkPosts = useCallback(async () => {
     const pageId = selectedPage?.id
     const after = metaDarkPostsMeta?.paging?.after
@@ -3508,38 +3567,46 @@ export default function PageManagerPage() {
 
               {aiReplyResult ? (
                 <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-                  <div className="rounded-xl border bg-muted/20 p-4">
-                    <div className="mb-3 flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700">Intent: {aiReplyResult.intent}</Badge>
-                      <Badge variant="outline" className={cn(
-                        aiReplyResult.action === "send" && "bg-emerald-50 text-emerald-700",
-                        aiReplyResult.action === "draft" && "bg-blue-50 text-blue-700",
-                        aiReplyResult.action === "assign" && "bg-amber-50 text-amber-700",
-                        aiReplyResult.action === "ignore" && "bg-muted text-muted-foreground"
+                  <div className="border rounded-xl p-3.5 bg-card space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        Intent: {aiReplyResult.intent}
+                      </span>
+                      <span className={cn(
+                        "text-xs font-semibold px-2 py-0.5 rounded-full",
+                        aiReplyResult.action === "send" && "bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900",
+                        aiReplyResult.action === "draft" && "bg-blue-50 border border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-900",
+                        aiReplyResult.action === "assign" && "bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900",
+                        aiReplyResult.action === "ignore" && "bg-muted border border-border text-muted-foreground"
                       )}>
                         Action: {aiReplyResult.action}
-                      </Badge>
-                      <Badge variant="outline">Confidence: {aiReplyResult.confidence}%</Badge>
-                      <Badge variant="outline" className={cn(
-                        aiReplyResult.riskLevel === "high" && "bg-red-50 text-red-700",
-                        aiReplyResult.riskLevel === "medium" && "bg-amber-50 text-amber-700",
-                        aiReplyResult.riskLevel === "low" && "bg-emerald-50 text-emerald-700"
+                      </span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/5 text-foreground border">
+                        Confidence: {aiReplyResult.confidence}%
+                      </span>
+                      <span className={cn(
+                        "text-xs font-semibold px-2 py-0.5 rounded-full",
+                        aiReplyResult.riskLevel === "high" && "bg-red-50 border border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-900",
+                        aiReplyResult.riskLevel === "medium" && "bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900",
+                        aiReplyResult.riskLevel === "low" && "bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900"
                       )}>
                         Risk: {aiReplyResult.riskLevel}
-                      </Badge>
+                      </span>
                     </div>
-                    <p className="text-xs font-medium uppercase text-muted-foreground">Draft reply</p>
-                    <p className="mt-2 whitespace-pre-wrap rounded-lg bg-background p-3 text-sm leading-6">{aiReplyResult.draftReply}</p>
+                    <div>
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">DRAFT REPLY</p>
+                      <p className="mt-2 whitespace-pre-wrap rounded-lg bg-muted/40 border p-3.5 text-sm leading-relaxed">{aiReplyResult.draftReply}</p>
+                    </div>
                   </div>
-                  <div className="rounded-xl border bg-background p-4 text-sm">
-                    <p className="font-medium">Decision details</p>
-                    <div className="mt-3 space-y-2 text-muted-foreground">
+                  <div className="border rounded-xl p-3.5 bg-card text-sm space-y-3">
+                    <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">DECISION DETAILS</p>
+                    <div className="space-y-2 text-muted-foreground text-xs">
                       <p>Model: <span className="font-medium text-foreground">{aiReplyResult.model}</span></p>
                       <p>Threshold: <span className="font-medium text-foreground">{aiReplyResult.guardrails?.threshold ?? s.automation.confidenceThreshold}%</span></p>
                       <p>Auto-reply: <span className="font-medium text-foreground">{aiReplyResult.guardrails?.autoReplyEnabled ? "on" : "off"}</span></p>
                       <p>Fallback: <span className="font-medium text-foreground">{aiReplyResult.guardrails?.fallbackAction || s.automation.fallbackAction}</span></p>
                       <p>Rules: <span className="font-medium text-foreground">{aiReplyResult.matchedRules.length ? aiReplyResult.matchedRules.join(", ") : "none"}</span></p>
-                      <p className="border-t pt-2">{aiReplyResult.reason}</p>
+                      <p className="border-t pt-2 mt-2 leading-relaxed">{aiReplyResult.reason}</p>
                     </div>
                   </div>
                 </div>
@@ -3713,9 +3780,9 @@ export default function PageManagerPage() {
                   >
                     <div className="flex min-w-0 items-center gap-2 text-left">
                       <div className="size-8 shrink-0 overflow-hidden rounded-lg border border-border/60 bg-muted">
-                        {selectedPage?.picture ? (
+                        {selectedPage?.picture || selectedPage?.id ? (
                           <img
-                            src={selectedPage.picture}
+                            src={selectedPage.picture || `/api/facebook/page-picture?page_id=${selectedPage.id}`}
                             alt={selectedPage.name}
                             className="size-full object-cover"
                           />
@@ -3774,8 +3841,8 @@ export default function PageManagerPage() {
                             )}
                           >
                             <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-muted ring-1 ring-border/60">
-                              {page.picture ? (
-                                <img src={page.picture} alt={page.name} className="size-full object-cover" />
+                              {page.picture || page.metaPageId || page.id ? (
+                                <img src={page.picture || `/api/facebook/page-picture?page_id=${page.metaPageId || page.id}`} alt={page.name} className="size-full object-cover" />
                               ) : (
                                 <div className="flex size-full items-center justify-center bg-slate-100 text-sm font-semibold text-slate-600">
                                   {page.name.charAt(0)}
@@ -4045,7 +4112,7 @@ export default function PageManagerPage() {
             </div>
           </div>
 
-          <div className="mt-4 overflow-x-auto">
+          <div className="mt-4 overflow-x-auto md:hidden">
             <div className="min-w-max rounded-xl border border-border/70 bg-background p-1 shadow-sm">
               <div className="flex items-center gap-1">
                 {PAGE_MANAGER_TABS.map(item => {
@@ -4072,6 +4139,27 @@ export default function PageManagerPage() {
       </div>
 
       <div className="mx-auto flex max-w-[1600px] gap-4 px-4 py-4">
+        <aside className="hidden w-auto shrink-0 flex-col gap-2 md:flex">
+          <nav className="flex w-fit flex-col gap-1 rounded-xl border border-border/70 bg-background p-1 shadow-sm">
+            {PAGE_MANAGER_TABS.map(item => {
+              const active = tab === item.id
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setTab(item.id)}
+                  className={cn(
+                    "rounded-lg px-4 py-2 text-left text-sm font-medium whitespace-nowrap transition-colors",
+                    active
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                  )}
+                >
+                  {item.label}
+                </button>
+              )
+            })}
+          </nav>
+        </aside>
         <main className="min-w-0 flex-1 space-y-4">
 
           {tab === "inbox" && (
@@ -4222,7 +4310,7 @@ export default function PageManagerPage() {
                             >
                               <InboxAvatar
                                 name={thread.name}
-                                src={thread.customerProfilePic || (thread.id === "thread-1" ? selectedPage?.picture || "/applogo.webp" : null)}
+                                src={thread.customerProfilePic || (thread.id === "thread-1" ? (selectedPage?.picture || (selectedPage?.id ? `/api/facebook/page-picture?page_id=${selectedPage.id}` : "/applogo.webp")) : null)}
                                 online={thread.unread > 0 || thread.responseStatus === "pending"}
                               />
 
@@ -4286,7 +4374,7 @@ export default function PageManagerPage() {
                       <div className="flex min-w-0 items-center gap-3">
                         <InboxAvatar
                           name={selectedThread.name}
-                          src={selectedThread.customerProfilePic || (selectedThread.sourceType === "facebook_comment" ? selectedPage?.picture : null)}
+                          src={selectedThread.customerProfilePic || (selectedThread.sourceType === "facebook_comment" ? (selectedPage?.picture || (selectedPage?.id ? `/api/facebook/page-picture?page_id=${selectedPage.id}` : null)) : null)}
                           online={selectedThread.responseStatus === "pending" || selectedThread.unread > 0}
                         />
                         <div className="min-w-0">
@@ -4401,7 +4489,7 @@ export default function PageManagerPage() {
                           <div className="mb-20 mt-4 flex flex-col items-center text-center">
                             <InboxAvatar
                               name={selectedThread.name}
-                              src={selectedThread.customerProfilePic || selectedPage?.picture}
+                              src={selectedThread.customerProfilePic || selectedPage?.picture || (selectedPage?.id ? `/api/facebook/page-picture?page_id=${selectedPage.id}` : undefined)}
                               size="lg"
                             />
                             <p className="mt-3 text-base font-semibold text-[#050505] dark:text-foreground">{selectedThread.name}</p>
@@ -4483,37 +4571,43 @@ export default function PageManagerPage() {
                         ) : null}
 
                         {inboxAiResult ? (
-                          <div className="mt-4 rounded-2xl border bg-background p-3 shadow-sm">
+                          <div className="mt-4 border rounded-xl p-3.5 bg-card shadow-sm space-y-3">
                             <div className="flex flex-wrap items-center gap-2">
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700">Intent: {inboxAiResult.intent}</Badge>
-                              <Badge variant="outline" className={cn(
-                                inboxAiResult.action === "send" && "bg-emerald-50 text-emerald-700",
-                                inboxAiResult.action === "draft" && "bg-blue-50 text-blue-700",
-                                inboxAiResult.action === "assign" && "bg-amber-50 text-amber-700",
-                                inboxAiResult.action === "ignore" && "bg-muted text-muted-foreground"
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                                Intent: {inboxAiResult.intent}
+                              </span>
+                              <span className={cn(
+                                "text-xs font-semibold px-2 py-0.5 rounded-full",
+                                inboxAiResult.action === "send" && "bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900",
+                                inboxAiResult.action === "draft" && "bg-blue-50 border border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-900",
+                                inboxAiResult.action === "assign" && "bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900",
+                                inboxAiResult.action === "ignore" && "bg-muted border border-border text-muted-foreground"
                               )}>
                                 Action: {inboxAiResult.action}
-                              </Badge>
-                              <Badge variant="outline">Confidence: {inboxAiResult.confidence}%</Badge>
-                              <Badge variant="outline" className={cn(
-                                inboxAiResult.riskLevel === "high" && "bg-red-50 text-red-700",
-                                inboxAiResult.riskLevel === "medium" && "bg-amber-50 text-amber-700",
-                                inboxAiResult.riskLevel === "low" && "bg-emerald-50 text-emerald-700"
+                              </span>
+                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/5 text-foreground border">
+                                Confidence: {inboxAiResult.confidence}%
+                              </span>
+                              <span className={cn(
+                                "text-xs font-semibold px-2 py-0.5 rounded-full",
+                                inboxAiResult.riskLevel === "high" && "bg-red-50 border border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-900",
+                                inboxAiResult.riskLevel === "medium" && "bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900",
+                                inboxAiResult.riskLevel === "low" && "bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900"
                               )}>
                                 Risk: {inboxAiResult.riskLevel}
-                              </Badge>
+                              </span>
                               {inboxAiResult.guardrails?.quietHoursActive ? (
-                                <Badge variant="outline" className="bg-slate-50 text-slate-700">
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 border text-slate-700">
                                   Quiet hours
-                                </Badge>
+                                </span>
                               ) : null}
                               {inboxAiResult.matchedTemplate ? (
-                                <Badge variant="outline" className="bg-violet-50 text-violet-700">
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-violet-700">
                                   Template: {inboxAiResult.matchedTemplate.shortcut}
-                                </Badge>
+                                </span>
                               ) : null}
                             </div>
-                            <p className="mt-2 text-xs text-muted-foreground">
+                            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
                               {inboxAiResult.action === "send"
                                 ? "Auto-reply condition passed. This is shown as sent in preview; real Messenger sending requires pages_messaging."
                                 : inboxAiResult.action === "draft"
@@ -4715,7 +4809,7 @@ export default function PageManagerPage() {
                         <IconRefresh className={cn("size-3.5", (pageInsightLoading || launchHistoryLoading || metaDarkPostsLoading) && "animate-spin")} />
                         Sync
                       </Button>
-                      <Button size="sm" className="gap-1.5" disabled title="Post creation is not wired in this view yet.">
+                      <Button size="sm" className="gap-1.5" onClick={() => setComposerOpen(true)} disabled={!selectedPage?.id || /^p-\d+$/.test(selectedPage?.id || "")} title="Publish a post to this Page">
                         <IconPlus className="size-3.5" />
                         New post
                       </Button>
@@ -5328,6 +5422,42 @@ export default function PageManagerPage() {
                   </Card>
                 </div>
               </div>
+
+              <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
+                <DialogContent className="sm:max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>New post</DialogTitle>
+                    <DialogDescription>
+                      Publish directly to {selectedPage?.name || "the selected Page"}. Text and/or one photo.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <Textarea
+                      placeholder="Write your post…"
+                      value={composerMessage}
+                      onChange={e => setComposerMessage(e.target.value)}
+                      rows={5}
+                    />
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Image URL (optional, must be public)</label>
+                      <Input
+                        placeholder="https://…"
+                        value={composerImageUrl}
+                        onChange={e => setComposerImageUrl(e.target.value)}
+                      />
+                    </div>
+                    {composerError ? <p className="text-sm text-red-600">{composerError}</p> : null}
+                    {composerSuccess ? <p className="text-sm text-green-600">{composerSuccess}</p> : null}
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setComposerOpen(false)} disabled={composerLoading}>Cancel</Button>
+                    <Button onClick={() => void publishPost()} disabled={composerLoading}>
+                      {composerLoading ? <IconLoader2 className="mr-2 size-4 animate-spin" /> : null}
+                      Publish
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
 
@@ -5616,7 +5746,7 @@ export default function PageManagerPage() {
                             />
                             <div className="flex items-center justify-between gap-2">
                               <div className="text-xs text-muted-foreground">
-                                Reply uses the selected Page access token when permissions are ready.
+                                Reply uses the selected Page access token.
                               </div>
                               <Button onClick={() => void handleReplySelectedComment()} disabled={replyLoading || commentActionLoading || !replyText.trim()}>
                                 {replyLoading ? <IconLoader2 className="mr-2 size-3.5 animate-spin" /> : <IconSend className="mr-2 size-3.5" />}
@@ -5757,7 +5887,7 @@ export default function PageManagerPage() {
                     </div>
                     <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-3 py-2">
                       <span className="text-sm">Comment sync</span>
-                      <Badge variant="outline" className={cn("h-6", stateTone("pending"))}>Waiting</Badge>
+                      <Badge variant="outline" className={cn("h-6", stateTone("ready"))}>Ready</Badge>
                     </div>
                     <div className="flex items-center justify-between rounded-xl border bg-muted/20 px-3 py-2">
                       <span className="text-sm">Inbox sync</span>

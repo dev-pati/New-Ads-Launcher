@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { insertMessengerMessage } from "@/lib/messenger-storage"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { logPageManageActivity } from "@/lib/page-manage-activity"
 
 export const dynamic = "force-dynamic"
 
@@ -99,6 +100,15 @@ export async function POST(request: NextRequest) {
       })
       .eq("id", conversation.id)
       .eq("org_id", ctx.orgId)
+
+    await logPageManageActivity(supabase, {
+      actorId: ctx.user.id,
+      orgId: ctx.orgId,
+      pageId: String(page_id),
+      module: "inbox",
+      action: "reply",
+      targetRef: conversation.customer_psid,
+    })
 
     return NextResponse.json({ success: true, meta: metaData })
   } catch (err) {
