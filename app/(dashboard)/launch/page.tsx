@@ -5620,12 +5620,19 @@ function LoadMediaModal({
       await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, images.length) }, imgWorker))
     }
 
-    // Videos: serial with a small fixed pause to avoid spamming Meta quota
-    for (let i = 0; i < videos.length; i++) {
-      await uploadFile(videos[i])
-      done++
-      setUploadProgress({ current: done, total: fileArr.length })
-      if (i < videos.length - 1) await new Promise(r => setTimeout(r, 1500))
+    // Videos: capped concurrency (matches Gallery's uploadOneFile) — fully serial
+    // wastes time on multi-file batches, fully unbounded starves each other's bandwidth.
+    if (videos.length > 0) {
+      const VIDEO_UPLOAD_CONCURRENCY = 4
+      let vidIdx = 0
+      const vidWorker = async () => {
+        while (vidIdx < videos.length) {
+          await uploadFile(videos[vidIdx++])
+          done++
+          setUploadProgress({ current: done, total: fileArr.length })
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(VIDEO_UPLOAD_CONCURRENCY, videos.length) }, vidWorker))
     }
 
     setUploading(false)
@@ -14791,7 +14798,7 @@ export default function LaunchPage() {
     // chunked-upload sessions split the same bandwidth, so each one starves and can
     // time out on Meta's side. A small cap keeps multiple videos moving at once
     // without any single session going too slowly to finish.
-    const VIDEO_UPLOAD_CONCURRENCY = 2
+    const VIDEO_UPLOAD_CONCURRENCY = 4
     let videoIdx = 0
     const videoWorker = async () => {
       while (videoIdx < videoItems.length) await processItem(videoItems[videoIdx++])
