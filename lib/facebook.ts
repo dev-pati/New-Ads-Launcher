@@ -1324,7 +1324,7 @@ export async function createAd(
       bodies: [{ text: params.body }],
       link_urls: [{ website_url: params.link_url }],
       call_to_action_types: [params.cta],
-      ad_formats: videos.length > 0 ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"],
+      ad_formats: videos.length > 0 ? ["AUTOMATIC_FORMAT"] : ["SINGLE_IMAGE"],
     }
     if (images.length > 0) spec.images = images
     if (videos.length > 0) spec.videos = videos
@@ -1349,7 +1349,7 @@ export async function createAd(
       call_to_action_types: [params.cta],
       ...(images.length > 0 && { images }),
       ...(videos.length > 0 && { videos }),
-      ad_formats: videos.length > 0 ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"],
+      ad_formats: videos.length > 0 ? ["AUTOMATIC_FORMAT"] : ["SINGLE_IMAGE"],
       // Group media variants: Meta uses these as alternatives within each group position
       groups: fa.group_asset_indices.map(g => ({
         image_indices: g.image_indices || [],
@@ -1370,7 +1370,7 @@ export async function createAd(
       titles: tv.titles.map(t => ({ text: t })),
       call_to_action_types: [params.cta],
       link_urls: [{ website_url: params.link_url }],
-      ad_formats: params.video_id ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"],
+      ad_formats: params.video_id ? ["AUTOMATIC_FORMAT"] : ["SINGLE_IMAGE"],
     }
     if (tv.descriptions.length > 0) spec.descriptions = tv.descriptions.map(t => ({ text: t }))
     if (params.image_hash) spec.images = [{ hash: params.image_hash }]
@@ -1484,7 +1484,7 @@ export async function createAd(
     if (params.image_hash) assetFeedSpec.images = [{ hash: params.image_hash }]
     if (params.video_id) {
       assetFeedSpec.videos = [{ video_id: params.video_id, thumbnail_url: params.thumbnail_url }]
-      assetFeedSpec.ad_formats = ["SINGLE_VIDEO"]
+      assetFeedSpec.ad_formats = ["AUTOMATIC_FORMAT"]
     }
 
     creativeJson.asset_feed_spec = assetFeedSpec
