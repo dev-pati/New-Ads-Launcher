@@ -10110,7 +10110,7 @@ type AdSourceMode = "new_ad" | "post_id" | "creative_id"
 function AdSetupPanel({
   primaryTexts, setPrimaryTexts,
   headlines, setHeadlines,
-  description, setDescription,
+  descriptions, setDescriptions,
   cta, setCta,
   webLink, setWebLink,
   utmParams, setUtmParams,
@@ -10124,7 +10124,7 @@ function AdSetupPanel({
 }: {
   primaryTexts: string[]; setPrimaryTexts: (v: string[]) => void
   headlines: string[]; setHeadlines: (v: string[]) => void
-  description: string; setDescription: (v: string) => void
+  descriptions: string[]; setDescriptions: (v: string[]) => void
   cta: string; setCta: (v: string) => void
   webLink: string; setWebLink: (v: string) => void
   utmParams: string; setUtmParams: (v: string) => void
@@ -10140,8 +10140,8 @@ function AdSetupPanel({
   setAdSourceIds: (v: Record<string, string>) => void
   validationErrors?: Record<string, boolean>
 }) {
-  const [showDesc, setShowDesc] = useState(() => !!description)
-  useEffect(() => { if (description) setShowDesc(true) }, [description])
+  const [showDesc, setShowDesc] = useState(() => descriptions.some(d => d.trim()))
+  useEffect(() => { if (descriptions.some(d => d.trim())) setShowDesc(true) }, [descriptions])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [copyTemplateOpen, setCopyTemplateOpen] = useState(false)
   const [showAiVariations, setShowAiVariations] = useState(false)
@@ -10205,6 +10205,12 @@ function AdSetupPanel({
   const addHeadline = () => setHeadlines([...headlines, ""])
   const removeHeadline = (idx: number) => setHeadlines(headlines.filter((_, i) => i !== idx))
 
+  const updateDescription = (idx: number, val: string) => {
+    const next = [...descriptions]; next[idx] = val; setDescriptions(next)
+  }
+  const addDescription = () => setDescriptions([...descriptions, ""])
+  const removeDescription = (idx: number) => setDescriptions(descriptions.filter((_, i) => i !== idx))
+
   const openGenerateModal = () => {
     setShowGenerateModal(true)
     setGenerateCopyError(null)
@@ -10239,7 +10245,7 @@ function AdSetupPanel({
       const g = data.generated
       setPrimaryTexts(g.primary_texts.map((p: { text: string }) => p.text))
       setHeadlines(g.headlines)
-      if (g.descriptions?.[0]) setDescription(g.descriptions[0])
+      if (g.descriptions?.[0]) setDescriptions([g.descriptions[0]])
       if (g.cta) setCta(g.cta)
       if (hasUrl) setWebLink(genUrl.trim())
       setShowGenerateModal(false)
@@ -10345,13 +10351,13 @@ function AdSetupPanel({
         adAccountName={adAccountName}
         currentPrimaryText={primaryTexts[0] || ""}
         currentHeadline={headlines[0] || ""}
-        currentDescription={description}
+        currentDescription={descriptions.find(d => d.trim()) || ""}
         currentLink={webLink}
         currentCta={cta}
         onApply={t => {
           if (t.primaryText) setPrimaryTexts([t.primaryText])
           if (t.headline) setHeadlines([t.headline])
-          if (t.description) setDescription(t.description)
+          if (t.description) setDescriptions([t.description])
           if (t.link) setWebLink(t.link)
           if (t.cta) setCta(t.cta)
         }}
@@ -10549,9 +10555,27 @@ function AdSetupPanel({
             </button>
           </div>
           {showDesc && (
-            <textarea value={description} onChange={e => setDescription(e.target.value)}
-              placeholder="Enter description (optional)..." rows={2}
-              className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50" />
+            <>
+              {descriptions.map((d, idx) => (
+                <div key={idx} className={cn("relative", idx > 0 && "mt-2")}>
+                  <textarea value={d} onChange={e => updateDescription(idx, e.target.value)}
+                    placeholder="Enter description (optional)..." rows={2}
+                    className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50 pr-8" />
+                  {descriptions.length > 1 && (
+                    <button onClick={() => removeDescription(idx)}
+                      className="absolute top-2 right-2 text-muted-foreground/40 hover:text-destructive transition-colors">
+                      <IconMinus className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              <div className="flex items-center gap-3 mt-1.5">
+                <button onClick={addDescription} className="text-xs text-primary hover:underline flex items-center gap-0.5">
+                  <IconPlus className="size-3" />Add more descriptions
+                  {descriptions.length > 1 && <span className="ml-1 text-muted-foreground">({descriptions.length - 1} additional)</span>}
+                </button>
+              </div>
+            </>
           )}
         </div>
 
@@ -13518,7 +13542,7 @@ export default function LaunchPage() {
   const [selectedAdSets, setSelectedAdSets] = useState<AdSet[]>([])
   const [primaryTexts, setPrimaryTexts] = useState<string[]>([""])
   const [headlines, setHeadlines] = useState<string[]>([""])
-  const [description, setDescription] = useState("")
+  const [descriptions, setDescriptions] = useState<string[]>([""])
   const [cta, setCta] = useState("LEARN_MORE")
   const [webLink, setWebLink] = useState("")
   const [launchAsActive, setLaunchAsActive] = useState(false)
@@ -13570,7 +13594,7 @@ export default function LaunchPage() {
       // Pre-fill ad copy only when fields are empty (don't overwrite user input)
       if (!primaryTexts[0]?.trim() && s.adCopy.primaryText) setPrimaryTexts([s.adCopy.primaryText])
       if (!headlines[0]?.trim() && s.adCopy.headline) setHeadlines([s.adCopy.headline])
-      if (!description && s.adCopy.description) setDescription(s.adCopy.description)
+      if (!descriptions.some(d => d.trim()) && s.adCopy.description) setDescriptions([s.adCopy.description])
       if (s.adCopy.cta) setCta(s.adCopy.cta)
       // Pre-fill web/app links
       if (!webLink && s.links.webLink) setWebLink(s.links.webLink)
@@ -13964,7 +13988,7 @@ export default function LaunchPage() {
           fb_video_id:   fbVideoId,
           headline:      currentHeadline,
           primary_text:  currentPrimary,
-          description:   description || "",
+          description:   descriptions.find(d => d.trim()) || "",
           cta:           cta || "LEARN_MORE",
           link_url:      webLink || "",
         }),
@@ -14046,7 +14070,7 @@ export default function LaunchPage() {
     }
     if (currentPrimary)  finalBody.primary_text = currentPrimary
     if (currentHeadline) finalBody.headline     = currentHeadline
-    if (description)     finalBody.description  = description
+    if (descriptions.some(d => d.trim())) finalBody.description = descriptions.find(d => d.trim()) || ""
     if (webLink)         finalBody.link_url     = webLink
     if (cta)             finalBody.cta          = cta
 
@@ -14541,8 +14565,12 @@ export default function LaunchPage() {
     setLaunching(true)
     setLaunchResult(null)
     try {
-      const primaryText = primaryTexts.find(t => t.trim()) || ""
-      const headline = headlines.find(h => h.trim()) || ""
+      const primaryTextList = primaryTexts.filter(t => t.trim())
+      const headlineList = headlines.filter(h => h.trim())
+      const descriptionList = descriptions.filter(d => d.trim())
+      const primaryText = primaryTextList[0] || ""
+      const headline = headlineList[0] || ""
+      const description = descriptionList[0] || ""
 
       // Read saved Default Ad Settings so enhancements + launch flags reach the API
       let savedEnhancements: DefaultAdSettings["enhancements"] | undefined
@@ -14567,8 +14595,11 @@ export default function LaunchPage() {
           creativeIds: Array.from(selectedMediaIds),
           pageId: selectedPageId,
           headline: headline.trim(),
+          headlineVariations: headlineList.slice(1),
           primaryText: primaryText.trim(),
+          primaryTextVariations: primaryTextList.slice(1),
           description: description.trim(),
+          descriptionVariations: descriptionList.slice(1),
           cta,
           webLink: utmParams.trim()
             ? `${webLink.trim()}${webLink.includes("?") ? "&" : "?"}${utmParams.trim()}`
@@ -14695,26 +14726,27 @@ export default function LaunchPage() {
   }, [])
 
   const syncTableFromGallery = useCallback(() => {
-    const sharedPt = primaryTexts.find(t => t.trim()) || ""
-    const sharedHl = headlines.find(h => h.trim()) || ""
+    const ptList = primaryTexts.filter(t => t.trim())
+    const hlList = headlines.filter(h => h.trim())
+    const descList = descriptions.filter(d => d.trim())
     const adSetIdList = selectedAdSets.map((a: AdSet) => a.id)
     setTableRows(prev => prev.map(r => ({
       ...r,
-      ...(sharedPt ? { primaryText: sharedPt } : {}),
-      ...(sharedHl ? { headline: sharedHl } : {}),
-      ...(description ? { description } : {}),
+      ...(ptList[0] ? { primaryText: ptList[0], primaryTextVariations: ptList.slice(1) } : {}),
+      ...(hlList[0] ? { headline: hlList[0], headlineVariations: hlList.slice(1) } : {}),
+      ...(descList[0] ? { description: descList[0], descriptionVariations: descList.slice(1) } : {}),
       ...(adSetIdList.length > 0 ? { adSetIds: adSetIdList } : {}),
       ...(cta ? { cta } : {}),
       ...(webLink ? { webLink } : {}),
     })))
-  }, [primaryTexts, headlines, description, cta, webLink, selectedAdSets])
+  }, [primaryTexts, headlines, descriptions, cta, webLink, selectedAdSets])
 
   // Auto-sync when gallery values change (only while auto-sync is on and in table mode)
   useEffect(() => {
     if (!tableAutoSync || mode !== "table") return
     syncTableFromGallery()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tableAutoSync, primaryTexts, headlines, description, cta, webLink, selectedAdSets])
+  }, [tableAutoSync, primaryTexts, headlines, descriptions, cta, webLink, selectedAdSets])
 
   const addTableRow = () => {
     setTableRows(prev => [...prev, { id: crypto.randomUUID(), creative: null, adName: "", primaryText: "", headline: "", description: "", adSetIds: [] }])
@@ -15038,8 +15070,8 @@ export default function LaunchPage() {
             if (!headlines.some(h => h.trim()) && first.headline) {
               setHeadlines([first.headline])
             }
-            if (!description && (first as any).description) {
-              setDescription((first as any).description)
+            if (!descriptions.some(d => d.trim()) && (first as any).description) {
+              setDescriptions([(first as any).description])
             }
             if (!webLink && first.link_url) {
               setWebLink(first.link_url)
@@ -15117,7 +15149,7 @@ export default function LaunchPage() {
         onConfirm={setMultilanguage}
         basePrimaryText={primaryTexts.find(t => t.trim()) || ""}
         baseHeadline={headlines.find(h => h.trim()) || ""}
-        baseDescription={description}
+        baseDescription={descriptions.find(d => d.trim()) || ""}
       />
       <CollectionAdsModal
         open={collectionModalOpen}
@@ -15175,7 +15207,7 @@ export default function LaunchPage() {
         page={selectedPage}
         primaryText={primaryTexts.find(t => t.trim()) || ""}
         headline={headlines.find(h => h.trim()) || ""}
-        description={description}
+        description={descriptions.find(d => d.trim()) || ""}
         webLink={webLink}
         cta={cta}
         adNameOverrides={adNameOverrides}
@@ -15284,38 +15316,51 @@ export default function LaunchPage() {
             <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs"
               onClick={() => {
                 if (mode === "gallery") {
-                  // Sync gallery state → table rows when switching to table mode
-                  const sharedPt = primaryTexts.find(t => t.trim()) || ""
-                  const sharedHl = headlines.find(h => h.trim()) || ""
+                  // Sync gallery state → table rows when switching to table mode.
+                  // Rows already present for a creative are kept as-is so table-mode
+                  // edits survive a gallery round-trip; only new creatives get gallery defaults.
+                  const ptList = primaryTexts.filter(t => t.trim())
+                  const hlList = headlines.filter(h => h.trim())
+                  const descList = descriptions.filter(d => d.trim())
                   const adSetIdList = selectedAdSets.map(a => a.id)
+                  const newRow = (c: Creative | null, i: number): TableRow => ({
+                    id: c ? `tr_${c.id}_${i}` : "tr_empty",
+                    creative: c,
+                    adName: c ? (adNameOverrides[c.id] || (c.file_name || "").replace(/\.[^/.]+$/, "")) : "",
+                    primaryText: ptList[0] || "",
+                    primaryTextVariations: ptList.slice(1),
+                    headline: hlList[0] || "",
+                    headlineVariations: hlList.slice(1),
+                    description: descList[0] || "",
+                    descriptionVariations: descList.slice(1),
+                    adSetIds: adSetIdList,
+                    cta,
+                    webLink,
+                  })
                   if (selectedCreatives.length > 0) {
-                    setTableRows(selectedCreatives.map((c, i) => ({
-                      id: `tr_${c.id}_${i}`,
-                      creative: c,
-                      adName: adNameOverrides[c.id] || (c.file_name || "").replace(/\.[^/.]+$/, ""),
-                      primaryText: sharedPt,
-                      headline: sharedHl,
-                      description,
-                      adSetIds: adSetIdList,
-                      cta,
-                      webLink,
-                    })))
+                    setTableRows(selectedCreatives.map((c, i) => tableRows.find(r => r.creative?.id === c.id) || newRow(c, i)))
                   } else {
-                    // No creatives selected: just fill one empty row with form data
-                    setTableRows([{
-                      id: "tr_empty",
-                      creative: null,
-                      adName: "",
-                      primaryText: sharedPt,
-                      headline: sharedHl,
-                      description,
-                      adSetIds: adSetIdList,
-                      cta,
-                      webLink,
-                    }])
+                    setTableRows(prev => [prev.find(r => !r.creative) || newRow(null, 0)])
                   }
                   setMode("table")
                 } else {
+                  // Sync table state → gallery form when switching back, so edits made
+                  // in table mode aren't lost the next time gallery → table runs.
+                  const firstRow = tableRows.find(r => r.creative || r.primaryText || r.headline || r.description)
+                  if (firstRow) {
+                    const pts = [firstRow.primaryText, ...(firstRow.primaryTextVariations || [])].filter(v => v.trim())
+                    const hls = [firstRow.headline, ...(firstRow.headlineVariations || [])].filter(v => v.trim())
+                    const descs = [firstRow.description, ...(firstRow.descriptionVariations || [])].filter(v => v.trim())
+                    setPrimaryTexts(pts.length ? pts : [""])
+                    setHeadlines(hls.length ? hls : [""])
+                    setDescriptions(descs.length ? descs : [""])
+                    if (firstRow.cta) setCta(firstRow.cta)
+                    if (firstRow.webLink) setWebLink(firstRow.webLink)
+                    if (firstRow.adSetIds.length) {
+                      const matched = firstRow.adSetIds.map(id => allAdSets.find(a => a.id === id)).filter(Boolean) as AdSet[]
+                      if (matched.length) setSelectedAdSets(matched)
+                    }
+                  }
                   setMode("gallery")
                 }
               }}>
@@ -15342,7 +15387,7 @@ export default function LaunchPage() {
               <AdSetupPanel
                 primaryTexts={primaryTexts} setPrimaryTexts={setPrimaryTexts}
                 headlines={headlines} setHeadlines={setHeadlines}
-                description={description} setDescription={setDescription}
+                descriptions={descriptions} setDescriptions={setDescriptions}
                 cta={cta} setCta={setCta}
                 webLink={webLink} setWebLink={setWebLink}
                 launchAsActive={launchAsActive} setLaunchAsActive={setLaunchAsActive}
@@ -15680,7 +15725,7 @@ export default function LaunchPage() {
                       {[
                         { label: "Primary Text from Gallery", emptyMsg: "Primary Text is empty in Gallery Mode — nothing to apply.", apply: () => { const pt = primaryTexts.find(t => t.trim()) || ""; if (!pt) return false; setTableRows(prev => prev.map(r => ({ ...r, primaryText: pt }))); return true } },
                         { label: "Headline from Gallery", emptyMsg: "Headline is empty in Gallery Mode — nothing to apply.", apply: () => { const hl = headlines.find(h => h.trim()) || ""; if (!hl) return false; setTableRows(prev => prev.map(r => ({ ...r, headline: hl }))); return true } },
-                        { label: "Description from Gallery", emptyMsg: "Description is empty in Gallery Mode — nothing to apply.", apply: () => { if (!description) return false; setTableRows(prev => prev.map(r => ({ ...r, description }))); return true } },
+                        { label: "Description from Gallery", emptyMsg: "Description is empty in Gallery Mode — nothing to apply.", apply: () => { const descList = descriptions.filter(d => d.trim()); if (!descList.length) return false; setTableRows(prev => prev.map(r => ({ ...r, description: descList[0], descriptionVariations: descList.slice(1) }))); return true } },
                         { label: "Ad Sets from Gallery", emptyMsg: "No Ad Sets selected in Gallery Mode — nothing to apply.", apply: () => { const ids = selectedAdSets.map((a: AdSet) => a.id); if (!ids.length) return false; setTableRows(prev => prev.map(r => ({ ...r, adSetIds: ids }))); return true } },
                         { label: "CTA from Gallery", emptyMsg: "No CTA set in Gallery Mode — nothing to apply.", apply: () => { if (!cta) return false; setTableRows(prev => prev.map(r => ({ ...r, cta }))); return true } },
                       ].map(item => (
