@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse, after } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { uploadImageToMeta, uploadVideoToMeta } from "@/lib/facebook"
+import { uploadImageToMeta, uploadVideoUrlToMeta } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { getGoogleTokenForOrg } from "@/lib/google-token"
@@ -41,12 +41,12 @@ async function tusUpload(
   serviceRoleKey: string,
   bucket: string,
   objectPath: string,
-  data: ArrayBuffer,
+  data: ArrayBuffer | { fetchChunk: (start: number, end: number) => Promise<ArrayBuffer>; total: number },
   mimeType: string,
   cfHeaders: Record<string, string> = {}
 ) {
   const CHUNK = 20 * 1024 * 1024
-  const total = data.byteLength
+  const total = data instanceof ArrayBuffer ? data.byteLength : data.total
   const base = (s: string) => Buffer.from(s).toString("base64")
 
   const initRes = await fetch(`${supabaseUrl}/storage/v1/upload/resumable`, {
@@ -69,7 +69,10 @@ async function tusUpload(
   let offset = 0
   while (offset < total) {
     const end = Math.min(offset + CHUNK, total)
-    const chunk = data.slice(offset, end)
+    const chunk = data instanceof ArrayBuffer
+      ? data.slice(offset, end)
+      : await data.fetchChunk(offset, end)
+
     const patchRes = await fetch(uploadUrl, {
       method: "PATCH",
       headers: {
@@ -85,6 +88,36 @@ async function tusUpload(
     if (!patchRes.ok) throw new Error(`TUS chunk failed at ${offset} (${patchRes.status}): ${await patchRes.text()}`)
     offset = end
   }
+}
+
+async function fetchDriveRange(
+  fileId: string,
+  accessToken: string,
+  start: number,
+  end: number,
+  orgId: string
+): Promise<ArrayBuffer> {
+  const fetchUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${accessToken}`,
+    Range: `bytes=${start}-${end - 1}`,
+  }
+
+  let res = await fetch(fetchUrl, { headers })
+
+  if (res.status === 401) {
+    const refreshed = await getGoogleTokenForOrg(orgId, { forceRefresh: true })
+    if (refreshed) {
+      headers.Authorization = `Bearer ${refreshed}`
+      res = await fetch(fetchUrl, { headers })
+    }
+  }
+
+  if (!res.ok) {
+    throw new Error(`Drive chunk fetch failed (${res.status}): ${await res.text()}`)
+  }
+
+  return res.arrayBuffer()
 }
 
 export async function POST(request: NextRequest) {
@@ -109,60 +142,85 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Unsupported file type: ${mimeType}` }, { status: 400 })
     }
 
-    // ── Download from Google Drive ────────────────────────────────────────────
-    let driveRes = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-      { headers: { Authorization: `Bearer ${driveAccessToken}` } }
-    )
+    let fileSize = 0
+    let fileBuffer: ArrayBuffer | null = null
 
-    if (driveRes.status === 401) {
-      const refreshed = await getGoogleTokenForOrg(ctx.orgId, { forceRefresh: true })
-      if (refreshed) {
-        driveAccessToken = refreshed
+    if (isImage) {
+      // ── Images: Download entire file into memory ─────────────────────────────
+      let driveRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+        { headers: { Authorization: `Bearer ${driveAccessToken}` } }
+      )
+
+      if (driveRes.status === 401) {
+        const refreshed = await getGoogleTokenForOrg(ctx.orgId, { forceRefresh: true })
+        if (refreshed) {
+          driveAccessToken = refreshed
+          driveRes = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+            { headers: { Authorization: `Bearer ${driveAccessToken}` } }
+          )
+        }
+      }
+
+      const contentType = driveRes.headers.get("content-type") || ""
+      if (contentType.includes("text/html")) {
+        const html = await driveRes.text()
+        const match = html.match(/name="confirm" value="([^"]+)"/)
+        if (!match) {
+          return NextResponse.json({
+            error: "Google Drive returned an HTML page instead of the file. Check file permissions or try again.",
+          }, { status: 400 })
+        }
         driveRes = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&confirm=${match[1]}`,
           { headers: { Authorization: `Bearer ${driveAccessToken}` } }
         )
       }
-    }
 
-    // Large files may return a virus-scan confirmation HTML page
-    const contentType = driveRes.headers.get("content-type") || ""
-    if (contentType.includes("text/html")) {
-      const html = await driveRes.text()
-      const match = html.match(/name="confirm" value="([^"]+)"/)
-      if (!match) {
-        return NextResponse.json({
-          error: "Google Drive returned an HTML page instead of the file. Check file permissions or try again.",
-        }, { status: 400 })
+      if (!driveRes.ok) {
+        const errText = await driveRes.text()
+        return NextResponse.json({ error: `Drive download failed (${driveRes.status}): ${errText}` }, { status: 400 })
       }
-      driveRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&confirm=${match[1]}`,
+
+      fileBuffer = await driveRes.arrayBuffer()
+
+      if (fileBuffer.byteLength < 5000) {
+        const head = new TextDecoder().decode(fileBuffer.slice(0, 100)).toLowerCase()
+        if (head.includes("<!doctype html") || head.includes("<html")) {
+          return NextResponse.json({ error: "Downloaded content appears to be HTML, not a media file." }, { status: 400 })
+        }
+      }
+      fileSize = fileBuffer.byteLength
+    } else {
+      // ── Videos: Fetch metadata only to stream chunks later ──────────────────
+      let metaRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=size`,
         { headers: { Authorization: `Bearer ${driveAccessToken}` } }
       )
-    }
 
-    if (!driveRes.ok) {
-      const errText = await driveRes.text()
-      if (driveRes.status === 401) {
-        return NextResponse.json({
-          error: "Google Drive token is invalid. Disconnect and reconnect Google Drive, then import again.",
-        }, { status: 401 })
+      if (metaRes.status === 401) {
+        const refreshed = await getGoogleTokenForOrg(ctx.orgId, { forceRefresh: true })
+        if (refreshed) {
+          driveAccessToken = refreshed
+          metaRes = await fetch(
+            `https://www.googleapis.com/drive/v3/files/${fileId}?fields=size`,
+            { headers: { Authorization: `Bearer ${driveAccessToken}` } }
+          )
+        }
       }
-      return NextResponse.json({ error: `Drive download failed (${driveRes.status}): ${errText}` }, { status: 400 })
-    }
 
-    const fileBuffer = await driveRes.arrayBuffer()
+      if (!metaRes.ok) {
+        return NextResponse.json({ error: `Drive meta failed (${metaRes.status}): ${await metaRes.text()}` }, { status: 400 })
+      }
 
-    // Sanity check: detect accidental HTML download (e.g. access-denied page)
-    if (fileBuffer.byteLength < 5000) {
-      const head = new TextDecoder().decode(fileBuffer.slice(0, 100)).toLowerCase()
-      if (head.includes("<!doctype html") || head.includes("<html")) {
-        return NextResponse.json({ error: "Downloaded content appears to be HTML, not a media file." }, { status: 400 })
+      const metaData = await metaRes.json()
+      fileSize = parseInt(metaData.size || "0", 10)
+      if (!fileSize) {
+        return NextResponse.json({ error: "Could not determine video file size from Google Drive." }, { status: 400 })
       }
     }
 
-    const fileSize = fileBuffer.byteLength
     const admin = createAdminClient()
     const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const storageUploadUrl = await resolveStorageUploadUrl(publicSupabaseUrl)
@@ -179,10 +237,10 @@ export async function POST(request: NextRequest) {
       const connection = await getFacebookConnection(ctx.orgId)
       if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
-      const r = await uploadImageToMeta(normAccountId, connection.access_token, fileBuffer, fileName)
+      const r = await uploadImageToMeta(normAccountId, connection.access_token, fileBuffer!, fileName)
 
       try {
-        await tusUpload(storageUploadUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
+        await tusUpload(storageUploadUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer!, mimeType, cfHeaders)
       } catch (e: any) {
         console.error("[import-drive] Storage upload error (image):", e)
       }
@@ -232,18 +290,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ creative: mapCreativeForClient(existingVideo) })
     }
 
-    // ── Videos: insert immediately, move TUS + Meta to after() ──────────────
-    // publicUrl is deterministic from storagePath — no upload needed to compute it.
-    // Returning before TUS completes means the user sees the card in ~Drive-download
-    // time instead of waiting for TUS (20-25 s extra for 200 MB).
+    // ── Videos: insert immediately, stream TUS + Meta upload entirely in after() ──
+    // Large files are never buffered whole in memory: chunks are pulled from Drive
+    // via Range requests and piped straight into the TUS PATCH, one chunk at a time.
     const { data: { publicUrl } } = admin.storage.from("ad-media").getPublicUrl(storagePath)
-    let cachedToStorage = false
-    try {
-      await tusUpload(storageUploadUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
-      cachedToStorage = true
-    } catch (e: any) {
-      console.warn("[import-drive] Supabase cache upload failed before return:", e.message)
-    }
+    const driveTokenForChunks = driveAccessToken
+    const orgIdForChunks = ctx.orgId
 
     const { data: creative, error: insertError } = await admin
       .from("creatives")
@@ -252,8 +304,8 @@ export async function POST(request: NextRequest) {
         user_id: ctx.user.id,
         ad_account_id: normAccountId,
         file_name: fileName,
-        file_url: cachedToStorage ? publicUrl : "",
-        storage_path: cachedToStorage ? storagePath : null,
+        file_url: "",
+        storage_path: null,
         media_type: "video",
         file_size: fileSize,
         fb_image_hash: null,
@@ -273,28 +325,36 @@ export async function POST(request: NextRequest) {
     const creativeId = creative.id
     after(async () => {
       try {
-        if (!cachedToStorage) try {
-          await tusUpload(storageUploadUrl, serviceRoleKey, "ad-media", storagePath, fileBuffer, mimeType, cfHeaders)
-          await admin.from("creatives")
-            .update({ file_url: publicUrl, storage_path: storagePath })
-            .eq("id", creativeId)
-        } catch (e: any) {
-          console.warn(`[import-drive] Supabase cache upload failed for ${creativeId}:`, e.message)
-        }
+        await tusUpload(
+          storageUploadUrl,
+          serviceRoleKey,
+          "ad-media",
+          storagePath,
+          {
+            total: fileSize,
+            fetchChunk: (start, end) => fetchDriveRange(fileId, driveTokenForChunks, start, end, orgIdForChunks),
+          },
+          mimeType,
+          cfHeaders
+        )
+        await admin.from("creatives")
+          .update({ file_url: publicUrl, storage_path: storagePath })
+          .eq("id", creativeId)
 
-        // Step 2: tell Meta to fetch the video from Supabase — no re-upload through server
-        const conn = await getFacebookConnection(ctx.orgId)
+        // Meta fetches the video itself from the public Supabase URL — no re-upload through server
+        const conn = await getFacebookConnection(orgIdForChunks)
         if (!conn?.access_token) {
-          console.error(`[import-drive] no Facebook connection for org ${ctx.orgId}`)
+          console.error(`[import-drive] no Facebook connection for org ${orgIdForChunks}`)
+          await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)
           return
         }
-        const metaData = await uploadVideoToMeta(normAccountId, conn.access_token, fileBuffer, fileName)
+        const metaData = await uploadVideoUrlToMeta(normAccountId, conn.access_token, publicUrl, fileName)
         await admin.from("creatives")
           .update({ fb_video_id: metaData.videoId, status: "processing" })
           .eq("id", creativeId)
         console.log(`[import-drive] video ${creativeId} uploaded to Meta: ${metaData.videoId}`)
       } catch (e: any) {
-        console.error(`[import-drive] background Meta upload failed for ${creativeId}:`, e.message)
+        console.error(`[import-drive] background upload failed for ${creativeId}:`, e.message)
         await admin.from("creatives").update({ status: "error" }).eq("id", creativeId)
       }
     })
