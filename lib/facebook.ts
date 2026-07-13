@@ -679,34 +679,53 @@ export async function uploadVideoToMeta(
     CHUNK_SIZE = 10 * 1024 * 1024 // 10MB chunks for files > 50MB
   }
   
+  const MAX_CHUNK_ATTEMPTS = 4
   let startOffset = Number(startData.start_offset || "0")
 
   while (startOffset < fileSize) {
     const endOffset = Math.min(startOffset + CHUNK_SIZE, fileSize)
-    const chunkBuffer = fileBuffer.slice(startOffset, endOffset)
 
-    const formData = new FormData()
-    formData.append("access_token", accessToken)
-    formData.append("upload_phase", "transfer")
-    formData.append("upload_session_id", upload_session_id)
-    formData.append("start_offset", String(startOffset))
-    formData.append("video_file_chunk", new Blob([chunkBuffer]), fileName)
-    
-    const transferRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
-      method: "POST",
-      body: formData,
-    }, opts)
-    
-    const transferText = await transferRes.text()
-    let transferData: any = {}
-    try { transferData = JSON.parse(transferText) } catch (e) {
-      throw new Error(`Meta Video Upload TRANSFER failed to parse JSON at offset ${startOffset}. Status: ${transferRes.status}, Body: ${transferText}`)
+    let transferData: any = null
+    let lastErr: string | null = null
+    for (let cAttempt = 1; cAttempt <= MAX_CHUNK_ATTEMPTS; cAttempt++) {
+      const chunkBuffer = fileBuffer.slice(startOffset, endOffset)
+      const formData = new FormData()
+      formData.append("access_token", accessToken)
+      formData.append("upload_phase", "transfer")
+      formData.append("upload_session_id", upload_session_id)
+      formData.append("start_offset", String(startOffset))
+      formData.append("video_file_chunk", new Blob([chunkBuffer]), fileName)
+
+      try {
+        const transferRes = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/advideos`, {
+          method: "POST",
+          body: formData,
+        }, opts)
+
+        const transferText = await transferRes.text()
+        try {
+          transferData = JSON.parse(transferText)
+        } catch {
+          throw new Error(`failed to parse JSON. Status: ${transferRes.status}, Body: ${transferText}`)
+        }
+
+        if (!transferRes.ok) {
+          throw new Error(transferData?.error?.message || "Unknown error")
+        }
+        lastErr = null
+        break
+      } catch (e: any) {
+        lastErr = e?.message || "Transfer error"
+        if (cAttempt < MAX_CHUNK_ATTEMPTS) {
+          await new Promise(r => setTimeout(r, 800 * cAttempt))
+        }
+      }
     }
-    
-    if (!transferRes.ok) {
-      throw new Error(`Meta Video Upload TRANSFER failed at offset ${startOffset}: ${transferData.error?.message || "Unknown error"}`)
+
+    if (lastErr || !transferData) {
+      throw new Error(`Meta Video Upload TRANSFER failed at offset ${startOffset} after ${MAX_CHUNK_ATTEMPTS} attempts: ${lastErr}`)
     }
-    
+
     startOffset = Number(transferData.start_offset)
   }
   
@@ -1305,7 +1324,7 @@ export async function createAd(
       bodies: [{ text: params.body }],
       link_urls: [{ website_url: params.link_url }],
       call_to_action_types: [params.cta],
-      ad_formats: videos.length > 0 ? ["SINGLE_VIDEO", "SINGLE_IMAGE"] : ["SINGLE_IMAGE"],
+      ad_formats: videos.length > 0 ? ["AUTOMATIC_FORMAT"] : ["SINGLE_IMAGE"],
     }
     if (images.length > 0) spec.images = images
     if (videos.length > 0) spec.videos = videos
@@ -1330,7 +1349,7 @@ export async function createAd(
       call_to_action_types: [params.cta],
       ...(images.length > 0 && { images }),
       ...(videos.length > 0 && { videos }),
-      ad_formats: videos.length > 0 ? ["SINGLE_VIDEO", "SINGLE_IMAGE"] : ["SINGLE_IMAGE"],
+      ad_formats: videos.length > 0 ? ["AUTOMATIC_FORMAT"] : ["SINGLE_IMAGE"],
       // Group media variants: Meta uses these as alternatives within each group position
       groups: fa.group_asset_indices.map(g => ({
         image_indices: g.image_indices || [],
@@ -1351,7 +1370,7 @@ export async function createAd(
       titles: tv.titles.map(t => ({ text: t })),
       call_to_action_types: [params.cta],
       link_urls: [{ website_url: params.link_url }],
-      ad_formats: params.video_id ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"],
+      ad_formats: params.video_id ? ["AUTOMATIC_FORMAT"] : ["SINGLE_IMAGE"],
     }
     if (tv.descriptions.length > 0) spec.descriptions = tv.descriptions.map(t => ({ text: t }))
     if (params.image_hash) spec.images = [{ hash: params.image_hash }]
@@ -1465,7 +1484,7 @@ export async function createAd(
     if (params.image_hash) assetFeedSpec.images = [{ hash: params.image_hash }]
     if (params.video_id) {
       assetFeedSpec.videos = [{ video_id: params.video_id, thumbnail_url: params.thumbnail_url }]
-      assetFeedSpec.ad_formats = ["SINGLE_VIDEO"]
+      assetFeedSpec.ad_formats = ["AUTOMATIC_FORMAT"]
     }
 
     creativeJson.asset_feed_spec = assetFeedSpec

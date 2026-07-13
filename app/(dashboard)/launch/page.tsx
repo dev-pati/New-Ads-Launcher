@@ -417,86 +417,79 @@ function AdAccountDropdown({ accounts, selectedId, onSelect }: {
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
-  const ref = useRef<HTMLDivElement>(null)
   const selected = accounts.find(a => a.id === selectedId)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [])
 
   const filtered = accounts.filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase()) || a.id.includes(search)
   )
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="h-8 flex items-center gap-1.5 px-3 rounded-lg border bg-background hover:bg-muted/40 transition-colors min-w-[180px] max-w-[240px] text-sm"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="h-8 flex items-center gap-1.5 px-3 rounded-lg border bg-background hover:bg-muted/40 transition-colors min-w-[180px] max-w-[240px] text-sm"
+        >
+          <IconBrandMeta className="size-3.5 text-[#0064E0] shrink-0" />
+          <span className="truncate flex-1 text-left">{selected?.name || "Select account..."}</span>
+          <IconChevronDown className={cn("size-3.5 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        className="w-72 p-0 gap-0 overflow-hidden"
       >
-        <IconBrandMeta className="size-3.5 text-[#0064E0] shrink-0" />
-        <span className="truncate flex-1 text-left">{selected?.name || "Select account..."}</span>
-        <IconChevronDown className="size-3.5 text-muted-foreground shrink-0" />
-      </button>
-
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-popover border rounded-xl shadow-lg z-50 overflow-hidden">
-          {/* Search */}
-          <div className="px-3 pt-3 pb-2">
-            <div className="relative">
-              <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-              <input
-                autoFocus
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search account..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-              />
-            </div>
-          </div>
-
-          {/* Account list */}
-          <div className="max-h-52 overflow-y-auto">
-            {filtered.map(a => {
-              const isSelected = a.id === selectedId
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => { onSelect(a.id); setOpen(false); setSearch("") }}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent transition-colors text-left",
-                    isSelected && "bg-primary/5"
-                  )}
-                >
-                  <div className="size-4 shrink-0">
-                    {isSelected && <IconCheck className="size-4 text-primary" />}
-                  </div>
-                  <div className="size-5 rounded-full bg-[#0064E0]/10 flex items-center justify-center shrink-0">
-                    <IconBrandMeta className="size-3 text-[#0064E0]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{a.name}</p>
-                    <p className="text-xs text-muted-foreground">{a.id}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Footer */}
-          <div className="border-t">
-            <button className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-              <IconPlus className="size-3.5" />
-              Add or edit ad accounts
-            </button>
+        {/* Search */}
+        <div className="px-3 pt-3 pb-2">
+          <div className="relative">
+            <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search account..."
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+            />
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Account list */}
+        <div className="max-h-52 overflow-y-auto">
+          {filtered.map(a => {
+            const isSelected = a.id === selectedId
+            return (
+              <button
+                key={a.id}
+                onClick={() => { onSelect(a.id); setOpen(false); setSearch("") }}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent transition-colors text-left",
+                  isSelected && "bg-primary/5"
+                )}
+              >
+                <div className="size-4 shrink-0">
+                  {isSelected && <IconCheck className="size-4 text-primary" />}
+                </div>
+                <div className="size-5 rounded-full bg-[#0064E0]/10 flex items-center justify-center shrink-0">
+                  <IconBrandMeta className="size-3 text-[#0064E0]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{a.name}</p>
+                  <p className="text-xs text-muted-foreground">{a.id}</p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t">
+          <button className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+            <IconPlus className="size-3.5" />
+            Add or edit ad accounts
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
@@ -4467,7 +4460,7 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
   const [links, setLinks] = useState("")
   const [includeSubfolders, setIncludeSubfolders] = useState(false)
   const [importing, setImporting] = useState(false)
-  const [results, setResults] = useState<{ name: string; status: "done" | "error"; error?: string }[]>([])
+  const [results, setResults] = useState<{ name: string; status: "importing" | "done" | "error"; error?: string }[]>([])
 
   const extractFileId = (url: string): { id: string; type: "file" | "folder" } | null => {
     const fileMatch = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)
@@ -4521,6 +4514,7 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
         let cursor = 0
         const concurrency = 2
         const importOne = async (file: { id: string; name: string; mimeType: string }) => {
+          setResults(p => [...p, { name: file.name, status: "importing" }])
           try {
             const res = await fetch("/api/google/import-drive", {
               method: "POST",
@@ -4530,9 +4524,9 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
             const d = await res.json()
             if (!res.ok) throw new Error(d.error || "Import failed")
             newCreatives.push(d.creative)
-            setResults(p => [...p, { name: file.name, status: "done" }])
+            setResults(p => p.map(r => r.name === file.name && r.status === "importing" ? { name: file.name, status: "done" } : r))
           } catch (e: any) {
-            setResults(p => [...p, { name: file.name, status: "error", error: e.message }])
+            setResults(p => p.map(r => r.name === file.name && r.status === "importing" ? { name: file.name, status: "error", error: e.message } : r))
           }
         }
 
@@ -4600,9 +4594,12 @@ function DriveLinkTab({ gdriveToken, onRequestAuth, adAccountId, onImported }: {
             <div key={i} className="flex items-center gap-2 text-xs p-2 rounded-lg bg-muted/30 border">
               {r.status === "done"
                 ? <IconCheck className="size-3.5 text-green-500 shrink-0" />
-                : <IconX className="size-3.5 text-destructive shrink-0" />
+                : r.status === "importing"
+                  ? <IconLoader2 className="size-3.5 animate-spin text-muted-foreground shrink-0" />
+                  : <IconX className="size-3.5 text-destructive shrink-0" />
               }
-              <span className="truncate flex-1">{r.name}</span>
+              <span className={cn("truncate flex-1", r.status === "importing" && "text-muted-foreground")}>{r.name}</span>
+              {r.status === "importing" && <span className="text-muted-foreground shrink-0">Importing…</span>}
               {r.error && <span className="text-destructive shrink-0">{r.error}</span>}
             </div>
           ))}
@@ -5620,12 +5617,19 @@ function LoadMediaModal({
       await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, images.length) }, imgWorker))
     }
 
-    // Videos: serial with a small fixed pause to avoid spamming Meta quota
-    for (let i = 0; i < videos.length; i++) {
-      await uploadFile(videos[i])
-      done++
-      setUploadProgress({ current: done, total: fileArr.length })
-      if (i < videos.length - 1) await new Promise(r => setTimeout(r, 1500))
+    // Videos: capped concurrency (matches Gallery's uploadOneFile) — fully serial
+    // wastes time on multi-file batches, fully unbounded starves each other's bandwidth.
+    if (videos.length > 0) {
+      const VIDEO_UPLOAD_CONCURRENCY = 4
+      let vidIdx = 0
+      const vidWorker = async () => {
+        while (vidIdx < videos.length) {
+          await uploadFile(videos[vidIdx++])
+          done++
+          setUploadProgress({ current: done, total: fileArr.length })
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(VIDEO_UPLOAD_CONCURRENCY, videos.length) }, vidWorker))
     }
 
     setUploading(false)
@@ -11318,7 +11322,9 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
       >
         {selectedCreatives.map(c => {
           const thumb = proxyFbImage(c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url))
-          const isReady = !!(c.fb_image_hash || c.fb_video_id)
+          const isReady = c.media_type === "video"
+            ? !!c.fb_video_id && c.status !== "processing" && c.status !== "pending" && c.status !== "error"
+            : !!c.fb_image_hash
           const isVideo = c.media_type === "video"
           const customName = adNameOverrides[c.id]
           const displayName = customName ?? c.file_name.replace(/\.[^/.]+$/, "")
@@ -11359,10 +11365,19 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
                 {/* Not ready badge */}
                 {!isReady && (
                   <div className={cn(
-                    "absolute bottom-2 right-2 text-xs text-white font-semibold px-1.5 py-0.5 rounded",
+                    "absolute bottom-2 right-2 flex items-center gap-1 text-xs text-white font-semibold px-1.5 py-0.5 rounded",
                     c.status === "error" ? "bg-red-500/90" : "bg-amber-500/90"
                   )}>
-                    {c.status === "error" ? "Upload Failed" : "Not Uploaded"}
+                    {(c.status === "pending" || c.status === "processing") && (
+                      <IconLoader2 className="size-3 animate-spin" />
+                    )}
+                    {c.status === "error"
+                      ? "Upload Failed"
+                      : c.status === "pending"
+                        ? "Uploading…"
+                        : c.status === "processing"
+                          ? "Processing…"
+                          : "Not Uploaded"}
                   </div>
                 )}
               </div>
@@ -13952,7 +13967,8 @@ export default function LaunchPage() {
     if (pending.length === 0) return
 
     const tick = async () => {
-      for (const c of pending) {
+      if (document.hidden) return
+      for (const c of pending.slice(0, 2)) {
         try {
           const res = await fetch(`/api/creatives/${c.id}`)
           if (!res.ok) continue
@@ -14791,7 +14807,7 @@ export default function LaunchPage() {
     // chunked-upload sessions split the same bandwidth, so each one starves and can
     // time out on Meta's side. A small cap keeps multiple videos moving at once
     // without any single session going too slowly to finish.
-    const VIDEO_UPLOAD_CONCURRENCY = 2
+    const VIDEO_UPLOAD_CONCURRENCY = 4
     let videoIdx = 0
     const videoWorker = async () => {
       while (videoIdx < videoItems.length) await processItem(videoItems[videoIdx++])
@@ -14929,6 +14945,10 @@ export default function LaunchPage() {
     }
     if (selectedAdSets.length === 0) return fail("No ad set selected — please select at least 1 ad set", ["adsets"])
     if (selectedMediaIds.size === 0) return fail("No creative selected — please select at least 1 image/video", ["creatives"])
+    const erroredCreatives = selectedCreatives.filter(c => c.status === "error")
+    if (erroredCreatives.length > 0) {
+      return fail(`${erroredCreatives.length} media failed to upload. Please remove them or re-upload.`, ["creatives"])
+    }
     const pendingCreatives = selectedCreatives.filter(c => c.status !== "ready")
     if (pendingCreatives.length > 0) {
       return fail(`${pendingCreatives.length} media still uploading/processing on Meta — please wait until they show "ready" then try again`, ["creatives"])
