@@ -417,86 +417,79 @@ function AdAccountDropdown({ accounts, selectedId, onSelect }: {
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
-  const ref = useRef<HTMLDivElement>(null)
   const selected = accounts.find(a => a.id === selectedId)
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [])
 
   const filtered = accounts.filter(a =>
     !search || a.name.toLowerCase().includes(search.toLowerCase()) || a.id.includes(search)
   )
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        className="h-8 flex items-center gap-1.5 px-3 rounded-lg border bg-background hover:bg-muted/40 transition-colors min-w-[180px] max-w-[240px] text-sm"
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="h-8 flex items-center gap-1.5 px-3 rounded-lg border bg-background hover:bg-muted/40 transition-colors min-w-[180px] max-w-[240px] text-sm"
+        >
+          <IconBrandMeta className="size-3.5 text-[#0064E0] shrink-0" />
+          <span className="truncate flex-1 text-left">{selected?.name || "Select account..."}</span>
+          <IconChevronDown className={cn("size-3.5 text-muted-foreground shrink-0 transition-transform", open && "rotate-180")} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        sideOffset={4}
+        className="w-72 p-0 gap-0 overflow-hidden"
       >
-        <IconBrandMeta className="size-3.5 text-[#0064E0] shrink-0" />
-        <span className="truncate flex-1 text-left">{selected?.name || "Select account..."}</span>
-        <IconChevronDown className="size-3.5 text-muted-foreground shrink-0" />
-      </button>
-
-      {open && (
-        <div className="absolute top-full left-0 mt-1 w-72 bg-popover border rounded-xl shadow-lg z-50 overflow-hidden">
-          {/* Search */}
-          <div className="px-3 pt-3 pb-2">
-            <div className="relative">
-              <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-              <input
-                autoFocus
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search account..."
-                className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-              />
-            </div>
-          </div>
-
-          {/* Account list */}
-          <div className="max-h-52 overflow-y-auto">
-            {filtered.map(a => {
-              const isSelected = a.id === selectedId
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => { onSelect(a.id); setOpen(false); setSearch("") }}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent transition-colors text-left",
-                    isSelected && "bg-primary/5"
-                  )}
-                >
-                  <div className="size-4 shrink-0">
-                    {isSelected && <IconCheck className="size-4 text-primary" />}
-                  </div>
-                  <div className="size-5 rounded-full bg-[#0064E0]/10 flex items-center justify-center shrink-0">
-                    <IconBrandMeta className="size-3 text-[#0064E0]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{a.name}</p>
-                    <p className="text-xs text-muted-foreground">{a.id}</p>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
-
-          {/* Footer */}
-          <div className="border-t">
-            <button className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-              <IconPlus className="size-3.5" />
-              Add or edit ad accounts
-            </button>
+        {/* Search */}
+        <div className="px-3 pt-3 pb-2">
+          <div className="relative">
+            <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search account..."
+              className="w-full pl-8 pr-3 py-1.5 text-sm bg-muted/40 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+            />
           </div>
         </div>
-      )}
-    </div>
+
+        {/* Account list */}
+        <div className="max-h-52 overflow-y-auto">
+          {filtered.map(a => {
+            const isSelected = a.id === selectedId
+            return (
+              <button
+                key={a.id}
+                onClick={() => { onSelect(a.id); setOpen(false); setSearch("") }}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 hover:bg-accent transition-colors text-left",
+                  isSelected && "bg-primary/5"
+                )}
+              >
+                <div className="size-4 shrink-0">
+                  {isSelected && <IconCheck className="size-4 text-primary" />}
+                </div>
+                <div className="size-5 rounded-full bg-[#0064E0]/10 flex items-center justify-center shrink-0">
+                  <IconBrandMeta className="size-3 text-[#0064E0]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{a.name}</p>
+                  <p className="text-xs text-muted-foreground">{a.id}</p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t">
+          <button className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+            <IconPlus className="size-3.5" />
+            Add or edit ad accounts
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }
 
