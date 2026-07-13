@@ -11322,7 +11322,9 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
       >
         {selectedCreatives.map(c => {
           const thumb = proxyFbImage(c.media_type === "video" ? c.fb_thumbnail_url : (c.fb_image_url || c.file_url))
-          const isReady = !!(c.fb_image_hash || c.fb_video_id)
+          const isReady = c.media_type === "video"
+            ? !!c.fb_video_id && c.status !== "processing" && c.status !== "pending" && c.status !== "error"
+            : !!c.fb_image_hash
           const isVideo = c.media_type === "video"
           const customName = adNameOverrides[c.id]
           const displayName = customName ?? c.file_name.replace(/\.[^/.]+$/, "")
@@ -11363,10 +11365,19 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
                 {/* Not ready badge */}
                 {!isReady && (
                   <div className={cn(
-                    "absolute bottom-2 right-2 text-xs text-white font-semibold px-1.5 py-0.5 rounded",
+                    "absolute bottom-2 right-2 flex items-center gap-1 text-xs text-white font-semibold px-1.5 py-0.5 rounded",
                     c.status === "error" ? "bg-red-500/90" : "bg-amber-500/90"
                   )}>
-                    {c.status === "error" ? "Upload Failed" : "Not Uploaded"}
+                    {(c.status === "pending" || c.status === "processing") && (
+                      <IconLoader2 className="size-3 animate-spin" />
+                    )}
+                    {c.status === "error"
+                      ? "Upload Failed"
+                      : c.status === "pending"
+                        ? "Uploading…"
+                        : c.status === "processing"
+                          ? "Processing…"
+                          : "Not Uploaded"}
                   </div>
                 )}
               </div>
