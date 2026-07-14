@@ -54,18 +54,6 @@ export async function POST(request: NextRequest) {
       sitelinks,     // SitelinkItem[] | undefined
     } = body
 
-    // Build degrees_of_freedom_spec from Creative Enhancement settings.
-    // metaCreativeEnhancements master toggle maps to standard_enhancements enroll_status.
-    const degreesOfFreedom: Record<string, any> | undefined = enhancements
-      ? {
-          creative_features_spec: {
-            standard_enhancements: {
-              enroll_status: enhancements.metaCreativeEnhancements ? "OPT_IN" : "OPT_OUT",
-            },
-          },
-        }
-      : undefined
-
     if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
     if (!adSetIds?.length) return NextResponse.json({ error: "Select at least one ad set" }, { status: 400 })
     if (!creativeIds?.length) return NextResponse.json({ error: "Select at least one creative" }, { status: 400 })
@@ -506,7 +494,6 @@ export async function POST(request: NextRequest) {
                 catalog_ads: catalogAds || undefined,
                 collection_ads: collectionAds || undefined,
                 sitelinks: sitelinks && sitelinks.length > 0 ? sitelinks : undefined,
-                degrees_of_freedom_spec: degreesOfFreedom,
               }, tokenOpts)
 
               if (vi === 0) {

@@ -132,10 +132,6 @@ export async function POST(request: NextRequest) {
         (adSetIds || []).map((id: string, i: number) => [id, (adSetNames || [])[i] || id])
       )
       const adStatus = scheduledStart ? "PAUSED" : (createPaused === false ? "ACTIVE" : "PAUSED")
-      const degreesOfFreedom: Record<string, any> | undefined = enhancements
-        ? { creative_features_spec: { standard_enhancements: { enroll_status: enhancements.metaCreativeEnhancements ? "OPT_IN" : "OPT_OUT" } } }
-        : undefined
-
       const rowCreatives = (creativeIds || []).map((id: string) => creativeMap.get(id)).filter(Boolean)
       const created: any[] = []
       const errors: any[] = []
@@ -235,7 +231,6 @@ export async function POST(request: NextRequest) {
                   catalog_ads: catalogAds || undefined,
                   collection_ads: collectionAds || undefined,
                   sitelinks: sitelinks?.length > 0 ? sitelinks : undefined,
-                  degrees_of_freedom_spec: degreesOfFreedom,
                 }, tokenOpts)
 
                 if (vi === 0) {

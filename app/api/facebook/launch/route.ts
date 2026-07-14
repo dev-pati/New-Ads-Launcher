@@ -138,8 +138,6 @@ async function createAdsInAdset(
   startIndex = 1,
   textOverride?: TextOverride,
   creativeTextMap?: Map<string, any>,
-  imgDof?: Record<string, any>,
-  vidDof?: Record<string, any>,
   adStatus = "PAUSED",
   utmQuery = "",
   globalWebsiteUrl = "",
@@ -228,7 +226,6 @@ async function createAdsInAdset(
           link_url,
           display_url,
           status: adStatus,
-          degrees_of_freedom_spec: creative.fb_video_id ? vidDof : imgDof,
         }, tokenOpts)
         if (vi === 0) {
           await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
@@ -306,16 +303,6 @@ export async function POST(request: NextRequest) {
       pageId,
       pixelId, pixelEvent,
     } = body
-
-    const buildDegreesOfFreedom = (keys: string[]): Record<string, any> | undefined => {
-      if (useMetaDefaults) return undefined
-      if (!keys.length) return undefined
-      const features: Record<string, any> = {}
-      keys.forEach((k: string) => { features[k] = { enroll_status: "OPT_IN" } })
-      return { creative_features_spec: features }
-    }
-    const imgDof = buildDegreesOfFreedom(imageEnhancements || [])
-    const vidDof = buildDegreesOfFreedom(videoEnhancements || [])
 
     const creativeTextMap: Map<string, any> = new Map(
       useUniqueTextPerCreative ? (creativeTextConfigs || []).map((c: any) => [c.creativeId, c]) : []
@@ -609,7 +596,7 @@ export async function POST(request: NextRequest) {
           launchedAdsets.set(adset.id, adsetConfig.name)
           const adsetCreatives = creatives.filter((c: any) => adsetConfig.creativeIds.includes(c.id))
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
+          const { results, errors } = await createAdsInAdset(adset.id, adsetCreatives, adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
           globalIdx += adsetCreatives.length
           allResults.push(...results)
           allErrors.push(...errors)
@@ -670,7 +657,7 @@ export async function POST(request: NextRequest) {
           const adset = await buildAdset(adAccountId, token, template, campaignId, name, adsetBudgetAmount, startTime, pageId, resolvedObjective, pixelId, pixelEvent, adStatus, tokenOpts)
           launchedAdsets.set(adset.id, name)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
+          const { results, errors } = await createAdsInAdset(adset.id, [creative], adAccountId, token, pageId, supabase, resolveAdName, i + 1, override, creativeTextMap, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
           allResults.push(...results)
           allErrors.push(...errors)
         }
@@ -685,7 +672,7 @@ export async function POST(request: NextRequest) {
         for (let i = 0; i < chunks.length; i++) {
           const adsetId = await resolveAdset(campaignId, chunks[i], i + 1)
           const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-          const { results, errors } = await createAdsInAdset(adsetId!, chunks[i], adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
+          const { results, errors } = await createAdsInAdset(adsetId!, chunks[i], adAccountId, token, pageId, supabase, resolveAdName, globalIdx, override, creativeTextMap, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
           globalIdx += chunks[i].length
           allResults.push(...results)
           allErrors.push(...errors)
@@ -694,7 +681,7 @@ export async function POST(request: NextRequest) {
         const adsetId = await resolveAdset(campaignId, campaignCreatives)
         if (adsetId) launchedAdsets.set(adsetId, launchedAdsets.get(adsetId) || template.adset.name || adsetId)
         const override = textOverride ?? getAdsetTextOverride(adsetCounter++)
-        const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1, override, creativeTextMap, imgDof, vidDof, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
+        const { results, errors } = await createAdsInAdset(adsetId!, campaignCreatives, adAccountId, token, pageId, supabase, resolveAdName, 1, override, creativeTextMap, adStatus, utmQuery, globalWebsiteUrl, globalDisplayUrl, tokenOpts)
         allResults.push(...results)
         allErrors.push(...errors)
       }
