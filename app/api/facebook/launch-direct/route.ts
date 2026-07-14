@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createAd, getVideoThumbnail, getResourceAccountId, pollVideoReady } from "@/lib/facebook"
+import { createAd, getVideoThumbnail, getResourceAccountId, getDynamicCreativeAdSets, pollVideoReady } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
 
 // Simple launch: create ads directly in existing ad sets.
@@ -363,7 +363,25 @@ export async function POST(request: NextRequest) {
       // Skip the standard per-creative loop when carousels are used
     } else {
     // ── Standard per-creative loop ──────────────────────────────────
+    // Preflight: MTO ads (standard, DEGREES_OF_FREEDOM) are rejected by legacy Dynamic Creative
+    // ad sets (1-ad cap). Detect them up front and fail with an actionable per-adset error
+    // instead of N cryptic Meta errors.
+    const reqHasVariations =
+      (headlineVariations || []).some((s: string) => s?.trim()) ||
+      (primaryTextVariations || []).some((s: string) => s?.trim()) ||
+      (descriptionVariations || []).some((s: string) => s?.trim())
+    const legacyDynamicAdsets = reqHasVariations
+      ? await getDynamicCreativeAdSets(adSetIds as string[], token, { skipProof: tokenOpts.isManual })
+      : new Set<string>()
+
     for (const adSetId of adSetIds) {
+      if (legacyDynamicAdsets.has(adSetId)) {
+        errors.push({
+          adSetId,
+          error: `Ad set "${adSetNameMap.get(adSetId) || adSetId}" is a legacy Dynamic Creative ad set (capped at 1 ad) and can't take ads with multiple text options. Pick or create a standard ad set instead.`,
+        })
+        continue
+      }
       for (const creative of creatives) {
         if (!creative.fb_image_hash && !creative.fb_video_id) {
           errors.push({

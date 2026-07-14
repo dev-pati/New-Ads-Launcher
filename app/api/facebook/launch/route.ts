@@ -88,7 +88,9 @@ async function buildAdset(
   }
 
   // If we have a real template adset ID, copy it to preserve all settings (attribution model, etc.)
-  if (template.adset.id) {
+  // EXCEPT legacy Dynamic Creative templates: copying would clone is_dynamic_creative=true
+  // (set-on-create only, 1-ad cap) — build a fresh standard ad set from its settings instead.
+  if (template.adset.id && !template.adset.is_dynamic_creative) {
     return copyAdSet(token, template.adset.id, {
       campaign_id: campaignId,
       name,

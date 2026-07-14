@@ -827,7 +827,7 @@ export interface AdDetails {
 export async function getAdDetails(adId: string, accessToken: string, opts?: { isManual?: boolean }): Promise<AdDetails> {
   const fields = [
     "id", "name", "status",
-    "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget,promoted_object,attribution_spec}",
+    "adset{id,name,campaign_id,targeting,optimization_goal,billing_event,bid_amount,bid_strategy,daily_budget,lifetime_budget,promoted_object,attribution_spec,is_dynamic_creative}",
     "campaign{id,name,objective,special_ad_categories,daily_budget,lifetime_budget,bid_strategy}",
   ].join(",")
   const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adId}?fields=${fields}&access_token=${accessToken}`, undefined, { skipProof: opts?.isManual })
@@ -836,6 +836,26 @@ export async function getAdDetails(adId: string, accessToken: string, opts?: { i
     throw new Error(error.error?.message || "Failed to get ad details")
   }
   return res.json()
+}
+
+// Batch-detect legacy Dynamic Creative ad sets (is_dynamic_creative=true, hard 1-ad cap).
+// Best-effort: on API failure returns an empty set so the launch proceeds and Meta's own
+// error (mapped in createAd) still surfaces per ad.
+export async function getDynamicCreativeAdSets(adsetIds: string[], accessToken: string, opts?: MetaFetchOpts): Promise<Set<string>> {
+  const out = new Set<string>()
+  if (!adsetIds.length) return out
+  try {
+    const res = await secureMetaFetch(`${GRAPH_API_BASE}/?ids=${adsetIds.join(",")}&fields=is_dynamic_creative&access_token=${accessToken}`, undefined, opts)
+    const data = await res.json()
+    if (res.ok && data && !data.error) {
+      for (const [id, v] of Object.entries<any>(data)) {
+        if (v?.is_dynamic_creative) out.add(id)
+      }
+    }
+  } catch (e) {
+    console.warn("[getDynamicCreativeAdSets] lookup failed:", e)
+  }
+  return out
 }
 
 export async function getResourceAccountId(resourceId: string, accessToken: string, opts?: { isManual?: boolean }): Promise<string | null> {
@@ -1346,9 +1366,26 @@ export async function createAd(
   }
 
   const creativeJson: any = { object_story_spec: creativeSpec }
-  // Only attach degrees_of_freedom_spec (Advantage+ creative enhancements) if not using text_variations.
-  // Combining both makes Meta treat it as a Dynamic Creative Ad, which requires a dynamic creative ad set (max 1 active ad).
-  const usesTextVariations = params.text_variations && (params.text_variations.bodies.length > 1 || params.text_variations.titles.length > 1 || params.text_variations.descriptions.length > 1)
+  // Sanitize MTO input: trim, drop empties, dedupe. Callers may include the base text as an
+  // empty-string placeholder — Meta must never receive { text: "" } entries.
+  const tvClean = params.text_variations
+    ? {
+        bodies: Array.from(new Set(params.text_variations.bodies.map(t => t.trim()).filter(Boolean))),
+        titles: Array.from(new Set(params.text_variations.titles.map(t => t.trim()).filter(Boolean))),
+        descriptions: Array.from(new Set(params.text_variations.descriptions.map(t => t.trim()).filter(Boolean))),
+      }
+    : null
+  const tvHasMultiple = !!tvClean && (tvClean.bodies.length > 1 || tvClean.titles.length > 1 || tvClean.descriptions.length > 1)
+  // MTO owns asset_feed_spec — formats that build their own spec/template take precedence.
+  const tvConflict = !!(
+    (params.multilanguage && params.multilanguage.translations.length > 0) ||
+    params.catalog_ads || params.multi_placement || params.flexible_asset_feed ||
+    (params.carousel_cards && params.carousel_cards.length >= 2)
+  )
+  const usesTextVariations = tvHasMultiple && !tvConflict
+  if (tvHasMultiple && tvConflict) {
+    console.warn("[createAd] text_variations ignored — a conflicting ad format (multilanguage/catalog/multi-placement/flexible/carousel) owns asset_feed_spec for this ad")
+  }
   if (usesTextVariations) {
     // Explicitly OPT_OUT of all Advantage+ creative enhancements when using MTO.
     // standard_enhancements is deprecated; Meta now validates creative_features_spec keys against a fixed enum
@@ -1427,14 +1464,13 @@ export async function createAd(
   // optimization_type is the discriminator — without it Meta defaults to REGULAR, treats the
   // creative as legacy Dynamic Creative, and rejects on standard ad sets with
   // "Dynamic creative ads can only be created under dynamic creative ad sets."
-  if (params.text_variations && (params.text_variations.bodies.length > 1 || params.text_variations.titles.length > 1 || params.text_variations.descriptions.length > 1)) {
-    const tv = params.text_variations
-    const spec: any = {
-      bodies: tv.bodies.map(t => ({ text: t })),
-      titles: tv.titles.map(t => ({ text: t })),
-      optimization_type: "DEGREES_OF_FREEDOM",
-    }
-    if (tv.descriptions.length > 0) spec.descriptions = tv.descriptions.map(t => ({ text: t }))
+  if (usesTextVariations && tvClean) {
+    // Empty arrays are OMITTED, not sent as [] — ground-truth creatives show e.g. bodies-only
+    // MTO with no titles/descriptions fields at all.
+    const spec: any = { optimization_type: "DEGREES_OF_FREEDOM" }
+    if (tvClean.bodies.length > 0) spec.bodies = tvClean.bodies.map(t => ({ text: t }))
+    if (tvClean.titles.length > 0) spec.titles = tvClean.titles.map(t => ({ text: t }))
+    if (tvClean.descriptions.length > 0) spec.descriptions = tvClean.descriptions.map(t => ({ text: t }))
     creativeJson.asset_feed_spec = spec
 
     if (creativeSpec.link_data) {
@@ -1573,7 +1609,12 @@ export async function createAd(
   if (!res.ok) {
     const fb = respData.error
     const detail = fb?.error_user_msg || fb?.error_user_title || ""
-    const msg = [fb?.message || "Failed to create ad", detail].filter(Boolean).join(" — ")
+    let msg = [fb?.message || "Failed to create ad", detail].filter(Boolean).join(" — ")
+    // Legacy Dynamic Creative ad sets (is_dynamic_creative=true, 1-ad cap) reject standard/MTO ads
+    // with a cryptic mismatch error — translate it into an actionable message.
+    if (/dynamic creative/i.test(`${fb?.message || ""} ${detail}`)) {
+      msg += " — Target ad set is a legacy Dynamic Creative ad set (capped at 1 ad). Launch into a new standard ad set instead."
+    }
     console.error(`[createAd] FAILED (Status ${res.status}):`, JSON.stringify(respData, null, 2))
     throw new Error(msg)
   }
