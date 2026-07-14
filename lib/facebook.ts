@@ -897,7 +897,6 @@ export async function createAdSet(
     destination_type?: string
     promoted_object?: Record<string, any>
     attribution_spec?: any[]
-    is_dynamic_creative?: boolean
   },
   opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
@@ -910,7 +909,6 @@ export async function createAdSet(
     status: params.status || "PAUSED",
     access_token: accessToken,
   }
-  if (params.is_dynamic_creative) body.is_dynamic_creative = "true"
   if (params.bid_amount) body.bid_amount = params.bid_amount
   if (params.bid_strategy) body.bid_strategy = params.bid_strategy
   if (params.daily_budget) body.daily_budget = params.daily_budget
@@ -937,7 +935,7 @@ export async function createAdSet(
 export async function copyAdSet(
   accessToken: string,
   sourceAdsetId: string,
-  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string; status?: string; is_dynamic_creative?: boolean },
+  params: { campaign_id: string; name: string; daily_budget?: number; start_time?: string; status?: string },
   opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
   const body = new URLSearchParams({
@@ -961,7 +959,6 @@ export async function copyAdSet(
   const patch = new URLSearchParams({ name: params.name, access_token: accessToken })
   if (params.daily_budget) patch.set("daily_budget", String(Math.round(params.daily_budget * 100)))
   if (params.start_time) patch.set("start_time", params.start_time)
-  if (params.is_dynamic_creative) patch.set("is_dynamic_creative", "true")
   await secureMetaFetch(`${GRAPH_API_BASE}/${newId}`, { method: "POST", body: patch }, { skipProof: opts?.isManual })
 
   return { id: newId }
@@ -1423,27 +1420,33 @@ export async function createAd(
   }
 
   // Text Variations (Multiple Text Options - MTO) via asset_feed_spec.
-  // Meta natively supports MTO on STANDARD ad sets without requiring is_dynamic_creative=true.
-  // To avoid triggering Dynamic Creative errors, we must provide EXACTLY ONE image or ONE video
-  // and strictly specify "SINGLE_IMAGE" or "SINGLE_VIDEO" as ad_formats (do not use "AUTOMATIC_FORMAT").
+  // Format verified against a creative Ads Manager itself generated (creative 27968900572711731,
+  // read via Graph API 2026-07-14): asset_feed_spec carries ONLY the text arrays plus
+  // optimization_type "DEGREES_OF_FREEDOM"; media/link/CTA stay in object_story_spec, and the
+  // base text fields are removed from link_data/video_data (text lives only in asset_feed_spec).
+  // optimization_type is the discriminator — without it Meta defaults to REGULAR, treats the
+  // creative as legacy Dynamic Creative, and rejects on standard ad sets with
+  // "Dynamic creative ads can only be created under dynamic creative ad sets."
   if (params.text_variations && (params.text_variations.bodies.length > 1 || params.text_variations.titles.length > 1 || params.text_variations.descriptions.length > 1)) {
     const tv = params.text_variations
     const spec: any = {
       bodies: tv.bodies.map(t => ({ text: t })),
       titles: tv.titles.map(t => ({ text: t })),
-      call_to_action_types: [params.cta],
-      link_urls: [{ website_url: params.link_url }],
-      ad_formats: params.video_id ? ["SINGLE_VIDEO"] : ["SINGLE_IMAGE"],
+      optimization_type: "DEGREES_OF_FREEDOM",
     }
     if (tv.descriptions.length > 0) spec.descriptions = tv.descriptions.map(t => ({ text: t }))
-    if (params.image_hash) spec.images = [{ hash: params.image_hash }]
-    if (params.video_id) {
-      spec.videos = [{ video_id: params.video_id, ...(params.thumbnail_url ? { thumbnail_url: params.thumbnail_url } : {}) }]
-    }
-
     creativeJson.asset_feed_spec = spec
-    delete creativeSpec.link_data
-    delete creativeSpec.video_data
+
+    if (creativeSpec.link_data) {
+      delete creativeSpec.link_data.message
+      delete creativeSpec.link_data.name
+      delete creativeSpec.link_data.description
+    }
+    if (creativeSpec.video_data) {
+      delete creativeSpec.video_data.message
+      delete creativeSpec.video_data.title
+      delete creativeSpec.video_data.link_description
+    }
   }
 
   // Partnership Ads: brand collaboration

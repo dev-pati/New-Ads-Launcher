@@ -14957,13 +14957,6 @@ export default function LaunchPage() {
     if (!/^https?:\/\//.test(webLink.trim())) return fail("URL must start with http:// or https://.", ["webLink"])
     if (!selectedPageId) return fail("Select a Facebook Page.", ["page"])
 
-    // Multiple text variations require a Dynamic Creative ad set (Meta hard constraint).
-    const hasTextVariations =
-      primaryTexts.filter(t => t.trim()).length > 1 ||
-      headlines.filter(h => h.trim()).length > 1 ||
-      descriptions.filter(d => d.trim()).length > 1
-
-
     setError("")
     setValidationErrors({})
     return true
@@ -15081,7 +15074,8 @@ export default function LaunchPage() {
           headlineVariations: headlineList.slice(1),
           primaryText: primaryText.trim(),
           // Send remaining variations (first entry is already sent as headline/primaryText above).
-          // Server builds asset_feed_spec = [primary, ...variations] for Dynamic Creative A/B.
+          // Server merges them into ONE ad's asset_feed_spec (Multiple Text Options,
+          // optimization_type DEGREES_OF_FREEDOM) — works on standard ad sets, N ads per ad set.
           primaryTextVariations: primaryTextList.slice(1),
           description: description.trim(),
           descriptionVariations: descriptionList.slice(1),

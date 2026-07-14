@@ -21,8 +21,7 @@ async function buildAdset(
   pageId?: string, resolvedObjective?: string,
   pixelId?: string, pixelEvent?: string,
   status = "PAUSED",
-  tokenOpts?: { isManual?: boolean },
-  isDynamicCreative?: boolean
+  tokenOpts?: { isManual?: boolean }
 ) {
   // Safe optimization goal per objective for adset-level budget (non-CBO) campaigns.
   // ENGAGED_USERS is CBO-only; for adset budgets, OUTCOME_ENGAGEMENT requires POST_ENGAGEMENT.
@@ -96,7 +95,6 @@ async function buildAdset(
       daily_budget: dailyBudget,
       start_time: startTime,
       status,
-      is_dynamic_creative: isDynamicCreative,
     }, tokenOpts)
   }
 
@@ -113,7 +111,6 @@ async function buildAdset(
     destination_type: destinationType,
     promoted_object: promotedObject,
     attribution_spec: template.adset.attribution_spec || undefined,
-    is_dynamic_creative: isDynamicCreative,
   }, tokenOpts)
 }
 
@@ -183,20 +180,10 @@ async function createAdsInAdset(
     const allBodies = Array.from(new Set([body, ...pcPrimaryTexts, ...(textOverride?.primaryTexts || [])].map((s: string) => s.trim()).filter(Boolean)))
     const allDescs = Array.from(new Set([description].map((s: string) => s.trim()).filter(Boolean)))
 
-    // Option B (Manual Split): build the Cartesian product of primary text × headline × description
-    // and create ONE standard static ad per combination. No asset_feed_spec / text_variations, so the
-    // ad set stays standard (no 1-ad limit) and each combo is visible as its own ad in Ads Manager.
-    const titleCombos = allTitles.length ? allTitles : [title]
-    const bodyCombos = allBodies.length ? allBodies : [body]
-    const descCombos = allDescs.length ? allDescs : [description]
-    const variants: { vTitle: string; vBody: string; vDesc: string }[] = []
-    for (const vBody of bodyCombos) {
-      for (const vTitle of titleCombos) {
-        for (const vDesc of descCombos) {
-          variants.push({ vTitle, vBody, vDesc })
-        }
-      }
-    }
+    // Multiple Text Options (MTO): all text variations ride on ONE ad via asset_feed_spec with
+    // optimization_type DEGREES_OF_FREEDOM (handled in createAd). The ad set stays standard —
+    // no is_dynamic_creative, no 1-ad limit — and Meta optimizes text delivery per impression.
+    const hasVariations = allTitles.length > 1 || allBodies.length > 1 || allDescs.length > 1
 
     let thumbnailUrl: string | undefined = creative.fb_thumbnail_url || undefined
     try {
@@ -209,39 +196,37 @@ async function createAdsInAdset(
     }
 
     const baseAdName = resolveName(baseName, startIndex + i)
-    for (let vi = 0; vi < variants.length; vi++) {
-      const { vTitle, vBody, vDesc } = variants[vi]
-      try {
-        const ad = await createAd(adAccountId, token, {
-          name: variants.length > 1 ? `${baseAdName} (v${vi + 1})` : baseAdName,
-          adset_id: adsetId,
-          page_id: pageId,
-          image_hash: creative.fb_image_hash || undefined,
-          video_id: creative.fb_video_id || undefined,
-          thumbnail_url: thumbnailUrl,
-          title: vTitle,
-          body: vBody,
-          description: vDesc,
-          cta,
-          link_url,
-          display_url,
-          status: adStatus,
-        }, tokenOpts)
-        if (vi === 0) {
-          await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
-        }
-        results.push({
-          creativeId: creative.id,
-          adId: ad.id,
-          adName: variants.length > 1 ? `${baseAdName} (v${vi + 1})` : baseAdName,
-          fileName: variants.length > 1 ? `${creative.file_name} (v${vi + 1})` : creative.file_name,
-          adSetId: adsetId,
-          thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || null,
-          mediaType: creative.media_type || "image",
-        })
-      } catch (err: any) {
-        errors.push({ creativeId: creative.id, error: err.message })
-      }
+    try {
+      const ad = await createAd(adAccountId, token, {
+        name: baseAdName,
+        adset_id: adsetId,
+        page_id: pageId,
+        image_hash: creative.fb_image_hash || undefined,
+        video_id: creative.fb_video_id || undefined,
+        thumbnail_url: thumbnailUrl,
+        title: allTitles[0] || title,
+        body: allBodies[0] || body,
+        description: allDescs[0] || description,
+        cta,
+        link_url,
+        display_url,
+        status: adStatus,
+        text_variations: hasVariations
+          ? { bodies: allBodies.length ? allBodies : [body], titles: allTitles.length ? allTitles : [title], descriptions: allDescs }
+          : undefined,
+      }, tokenOpts)
+      await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+      results.push({
+        creativeId: creative.id,
+        adId: ad.id,
+        adName: baseAdName,
+        fileName: creative.file_name,
+        adSetId: adsetId,
+        thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || null,
+        mediaType: creative.media_type || "image",
+      })
+    } catch (err: any) {
+      errors.push({ creativeId: creative.id, error: err.message })
     }
   }
   return { results, errors }
