@@ -5491,7 +5491,9 @@ function LoadMediaModal({
           const cleanId = String(credAccountId).replace(/^act_/, "")
           const FB_VIDEOS = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
           const DIRECT_LIMIT = 100 * 1024 * 1024 // ≤100MB: direct POST
-          const CHUNK_SIZE = 50 * 1024 * 1024    // >100MB: 50MB chunks
+          let CHUNK_SIZE = 4 * 1024 * 1024
+          if (file.size > 150 * 1024 * 1024) CHUNK_SIZE = 20 * 1024 * 1024
+          else if (file.size > 50 * 1024 * 1024) CHUNK_SIZE = 10 * 1024 * 1024
 
           let fbVideoId: string
           if (file.size <= DIRECT_LIMIT) {
@@ -14247,7 +14249,9 @@ export default function LaunchPage() {
       const cleanId    = adAccountId.replace(/^act_/, "")
       const FB_VIDEOS  = `https://graph.facebook.com/v25.0/act_${cleanId}/advideos`
       const DIRECT_LIMIT = 100 * 1024 * 1024 // ≤100 MB: direct POST
-      const CHUNK_SIZE   =  50 * 1024 * 1024 // >100 MB: 50 MB chunks
+      let CHUNK_SIZE = 4 * 1024 * 1024
+      if (item.file.size > 150 * 1024 * 1024) CHUNK_SIZE = 20 * 1024 * 1024
+      else if (item.file.size > 50 * 1024 * 1024) CHUNK_SIZE = 10 * 1024 * 1024
 
       // Meta's transcode pipeline is known to be flaky for large/high-fps chunked
       // uploads — a single transient failure otherwise kills the whole upload even

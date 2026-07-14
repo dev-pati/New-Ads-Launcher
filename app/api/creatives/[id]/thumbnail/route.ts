@@ -1,8 +1,12 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getVideoReadyData } from "@/lib/facebook"
+
+function sanitizeFileName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-")
+}
 
 interface CreativeUpdate {
   fb_thumbnail_url?: string
@@ -22,7 +26,7 @@ export async function POST(
     const supabase = createAdminClient()
     const { data: creative } = await supabase
       .from("creatives")
-      .select("id, media_type, storage_path, fb_video_id, fb_thumbnail_url, fb_image_url, file_url, status")
+      .select("id, media_type, storage_path, fb_video_id, fb_thumbnail_url, fb_image_url, file_url, file_name, status")
       .eq("id", id)
       .eq("org_id", ctx.orgId)
       .single()
@@ -82,6 +86,36 @@ export async function POST(
         .from("creatives")
         .update(update)
         .eq("id", id)
+    }
+
+    if (sourceUrl && !creative.storage_path) {
+      const orgId = ctx.orgId
+      const fileName = creative.file_name || `video-${id}.mp4`
+      after(async () => {
+        try {
+          const videoRes = await fetch(sourceUrl)
+          if (!videoRes.ok) throw new Error(`Fetch video failed (${videoRes.status})`)
+          const videoBuffer = await videoRes.arrayBuffer()
+          const cleanName = sanitizeFileName(fileName)
+          const storagePath = `creatives/${orgId}/${crypto.randomUUID()}-${cleanName}`
+
+          const { error: uploadErr } = await supabase.storage.from("ad-media").upload(storagePath, videoBuffer, {
+            contentType: "video/mp4",
+            upsert: false,
+            cacheControl: "31536000",
+          })
+          if (uploadErr) throw new Error(`Supabase upload failed: ${uploadErr.message}`)
+
+          const { data: { publicUrl } } = supabase.storage.from("ad-media").getPublicUrl(storagePath)
+          await supabase
+            .from("creatives")
+            .update({ storage_path: storagePath, file_url: publicUrl })
+            .eq("id", id)
+          console.log(`[thumbnail-refresh] Video backup saved for creative ${id}: ${publicUrl}`)
+        } catch (err: any) {
+          console.error(`[thumbnail-refresh] Background video backup failed for creative ${id}:`, err.message || err)
+        }
+      })
     }
 
     const nextCreative = mapCreativeForClient({
