@@ -12,7 +12,8 @@ import {
   IconChevronRight as IconDrillRight,
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
 } from "@tabler/icons-react"
-import { ChartsDrawer, CompareDrawer, type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
+import { type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
+import { PerformancePopup } from "@/components/ads-manager/PerformancePopup"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
 import { Label } from "@/components/ui/label"
@@ -348,7 +349,7 @@ export default function AdsManagerPage() {
   const [breakdowns,        setBreakdowns]        = useState<string[]>([])
   const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
   const [breakdownError,    setBreakdownError]    = useState("")
-  const [reportDrawer, setReportDrawer] = useState<{ mode: "charts" | "compare"; row: ReportRow } | null>(null)
+  const [performancePopup, setPerformancePopup] = useState<{ mode: "charts" | "compare"; rows: ReportRow[] } | null>(null)
 
   const router = useRouter()
   const level: Level = tab === "campaigns" ? "campaign" : tab === "adsets" ? "adset" : "ad"
@@ -356,6 +357,19 @@ export default function AdsManagerPage() {
   const drawerUntil = datePreset === "custom" && customDateRange ? formatMetaDate(customDateRange.end) : ""
   const toReportRow = (node: { id: string; name: string }): ReportRow =>
     ({ id: node.id, name: node.name, adId: tab === "ads" ? node.id : undefined })
+
+  // Open the big Meta-style popup. Compare uses the multi-selection when the clicked
+  // row is part of it; otherwise falls back to just the clicked row.
+  const openCompare = (clicked: { id: string; name: string }) => {
+    const rowsById = new Map(currentData.map(r => [r.id, r as { id: string; name: string }]))
+    const many = selectedIds.size > 1 && selectedIds.has(clicked.id)
+    const rows = many
+      ? Array.from(selectedIds).map(id => rowsById.get(id)).filter(Boolean).map(n => toReportRow(n as any))
+      : [toReportRow(clicked)]
+    setPerformancePopup({ mode: "compare", rows })
+  }
+  const openCharts = (clicked: { id: string; name: string }) =>
+    setPerformancePopup({ mode: "charts", rows: [toReportRow(clicked)] })
 
   const DEFAULTS_KEY = `adsmanager_defaults_${selectedAccountId}`
 
@@ -1404,6 +1418,17 @@ export default function AdsManagerPage() {
           <IconPencil className="size-3.5" />
           Edit{selectedIds.size > 0 && ` (${selectedIds.size})`}
         </button>
+        <button
+          disabled={selectedIds.size === 0}
+          onClick={() => {
+            const rowsById = new Map(currentData.map(r => [r.id, r as { id: string; name: string }]))
+            const rows = Array.from(selectedIds).map(id => rowsById.get(id)).filter(Boolean).map(n => toReportRow(n as any))
+            setPerformancePopup({ mode: "compare", rows })
+          }}
+          className="flex items-center gap-1.5 h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm disabled:opacity-40"
+        >
+          Compare{selectedIds.size > 0 && ` (${selectedIds.size})`}
+        </button>
 
         {selectedIds.size > 0 && (
           <div className="flex items-center gap-1.5 ml-2">
@@ -1657,9 +1682,9 @@ export default function AdsManagerPage() {
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "charts", row: toReportRow(c) })}>Charts</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCharts(c)}>Charts</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "compare", row: toReportRow(c) })}>Compare</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCompare(c)}>Compare</button>
                               </div>
                             </div>
                           )}
@@ -1708,9 +1733,9 @@ export default function AdsManagerPage() {
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "charts", row: toReportRow(a) })}>Charts</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCharts(a)}>Charts</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "compare", row: toReportRow(a) })}>Compare</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCompare(a)}>Compare</button>
                               </div>
                             </div>
                           )}
@@ -1761,9 +1786,9 @@ export default function AdsManagerPage() {
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "charts", row: toReportRow(a) })}>Charts</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCharts(a)}>Charts</button>
                                 <span className="text-[#ccd0d5]">·</span>
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "compare", row: toReportRow(a) })}>Compare</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCompare(a)}>Compare</button>
                               </div>
                               {adSet && <p className="text-xs text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
                             </div>
@@ -2269,26 +2294,16 @@ export default function AdsManagerPage() {
         </SheetContent>
       </Sheet>
 
-      {reportDrawer?.mode === "charts" && selectedAccountId && (
-        <ChartsDrawer
-          row={reportDrawer.row}
+      {performancePopup && selectedAccountId && (
+        <PerformancePopup
+          mode={performancePopup.mode}
+          rows={performancePopup.rows}
           level={level}
           accountId={selectedAccountId}
           datePreset={datePreset === "custom" ? "last_30d" : datePreset}
           since={drawerSince}
           until={drawerUntil}
-          onClose={() => setReportDrawer(null)}
-        />
-      )}
-      {reportDrawer?.mode === "compare" && selectedAccountId && (
-        <CompareDrawer
-          row={reportDrawer.row}
-          level={level}
-          accountId={selectedAccountId}
-          datePreset={datePreset === "custom" ? "last_30d" : datePreset}
-          since={drawerSince}
-          until={drawerUntil}
-          onClose={() => setReportDrawer(null)}
+          onClose={() => setPerformancePopup(null)}
         />
       )}
 
