@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/auth"
+import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { encryptSecret } from "@/lib/crypto"
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -23,16 +24,17 @@ export async function POST(request: NextRequest) {
 
     const { error } = await supabase.from("pages").upsert(
       {
-        user_id: user.id,
+        org_id: ctx.orgId,
+        user_id: ctx.user.id,
         business_manager_id: businessManagerId,
         fb_page_id: pageId,
         name: pageName,
-        page_access_token: pageAccessToken,
+        page_access_token: encryptSecret(pageAccessToken),
         category: pageCategory,
         picture_url: pagePictureUrl,
         is_active: true,
       },
-      { onConflict: "user_id,fb_page_id" }
+      { onConflict: "org_id,fb_page_id" }
     )
 
     if (error) {

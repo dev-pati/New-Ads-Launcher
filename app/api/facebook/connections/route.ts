@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { encryptSecret } from "@/lib/crypto"
 import {
   fetchViaProfile,
   fetchViaAdAccounts,
@@ -120,7 +121,7 @@ export async function POST(request: NextRequest) {
       fb_user_id: profile.id,
       fb_user_name: profile.name,
       fb_picture_url: profile.picture_url,
-      access_token: token,
+      access_token: encryptSecret(token),
       token_expires_at: null, // via session token — không biết trước hạn, theo dõi qua check
       is_active: true,
       connection_type: "manual_token",

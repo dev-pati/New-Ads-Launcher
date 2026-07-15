@@ -1,5 +1,6 @@
 import { getFacebookConnection } from "@/lib/auth"
 import { getFacebookPages, type FacebookPage } from "@/lib/facebook"
+import { encryptSecret } from "@/lib/crypto"
 
 type DbClient = any
 
@@ -73,7 +74,7 @@ export async function syncMetaPagesForWorkspace(supabase: DbClient, orgId: strin
         user_id: userId,
         provider: "facebook",
         meta_user_id: connection.fb_user_id,
-        access_token_encrypted: connection.access_token,
+        access_token_encrypted: encryptSecret(connection.access_token),
         connection_status: "connected",
         raw_data: {
           facebook_connection_id: connection.id,
@@ -99,7 +100,7 @@ export async function syncMetaPagesForWorkspace(supabase: DbClient, orgId: strin
     page_name: page.name,
     page_picture_url: page.picture?.data?.url || null,
     category: page.category || "Facebook Page",
-    access_token_encrypted: page.access_token,
+    access_token_encrypted: page.access_token ? encryptSecret(page.access_token) : null,
     connection_status: page.access_token ? "connected" : "permission_required",
     raw_data: page,
   }))
@@ -110,7 +111,7 @@ export async function syncMetaPagesForWorkspace(supabase: DbClient, orgId: strin
       .upsert(rows, { onConflict: "org_id,page_id" })
     if (error) throw new Error(error.message)
 
-    await Promise.all(rows.map(row =>
+    await Promise.all(rows.map((row, i) =>
       supabase.from("pages").upsert(
         {
           org_id: orgId,
@@ -119,7 +120,8 @@ export async function syncMetaPagesForWorkspace(supabase: DbClient, orgId: strin
           name: row.page_name,
           category: row.category,
           picture_url: row.page_picture_url,
-          page_access_token: row.access_token_encrypted,
+          // encrypt again is idempotent only if already enc:v1; pages list has plaintext
+          page_access_token: pages[i]?.access_token ? encryptSecret(pages[i].access_token) : null,
           is_active: true,
         },
         { onConflict: "org_id,fb_page_id" }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { encryptSecret } from "@/lib/crypto"
 
 export async function POST(request: NextRequest) {
   try {
@@ -58,8 +59,8 @@ export async function POST(request: NextRequest) {
       org_id:        ctx.orgId,
       user_id:       ctx.user.id,
       email,
-      access_token,
-      refresh_token,
+      access_token:  encryptSecret(access_token),
+      refresh_token: encryptSecret(refresh_token),
       expiry_at:     expiryAt,
       updated_at:    new Date().toISOString(),
     }, { onConflict: "org_id" })

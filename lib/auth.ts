@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getSessionAccount } from "@/lib/custom-auth"
+import { decryptSecret } from "@/lib/crypto"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 
@@ -85,7 +86,11 @@ export async function getFacebookConnection(orgId: string) {
     .limit(1)
     .maybeSingle()
 
-  return data
+  if (!data) return data
+  return {
+    ...data,
+    access_token: decryptSecret(data.access_token) || data.access_token,
+  }
 }
 
 /**
@@ -147,7 +152,11 @@ async function getSlotConnection(
     .eq("connection_type", "manual_token")
     .maybeSingle()
 
-  return (conn as ResolvedConnection | null) ?? null
+  if (!conn) return null
+  return {
+    ...(conn as ResolvedConnection),
+    access_token: decryptSecret((conn as ResolvedConnection).access_token) || (conn as ResolvedConnection).access_token,
+  }
 }
 
 export async function getConnectionForAdAccount(

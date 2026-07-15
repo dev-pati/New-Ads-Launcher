@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/auth"
+import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
-// List ads for the authenticated user
+// List ads for the active org
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
         page:pages (id, fb_page_id, name, picture_url),
         ad_account:ad_accounts (id, fb_ad_account_id, name, currency)
       `)
-      .eq("user_id", user.id)
+      .eq("org_id", ctx.orgId)
       .order("created_at", { ascending: false })
 
     if (status) query = query.eq("status", status)
@@ -48,8 +48,8 @@ export async function GET(request: NextRequest) {
 // Create a new ad draft
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -86,7 +86,8 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from("ads")
       .insert({
-        user_id: user.id,
+        org_id: ctx.orgId,
+        user_id: ctx.user.id,
         page_id,
         ad_account_id,
         name,

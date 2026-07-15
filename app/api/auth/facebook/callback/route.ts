@@ -9,6 +9,7 @@ import {
 } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAuthUser } from "@/lib/auth"
+import { encryptSecret } from "@/lib/crypto"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
           fb_user_name: fbUser.name,
           fb_email: fbUser.email,
           fb_picture_url: fbUser.picture?.data?.url,
-          access_token: longLivedToken.access_token,
+          access_token: encryptSecret(longLivedToken.access_token),
           token_expires_at: longLivedToken.expires_in
             ? new Date(Date.now() + longLivedToken.expires_in * 1000).toISOString()
             : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
@@ -136,7 +137,7 @@ export async function GET(request: NextRequest) {
                 name: page.name,
                 category: page.category,
                 picture_url: page.picture?.data?.url,
-                page_access_token: page.access_token,
+                page_access_token: encryptSecret(page.access_token),
               },
               { onConflict: "org_id,fb_page_id" }
             )

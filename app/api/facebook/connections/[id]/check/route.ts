@@ -3,6 +3,7 @@ import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { fetchViaProfile, tokenStatusFromError } from "@/lib/via-connections"
 import { buildMetaHeaders } from "@/lib/meta-secure-fetch"
+import { decryptSecret } from "@/lib/crypto"
 
 // Health check 1 connection: GET /me (skipProof nếu manual) → cập nhật token_status
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -22,13 +23,14 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
     if (!connection) return NextResponse.json({ error: "Connection not found" }, { status: 404 })
 
+    const token = decryptSecret(connection.access_token) || connection.access_token
     let tokenStatus: "valid" | "expired" | "invalid" = "valid"
     try {
       if (connection.connection_type === "manual_token") {
-        await fetchViaProfile(connection.access_token)
+        await fetchViaProfile(token)
       } else {
         const res = await fetch("https://graph.facebook.com/v25.0/me?fields=id", {
-          headers: buildMetaHeaders(connection.access_token),
+          headers: buildMetaHeaders(token),
         })
         const data = await res.json()
         if (data?.error) throw data

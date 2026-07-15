@@ -1,5 +1,6 @@
 import { getFacebookConnection } from "@/lib/auth"
 import { getFacebookPages } from "@/lib/facebook"
+import { decryptSecret, encryptSecret } from "@/lib/crypto"
 
 export type ResolvedPageAccessToken = {
   token: string
@@ -28,7 +29,7 @@ export async function resolveOrgPageAccessToken(
             name: metaPage.name,
             category: metaPage.category,
             picture_url: metaPage.picture?.data?.url,
-            page_access_token: metaPage.access_token,
+            page_access_token: encryptSecret(metaPage.access_token),
             is_active: true,
           },
           { onConflict: "org_id,fb_page_id" }
@@ -56,5 +57,8 @@ export async function resolveOrgPageAccessToken(
     .maybeSingle()
 
   if (!page?.page_access_token) return null
-  return { token: page.page_access_token, pageName: page.name }
+  return {
+    token: decryptSecret(page.page_access_token) || page.page_access_token,
+    pageName: page.name,
+  }
 }

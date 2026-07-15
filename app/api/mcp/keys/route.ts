@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) throw error
-    return NextResponse.json({ key: data }, { status: 201 })
+    // Return the plaintext key exactly once for the caller to copy.
+    return NextResponse.json({ key: { ...data, api_key: apiKey } }, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

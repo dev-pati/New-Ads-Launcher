@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin"
+import { decryptSecret } from "@/lib/crypto"
 
 // NOTE: these run server-side only, and callers pass ctx.orgId after
 // getAuthContext() has already verified the user's membership in that org.
@@ -17,7 +18,8 @@ export async function getGeminiApiKey(orgId: string): Promise<string | null> {
       .eq("org_id", orgId)
       .single()
 
-    if (data?.gemini_api_key?.trim()) return data.gemini_api_key.trim()
+    const key = decryptSecret(data?.gemini_api_key)?.trim()
+    if (key) return key
   } catch { /* fallthrough */ }
 
   return process.env.GEMINI_API_KEY ?? null
@@ -32,7 +34,8 @@ export async function getOpenAIApiKey(orgId: string): Promise<string | null> {
       .eq("org_id", orgId)
       .single()
 
-    if (data?.openai_api_key?.trim()) return data.openai_api_key.trim()
+    const key = decryptSecret(data?.openai_api_key)?.trim()
+    if (key) return key
   } catch { /* fallthrough */ }
 
   return process.env.OPENAI_API_KEY ?? null
