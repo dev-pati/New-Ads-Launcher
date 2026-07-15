@@ -551,11 +551,11 @@ export async function getAds(
   datePreset: string = "last_7d",
   timeRange?: string
 ): Promise<Ad[]> {
-  // Ads path is the heaviest: many rows × creative × insights. Keep this lighter than
-  // campaign/adset (drop unique_* fields; they inflate Meta response size).
+  // Ads path is the heaviest: many rows × creative × insights. Keep slim creative
+  // + small page size; unique_* scalars are cheap and needed by ECOM columns.
   const adsInsightFields = [
     "spend", "impressions", "clicks", "reach", "frequency", "cpm", "ctr",
-    "inline_link_clicks",
+    "inline_link_clicks", "unique_clicks", "unique_inline_link_clicks", "unique_link_clicks_ctr",
     "actions", "action_values", "cost_per_action_type",
     "video_avg_time_watched_actions",
   ].join(",")
