@@ -1,26 +1,50 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { getCachedFacebookMetadata } from "@/app/api/facebook/_cache"
+import { getDbCachedFacebookMetadata } from "@/app/api/facebook/_db-cache"
 import { metaFetch } from "@/app/api/facebook/_meta-fetch"
+import { computeInsightMetrics } from "@/lib/insights-metrics"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 30
 
-const GRAPH          = "https://graph.facebook.com/v25.0"
-const CACHE_TTL      = 5 * 60 * 1000 // 5 minutes
-const PURCHASE_TYPES = ["offsite_conversion.fb_pixel_purchase", "purchase"]
+const GRAPH = "https://graph.facebook.com/v25.0"
+const CACHE_TTL = 5 * 60 * 1000
 
-function sumAction(actions: any[], types: string[]) {
-  return (actions || []).filter(a => types.includes(a.action_type))
-    .reduce((s, a) => s + parseFloat(a.value || "0"), 0)
-}
-function sumActionValue(values: any[], types: string[]) {
-  return (values || []).filter(a => types.includes(a.action_type))
-    .reduce((s, a) => s + parseFloat(a.value || "0"), 0)
+const VALID_BREAKDOWNS = [
+  "publisher_platform",
+  "platform_position",
+  "publisher_platform,platform_position",
+  "age",
+  "gender",
+  "age,gender",
+  "impression_device",
+  "publisher_platform,impression_device",
+  "platform_position,impression_device",
+  "country",
+  "region",
+  "media_type",
+]
+
+const BREAKDOWN_LABELS: Record<string, string> = {
+  publisher_platform: "Platform",
+  platform_position: "Placement",
+  "publisher_platform,platform_position": "Placement",
+  age: "Age",
+  gender: "Gender",
+  "age,gender": "Age and gender",
+  impression_device: "Impression device",
+  "publisher_platform,impression_device": "Platform and device",
+  "platform_position,impression_device": "Placement and device",
+  country: "Country",
+  region: "Region",
+  media_type: "Media type",
 }
 
-const VALID_BREAKDOWNS = ["publisher_platform", "age", "gender", "impression_device"]
+function labelForRow(row: any, breakdown: string) {
+  const keys = breakdown.split(",")
+  return keys.map(k => row[k] || "Unknown").join(" / ")
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -29,47 +53,66 @@ export async function GET(request: NextRequest) {
     const connection = await getFacebookConnection(ctx.orgId)
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
-    const sp          = request.nextUrl.searchParams
+    const sp = request.nextUrl.searchParams
     const adAccountId = sp.get("adAccountId") || ""
-    const datePreset  = sp.get("datePreset")  || "last_30d"
-    const breakdown   = VALID_BREAKDOWNS.includes(sp.get("breakdown") || "")
-      ? sp.get("breakdown")! : "publisher_platform"
+    const datePreset = sp.get("datePreset") || "last_30d"
+    const since = sp.get("since") || ""
+    const until = sp.get("until") || ""
+    const level = sp.get("level") || "account"
+    const id = sp.get("id") || ""
+    const requestedBreakdown = sp.get("breakdown") || "publisher_platform"
+    const breakdown = VALID_BREAKDOWNS.includes(requestedBreakdown) ? requestedBreakdown : "publisher_platform"
 
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
 
     const accountPath = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-    const token       = connection.access_token
-    const cacheKey    = `insights-breakdown:${adAccountId}:${datePreset}:${breakdown}`
+    const basePath = id || accountPath
+    const token = connection.access_token
+    const dateKey = since && until ? `range:${since}_${until}` : `preset:${datePreset}`
+    const cacheKey = `insights-breakdown:${adAccountId}:${id || "account"}:${dateKey}:${breakdown}`
 
-    const rows = await getCachedFacebookMetadata(cacheKey, CACHE_TTL, async () => {
-      const params = new URLSearchParams({
-        fields:      "spend,impressions,inline_link_clicks,actions,action_values,cpm",
-        breakdowns:  breakdown,
-        date_preset: datePreset,
-        limit:       "50",
-        access_token: token,
-      })
+    const result = await getDbCachedFacebookMetadata({
+      orgId: ctx.orgId,
+      cacheKey,
+      ttlMs: CACHE_TTL,
+      loader: async () => {
+        const params = new URLSearchParams({
+          fields: [
+            "spend", "impressions", "reach", "frequency", "cpm", "ctr", "clicks",
+            "inline_link_clicks", "inline_link_click_ctr", "unique_clicks",
+            "unique_inline_link_clicks", "unique_link_clicks_ctr", "outbound_clicks",
+            "actions", "action_values", "purchase_roas",
+          ].join(","),
+          breakdowns: breakdown,
+          limit: "100",
+          access_token: token,
+        })
+        if (since && until) params.set("time_range", JSON.stringify({ since, until }))
+        else params.set("date_preset", datePreset)
 
-      const data = await metaFetch(`${GRAPH}/${accountPath}/insights?${params}`, {
-        caller: "insights/breakdown",
-      })
+        const data = await metaFetch(`${GRAPH}/${basePath}/insights?${params}`, {
+          caller: "insights/breakdown",
+        })
 
-      return (data.data || []).map((d: any) => {
-        const spend        = parseFloat(d.spend || "0")
-        const impressions  = parseInt(d.impressions || "0")
-        const linkClicks   = parseInt(d.inline_link_clicks || "0")
-        const purchases    = sumAction(d.actions, PURCHASE_TYPES)
-        const purchaseValue = sumActionValue(d.action_values, PURCHASE_TYPES)
-        const cpm          = parseFloat(d.cpm || "0")
-        const ctr          = impressions > 0 ? (linkClicks / impressions) * 100 : 0
-        const cpc          = linkClicks   > 0 ? spend / linkClicks : 0
-        const roas         = spend        > 0 ? purchaseValue / spend : 0
-        const label        = d[breakdown] || "Unknown"
-        return { label, spend, impressions, linkClicks, purchases, purchaseValue, cpm, ctr, cpc, roas }
-      }).sort((a: any, b: any) => b.spend - a.spend)
+        return (data.data || []).map((d: any) => {
+          const m = computeInsightMetrics(d)
+          return { label: labelForRow(d, breakdown), breakdownValue: labelForRow(d, breakdown), ...m }
+        }).sort((a: any, b: any) => b.spend - a.spend)
+      },
     })
 
-    return NextResponse.json({ rows, breakdown, datePreset })
+    return NextResponse.json({
+      rows: result.value,
+      breakdown,
+      breakdownLabel: BREAKDOWN_LABELS[breakdown] || breakdown,
+      datePreset,
+      since: since || null,
+      until: until || null,
+      level,
+      id: id || null,
+      cached: result.source !== "meta",
+      stale: result.stale,
+    })
   } catch (err: any) {
     console.error("[insights/breakdown]", err)
     const isRateLimit = err?.name === "MetaRateLimitError"

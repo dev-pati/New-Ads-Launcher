@@ -21,6 +21,7 @@ import {
 export type ReportSection =
   | "top-creatives"
   | "admanage-ads"
+  | "ads-manager"
   | "all-active-ads"
   | "vs-mode"
   | "fatigued-ads"
@@ -233,7 +234,7 @@ interface ReportConfig {
   defaultGroupBy:     string
 }
 
-const REPORT_CONFIGS: Record<Exclude<ReportSection, "vs-mode" | "admanage-ads">, ReportConfig> = {
+const REPORT_CONFIGS: Record<Exclude<ReportSection, "vs-mode" | "admanage-ads" | "ads-manager">, ReportConfig> = {
   "top-creatives": {
     icon: IconTrophy,
     title: "Top Creatives",
@@ -795,7 +796,7 @@ function TableView({
 
 // ─── Standard Report View ─────────────────────────────────────────────────────
 
-function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" | "admanage-ads"> }) {
+function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" | "admanage-ads" | "ads-manager"> }) {
   const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
   const config = REPORT_CONFIGS[type]
 
@@ -904,7 +905,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
 
     // ── Section-config filters (moved from server so all sections share one cache entry) ──
     if (config.statusFilter) {
-      const statuses = config.statusFilter.split(",").map(s => s.trim().toUpperCase())
+      const statuses = (config.statusFilter || "").split(",").map((s: string) => s.trim().toUpperCase())
       list = list.filter(a => statuses.includes((a.effectiveStatus || "").toUpperCase()))
     }
     if ((config.frequencyMin ?? 0) > 0) {
@@ -2260,5 +2261,5 @@ function AdManageAdsView() {
 export function ReportsView({ type }: { type: ReportSection }) {
   if (type === "vs-mode")      return <VSModeView />
   if (type === "admanage-ads") return <AdManageAdsView />
-  return <StandardReportView type={type as Exclude<ReportSection, "vs-mode" | "admanage-ads">} />
+  return <StandardReportView type={type as Exclude<ReportSection, "vs-mode" | "admanage-ads" | "ads-manager">} />
 }
