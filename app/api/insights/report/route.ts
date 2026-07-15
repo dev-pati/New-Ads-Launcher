@@ -208,7 +208,8 @@ export async function GET(request: NextRequest) {
         } else {
           const step2 = await batchFetch(token, ids.map(id => ({
             method: "GET",
-            relative_url: `${id}?fields=id,name,effective_status,daily_budget,lifetime_budget,bid_strategy,attribution_spec,start_time,stop_time`,
+            // Campaign has no attribution_spec (adset-only). Asking for it → Meta #100.
+            relative_url: `${id}?fields=id,name,effective_status,daily_budget,lifetime_budget,bid_strategy,start_time,stop_time`,
           })))
           for (let i = 0; i < step2.length; i++) {
             const item = step2[i]
@@ -218,7 +219,7 @@ export async function GET(request: NextRequest) {
             metaById[ids[i]] = {
               effectiveStatus: parsed.effective_status || "UNKNOWN",
               bidStrategy: parsed.bid_strategy || null,
-              attribution: attributionLabel(parsed.attribution_spec),
+              attribution: null,
               budget, budgetType,
               startsAt: parsed.start_time || null,
               endsAt: parsed.stop_time || null,

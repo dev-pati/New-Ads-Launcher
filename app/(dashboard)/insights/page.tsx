@@ -21,7 +21,6 @@ import {
 import { AllAccountsView, SpendView, DemographicView, CountryView, AdHistoryView, PlacementsView, DeviceView, ReachView, CreativeAuditView, UploadStatsView, PageInsightsView } from "./_statistics"
 import { CommentsView } from "./_comments"
 import { ReportsView, ReportSection } from "./_reports"
-import { AdsManagerReportView } from "./_report-manager"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -658,7 +657,6 @@ export default function InsightsPage() {
               {([
                 { id: "top-creatives" as ReportSection, label: "Top Creatives",  dot: "🏆" },
                 { id: "admanage-ads"  as ReportSection, label: "AdManage Ads",   dot: "📊" },
-                { id: "ads-manager"   as ReportSection, label: "Ads Manager",    dot: "📈" },
                 { id: "all-active-ads"as ReportSection, label: "All Active Ads", dot: "🟢" },
                 { id: "vs-mode"       as ReportSection, label: "VS Mode",        dot: "✕" },
                 { id: "fatigued-ads"  as ReportSection, label: "Fatigued Ads",   dot: "😤" },
@@ -688,9 +686,6 @@ export default function InsightsPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* ════════════════ REPORT SECTIONS ═══════════════════════════ */}
-        {section === "ads-manager" && (
-          <AdsManagerReportView />
-        )}
 
         {(section === "top-creatives" || section === "admanage-ads" || section === "all-active-ads" ||
           section === "vs-mode" || section === "fatigued-ads" || section === "landing-pages" || section === "ads-l90d") && (

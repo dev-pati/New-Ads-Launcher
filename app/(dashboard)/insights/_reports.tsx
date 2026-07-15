@@ -21,7 +21,6 @@ import {
 export type ReportSection =
   | "top-creatives"
   | "admanage-ads"
-  | "ads-manager"
   | "all-active-ads"
   | "vs-mode"
   | "fatigued-ads"
@@ -234,7 +233,7 @@ interface ReportConfig {
   defaultGroupBy:     string
 }
 
-const REPORT_CONFIGS: Record<Exclude<ReportSection, "vs-mode" | "admanage-ads" | "ads-manager">, ReportConfig> = {
+const REPORT_CONFIGS: Record<Exclude<ReportSection, "vs-mode" | "admanage-ads">, ReportConfig> = {
   "top-creatives": {
     icon: IconTrophy,
     title: "Top Creatives",
@@ -796,7 +795,7 @@ function TableView({
 
 // ─── Standard Report View ─────────────────────────────────────────────────────
 
-function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" | "admanage-ads" | "ads-manager"> }) {
+function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" | "admanage-ads"> }) {
   const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
   const config = REPORT_CONFIGS[type]
 
@@ -2261,5 +2260,5 @@ function AdManageAdsView() {
 export function ReportsView({ type }: { type: ReportSection }) {
   if (type === "vs-mode")      return <VSModeView />
   if (type === "admanage-ads") return <AdManageAdsView />
-  return <StandardReportView type={type as Exclude<ReportSection, "vs-mode" | "admanage-ads" | "ads-manager">} />
+  return <StandardReportView type={type as Exclude<ReportSection, "vs-mode" | "admanage-ads">} />
 }

@@ -160,5 +160,6 @@ function objectFields(level: Level) {
   if (level === "adset") {
     return "id,name,effective_status,start_time,end_time,bid_amount,bid_strategy,daily_budget,lifetime_budget,attribution_spec,campaign{daily_budget,lifetime_budget}"
   }
-  return "id,name,effective_status,daily_budget,lifetime_budget,bid_strategy,attribution_spec,start_time,stop_time"
+  // Campaign has no attribution_spec (adset-only). Asking for it → Meta #100.
+  return "id,name,effective_status,daily_budget,lifetime_budget,bid_strategy,start_time,stop_time"
 }

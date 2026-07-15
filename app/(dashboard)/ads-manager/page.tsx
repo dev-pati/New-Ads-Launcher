@@ -12,6 +12,7 @@ import {
   IconChevronRight as IconDrillRight,
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
 } from "@tabler/icons-react"
+import { ChartsDrawer, CompareDrawer, type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
 import { Label } from "@/components/ui/label"
@@ -34,9 +35,17 @@ interface Insight {
   impressions: string
   clicks: string
   reach?: string
+  frequency?: string
+  cpm?: string
+  ctr?: string
+  inline_link_clicks?: string
+  unique_clicks?: string
+  unique_inline_link_clicks?: string
+  unique_link_clicks_ctr?: string
   actions?: { action_type: string; value: string }[]
   action_values?: { action_type: string; value: string }[]
   cost_per_action_type?: { action_type: string; value: string }[]
+  video_avg_time_watched_actions?: { action_type: string; value: string }[]
 }
 
 interface Campaign {
@@ -107,6 +116,9 @@ const ACTION_ALIASES: Record<string, string[]> = {
   lead: ["lead", "omni_lead", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped", "onsite_conversion.lead"],
   link_click: ["link_click", "omni_link_click"],
   add_to_cart: ["omni_add_to_cart", "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart", "onsite_conversion.add_to_cart"],
+  initiate_checkout: ["offsite_conversion.fb_pixel_initiate_checkout", "initiate_checkout", "omni_initiate_checkout"],
+  view_content: ["offsite_conversion.fb_pixel_view_content", "omni_view_content", "view_content"],
+  landing_page_view: ["landing_page_view", "omni_landing_page_view"],
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100]
@@ -336,8 +348,14 @@ export default function AdsManagerPage() {
   const [breakdowns,        setBreakdowns]        = useState<string[]>([])
   const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
   const [breakdownError,    setBreakdownError]    = useState("")
+  const [reportDrawer, setReportDrawer] = useState<{ mode: "charts" | "compare"; row: ReportRow } | null>(null)
 
   const router = useRouter()
+  const level: Level = tab === "campaigns" ? "campaign" : tab === "adsets" ? "adset" : "ad"
+  const drawerSince = datePreset === "custom" && customDateRange ? formatMetaDate(customDateRange.start) : ""
+  const drawerUntil = datePreset === "custom" && customDateRange ? formatMetaDate(customDateRange.end) : ""
+  const toReportRow = (node: { id: string; name: string }): ReportRow =>
+    ({ id: node.id, name: node.name, adId: tab === "ads" ? node.id : undefined })
 
   const DEFAULTS_KEY = `adsmanager_defaults_${selectedAccountId}`
 
@@ -878,18 +896,108 @@ export default function AdsManagerPage() {
         return <span className="text-xs tabular-nums">${cpmVal.toFixed(2)}</span>
       }
 
-      case "frequency":
-        return <span className="text-xs">—</span>
+      case "frequency": {
+        if (ins?.frequency != null && ins.frequency !== "") {
+          return <span className="text-xs tabular-nums">{parseFloat(ins.frequency).toFixed(2)}</span>
+        }
+        const imp = parseFloat(ins?.impressions || "0")
+        const rch = parseFloat(ins?.reach || "0")
+        if (!imp || !rch) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{(imp / rch).toFixed(2)}</span>
+      }
 
       case "ctr": {
         if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
-        const ctrVal = (parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100
+        const ctrVal = ins.ctr != null && ins.ctr !== ""
+          ? parseFloat(ins.ctr)
+          : (parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100
         return <span className="text-xs tabular-nums">{ctrVal.toFixed(2)}%</span>
       }
 
       case "cpc": {
         if (!ins || !ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-xs">—</span>
         return <span className="text-xs tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
+      }
+
+      case "link_clicks": {
+        const n = parseInt(ins?.inline_link_clicks || "0")
+        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+      }
+
+      case "unique_clicks": {
+        const n = parseInt(ins?.unique_clicks || "0")
+        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+      }
+
+      case "unique_link_clicks": {
+        const n = parseInt(ins?.unique_inline_link_clicks || "0")
+        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+      }
+
+      case "unique_link_ctr": {
+        if (ins?.unique_link_clicks_ctr != null && ins.unique_link_clicks_ctr !== "") {
+          return <span className="text-xs tabular-nums">{parseFloat(ins.unique_link_clicks_ctr).toFixed(2)}%</span>
+        }
+        const rch = parseFloat(ins?.reach || "0")
+        const ulc = parseFloat(ins?.unique_inline_link_clicks || "0")
+        if (!rch || !ulc) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{((ulc / rch) * 100).toFixed(2)}%</span>
+      }
+
+      case "cost_per_unique_click": {
+        const n = parseFloat(ins?.unique_clicks || "0")
+        if (!n) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+      }
+
+      case "cost_per_link_click": {
+        const n = parseFloat(ins?.inline_link_clicks || "0")
+        if (!n) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+      }
+
+      case "landing_page_views": {
+        const n = getActionValue(ins, "landing_page_view")
+        return <span className="text-xs tabular-nums">{n || "—"}</span>
+      }
+
+      case "lpv_rate": {
+        const lpv = getActionValue(ins, "landing_page_view")
+        const lc = parseFloat(ins?.inline_link_clicks || "0")
+        if (!lpv || !lc) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{((lpv / lc) * 100).toFixed(2)}%</span>
+      }
+
+      case "content_views": {
+        const n = getActionValue(ins, "view_content")
+        return <span className="text-xs tabular-nums">{n || "—"}</span>
+      }
+
+      case "cost_per_add_to_cart": {
+        const n = getActionValue(ins, "add_to_cart")
+        if (!n) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+      }
+
+      case "initiate_checkout": {
+        const n = getActionValue(ins, "initiate_checkout")
+        return <span className="text-xs tabular-nums">{n || "—"}</span>
+      }
+
+      case "cost_per_initiate_checkout": {
+        const n = getActionValue(ins, "initiate_checkout")
+        if (!n) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+      }
+
+      case "avg_watch_time": {
+        const arr = ins?.video_avg_time_watched_actions
+        const sec = arr?.[0] ? parseFloat(arr[0].value || "0") : 0
+        if (!sec) return <span className="text-xs">—</span>
+        const s = Math.round(sec)
+        const mm = Math.floor(s / 60)
+        const rr = s % 60
+        return <span className="text-xs tabular-nums">{mm > 0 ? `${mm}:${String(rr).padStart(2, "0")}` : `0:${String(rr).padStart(2, "0")}`}</span>
       }
 
       case "purchases":
@@ -1002,6 +1110,19 @@ export default function AdsManagerPage() {
         if (!ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-xs">—</span>
         return <span className="text-xs tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
       }
+      case "link_clicks":      { const n = parseInt(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_clicks":    { const n = parseInt(ins.unique_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_link_clicks": { const n = parseInt(ins.unique_inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_link_ctr":  { const v = parseFloat(ins.unique_link_clicks_ctr || "0"); return <span className="text-xs tabular-nums">{v ? `${v.toFixed(2)}%` : "—"}</span> }
+      case "cost_per_unique_click": { const n = parseFloat(ins.unique_clicks || "0"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
+      case "cost_per_link_click": { const n = parseFloat(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
+      case "landing_page_views": { const n = getVal("landing_page_view"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
+      case "lpv_rate":         { const lpv = getVal("landing_page_view"); const lc = parseFloat(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{lpv && lc ? `${((lpv/lc)*100).toFixed(2)}%` : "—"}</span> }
+      case "content_views":    { const n = getVal("view_content"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
+      case "cost_per_add_to_cart": { const n = getVal("add_to_cart"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
+      case "initiate_checkout": { const n = getVal("initiate_checkout"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
+      case "cost_per_initiate_checkout": { const n = getVal("initiate_checkout"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
+      case "avg_watch_time":   { const sec = parseFloat(ins.video_avg_time_watched_actions?.[0]?.value || "0"); const s = Math.round(sec); const mm = Math.floor(s / 60); const rr = s % 60; return <span className="text-xs tabular-nums">{s ? (mm > 0 ? `${mm}:${String(rr).padStart(2, "0")}` : `0:${String(rr).padStart(2, "0")}`) : "—"}</span> }
       case "purchases":        { const p = getVal("omni_purchase"); return <span className="text-xs tabular-nums">{p || "—"}</span> }
       case "purchase_value":   { const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{formatMoneyAmount(value)}</span> }
       case "avg_order_value":  { const p = getVal("omni_purchase"); const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{p && value ? `$${(value / p).toFixed(2)}` : "—"}</span> }
@@ -1535,8 +1656,11 @@ export default function AdsManagerPage() {
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(c)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "charts", row: toReportRow(c) })}>Charts</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "compare", row: toReportRow(c) })}>Compare</button>
                               </div>
-                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{c.id}</p>
                             </div>
                           )}
                         </td>
@@ -1583,8 +1707,11 @@ export default function AdsManagerPage() {
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "charts", row: toReportRow(a) })}>Charts</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "compare", row: toReportRow(a) })}>Compare</button>
                               </div>
-                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
                             </div>
                           )}
                         </td>
@@ -1633,8 +1760,11 @@ export default function AdsManagerPage() {
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "charts", row: toReportRow(a) })}>Charts</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setReportDrawer({ mode: "compare", row: toReportRow(a) })}>Compare</button>
                               </div>
-                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
                               {adSet && <p className="text-xs text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
                             </div>
                           )}
@@ -2102,20 +2232,9 @@ export default function AdsManagerPage() {
                     </div>
                   )}
 
-                  {/* ── IDs ── */}
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Details</p>
-                    <div className="rounded-xl border divide-y overflow-hidden text-xs">
-                      {[
-                        { label: "ID",          value: node.id },
-                        ...(isAdSet ? [{ label: "Campaign ID", value: node.campaign_id }] : []),
-                        ...(isAd    ? [{ label: "Ad Set ID",   value: node.adset_id }]   : []),
-                      ].map(row => (
-                        <div key={row.label} className="flex items-center justify-between px-3 py-2 bg-muted/10 hover:bg-muted/30 transition-colors">
-                          <span className="text-muted-foreground shrink-0 mr-3">{row.label}</span>
-                          <span className="font-mono text-foreground/80 truncate select-all">{row.value}</span>
-                        </div>
-                      ))}
+                    <div className="rounded-xl border overflow-hidden text-xs">
                       <button
                         className="w-full flex items-center gap-2 px-3 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors text-left"
                         onClick={() => {
@@ -2149,6 +2268,29 @@ export default function AdsManagerPage() {
           })()}
         </SheetContent>
       </Sheet>
+
+      {reportDrawer?.mode === "charts" && selectedAccountId && (
+        <ChartsDrawer
+          row={reportDrawer.row}
+          level={level}
+          accountId={selectedAccountId}
+          datePreset={datePreset === "custom" ? "last_30d" : datePreset}
+          since={drawerSince}
+          until={drawerUntil}
+          onClose={() => setReportDrawer(null)}
+        />
+      )}
+      {reportDrawer?.mode === "compare" && selectedAccountId && (
+        <CompareDrawer
+          row={reportDrawer.row}
+          level={level}
+          accountId={selectedAccountId}
+          datePreset={datePreset === "custom" ? "last_30d" : datePreset}
+          since={drawerSince}
+          until={drawerUntil}
+          onClose={() => setReportDrawer(null)}
+        />
+      )}
 
     </div>
   )
