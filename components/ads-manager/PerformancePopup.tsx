@@ -1,65 +1,74 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { IconChevronDown, IconHistory, IconLoader2, IconX } from "@tabler/icons-react"
+import {
+  IconChevronDown, IconDownload, IconHistory, IconLoader2, IconPlus,
+  IconSettings, IconX,
+} from "@tabler/icons-react"
 import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis,
 } from "recharts"
 import { cn } from "@/lib/utils"
+import {
+  Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip"
 import type { Level, ReportRow } from "./InsightDrawers"
 
 type Tab = "trends" | "breakdowns"
 
-// Fixed categorical palette, max 8 series. Beyond that callers should cap rows.
 const SERIES = ["#2a78d6", "#4b9cd3", "#5b0a66", "#2f9e44", "#e67700", "#9c36b5", "#0ca678", "#868e96"]
 const GRID = "#e1e0d9"
 const MUTED = "#898781"
 
-const METRIC_GROUPS: { group: string; items: { key: string; label: string; fmt: (v: number) => string }[] }[] = [
+type MetricItem = { key: string; label: string; fmt: (v: number) => string; desc: string }
+
+const METRIC_GROUPS: { group: string; items: MetricItem[] }[] = [
   {
     group: "Performance",
     items: [
-      { key: "spend", label: "Amount spent", fmt: v => fmt$(v) },
-      { key: "impressions", label: "Impressions", fmt: fmtN },
-      { key: "reach", label: "Reach", fmt: fmtN },
-      { key: "frequency", label: "Frequency", fmt: v => fmt(v, 2) },
-      { key: "results", label: "Results", fmt: fmtN },
+      { key: "spend", label: "Amount spent", fmt: v => fmt$(v), desc: "The total amount of money you spent on your campaigns, ad sets or ads during their lifetime." },
+      { key: "impressions", label: "Impressions", fmt: fmtN, desc: "The number of times your ads were on screen." },
+      { key: "reach", label: "Reach", fmt: fmtN, desc: "The number of people who saw your ads at least once." },
+      { key: "frequency", label: "Frequency", fmt: v => fmt(v, 2), desc: "The average number of times each person saw your ad." },
+      { key: "results", label: "Results", fmt: fmtN, desc: "The number of times your ad achieved an outcome, based on the objective and settings you selected." },
     ],
   },
   {
     group: "Conversions",
     items: [
-      { key: "purchases", label: "Website purchases", fmt: fmtN },
-      { key: "costPerPurchase", label: "Cost per purchase", fmt: fmt$ },
-      { key: "roas", label: "Purchase ROAS", fmt: v => fmt(v, 2) + "x" },
-      { key: "purchaseValue", label: "Purchases conversion value", fmt: fmt$ },
-      { key: "contentViews", label: "Content views", fmt: fmtN },
-      { key: "addToCart", label: "Adds to cart", fmt: fmtN },
-      { key: "initiateCheckout", label: "Checkouts initiated", fmt: fmtN },
+      { key: "purchases", label: "Website purchases", fmt: fmtN, desc: "The number of purchase events tracked by the pixel or conversions API on your website and attributed to your ads." },
+      { key: "costPerPurchase", label: "Per purchase", fmt: fmt$, desc: "The average cost of each website purchase." },
+      { key: "roas", label: "Purchase ROAS", fmt: v => fmt(v, 2) + "x", desc: "Purchase return on ad spend (ROAS), calculated as purchase conversion value divided by total spend." },
+      { key: "purchaseValue", label: "Purchases conversion value", fmt: fmt$, desc: "The total value of website purchase conversions attributed to your ads." },
+      { key: "contentViews", label: "Content views", fmt: fmtN, desc: "The number of website content view events attributed to your ads." },
+      { key: "addToCart", label: "Adds to cart", fmt: fmtN, desc: "The number of add to cart events attributed to your ads." },
+      { key: "initiateCheckout", label: "Checkouts initiated", fmt: fmtN, desc: "The number of checkout initiated events attributed to your ads." },
     ],
   },
   {
     group: "Clicks",
     items: [
-      { key: "linkClicks", label: "Link clicks", fmt: fmtN },
-      { key: "ctrAll", label: "CTR (all)", fmt: v => fmt(v, 2) + "%" },
-      { key: "cpm", label: "CPM", fmt: fmt$ },
+      { key: "linkClicks", label: "Link clicks", fmt: fmtN, desc: "The number of clicks on links within the ad that led to advertiser-specified destinations." },
+      { key: "ctrAll", label: "CTR (all)", fmt: v => fmt(v, 2) + "%", desc: "The percentage of times people saw your ad and performed any click." },
+      { key: "cpm", label: "CPM", fmt: fmt$, desc: "The average cost per 1,000 impressions." },
     ],
   },
   {
     group: "Video",
     items: [
-      { key: "hookRate", label: "Hook rate", fmt: v => fmt(v, 2) + "%" },
-      { key: "holdRate", label: "Hold rate", fmt: v => fmt(v, 2) + "%" },
-      { key: "avgWatchTime", label: "Avg. watch time", fmt: fmtSec },
+      { key: "hookRate", label: "Hook rate", fmt: v => fmt(v, 2) + "%", desc: "The percentage of video views that lasted 3 seconds or more, measuring initial hook strength." },
+      { key: "holdRate", label: "Hold rate", fmt: v => fmt(v, 2) + "%", desc: "The percentage of video views that lasted 15 seconds or more, measuring retention." },
+      { key: "avgWatchTime", label: "Avg. watch time", fmt: fmtSec, desc: "The average watch time of your video ads." },
     ],
   },
 ]
 
 const ALL_METRICS = METRIC_GROUPS.flatMap(g => g.items)
-const metricLabel = (k: string) => ALL_METRICS.find(m => m.key === k)?.label || k
-const metricFmt = (k: string) => ALL_METRICS.find(m => m.key === k)?.fmt || (v => fmtN(v))
+const metricItem = (k: string): MetricItem => ALL_METRICS.find(m => m.key === k) || { key: k, label: k, fmt: fmtN, desc: "" }
+const metricLabel = (k: string) => metricItem(k).label
+const metricFmt = (k: string) => metricItem(k).fmt
+const metricDesc = (k: string) => metricItem(k).desc
 
 const BREAKDOWN_OPTS = [
   { key: "age,gender", label: "Age and gender" },
@@ -71,6 +80,7 @@ const BREAKDOWN_OPTS = [
 ]
 
 const MAX_ROWS = 8
+const MAX_ACTIVE_METRICS = 3
 
 // ─── formatters ──────────────────────────────────────────────────────────────
 function fmt(v: number, d = 2) {
@@ -95,8 +105,30 @@ function fmtSec(v: number) {
   return m > 0 ? `${m}:${String(r).padStart(2, "0")}` : `0:${String(r).padStart(2, "0")}`
 }
 
+function downloadCsv(filename: string, rows: { label: string; value: number | string }[]) {
+  const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`
+  const csv = ["Label,Value", ...rows.map(r => `${esc(r.label)},${esc(r.value)}`)].join("\n")
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 interface Series { date: string; label: string; value: number }
 interface BreakdownRow { label: string; [key: string]: any }
+
+// KPI cards per level (Charts single-object)
+function cardsForLevel(level: Level) {
+  const base = [
+    { key: "purchases", label: "Website purchases" },
+    { key: "costPerPurchase", label: "Per purchase" },
+  ]
+  if (level === "campaign") return [...base, { key: "spend", label: "Amount spent" }]
+  return [...base, { key: "roas", label: "Purchase ROAS" }] // adset + ad default
+}
 
 export function PerformancePopup({
   mode, level, accountId, rows, datePreset, since, until, onClose,
@@ -114,21 +146,43 @@ export function PerformancePopup({
   const overCap = rows.length > MAX_ROWS
   const isCompare = mode === "compare"
 
+  // ── States ────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<Tab>("trends")
-  const [metric, setMetric] = useState("spend")
   const [granularity, setGranularity] = useState<"day" | "week" | "month">("day")
-  const [breakdown, setBreakdown] = useState("age,gender")
-  const [metricMenuOpen, setMetricMenuOpen] = useState(false)
-  const [activeCard, setActiveCard] = useState<string | null>(null) // metric key when a card is expanded
 
-  const [trendByRow, setTrendByRow] = useState<Record<string, Series[]>>({})
-  const [breakdownByRow, setBreakdownByRow] = useState<Record<string, BreakdownRow[]>>({})
+  // Charts mode active metric
+  const [metric, setMetric] = useState("spend")
+  const [activeCard, setActiveCard] = useState<string | null>(null)
+
+  // Compare mode charts list
+  const [compareCharts, setCompareCharts] = useState<string[]>(["spend"])
+  const [compareBreakdown, setCompareBreakdown] = useState("age,gender")
+  const [addChartOpen, setAddChartOpen] = useState(false)
+
+  // Filters for Charts mode
+  const [activityFilter, setActivityFilter] = useState("all")
+  const [customizeOpen, setCustomizeOpen] = useState(false)
+  const [selectedMetrics, setSelectedMetrics] = useState<string[]>(["spend", "purchases", "costPerPurchase"])
+  const [prefBenchmark, setPrefBenchmark] = useState(true)
+  const [prefSimilar, setPrefSimilar] = useState(true)
+  const [customizeTab, setCustomizeTab] = useState<"metrics" | "preferences">("metrics")
+
+  // Platform Section filters
+  const [platMetric1, setPlatMetric1] = useState("reach")
+  const [platMetric2, setPlatMetric2] = useState("results")
+  const [deviceFilter, setDeviceFilter] = useState<"both" | "mobile" | "desktop">("both")
+
+  // Data storage
+  // Key: rowId + ":" + metric
+  const [trendDataStore, setTrendDataStore] = useState<Record<string, Series[]>>({})
+  const [breakdownDataStore, setBreakdownDataStore] = useState<Record<string, BreakdownRow[]>>({})
+
   const [metricsByRow, setMetricsByRow] = useState<Record<string, any>>({})
   const [activities, setActivities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Charts-only: demographics (age,gender) + platform (placement) for the single object
+  // Demographics + Platform sections
   const [demoRows, setDemoRows] = useState<BreakdownRow[]>([])
   const [platRows, setPlatRows] = useState<BreakdownRow[]>([])
   const [chartsSub, setChartsSub] = useState<"demographics" | "platform">("demographics")
@@ -140,37 +194,61 @@ export function PerformancePopup({
     return p
   }, [accountId, level, since, until, datePreset])
 
-  // ── load trends for all rows (metric-dependent) ────────────────────────────
+  // Determine active metrics list based on mode
+  const activeMetrics = useMemo(() => {
+    return isCompare ? compareCharts : [metric]
+  }, [isCompare, compareCharts, metric])
+
+  // ── Fetch Trends (metric & row dependent) ──────────────────────────────────
   useEffect(() => {
     let cancelled = false
     setLoading(true)
     const load = async () => {
-      const results = await Promise.allSettled(capped.map(async row => {
-        const res = await fetch(`/api/insights/report-trends?${qsBase}&id=${row.id}&metric=${metric}&granularity=${granularity}`)
+      // Find what needs to be loaded
+      const queue: { row: ReportRow; metricKey: string }[] = []
+      capped.forEach(row => {
+        activeMetrics.forEach(m => {
+          const cacheKey = `${row.id}:${m}`
+          if (!trendDataStore[cacheKey]) {
+            queue.push({ row, metricKey: m })
+          }
+        })
+      })
+
+      if (queue.length === 0) {
+        setLoading(false)
+        return
+      }
+
+      const results = await Promise.allSettled(queue.map(async item => {
+        const res = await fetch(`/api/insights/report-trends?${qsBase}&id=${item.row.id}&metric=${item.metricKey}&granularity=${granularity}`)
         const d = await res.json()
         if (d.error) throw new Error(d.error)
-        return { row, series: (d.series || []) as Series[] }
+        return { key: `${item.row.id}:${item.metricKey}`, series: (d.series || []) as Series[] }
       }))
+
       if (cancelled) return
-      const next: Record<string, Series[]> = {}
+
+      const nextTrend = { ...trendDataStore }
       const errs: Record<string, string> = {}
-      results.forEach(r => {
-        if (r.status === "fulfilled") next[r.value.row.id] = r.value.series
-        else { /* per-row error tracked via index */ }
+      results.forEach((r, idx) => {
+        const q = queue[idx]
+        if (r.status === "fulfilled") {
+          nextTrend[r.value.key] = r.value.series
+        } else {
+          errs[q.row.id] = (r.reason as any)?.message || "Failed"
+        }
       })
-      capped.forEach((row, i) => {
-        const r = results[i]
-        if (r && r.status === "rejected") errs[row.id] = (r.reason as any)?.message || "Failed"
-      })
-      setTrendByRow(next)
+
+      setTrendDataStore(nextTrend)
       setErrors(errs)
       setLoading(false)
     }
     load()
     return () => { cancelled = true }
-  }, [qsBase, metric, granularity, capped.map(r => r.id).join(",")])
+  }, [qsBase, activeMetrics.join(","), granularity, capped.map(r => r.id).join(",")])
 
-  // ── load KPI metrics per row (once, then refresh with date change) ─────────
+  // ── Fetch KPI metrics (Charts mode initialization) ───────────────────────
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -189,29 +267,47 @@ export function PerformancePopup({
     return () => { cancelled = true }
   }, [qsBase, capped.map(r => r.id).join(",")])
 
-  // ── load breakdowns for all rows (only when breakdown tab active) ──────────
+  // ── Fetch Breakdowns (Compare Breakdown mode) ─────────────────────────────
   useEffect(() => {
-    if (tab !== "breakdowns") return
+    if (!isCompare || tab !== "breakdowns") return
     let cancelled = false
     const load = async () => {
-      const results = await Promise.allSettled(capped.map(async row => {
-        const res = await fetch(`/api/insights/breakdown?${qsBase}&id=${row.id}&breakdown=${encodeURIComponent(breakdown)}`)
+      const queue: { row: ReportRow; metricKey: string }[] = []
+      capped.forEach(row => {
+        compareCharts.forEach(m => {
+          const cacheKey = `${row.id}:${m}:${compareBreakdown}`
+          if (!breakdownDataStore[cacheKey]) {
+            queue.push({ row, metricKey: m })
+          }
+        })
+      })
+
+      if (queue.length === 0) return
+
+      const results = await Promise.allSettled(queue.map(async item => {
+        const res = await fetch(`/api/insights/breakdown?${qsBase}&id=${item.row.id}&breakdown=${encodeURIComponent(compareBreakdown)}`)
         const d = await res.json()
         if (d.error) throw new Error(d.error)
-        return { row, rows: (d.rows || []) as BreakdownRow[] }
+        return { key: `${item.row.id}:${item.metricKey}:${compareBreakdown}`, rows: (d.rows || []) as BreakdownRow[] }
       }))
+
       if (cancelled) return
-      const next: Record<string, BreakdownRow[]> = {}
-      results.forEach(r => { if (r.status === "fulfilled") next[r.value.row.id] = r.value.rows })
-      setBreakdownByRow(next)
+
+      const nextBreakdown = { ...breakdownDataStore }
+      results.forEach((r, idx) => {
+        if (r.status === "fulfilled") {
+          nextBreakdown[r.value.key] = r.value.rows
+        }
+      })
+      setBreakdownDataStore(nextBreakdown)
     }
     load()
     return () => { cancelled = true }
-  }, [tab, breakdown, qsBase, capped.map(r => r.id).join(",")])
+  }, [isCompare, tab, compareBreakdown, compareCharts.join(","), qsBase, capped.map(r => r.id).join(",")])
 
-  // ── activities for active card (single object only for MVP) ────────────────
+  // ── Activities for active card (single object only) ────────────────────────
   useEffect(() => {
-    if (!activeCard || capped.length !== 1) { setActivities([]); return }
+    if (isCompare || capped.length !== 1) { setActivities([]); return }
     let cancelled = false
     const row = capped[0]
     const load = async () => {
@@ -223,9 +319,9 @@ export function PerformancePopup({
     }
     load()
     return () => { cancelled = true }
-  }, [activeCard, qsBase, capped.map(r => r.id).join(",")])
+  }, [isCompare, qsBase, capped.map(r => r.id).join(",")])
 
-  // ── Charts mode: demographics + platform for the single object ─────────────
+  // ── Demographics + Platform load (Charts single object) ───────────────────
   useEffect(() => {
     if (isCompare || capped.length !== 1) return
     let cancelled = false
@@ -234,7 +330,7 @@ export function PerformancePopup({
       try {
         const [ageRes, platRes] = await Promise.all([
           fetch(`/api/insights/breakdown?${qsBase}&id=${row.id}&breakdown=age,gender`),
-          fetch(`/api/insights/breakdown?${qsBase}&id=${row.id}&breakdown=publisher_platform,platform_position`),
+          fetch(`/api/insights/breakdown?${qsBase}&id=${row.id}&breakdown=publisher_platform,platform_position,impression_device`),
         ])
         const [age, plat] = await Promise.all([ageRes.json(), platRes.json()])
         if (cancelled) return
@@ -246,7 +342,7 @@ export function PerformancePopup({
     return () => { cancelled = true }
   }, [isCompare, qsBase, capped.map(r => r.id).join(",")])
 
-  // ── aggregate KPI headline ─────────────────────────────────────────────────
+  // ── Compute KPIs ──────────────────────────────────────────────────────────
   const totals = useMemo(() => {
     let spend = 0, purchases = 0, purchaseValue = 0
     Object.values(metricsByRow).forEach((m: any) => {
@@ -262,36 +358,38 @@ export function PerformancePopup({
     }
   }, [metricsByRow])
 
-  // ── merge trend series into one dataset per date ───────────────────────────
-  const trendData = useMemo(() => {
+  // Get trend series data helper for a specific metric
+  const getTrendDataForMetric = (mKey: string) => {
     const byDate: Record<string, any> = {}
     capped.forEach((row, i) => {
-      (trendByRow[row.id] || []).forEach(p => {
+      const cacheKey = `${row.id}:${mKey}`
+      const series = trendDataStore[cacheKey] || []
+      series.forEach(p => {
         if (!byDate[p.date]) byDate[p.date] = { date: p.date, label: p.label }
         byDate[p.date][`row_${i}`] = p.value
       })
     })
     return Object.values(byDate).sort((a: any, b: any) => (a.date < b.date ? -1 : 1))
-  }, [trendByRow, capped.map(r => r.id).join(",")])
+  }
 
-  // ── merge breakdown rows into grouped bar data ─────────────────────────────
-  const breakdownData = useMemo(() => {
+  // Get breakdown data helper for a specific metric
+  const getBreakdownDataForMetric = (mKey: string) => {
     const byLabel: Record<string, any> = {}
     capped.forEach((row, i) => {
-      (breakdownByRow[row.id] || []).forEach(r => {
+      const cacheKey = `${row.id}:${mKey}:${compareBreakdown}`
+      const rows = breakdownDataStore[cacheKey] || []
+      rows.forEach(r => {
         const label = r.label || r.breakdownValue || "Unknown"
         if (!byLabel[label]) byLabel[label] = { label }
-        byLabel[label][`row_${i}`] = Number(r[metric] ?? r.spend ?? 0) || 0
+        byLabel[label][`row_${i}`] = Number(r[mKey] ?? r.spend ?? 0) || 0
       })
     })
-    // total per label across rows, sort desc, cap 8
     return Object.values(byLabel)
       .map((d: any) => ({ ...d, _total: capped.reduce((s, _, i) => s + (Number(d[`row_${i}`]) || 0), 0) }))
       .sort((a: any, b: any) => b._total - a._total)
-      .slice(0, 8)
-  }, [breakdownByRow, metric, capped.map(r => r.id).join(",")])
+      .slice(0, 10)
+  }
 
-  // ── Charts sub-breakdowns (demo/platform) ──────────────────────────────────
   const demoBarData = useMemo(() => {
     return demoRows.map(r => ({
       label: r.label || r.breakdownValue || "Unknown",
@@ -299,276 +397,407 @@ export function PerformancePopup({
     })).sort((a, b) => b.value - a.value).slice(0, 10)
   }, [demoRows, metric])
 
+  // Platform bar data: apply device type filters client-side
   const platBarData = useMemo(() => {
-    return platRows.map(r => ({
-      label: r.label || r.breakdownValue || "Unknown",
-      value: Number(r[metric] ?? r.spend ?? 0) || 0
-    })).sort((a, b) => b.value - a.value).slice(0, 10)
-  }, [platRows, metric])
+    // Group placement results
+    const filtered = platRows.filter(r => {
+      if (deviceFilter === "mobile") return String(r.impression_device || "").toLowerCase().includes("mobile")
+      if (deviceFilter === "desktop") return String(r.impression_device || "").toLowerCase().includes("desktop")
+      return true
+    })
 
-  const cards = [
-    { key: "purchases", label: "Website purchases", value: fmtN(totals.purchases), desc: "Purchase events attributed to your ads" },
-    { key: "costPerPurchase", label: "Per purchase", value: fmt$(totals.costPerPurchase), desc: "Average cost per website purchase" },
-    { key: "roas", label: "Purchase ROAS", value: totals.roas ? totals.roas.toFixed(2) + "x" : "—", desc: "Purchases conversion value / spend" },
-    { key: "spend", label: "Amount spent", value: fmt$(totals.spend), desc: "Total spent across selected items" },
-  ]
+    // Aggregate by publisher_platform + platform_position
+    const grouped: Record<string, { label: string; metric1Val: number; metric2Val: number }> = {}
+    filtered.forEach(r => {
+      const label = `${r.publisher_platform || "Unknown"} - ${r.platform_position || "Unknown"}`
+      if (!grouped[label]) {
+        grouped[label] = { label, metric1Val: 0, metric2Val: 0 }
+      }
+      grouped[label].metric1Val += Number(r[platMetric1] || 0)
+      grouped[label].metric2Val += Number(r[platMetric2] || 0)
+    })
+
+    return Object.values(grouped)
+      .map(g => ({
+        label: g.label,
+        metric1: g.metric1Val,
+        metric2: g.metric2Val
+      }))
+      .sort((a, b) => b.metric1 + b.metric2 - (a.metric1 + a.metric2))
+      .slice(0, 10)
+  }, [platRows, platMetric1, platMetric2, deviceFilter])
+
+  // Activities filtered by Activity History dropdown
+  const filteredActivities = useMemo(() => {
+    if (activityFilter === "all") return activities
+    return activities.filter(e => {
+      const type = String(e.type || "").toLowerCase()
+      if (activityFilter === "budget") return type.includes("budget") || type.includes("bid")
+      if (activityFilter === "status") return type.includes("status") || type.includes("pause") || type.includes("resume")
+      return true
+    })
+  }, [activities, activityFilter])
+
+  // Generate activities markers for Chart Mode Recharts line
+  const CustomDot = (props: any) => {
+    const { cx, cy, payload } = props
+    // Check if there is an activity on this date
+    const hasEvent = activities.some(e => {
+      if (!e.time) return false
+      const eDate = new Date(e.time).toISOString().split("T")[0]
+      return eDate === payload.date
+    })
+
+    if (hasEvent) {
+      return (
+        <svg x={cx - 6} y={cy - 6} width="12" height="12" viewBox="0 0 24 24" className="cursor-pointer text-destructive fill-destructive">
+          <circle cx="12" cy="12" r="10" stroke="white" strokeWidth="2" />
+        </svg>
+      )
+    }
+
+    return null
+  }
 
   const headerTitle = isCompare
     ? `Compare ${capped.length} ${level}${capped.length > 1 ? "s" : ""}`
     : `Charts · ${capped[0]?.name || ""}`
 
-  // ── Compare: narrow right sidebar, Amount spent only ───────────────────────
+  const currentCards = cardsForLevel(level)
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // COMPARE MODE — SIDEBAR DRAWER
+  // ═══════════════════════════════════════════════════════════════════════════
   if (isCompare) {
-    const spendTotal = Object.values(metricsByRow).reduce((s, m: any) => s + (Number(m.spend) || 0), 0)
+    const availableToAdd = ALL_METRICS.filter(m => !compareCharts.includes(m.key))
+
     return (
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l bg-background shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Compare · {level}</p>
-            <h2 className="font-semibold text-sm truncate" title={headerTitle}>{headerTitle}</h2>
-          </div>
-          <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/50 shrink-0">
-            <IconX className="size-4" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
-          <select value={granularity} onChange={e => setGranularity(e.target.value as any)}
-            className="h-8 px-2 text-xs rounded-lg border bg-background">
-            <option value="day">Day</option>
-            <option value="week">Week</option>
-            <option value="month">Month</option>
-          </select>
-          {overCap && (
-            <span className="text-[11px] text-amber-600">First {MAX_ROWS} of {rows.length}</span>
-          )}
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div>
-            <p className="text-xs text-muted-foreground">Amount spent</p>
-            <p className="text-2xl font-bold tabular-nums">{fmt$(spendTotal)}</p>
-          </div>
-          {loading ? (
-            <div className="flex items-center justify-center h-40 gap-2 text-sm text-muted-foreground">
-              <IconLoader2 className="size-4 animate-spin" /> Loading…
+      <TooltipProvider>
+        <div className="fixed inset-y-0 right-0 z-50 w-full max-w-xl border-l bg-background shadow-2xl flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Compare</p>
+              <h2 className="font-semibold text-sm truncate" title={headerTitle}>{headerTitle}</h2>
             </div>
-          ) : (
-            <>
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: MUTED }} />
-                  <YAxis tick={{ fontSize: 10, fill: MUTED }} width={52} tickFormatter={v => fmt$(Number(v))} />
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                    formatter={(v: any, name: any) => [fmt$(Number(v)), name]} />
-                  {capped.map((row, i) => (
-                    <Line key={row.id} type="monotone" dataKey={`row_${i}`} name={row.name}
-                      stroke={SERIES[i]} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-              <div className="flex flex-col gap-1.5">
-                {capped.map((row, i) => (
-                  <div key={row.id} className="flex items-center justify-between gap-2 text-xs">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="size-2.5 rounded-full shrink-0" style={{ background: SERIES[i] }} />
-                      <span className="text-muted-foreground truncate" title={row.name}>{row.name}</span>
-                    </div>
-                    <span className="tabular-nums font-medium shrink-0">{fmt$(Number(metricsByRow[row.id]?.spend) || 0)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  // ── Charts: large popup ────────────────────────────────────────────────────
-  return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
-        {/* header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
-          <div className="min-w-0">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">
-              {isCompare ? "Compare" : "Performance overview"} · {level}
-            </p>
-            <h2 className="font-semibold text-base truncate" title={headerTitle}>{headerTitle}</h2>
+            <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/50 shrink-0">
+              <IconX className="size-4" />
+            </button>
           </div>
-          <button onClick={onClose} className="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-muted/50 shrink-0">
-            <IconX className="size-5" />
-          </button>
-        </div>
 
-        {/* KPI cards */}
-        <div className="px-5 py-3 border-b shrink-0">
-          <div className="grid grid-cols-4 gap-3">
-            {cards.map(c => (
-              <button key={c.key}
-                onClick={() => {
-                  setMetric(c.key)
-                  setActiveCard(activeCard === c.key ? null : c.key)
-                  setTab("trends")
-                }}
-                className={cn(
-                  "text-left rounded-xl border p-3 transition-colors hover:bg-muted/30",
-                  activeCard === c.key && "ring-2 ring-primary/40 bg-primary/5",
-                )}
-              >
-                <p className="text-xs text-muted-foreground">{c.label}</p>
-                <p className="text-xl font-bold tabular-nums mt-1">{c.value}</p>
-                <p className="text-[10px] text-muted-foreground/70 mt-1 line-clamp-2">{c.desc}</p>
-              </button>
-            ))}
-          </div>
-          {overCap && (
-            <p className="text-xs text-amber-600 mt-2">
-              Showing first {MAX_ROWS} of {rows.length} selected items to keep Meta API requests safe.
-            </p>
-          )}
-        </div>
-
-        {/* controls row */}
-        <div className="flex items-center gap-2 px-5 py-2 border-b shrink-0 flex-wrap">
-          {/* tabs */}
-          <div className="flex items-center gap-1">
-            {(["trends", "breakdowns"] as Tab[]).map(t => (
+          {/* Tabs */}
+          <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
+            {(["trends", "breakdowns"] as const).map(t => (
               <button key={t} onClick={() => setTab(t)}
                 className={cn("h-8 px-3 text-sm rounded-lg capitalize transition-colors",
                   tab === t ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50")}>
-                {t}
+                {t === "trends" ? "Trends" : "Breakdown"}
               </button>
             ))}
+            <div className="ml-auto flex items-center gap-2">
+              {tab === "trends" ? (
+                <select value={granularity} onChange={e => setGranularity(e.target.value as any)}
+                  className="h-8 px-2 text-xs rounded-lg border bg-background">
+                  <option value="day">Day</option>
+                  <option value="week">Week</option>
+                  <option value="month">Month</option>
+                </select>
+              ) : (
+                <select value={compareBreakdown} onChange={e => setCompareBreakdown(e.target.value)}
+                  className="h-8 px-2 text-xs rounded-lg border bg-background max-w-[180px]">
+                  {BREAKDOWN_OPTS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+              )}
+            </div>
           </div>
-          <div className="h-5 w-px bg-border mx-1" />
-          {/* metric dropdown */}
-          <div className="relative">
-            <button onClick={() => setMetricMenuOpen(o => !o)}
-              className="flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border bg-background hover:bg-muted/50">
-              {metricLabel(metric)} <IconChevronDown className="size-3.5 text-muted-foreground" />
-            </button>
-            {metricMenuOpen && (
-              <div className="absolute top-full mt-1 left-0 z-40 bg-popover border rounded-lg shadow-lg py-1 min-w-[200px] max-h-72 overflow-y-auto">
-                {METRIC_GROUPS.map(g => (
-                  <div key={g.group}>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-3 pt-2 pb-1">{g.group}</p>
-                    {g.items.map(m => (
-                      <button key={m.key}
-                        onClick={() => { setMetric(m.key); setMetricMenuOpen(false) }}
-                        className={cn("w-full text-left px-3 py-1.5 text-sm hover:bg-muted/50",
-                          metric === m.key && "bg-primary/10 text-primary font-medium")}>
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                ))}
+
+          {/* Charts list */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {overCap && (
+              <div className="text-[11px] text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Showing first {MAX_ROWS} of {rows.length} items to keep Meta API requests safe.
               </div>
             )}
-          </div>
-          {tab === "trends" ? (
-            <select value={granularity} onChange={e => setGranularity(e.target.value as any)}
-              className="h-8 px-2 text-xs rounded-lg border bg-background">
-              <option value="day">Day</option>
-              <option value="week">Week</option>
-              <option value="month">Month</option>
-            </select>
-          ) : (
-            <select value={breakdown} onChange={e => setBreakdown(e.target.value)}
-              className="h-8 px-2 text-xs rounded-lg border bg-background max-w-[200px]">
-              {BREAKDOWN_OPTS.map(b => <option key={b.key} value={b.key}>{b.label}</option>)}
-            </select>
-          )}
-        </div>
 
-        {/* body */}
-        <div className="flex-1 overflow-y-auto p-5">
-          {loading && tab === "trends" ? (
-            <div className="flex items-center justify-center h-64 gap-2 text-sm text-muted-foreground">
-              <IconLoader2 className="size-4 animate-spin" /> Loading…
-            </div>
-          ) : tab === "trends" ? (
-            <>
-              <ResponsiveContainer width="100%" height={320}>
-                <LineChart data={trendData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
-                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: MUTED }} />
-                  <YAxis tick={{ fontSize: 10, fill: MUTED }} width={56}
-                    tickFormatter={v => metricFmt(metric)(Number(v))} />
-                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                    formatter={(v: any, name: any) => [metricFmt(metric)(Number(v)), name]} />
-                  {capped.length >= 2 && <Legend wrapperStyle={{ fontSize: 11 }} />}
-                  {capped.map((row, i) => (
-                    <Line key={row.id} type="monotone" dataKey={`row_${i}`}
-                      name={row.name} stroke={SERIES[i]} strokeWidth={2}
-                      dot={false} activeDot={{ r: 4 }} connectNulls />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
+            {compareCharts.map((mKey, chartIdx) => {
+              const data = tab === "trends"
+                ? getTrendDataForMetric(mKey)
+                : getBreakdownDataForMetric(mKey)
+              const hasError = capped.some(r => errors[r.id])
 
-              {/* legend list (names can be long) */}
-              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3">
-                {capped.map((row, i) => (
-                  <div key={row.id} className="flex items-center gap-1.5 text-xs">
-                    <span className="size-2.5 rounded-full" style={{ background: SERIES[i] }} />
-                    <span className="text-muted-foreground truncate max-w-[180px]" title={row.name}>{row.name}</span>
-                    {errors[row.id] && <span className="text-destructive">(error)</span>}
+              return (
+                <div key={mKey + chartIdx} className="border rounded-xl p-3 bg-card">
+                  {/* Chart header */}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-sm font-semibold cursor-help">{metricLabel(mKey)}</span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">{metricDesc(mKey)}</TooltipContent>
+                      </UITooltip>
+                    </div>
+                    {compareCharts.length > 1 && (
+                      <button
+                        onClick={() => setCompareCharts(prev => prev.filter((_, i) => i !== chartIdx))}
+                        className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-muted/50 text-muted-foreground"
+                        title="Remove chart"
+                      >
+                        <IconX className="size-3.5" />
+                      </button>
+                    )}
                   </div>
-                ))}
-              </div>
 
-              {/* historical edits when a card is active (single object) */}
-              {activeCard && capped.length === 1 && (
-                <div className="mt-5 rounded-xl border bg-card p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <IconHistory className="size-4 text-muted-foreground" />
-                    <p className="text-sm font-semibold">Historical edits · {metricLabel(activeCard)}</p>
-                  </div>
-                  {activities.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No historical edits found for this date range.</p>
+                  {/* Chart body */}
+                  {hasError ? (
+                    <div className="h-40 flex items-center justify-center text-xs text-destructive">
+                      Failed to load chart data.
+                    </div>
+                  ) : data.length === 0 ? (
+                    <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">
+                      No data available.
+                    </div>
+                  ) : tab === "trends" ? (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
+                        <XAxis dataKey="label" tick={{ fontSize: 10, fill: MUTED }} />
+                        <YAxis tick={{ fontSize: 10, fill: MUTED }} width={52} tickFormatter={v => metricFmt(mKey)(Number(v))} />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any, name: any) => [metricFmt(mKey)(Number(v)), name]} />
+                        {capped.length >= 2 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+                        {capped.map((row, i) => (
+                          <Line key={row.id} type="monotone" dataKey={`row_${i}`} name={row.name}
+                            stroke={SERIES[i]} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+                        ))}
+                      </LineChart>
+                    </ResponsiveContainer>
                   ) : (
-                    <ul className="space-y-1.5 max-h-48 overflow-y-auto">
-                      {activities.map((e, i) => (
-                        <li key={i} className="flex items-start gap-3 text-xs">
-                          <span className="tabular-nums text-muted-foreground w-36 shrink-0">
-                            {e.time ? new Date(e.time).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "—"}
-                          </span>
-                          <span className="font-medium">{e.summary}</span>
-                          {e.actor && <span className="text-muted-foreground">· {e.actor}</span>}
-                        </li>
-                      ))}
-                    </ul>
+                    <ResponsiveContainer width="100%" height={Math.max(200, data.length * 24)}>
+                      <BarChart data={data} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => metricFmt(mKey)(Number(v))} />
+                        <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: MUTED }} width={120} interval={0} />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any, name: any) => [metricFmt(mKey)(Number(v)), name]} />
+                        {capped.length >= 2 && <Legend wrapperStyle={{ fontSize: 11 }} />}
+                        {capped.map((row, i) => (
+                          <Bar key={row.id} dataKey={`row_${i}`} name={row.name}
+                            fill={SERIES[i]} radius={[3, 3, 3, 3]} maxBarSize={18} />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
                   )}
                 </div>
-              )}
-            </>
-          ) : breakdownData.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-16">No breakdown data</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={Math.max(280, breakdownData.length * 44)}>
-              {/* grouped horizontal bars, NOT stacked */}
-              <BarChart data={breakdownData} layout="vertical" margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID} horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10, fill: MUTED }}
-                  tickFormatter={v => metricFmt(metric)(Number(v))} />
-                <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: MUTED }} width={120}
-                  interval={0} />
-                <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}
-                  formatter={(v: any, name: any) => [metricFmt(metric)(Number(v)), name]} />
-                {capped.length >= 2 && <Legend wrapperStyle={{ fontSize: 11 }} />}
-                {capped.map((row, i) => (
-                  <Bar key={row.id} dataKey={`row_${i}`} name={row.name} fill={SERIES[i]}
-                    radius={[3, 3, 3, 3]} maxBarSize={28} />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          )}
+              )
+            })}
 
-          {/* Charts single-object: Demographics + Platform */}
-          {!isCompare && capped.length === 1 && (
-            <div className="mt-6 border-t pt-5">
+            {/* Add chart button */}
+            <div className="relative">
+              <button
+                onClick={() => setAddChartOpen(o => !o)}
+                disabled={availableToAdd.length === 0}
+                className="w-full h-10 flex items-center justify-center gap-2 text-sm border border-dashed rounded-xl hover:bg-muted/50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <IconPlus className="size-4" /> Add chart
+              </button>
+              {addChartOpen && availableToAdd.length > 0 && (
+                <div className="absolute bottom-12 left-0 right-0 z-10 bg-background border rounded-xl shadow-xl max-h-72 overflow-y-auto">
+                  {METRIC_GROUPS.map(g => (
+                    <div key={g.group}>
+                      <p className="px-3 pt-2 pb-1 text-[10px] uppercase tracking-wide text-muted-foreground sticky top-0 bg-background">{g.group}</p>
+                      {g.items.filter(m => availableToAdd.includes(m as any)).map(m => (
+                        <button key={m.key}
+                          onClick={() => {
+                            setCompareCharts(prev => [...prev, m.key])
+                            setAddChartOpen(false)
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between">
+                          <span>{m.label}</span>
+                          <IconPlus className="size-3.5 text-muted-foreground" />
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </TooltipProvider>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CHARTS MODE — LARGE POPUP (SINGLE OBJECT)
+  // ═══════════════════════════════════════════════════════════════════════════
+  const trendData = getTrendDataForMetric(metric)
+  const spendTotal = totals.spend
+
+  return (
+    <TooltipProvider>
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+        <div className="bg-background rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Charts</p>
+              <h2 className="font-semibold text-base truncate" title={headerTitle}>{headerTitle}</h2>
+            </div>
+            <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/50">
+              <IconX className="size-4" />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+            {/* KPI Cards (level-based) */}
+            <div className="grid grid-cols-3 gap-3">
+              {currentCards.map(c => {
+                const value = totals[c.key as keyof typeof totals] ?? 0
+                return (
+                  <button key={c.key}
+                    onClick={() => { setActiveCard(c.key); setMetric(c.key) }}
+                    className={cn("text-left rounded-xl border p-3 hover:bg-muted/30 transition-colors",
+                      activeCard === c.key ? "border-primary bg-primary/5" : "bg-card")}>
+                    <div className="flex items-center gap-1 mb-1">
+                      <UITooltip>
+                        <TooltipTrigger asChild>
+                          <span className="text-[11px] text-muted-foreground cursor-help">{c.label}</span>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">{metricDesc(c.key)}</TooltipContent>
+                      </UITooltip>
+                    </div>
+                    <p className="text-xl font-bold tabular-nums">{metricFmt(c.key)(value)}</p>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Filter Row */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Time filter */}
+              <select value={granularity} onChange={e => setGranularity(e.target.value as any)}
+                className="h-9 px-3 text-sm rounded-lg border bg-background">
+                <option value="day">Day</option>
+                <option value="week">Week</option>
+                <option value="month">Month</option>
+              </select>
+
+              {/* Activity History */}
+              <select value={activityFilter} onChange={e => setActivityFilter(e.target.value)}
+                className="h-9 px-3 text-sm rounded-lg border bg-background">
+                <option value="all">All activity</option>
+                <option value="budget">Budget/Bid changes</option>
+                <option value="status">Status changes</option>
+              </select>
+
+              {/* Customize */}
+              <div className="relative ml-auto">
+                <button onClick={() => setCustomizeOpen(o => !o)}
+                  className="h-9 px-3 text-sm rounded-lg border bg-background flex items-center gap-1.5 hover:bg-muted/50">
+                  <IconSettings className="size-4" /> Customise
+                  <IconChevronDown className="size-3.5" />
+                </button>
+                {customizeOpen && (
+                  <div className="absolute right-0 top-10 z-10 w-72 bg-background border rounded-xl shadow-xl">
+                    {/* Tabs */}
+                    <div className="flex border-b">
+                      {(["metrics", "preferences"] as const).map(t => (
+                        <button key={t} onClick={() => setCustomizeTab(t)}
+                          className={cn("flex-1 h-9 text-sm capitalize border-b-2",
+                            customizeTab === t ? "border-primary text-primary font-medium" : "border-transparent text-muted-foreground")}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+
+                    {customizeTab === "metrics" ? (
+                      <div className="p-3 max-h-80 overflow-y-auto">
+                        <p className="text-[11px] text-muted-foreground mb-2">{selectedMetrics.length} of {MAX_ACTIVE_METRICS} metrics selected</p>
+                        {METRIC_GROUPS.map(g => (
+                          <div key={g.group} className="mb-2">
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{g.group}</p>
+                            {g.items.map(m => {
+                              const checked = selectedMetrics.includes(m.key)
+                              const disabled = !checked && selectedMetrics.length >= MAX_ACTIVE_METRICS
+                              return (
+                                <label key={m.key} className={cn("flex items-center gap-2 py-1 text-sm", disabled ? "opacity-50" : "cursor-pointer")}>
+                                  <input type="checkbox" checked={checked} disabled={disabled}
+                                    onChange={() => {
+                                      setSelectedMetrics(prev =>
+                                        checked ? prev.filter(k => k !== m.key) : [...prev, m.key]
+                                      )
+                                    }} />
+                                  <span>{m.label}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-3 space-y-3">
+                        <label className="flex items-center justify-between text-sm">
+                          <div>
+                            <p>Your similar ad sets</p>
+                            <p className="text-[11px] text-muted-foreground">Show benchmarks for similar ad sets</p>
+                          </div>
+                          <input type="checkbox" checked={prefSimilar} onChange={e => setPrefSimilar(e.target.checked)} />
+                        </label>
+                        <label className="flex items-center justify-between text-sm">
+                          <div>
+                            <p>Businesses like yours</p>
+                            <p className="text-[11px] text-muted-foreground">Show benchmarks for similar businesses</p>
+                          </div>
+                          <input type="checkbox" checked={prefBenchmark} onChange={e => setPrefBenchmark(e.target.checked)} />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Trendline chart with historical edit markers */}
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-sm font-semibold mb-3">{metricLabel(metric)} over time</p>
+              {trendData.length === 0 ? (
+                <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">No trend data</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={trendData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: MUTED }} />
+                    <YAxis tick={{ fontSize: 11, fill: MUTED }} width={56} tickFormatter={v => metricFmt(metric)(Number(v))} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any) => [metricFmt(metric)(Number(v)), metricLabel(metric)]} />
+                    <Line type="monotone" dataKey="row_0" name={capped[0]?.name}
+                      stroke={SERIES[0]} strokeWidth={2} dot={<CustomDot />} activeDot={{ r: 5 }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+
+              {/* Historical edits panel */}
+              {filteredActivities.length > 0 && (
+                <div className="mt-3 border-t pt-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <IconHistory className="size-3.5 text-muted-foreground" />
+                    <p className="text-xs font-medium">Historical edits ({filteredActivities.length})</p>
+                  </div>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {filteredActivities.slice(0, 20).map((e, i) => (
+                      <div key={i} className="flex items-start gap-2 text-[11px]">
+                        <span className="text-muted-foreground tabular-nums shrink-0">
+                          {e.time ? new Date(e.time).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "2-digit" }) : ""}
+                        </span>
+                        <span className="text-foreground">{e.summary}{e.actor ? ` · ${e.actor}` : ""}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Demographics + Platform sections */}
+            <div className="border-t pt-5">
               <div className="flex items-center gap-1 mb-3">
                 {(["demographics", "platform"] as const).map(s => (
                   <button key={s} onClick={() => setChartsSub(s)}
@@ -582,10 +811,10 @@ export function PerformancePopup({
               {chartsSub === "demographics" ? (
                 <section className="rounded-xl border bg-card p-4">
                   <p className="text-sm font-semibold mb-3">Age and gender distribution · {metricLabel(metric)}</p>
-                  {demoRows.length === 0 ? (
+                  {demoBarData.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-8">No demographic data</p>
                   ) : (
-                    <ResponsiveContainer width="100%" height={Math.max(240, demoRows.length * 20)}>
+                    <ResponsiveContainer width="100%" height={Math.max(240, demoBarData.length * 24)}>
                       <BarChart data={demoBarData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={GRID} horizontal={false} />
                         <XAxis type="number" tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => metricFmt(metric)(Number(v))} />
@@ -598,26 +827,83 @@ export function PerformancePopup({
                 </section>
               ) : (
                 <section className="rounded-xl border bg-card p-4">
-                  <p className="text-sm font-semibold mb-3">Placement per platform · {metricLabel(metric)}</p>
-                  {platRows.length === 0 ? (
+                  <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                    <p className="text-sm font-semibold">Placement per platform</p>
+                    {/* Device filter */}
+                    <select value={deviceFilter} onChange={e => setDeviceFilter(e.target.value as any)}
+                      className="h-8 px-2 text-xs rounded-lg border bg-background">
+                      <option value="both">Mobile and desktop</option>
+                      <option value="mobile">Mobile</option>
+                      <option value="desktop">Desktop</option>
+                    </select>
+                  </div>
+
+                  {/* Dual metric filters */}
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
+                    <select value={platMetric1} onChange={e => setPlatMetric1(e.target.value)}
+                      className="h-8 px-2 text-xs rounded-lg border bg-background">
+                      <option value="reach">Reach</option>
+                      <option value="impressions">Impressions</option>
+                    </select>
+                    <select value={platMetric2} onChange={e => setPlatMetric2(e.target.value)}
+                      className="h-8 px-2 text-xs rounded-lg border bg-background">
+                      <option value="results">Results</option>
+                      <option value="spend">Amount spent</option>
+                      <option value="purchases">Website purchases</option>
+                    </select>
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground mb-3">
+                    About placement results — Ad delivery is optimised to allocate your budget to the placements likely to perform best with your audience, based on your targeting and bid amount.
+                  </p>
+
+                  {platBarData.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-8">No platform data</p>
                   ) : (
                     <ResponsiveContainer width="100%" height={Math.max(240, platBarData.length * 34)}>
-                      <BarChart data={platBarData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => metricFmt(metric)(Number(v))} />
-                        <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: MUTED }} width={150} interval={0} />
-                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any) => [metricFmt(metric)(Number(v)), metricLabel(metric)]} />
-                        <Bar dataKey="value" fill={SERIES[0]} radius={[3, 3, 3, 3]} maxBarSize={24} />
+                      <BarChart data={platBarData} margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+                        <XAxis dataKey="label" tick={{ fontSize: 9, fill: MUTED }} interval={0} angle={-15} textAnchor="end" height={60} />
+                        <YAxis tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => fmtN(Number(v))} />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Bar dataKey="metric1" name={metricLabel(platMetric1)} fill={SERIES[0]} radius={[3, 3, 0, 0]} maxBarSize={32} />
+                        <Bar dataKey="metric2" name={metricLabel(platMetric2)} fill={SERIES[3]} radius={[3, 3, 0, 0]} maxBarSize={32} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
                 </section>
               )}
             </div>
-          )}
+
+            {/* Download Reports Block */}
+            <div className="rounded-xl border bg-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <p className="text-sm font-semibold mb-1">See where your ads appeared</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Download delivery reports to see where your ads appeared. Reports show the last 30 days of available data for Audience Network, Facebook in-stream reels and Ads on Facebook Reels. Recent data may be delayed by a few days. Learn more
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    const csvRows = platBarData.map(r => ({ label: r.label, value: `${metricLabel(platMetric1)}: ${r.metric1}, ${metricLabel(platMetric2)}: ${r.metric2}` }))
+                    if (csvRows.length === 0) {
+                      const demoRows = demoBarData.map(r => ({ label: r.label, value: r.value }))
+                      downloadCsv("placement_report.csv", demoRows)
+                    } else {
+                      downloadCsv("placement_report.csv", csvRows)
+                    }
+                  }}
+                  className="h-9 px-3 text-sm rounded-lg border bg-background flex items-center gap-1.5 hover:bg-muted/50 shrink-0"
+                >
+                  <IconDownload className="size-4" /> Download reports
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   )
 }
