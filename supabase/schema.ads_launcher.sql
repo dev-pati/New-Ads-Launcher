@@ -203,52 +203,82 @@ CREATE TABLE org_invitations (
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION is_org_member(check_org_id UUID)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ads_launcher, public
+AS $$
   SELECT EXISTS (
     SELECT 1 FROM org_members
     WHERE org_id = check_org_id AND user_id = current_account_id()
   );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$;
 
 CREATE OR REPLACE FUNCTION is_org_admin(check_org_id UUID)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ads_launcher, public
+AS $$
   SELECT EXISTS (
     SELECT 1 FROM org_members
     WHERE org_id = check_org_id AND user_id = current_account_id() AND role = 'admin'
   );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$;
 
 CREATE OR REPLACE FUNCTION can_edit_ads(check_org_id UUID)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ads_launcher, public
+AS $$
   SELECT EXISTS (
     SELECT 1 FROM org_members
     WHERE org_id = check_org_id AND user_id = current_account_id() AND role IN ('admin', 'editor', 'launcher')
   );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$;
 
 CREATE OR REPLACE FUNCTION can_delete_ads(check_org_id UUID)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ads_launcher, public
+AS $$
   SELECT EXISTS (
     SELECT 1 FROM org_members
     WHERE org_id = check_org_id AND user_id = current_account_id() AND role IN ('admin', 'editor')
   );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$;
 
 CREATE OR REPLACE FUNCTION can_upload_media(check_org_id UUID)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ads_launcher, public
+AS $$
   SELECT EXISTS (
     SELECT 1 FROM org_members
     WHERE org_id = check_org_id AND user_id = current_account_id() AND role IN ('admin', 'editor', 'launcher', 'uploader')
   );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$;
 
 CREATE OR REPLACE FUNCTION can_write_comments(check_org_id UUID)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ads_launcher, public
+AS $$
   SELECT EXISTS (
     SELECT 1 FROM org_members
     WHERE org_id = check_org_id AND user_id = current_account_id() AND role IN ('admin', 'editor', 'launcher', 'uploader', 'commenter')
   );
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+$$;
 
 -- ============================================================
 -- 6. FACEBOOK CONNECTIONS

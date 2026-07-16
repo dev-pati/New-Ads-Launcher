@@ -40,45 +40,96 @@ begin
 end $$;
 
 -- 3) Role helpers (custom-auth lineage: current_account_id)
+-- Pin search_path to prevent SECURITY DEFINER search_path hijack.
 create or replace function ads_launcher.can_edit_ads(check_org_id uuid)
-returns boolean as $$
+returns boolean
+language sql
+security definer
+stable
+set search_path = ads_launcher, public
+as $$
   select exists (
-    select 1 from ads_launcher.org_members
+    select 1 from org_members
     where org_id = check_org_id
-      and user_id = ads_launcher.current_account_id()
+      and user_id = current_account_id()
       and role in ('admin', 'editor', 'launcher')
   );
-$$ language sql security definer stable;
+$$;
 
 create or replace function ads_launcher.can_delete_ads(check_org_id uuid)
-returns boolean as $$
+returns boolean
+language sql
+security definer
+stable
+set search_path = ads_launcher, public
+as $$
   select exists (
-    select 1 from ads_launcher.org_members
+    select 1 from org_members
     where org_id = check_org_id
-      and user_id = ads_launcher.current_account_id()
+      and user_id = current_account_id()
       and role in ('admin', 'editor')
   );
-$$ language sql security definer stable;
+$$;
 
 create or replace function ads_launcher.can_upload_media(check_org_id uuid)
-returns boolean as $$
+returns boolean
+language sql
+security definer
+stable
+set search_path = ads_launcher, public
+as $$
   select exists (
-    select 1 from ads_launcher.org_members
+    select 1 from org_members
     where org_id = check_org_id
-      and user_id = ads_launcher.current_account_id()
+      and user_id = current_account_id()
       and role in ('admin', 'editor', 'launcher', 'uploader')
   );
-$$ language sql security definer stable;
+$$;
 
 create or replace function ads_launcher.can_write_comments(check_org_id uuid)
-returns boolean as $$
+returns boolean
+language sql
+security definer
+stable
+set search_path = ads_launcher, public
+as $$
   select exists (
-    select 1 from ads_launcher.org_members
+    select 1 from org_members
     where org_id = check_org_id
-      and user_id = ads_launcher.current_account_id()
+      and user_id = current_account_id()
       and role in ('admin', 'editor', 'launcher', 'uploader', 'commenter')
   );
-$$ language sql security definer stable;
+$$;
+
+-- Also harden base membership helpers if present
+create or replace function ads_launcher.is_org_member(check_org_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = ads_launcher, public
+as $$
+  select exists (
+    select 1 from org_members
+    where org_id = check_org_id
+      and user_id = current_account_id()
+  );
+$$;
+
+create or replace function ads_launcher.is_org_admin(check_org_id uuid)
+returns boolean
+language sql
+security definer
+stable
+set search_path = ads_launcher, public
+as $$
+  select exists (
+    select 1 from org_members
+    where org_id = check_org_id
+      and user_id = current_account_id()
+      and role = 'admin'
+  );
+$$;
 
 -- 4) Missing org FKs (only if tables exist + FK not already present)
 do $$
