@@ -686,6 +686,7 @@ export default function InsightsPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* ════════════════ REPORT SECTIONS ═══════════════════════════ */}
+
         {(section === "top-creatives" || section === "admanage-ads" || section === "all-active-ads" ||
           section === "vs-mode" || section === "fatigued-ads" || section === "landing-pages" || section === "ads-l90d") && (
           <ReportsView type={section as ReportSection} />

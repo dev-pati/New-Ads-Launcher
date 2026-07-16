@@ -379,15 +379,29 @@ export interface CampaignInsight {
   impressions: string
   clicks: string
   reach?: string
+  frequency?: string
   cpc?: string
   cpm?: string
   ctr?: string
+  inline_link_clicks?: string
+  unique_clicks?: string
+  unique_inline_link_clicks?: string
+  unique_link_clicks_ctr?: string
   actions?: { action_type: string; value: string }[]
   action_values?: { action_type: string; value: string }[]
   cost_per_action_type?: { action_type: string; value: string }[]
+  video_avg_time_watched_actions?: { action_type: string; value: string }[]
   date_start: string
   date_stop: string
 }
+
+/** Shared insights subfields for Ads Manager ECOM columns. */
+const ADS_MANAGER_INSIGHT_FIELDS = [
+  "spend", "impressions", "clicks", "reach", "frequency", "cpm", "ctr",
+  "inline_link_clicks", "unique_clicks", "unique_inline_link_clicks", "unique_link_clicks_ctr",
+  "actions", "action_values", "cost_per_action_type",
+  "video_avg_time_watched_actions",
+].join(",")
 
 export interface Campaign {
   id: string
@@ -415,8 +429,8 @@ export async function getCampaigns(
   timeRange?: string
 ): Promise<Campaign[]> {
   const insightsParam = timeRange
-    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
-    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
+    ? `insights.time_range(${timeRange}){${ADS_MANAGER_INSIGHT_FIELDS}}`
+    : `insights.date_preset(${datePreset}){${ADS_MANAGER_INSIGHT_FIELDS}}`
   const fields = [
     "id", "name", "status", "effective_status", "objective",
     "daily_budget", "lifetime_budget", "budget_remaining", "spend_cap", "bid_strategy",
@@ -467,8 +481,8 @@ export async function getAdSets(
   timeRange?: string
 ): Promise<AdSet[]> {
   const insightsParam = timeRange
-    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
-    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
+    ? `insights.time_range(${timeRange}){${ADS_MANAGER_INSIGHT_FIELDS}}`
+    : `insights.date_preset(${datePreset}){${ADS_MANAGER_INSIGHT_FIELDS}}`
   const fields = [
     "id", "name", "status", "effective_status", "campaign_id", "campaign{name}",
     "daily_budget", "lifetime_budget", "budget_remaining", "is_dynamic_creative",
@@ -537,19 +551,29 @@ export async function getAds(
   datePreset: string = "last_7d",
   timeRange?: string
 ): Promise<Ad[]> {
+  // Ads path is the heaviest: many rows × creative × insights. Keep slim creative
+  // + small page size; unique_* scalars are cheap and needed by ECOM columns.
+  const adsInsightFields = [
+    "spend", "impressions", "clicks", "reach", "frequency", "cpm", "ctr",
+    "inline_link_clicks", "unique_clicks", "unique_inline_link_clicks", "unique_link_clicks_ctr",
+    "actions", "action_values", "cost_per_action_type",
+    "video_avg_time_watched_actions",
+  ].join(",")
   const insightsParam = timeRange
-    ? `insights.time_range(${timeRange}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
-    : `insights.date_preset(${datePreset}){spend,impressions,clicks,reach,actions,action_values,cost_per_action_type}`
+    ? `insights.time_range(${timeRange}){${adsInsightFields}}`
+    : `insights.date_preset(${datePreset}){${adsInsightFields}}`
   const fields = [
     "id", "name", "status", "effective_status", "adset_id", "campaign_id",
-    "creative{id,name,title,body,image_url,thumbnail_url,object_story_spec{link_data{message,name,description},video_data{message,title,image_url}},asset_feed_spec{bodies{text},titles{text},descriptions{text}}}",
+    "creative{id,name,title,body,image_url,thumbnail_url,asset_feed_spec{bodies{text},titles{text},descriptions{text}}}",
     "created_time",
     insightsParam,
   ].join(",")
 
-  let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
+  // Page size 25 — Meta rejects large multi-edge ads payloads with
+  // "Please reduce the amount of data you're asking for".
+  let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`
   if (adSetId) {
-    url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
+    url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`
   }
 
   const ads = await fetchAllMetaPages<Ad & { creative?: any }>(url, "Failed to get ads")

@@ -34,6 +34,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
   { id: "roas",              label: "ROAS",                     headerLabel: "ROAS",               description: "Show this column in the manage table.", tab: "key_metrics", section: "results_spend",     sectionLabel: "Results and spend" },
   { id: "cost_per_purchase", label: "Cost Per Purchase",        headerLabel: "Cost/purchase",      description: "Show this column in the manage table.", tab: "key_metrics", section: "results_spend",     sectionLabel: "Results and spend" },
   { id: "cost_per_lead",     label: "Cost Per Lead",            headerLabel: "Cost/lead",          description: "Show this column in the manage table.", tab: "key_metrics", section: "results_spend",     sectionLabel: "Results and spend" },
+  { id: "shopify_score",     label: "Shopify Score",            headerLabel: "Shopify Score",      description: "Shopify score (requires BE integration).", tab: "key_metrics", section: "results_spend",   sectionLabel: "Results and spend" },
 
   // ── Key metrics: Delivery ─────────────────────────────────────────────────
   { id: "delivery",          label: "Delivery",                 headerLabel: "Delivery",           description: "Show this column in the manage table.", tab: "key_metrics", section: "delivery",          sectionLabel: "Delivery" },
@@ -46,12 +47,25 @@ export const COLUMN_DEFS: ColumnDef[] = [
   { id: "frequency",         label: "Frequency",                headerLabel: "Frequency",          description: "Show this column in the manage table.", tab: "key_metrics", section: "distribution",      sectionLabel: "Distribution" },
 
   // ── Key metrics: Engagement ───────────────────────────────────────────────
-  { id: "clicks",             label: "Clicks",                  headerLabel: "Clicks",             description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
-  { id: "ctr",                label: "CTR",                     headerLabel: "CTR",                description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
-  { id: "cpc",                label: "CPC",                     headerLabel: "CPC",                description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
-  { id: "add_to_cart",        label: "Add to Cart",             headerLabel: "Add to Cart",        description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "clicks",             label: "Clicks (all)",            headerLabel: "Clicks (all)",       description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "ctr",                label: "CTR (all)",               headerLabel: "CTR (all)",          description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "cpc",                label: "CPC (all)",               headerLabel: "CPC (all)",          description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "link_clicks",        label: "Link clicks",             headerLabel: "Link clicks",        description: "Inline link clicks.",                   tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "unique_clicks",      label: "Unique clicks (all)",     headerLabel: "Unique clicks",      description: "Unique people who clicked.",            tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "unique_link_clicks", label: "Unique link clicks",      headerLabel: "Unique link clicks", description: "Unique people who clicked a link.",     tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "unique_link_ctr",    label: "Unique CTR (link)",       headerLabel: "Unique CTR (link)",  description: "Unique link CTR.",                      tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "cost_per_unique_click", label: "Cost per unique click", headerLabel: "Cost/unique click", description: "Spend / unique clicks.",                tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "cost_per_link_click", label: "CPC (link click)",       headerLabel: "CPC (link)",         description: "Spend / link clicks.",                  tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "landing_page_views", label: "Landing page views",      headerLabel: "LPV",                description: "Landing page views.",                   tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "lpv_rate",           label: "LPV rate per link clicks", headerLabel: "LPV rate",          description: "Landing page views / link clicks.",     tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "content_views",      label: "Content views",           headerLabel: "Content views",      description: "ViewContent events.",                   tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "add_to_cart",        label: "Adds to cart",            headerLabel: "Adds to cart",       description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "cost_per_add_to_cart", label: "Cost per add to cart",  headerLabel: "Cost/ATC",           description: "Spend / adds to cart.",                 tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "initiate_checkout",  label: "Checkouts initiated",     headerLabel: "Checkouts",          description: "InitiateCheckout events.",              tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "cost_per_initiate_checkout", label: "Cost per checkout initiated", headerLabel: "Cost/checkout", description: "Spend / checkouts initiated.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
   { id: "leads",              label: "Leads",                   headerLabel: "Leads",              description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
   { id: "purchase_conv_rate", label: "Purchase Conversion Rate",headerLabel: "Purchase conv. %",   description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
+  { id: "avg_watch_time",     label: "Video average play time", headerLabel: "Avg. watch time",    description: "Average video play time (seconds).",    tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
   { id: "video_100",          label: "Video 100% Watched",      headerLabel: "Video 100%",         description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
   { id: "video_25",           label: "Video 25% Watched",       headerLabel: "Video 25%",          description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
   { id: "video_50",           label: "Video 50% Watched",       headerLabel: "Video 50%",          description: "Show this column in the manage table.", tab: "key_metrics", section: "engagement",        sectionLabel: "Engagement" },
@@ -116,6 +130,21 @@ export const DEFAULT_PRESETS: ColumnPreset[] = [
     label: "Delivery",
     isDefault: true,
     columns: ["spend", "delivery", "impressions", "reach", "frequency", "cpm"],
+  },
+  {
+    id: "ecom",
+    label: "ECOM",
+    isDefault: true,
+    columns: [
+      "attribution_setting", "budget", "spend", "roas", "purchase_value",
+      "impressions", "frequency", "cpm",
+      "cost_per_unique_click", "unique_link_ctr", "ctr", "cost_per_link_click",
+      "unique_link_clicks", "lpv_rate", "content_views",
+      "add_to_cart", "cost_per_add_to_cart",
+      "initiate_checkout", "cost_per_initiate_checkout",
+      "purchases", "cost_per_purchase", "shopify_score",
+      "avg_watch_time", "delivery"
+    ],
   },
 ]
 

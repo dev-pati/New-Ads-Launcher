@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     }
 
     const dateKey  = timeRange ? `tr:${timeRange}` : `dp:${datePreset}`
-    const cacheKey = `ads:${adAccountId}:${adSetId || "all"}:${dateKey}`
+    const cacheKey = `ads:v4:${adAccountId}:${adSetId || "all"}:${dateKey}`
 
     if (forceRefresh) clearCachedFacebookMetadata(cacheKey)
 

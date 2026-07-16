@@ -117,14 +117,16 @@ function CalGrid({
         {cells.map((day, i) => {
           if (day === null) return <div key={i} />
           const date = new Date(year, month, day)
+          const isFuture = date > todayDate
           return (
             <div
               key={i}
-              onClick={() => onDay(date)}
-              onMouseEnter={() => onHover(date)}
+              onClick={() => { if (!isFuture) onDay(date) }}
+              onMouseEnter={() => { if (!isFuture) onHover(date) }}
               onMouseLeave={() => onHover(null)}
               className={cn(
                 "h-7 flex items-center justify-center text-xs cursor-pointer transition-colors",
+                isFuture && "text-muted-foreground/30 pointer-events-none",
                 dayClass(date)
               )}
             >
@@ -197,6 +199,8 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, onChange }:
   }
 
   const handleDay = (d: Date) => {
+    const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0)
+    if (d > todayDate) return
     setPending("custom")
     if (!needEnd || (rangeStart && rangeEnd)) {
       setRangeStart(d); setRangeEnd(null); setNeedEnd(true)
@@ -229,6 +233,9 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, onChange }:
     if (leftMonth === 11) { setLeftMonth(0); setLeftYear(y => y + 1) }
     else setLeftMonth(m => m + 1)
   }
+
+  const today = new Date()
+  const disableNextMonth = rightYear > today.getFullYear() || (rightYear === today.getFullYear() && rightMonth >= today.getMonth())
 
   const btnLabel = (() => {
     if (preset === "custom" && customStart && customEnd)
@@ -299,7 +306,11 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, onChange }:
 
               <button
                 onClick={nextMonth}
-                className="absolute right-0 top-[1px] p-1 rounded hover:bg-muted/50 transition-colors"
+                disabled={disableNextMonth}
+                className={cn(
+                  "absolute right-0 top-[1px] p-1 rounded transition-colors",
+                  disableNextMonth ? "opacity-30 cursor-not-allowed" : "hover:bg-muted/50"
+                )}
               >
                 <IconChevronRight className="size-4 text-muted-foreground" />
               </button>

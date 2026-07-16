@@ -12,6 +12,8 @@ import {
   IconChevronRight as IconDrillRight,
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
 } from "@tabler/icons-react"
+import { type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
+import { PerformancePopup } from "@/components/ads-manager/PerformancePopup"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
 import { Label } from "@/components/ui/label"
@@ -34,9 +36,17 @@ interface Insight {
   impressions: string
   clicks: string
   reach?: string
+  frequency?: string
+  cpm?: string
+  ctr?: string
+  inline_link_clicks?: string
+  unique_clicks?: string
+  unique_inline_link_clicks?: string
+  unique_link_clicks_ctr?: string
   actions?: { action_type: string; value: string }[]
   action_values?: { action_type: string; value: string }[]
   cost_per_action_type?: { action_type: string; value: string }[]
+  video_avg_time_watched_actions?: { action_type: string; value: string }[]
 }
 
 interface Campaign {
@@ -107,6 +117,9 @@ const ACTION_ALIASES: Record<string, string[]> = {
   lead: ["lead", "omni_lead", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped", "onsite_conversion.lead"],
   link_click: ["link_click", "omni_link_click"],
   add_to_cart: ["omni_add_to_cart", "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart", "onsite_conversion.add_to_cart"],
+  initiate_checkout: ["offsite_conversion.fb_pixel_initiate_checkout", "initiate_checkout", "omni_initiate_checkout"],
+  view_content: ["offsite_conversion.fb_pixel_view_content", "omni_view_content", "view_content"],
+  landing_page_view: ["landing_page_view", "omni_landing_page_view"],
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100]
@@ -273,6 +286,59 @@ function SortTh({ label, field, sortField, sortDir, onSort, className }: {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// Per-column header context menu: sort + column management actions (Meta-style).
+function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMoveRight, onRemove, canMoveLeft, canMoveRight }: {
+  colId: string
+  label: string
+  onSortAsc: () => void
+  onSortDesc: () => void
+  onMoveLeft: () => void
+  onMoveRight: () => void
+  onRemove: () => void
+  canMoveLeft: boolean
+  canMoveRight: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [open])
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10"
+        title="Column options"
+      >
+        <IconChevronDown className="size-3 opacity-50" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-6 z-50 w-44 bg-background border rounded-lg shadow-xl py-1 text-xs">
+          <button onClick={() => { onSortAsc(); setOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 flex items-center gap-2">
+            <IconArrowUp className="size-3.5" /> Sort ascending
+          </button>
+          <button onClick={() => { onSortDesc(); setOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 flex items-center gap-2">
+            <IconArrowDown className="size-3.5" /> Sort descending
+          </button>
+          <div className="my-1 border-t" />
+          <button onClick={() => { onMoveLeft(); setOpen(false) }} disabled={!canMoveLeft} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 disabled:opacity-40 flex items-center gap-2">
+            <IconChevronLeft className="size-3.5" /> Move left
+          </button>
+          <button onClick={() => { onMoveRight(); setOpen(false) }} disabled={!canMoveRight} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 disabled:opacity-40 flex items-center gap-2">
+            <IconChevronRight className="size-3.5" /> Move right
+          </button>
+          <button onClick={() => { onRemove(); setOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 text-destructive flex items-center gap-2">
+            <IconX className="size-3.5" /> Remove column
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AdsManagerPage() {
   const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
 
@@ -329,15 +395,34 @@ export default function AdsManagerPage() {
   const [defaultHeadline, setDefaultHeadline] = useState("")
   const [defaultCta, setDefaultCta] = useState("SHOP_NOW")
   const [defaultLink, setDefaultLink] = useState("")
-  const [columnOrder,       setColumnOrder]       = useState<string[]>(DEFAULT_PRESETS[1].columns)
+  const [columnOrder,       setColumnOrder]       = useState<string[]>(DEFAULT_PRESETS[4].columns)
   const [customPresets,     setCustomPresets]     = useState<ColumnPreset[]>([])
   const [colsOpen,          setColsOpen]          = useState(false)
   const [customizeColsOpen, setCustomizeColsOpen] = useState(false)
   const [breakdowns,        setBreakdowns]        = useState<string[]>([])
   const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
   const [breakdownError,    setBreakdownError]    = useState("")
+  const [performancePopup, setPerformancePopup] = useState<{ mode: "charts" | "compare"; rows: ReportRow[] } | null>(null)
 
   const router = useRouter()
+  const level: Level = tab === "campaigns" ? "campaign" : tab === "adsets" ? "adset" : "ad"
+  const drawerSince = datePreset === "custom" && customDateRange ? formatMetaDate(customDateRange.start) : ""
+  const drawerUntil = datePreset === "custom" && customDateRange ? formatMetaDate(customDateRange.end) : ""
+  const toReportRow = (node: { id: string; name: string }): ReportRow =>
+    ({ id: node.id, name: node.name, adId: tab === "ads" ? node.id : undefined })
+
+  // Open the big Meta-style popup. Compare uses the multi-selection when the clicked
+  // row is part of it; otherwise falls back to just the clicked row.
+  const openCompare = (clicked: { id: string; name: string }) => {
+    const rowsById = new Map(currentData.map(r => [r.id, r as { id: string; name: string }]))
+    const many = selectedIds.size > 1 && selectedIds.has(clicked.id)
+    const rows = many
+      ? Array.from(selectedIds).map(id => rowsById.get(id)).filter(Boolean).map(n => toReportRow(n as any))
+      : [toReportRow(clicked)]
+    setPerformancePopup({ mode: "compare", rows })
+  }
+  const openCharts = (clicked: { id: string; name: string }) =>
+    setPerformancePopup({ mode: "charts", rows: [toReportRow(clicked)] })
 
   const DEFAULTS_KEY = `adsmanager_defaults_${selectedAccountId}`
 
@@ -380,7 +465,7 @@ export default function AdsManagerPage() {
   // Load / save column state from localStorage
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("adsmanager_col_order")
+      const raw = localStorage.getItem("adsmanager_col_order_v2")
       if (raw) {
         const parsed = JSON.parse(raw) as string[]
         const valid = parsed.filter(id => id in COLUMN_MAP)
@@ -392,7 +477,7 @@ export default function AdsManagerPage() {
   }, [])
 
   useEffect(() => {
-    try { localStorage.setItem("adsmanager_col_order", JSON.stringify(columnOrder)) } catch {}
+    try { localStorage.setItem("adsmanager_col_order_v2", JSON.stringify(columnOrder)) } catch {}
   }, [columnOrder])
 
   useEffect(() => {
@@ -878,18 +963,108 @@ export default function AdsManagerPage() {
         return <span className="text-xs tabular-nums">${cpmVal.toFixed(2)}</span>
       }
 
-      case "frequency":
-        return <span className="text-xs">—</span>
+      case "frequency": {
+        if (ins?.frequency != null && ins.frequency !== "") {
+          return <span className="text-xs tabular-nums">{parseFloat(ins.frequency).toFixed(2)}</span>
+        }
+        const imp = parseFloat(ins?.impressions || "0")
+        const rch = parseFloat(ins?.reach || "0")
+        if (!imp || !rch) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{(imp / rch).toFixed(2)}</span>
+      }
 
       case "ctr": {
         if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
-        const ctrVal = (parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100
+        const ctrVal = ins.ctr != null && ins.ctr !== ""
+          ? parseFloat(ins.ctr)
+          : (parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100
         return <span className="text-xs tabular-nums">{ctrVal.toFixed(2)}%</span>
       }
 
       case "cpc": {
         if (!ins || !ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-xs">—</span>
         return <span className="text-xs tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
+      }
+
+      case "link_clicks": {
+        const n = parseInt(ins?.inline_link_clicks || "0")
+        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+      }
+
+      case "unique_clicks": {
+        const n = parseInt(ins?.unique_clicks || "0")
+        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+      }
+
+      case "unique_link_clicks": {
+        const n = parseInt(ins?.unique_inline_link_clicks || "0")
+        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+      }
+
+      case "unique_link_ctr": {
+        if (ins?.unique_link_clicks_ctr != null && ins.unique_link_clicks_ctr !== "") {
+          return <span className="text-xs tabular-nums">{parseFloat(ins.unique_link_clicks_ctr).toFixed(2)}%</span>
+        }
+        const rch = parseFloat(ins?.reach || "0")
+        const ulc = parseFloat(ins?.unique_inline_link_clicks || "0")
+        if (!rch || !ulc) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{((ulc / rch) * 100).toFixed(2)}%</span>
+      }
+
+      case "cost_per_unique_click": {
+        const n = parseFloat(ins?.unique_clicks || "0")
+        if (!n) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+      }
+
+      case "cost_per_link_click": {
+        const n = parseFloat(ins?.inline_link_clicks || "0")
+        if (!n) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+      }
+
+      case "landing_page_views": {
+        const n = getActionValue(ins, "landing_page_view")
+        return <span className="text-xs tabular-nums">{n || "—"}</span>
+      }
+
+      case "lpv_rate": {
+        const lpv = getActionValue(ins, "landing_page_view")
+        const lc = parseFloat(ins?.inline_link_clicks || "0")
+        if (!lpv || !lc) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">{((lpv / lc) * 100).toFixed(2)}%</span>
+      }
+
+      case "content_views": {
+        const n = getActionValue(ins, "view_content")
+        return <span className="text-xs tabular-nums">{n || "—"}</span>
+      }
+
+      case "cost_per_add_to_cart": {
+        const n = getActionValue(ins, "add_to_cart")
+        if (!n) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+      }
+
+      case "initiate_checkout": {
+        const n = getActionValue(ins, "initiate_checkout")
+        return <span className="text-xs tabular-nums">{n || "—"}</span>
+      }
+
+      case "cost_per_initiate_checkout": {
+        const n = getActionValue(ins, "initiate_checkout")
+        if (!n) return <span className="text-xs">—</span>
+        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+      }
+
+      case "avg_watch_time": {
+        const arr = ins?.video_avg_time_watched_actions
+        const sec = arr?.[0] ? parseFloat(arr[0].value || "0") : 0
+        if (!sec) return <span className="text-xs">—</span>
+        const s = Math.round(sec)
+        const mm = Math.floor(s / 60)
+        const rr = s % 60
+        return <span className="text-xs tabular-nums">{mm > 0 ? `${mm}:${String(rr).padStart(2, "0")}` : `0:${String(rr).padStart(2, "0")}`}</span>
       }
 
       case "purchases":
@@ -924,6 +1099,11 @@ export default function AdsManagerPage() {
         if (!ins || l === 0) return <span className="text-xs">—</span>
         return <span className="text-xs tabular-nums">${(spend / l).toFixed(2)}</span>
       }
+
+      case "shopify_score":
+        // ponytail: no Shopify data source wired yet — column exists for CSV-order parity.
+        // Upgrade: add /api/shopify/score + join by ad/adset/campaign id.
+        return <span className="text-xs tabular-nums">{(row as any).shopifyScore ?? (row as any).shopify_score ?? "—"}</span>
 
       case "leads":
         return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "lead") : "—"}</span>
@@ -1002,6 +1182,19 @@ export default function AdsManagerPage() {
         if (!ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-xs">—</span>
         return <span className="text-xs tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
       }
+      case "link_clicks":      { const n = parseInt(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_clicks":    { const n = parseInt(ins.unique_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_link_clicks": { const n = parseInt(ins.unique_inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_link_ctr":  { const v = parseFloat(ins.unique_link_clicks_ctr || "0"); return <span className="text-xs tabular-nums">{v ? `${v.toFixed(2)}%` : "—"}</span> }
+      case "cost_per_unique_click": { const n = parseFloat(ins.unique_clicks || "0"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
+      case "cost_per_link_click": { const n = parseFloat(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
+      case "landing_page_views": { const n = getVal("landing_page_view"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
+      case "lpv_rate":         { const lpv = getVal("landing_page_view"); const lc = parseFloat(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{lpv && lc ? `${((lpv/lc)*100).toFixed(2)}%` : "—"}</span> }
+      case "content_views":    { const n = getVal("view_content"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
+      case "cost_per_add_to_cart": { const n = getVal("add_to_cart"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
+      case "initiate_checkout": { const n = getVal("initiate_checkout"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
+      case "cost_per_initiate_checkout": { const n = getVal("initiate_checkout"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
+      case "avg_watch_time":   { const sec = parseFloat(ins.video_avg_time_watched_actions?.[0]?.value || "0"); const s = Math.round(sec); const mm = Math.floor(s / 60); const rr = s % 60; return <span className="text-xs tabular-nums">{s ? (mm > 0 ? `${mm}:${String(rr).padStart(2, "0")}` : `0:${String(rr).padStart(2, "0")}`) : "—"}</span> }
       case "purchases":        { const p = getVal("omni_purchase"); return <span className="text-xs tabular-nums">{p || "—"}</span> }
       case "purchase_value":   { const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{formatMoneyAmount(value)}</span> }
       case "avg_order_value":  { const p = getVal("omni_purchase"); const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{p && value ? `$${(value / p).toFixed(2)}` : "—"}</span> }
@@ -1009,6 +1202,7 @@ export default function AdsManagerPage() {
       case "cost_per_purchase":{ const p = getVal("omni_purchase"); return <span className="text-xs tabular-nums">{p ? `$${(spend/p).toFixed(2)}` : "—"}</span> }
       case "leads":            { const l = getVal("lead"); return <span className="text-xs tabular-nums">{l || "—"}</span> }
       case "cost_per_lead":    { const l = getVal("lead"); return <span className="text-xs tabular-nums">{l ? `$${(spend/l).toFixed(2)}` : "—"}</span> }
+      case "shopify_score":    return <span className="text-xs tabular-nums">—</span>
       case "add_to_cart":      { const atc = getVal("add_to_cart"); return <span className="text-xs tabular-nums">{atc || "—"}</span> }
       case "video_views_3s":   { const v = getVal("video_view"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
       case "video_25":         { const v = getVal("video_p25_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
@@ -1283,6 +1477,17 @@ export default function AdsManagerPage() {
           <IconPencil className="size-3.5" />
           Edit{selectedIds.size > 0 && ` (${selectedIds.size})`}
         </button>
+        <button
+          disabled={selectedIds.size === 0}
+          onClick={() => {
+            const rowsById = new Map(currentData.map(r => [r.id, r as { id: string; name: string }]))
+            const rows = Array.from(selectedIds).map(id => rowsById.get(id)).filter(Boolean).map(n => toReportRow(n as any))
+            setPerformancePopup({ mode: "compare", rows })
+          }}
+          className="flex items-center gap-1.5 h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm disabled:opacity-40"
+        >
+          Compare{selectedIds.size > 0 && ` (${selectedIds.size})`}
+        </button>
 
         {selectedIds.size > 0 && (
           <div className="flex items-center gap-1.5 ml-2">
@@ -1459,24 +1664,37 @@ export default function AdsManagerPage() {
                 {tab === "ads" && (
                   <th className="w-20 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Preview</th>
                 )}
-                {columnOrder.map(colId => {
+                                {columnOrder.map((colId, i) => {
                   const col = COLUMN_MAP[colId]
                   if (!col) return null
-                  if (col.sortKey) {
-                    return (
-                      <SortTh
-                        key={colId}
-                        label={col.headerLabel}
-                        field={col.sortKey}
-                        sortField={sortField}
-                        sortDir={sortDir}
-                        onSort={handleSort}
-                      />
-                    )
-                  }
+                  const moveLeft = () => setColumnOrder(prev => { const n = [...prev]; [n[i-1], n[i]] = [n[i], n[i-1]]; return n })
+                  const moveRight = () => setColumnOrder(prev => { const n = [...prev]; [n[i], n[i+1]] = [n[i+1], n[i]]; return n })
+                  const remove = () => setColumnOrder(prev => prev.filter(id => id !== colId))
+                  const sortFieldObj = col.sortKey || colId
+                  const active = sortField === sortFieldObj
+                  
                   return (
-                    <th key={colId} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                      {col.headerLabel}
+                    <th key={colId} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap group">
+                      <div className="flex items-center gap-1">
+                        <div className="cursor-pointer hover:text-foreground transition-colors flex items-center gap-1" onClick={() => handleSort(sortFieldObj)}>
+                          {col.headerLabel}
+                          {active
+                            ? (sortDir === "asc" ? <IconArrowUp className="size-3 text-primary" /> : <IconArrowDown className="size-3 text-primary" />)
+                            : <IconArrowsUpDown className="size-3 opacity-0 group-hover:opacity-40" />
+                          }
+                        </div>
+                        <HeaderCellMenu
+                          colId={colId}
+                          label={col.headerLabel}
+                          onSortAsc={() => { setSortField(sortFieldObj); setSortDir("asc") }}
+                          onSortDesc={() => { setSortField(sortFieldObj); setSortDir("desc") }}
+                          onMoveLeft={moveLeft}
+                          onMoveRight={moveRight}
+                          onRemove={remove}
+                          canMoveLeft={i > 0}
+                          canMoveRight={i < columnOrder.length - 1}
+                        />
+                      </div>
                     </th>
                   )
                 })}
@@ -1535,8 +1753,11 @@ export default function AdsManagerPage() {
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(c)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCharts(c)}>Charts</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCompare(c)}>Compare</button>
                               </div>
-                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{c.id}</p>
                             </div>
                           )}
                         </td>
@@ -1583,8 +1804,11 @@ export default function AdsManagerPage() {
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCharts(a)}>Charts</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCompare(a)}>Compare</button>
                               </div>
-                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
                             </div>
                           )}
                         </td>
@@ -1633,8 +1857,11 @@ export default function AdsManagerPage() {
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCharts(a)}>Charts</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCompare(a)}>Compare</button>
                               </div>
-                              <p className="text-xs text-[#8a8d91] font-mono mt-0.5">{a.id}</p>
                               {adSet && <p className="text-xs text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
                             </div>
                           )}
@@ -2102,20 +2329,9 @@ export default function AdsManagerPage() {
                     </div>
                   )}
 
-                  {/* ── IDs ── */}
                   <div className="space-y-2">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Details</p>
-                    <div className="rounded-xl border divide-y overflow-hidden text-xs">
-                      {[
-                        { label: "ID",          value: node.id },
-                        ...(isAdSet ? [{ label: "Campaign ID", value: node.campaign_id }] : []),
-                        ...(isAd    ? [{ label: "Ad Set ID",   value: node.adset_id }]   : []),
-                      ].map(row => (
-                        <div key={row.label} className="flex items-center justify-between px-3 py-2 bg-muted/10 hover:bg-muted/30 transition-colors">
-                          <span className="text-muted-foreground shrink-0 mr-3">{row.label}</span>
-                          <span className="font-mono text-foreground/80 truncate select-all">{row.value}</span>
-                        </div>
-                      ))}
+                    <div className="rounded-xl border overflow-hidden text-xs">
                       <button
                         className="w-full flex items-center gap-2 px-3 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors text-left"
                         onClick={() => {
@@ -2149,6 +2365,19 @@ export default function AdsManagerPage() {
           })()}
         </SheetContent>
       </Sheet>
+
+      {performancePopup && selectedAccountId && (
+        <PerformancePopup
+          mode={performancePopup.mode}
+          rows={performancePopup.rows}
+          level={level}
+          accountId={selectedAccountId}
+          datePreset={datePreset === "custom" ? "last_30d" : datePreset}
+          since={drawerSince}
+          until={drawerUntil}
+          onClose={() => setPerformancePopup(null)}
+        />
+      )}
 
     </div>
   )

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getDbCachedFacebookMetadata } from "../../facebook/_db-cache"
-import { adSnapshotFallback, datePresetToRange } from "@/lib/snapshot-fallback"
+import { adSnapshotFallback, campaignManagerSnapshotFallback, adsetManagerSnapshotFallback, datePresetToRange, clampTimeToToday } from "@/lib/snapshot-fallback"
+import { computeInsightMetrics, deliveryLabel, attributionLabel, budgetFromMinor, ObjectMeta } from "@/lib/insights-metrics"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,30 +10,72 @@ export const maxDuration = 60
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
-function pickResult(actions?: { action_type: string; value: string }[]) {
-  if (!actions?.length) return 0
-  const priority = [
-    "offsite_conversion.fb_pixel_purchase",
-    "purchase",
-    "lead",
-    "complete_registration",
-    "landing_page_view",
-    "link_click",
-    "post_engagement",
-  ]
-  for (const type of priority) {
-    const found = actions.find(a => a.action_type === type)
-    if (found) return parseInt(found.value || "0")
-  }
-  return 0
+type Level = "ad" | "adset" | "campaign"
+
+const LEVEL_ID_FIELD: Record<Level, string> = {
+  ad: "ad_id",
+  adset: "adset_id",
+  campaign: "campaign_id",
+}
+const LEVEL_NAME_FIELD: Record<Level, string> = {
+  ad: "ad_name",
+  adset: "adset_name",
+  campaign: "campaign_name",
 }
 
 async function batchFetch(token: string, requests: { method: string; relative_url: string }[]) {
-  const form = new URLSearchParams()
-  form.append("access_token", token)
-  form.append("batch", JSON.stringify(requests))
-  const res = await fetch(GRAPH, { method: "POST", body: form })
-  return res.json() as Promise<Array<{ code: number; body: string }>>
+  const results: Array<{ code: number; body: string }> = []
+  // Meta batch API caps at 50 requests per call
+  for (let i = 0; i < requests.length; i += 50) {
+    const chunk = requests.slice(i, i + 50)
+    const form = new URLSearchParams()
+    form.append("access_token", token)
+    form.append("batch", JSON.stringify(chunk))
+    const res = await fetch(GRAPH, { method: "POST", body: form })
+    const data = await res.json()
+    if (Array.isArray(data)) results.push(...data)
+  }
+  return results
+}
+
+function insightFields(level: Level) {
+  const common = [
+    "spend", "impressions", "reach", "frequency", "cpm", "ctr",
+    "clicks", "inline_link_clicks", "inline_link_click_ctr",
+    "unique_clicks", "unique_inline_link_clicks", "unique_link_clicks_ctr",
+    "outbound_clicks",
+    "actions", "action_values", "purchase_roas", "cost_per_action_type",
+    "video_thruplay_watched_actions",
+    "video_p25_watched_actions", "video_p50_watched_actions", "video_p75_watched_actions",
+    "video_p95_watched_actions", "video_p100_watched_actions",
+    "video_30_sec_watched_actions", "video_avg_time_watched_actions",
+    "date_start", "date_stop",
+  ]
+  const idName = [LEVEL_ID_FIELD[level], LEVEL_NAME_FIELD[level]]
+  if (level === "ad") idName.push("adset_name", "campaign_name")
+  if (level === "adset") idName.push("campaign_name")
+  return [...idName, ...common].join(",")
+}
+
+/** Resolve budget + budget type from campaign/adset object fields, matching CBO/ABO labeling. */
+function resolveBudget(obj: any, parentCampaign?: any) {
+  const ownDaily = obj?.daily_budget
+  const ownLifetime = obj?.lifetime_budget
+  if (ownDaily != null || ownLifetime != null) {
+    return {
+      budget: budgetFromMinor(ownDaily ?? ownLifetime),
+      budgetType: ownDaily != null ? "Daily" : "Lifetime",
+    }
+  }
+  const campDaily = parentCampaign?.daily_budget
+  const campLifetime = parentCampaign?.lifetime_budget
+  if (campDaily != null || campLifetime != null) {
+    return {
+      budget: budgetFromMinor(campDaily ?? campLifetime),
+      budgetType: "Using campaign budget",
+    }
+  }
+  return { budget: null, budgetType: obj ? "Using ad set budget" : null }
 }
 
 export async function GET(request: NextRequest) {
@@ -45,245 +88,175 @@ export async function GET(request: NextRequest) {
 
     const sp = request.nextUrl.searchParams
     const adAccountId = sp.get("adAccountId") || ""
-    const datePreset  = sp.get("datePreset") || "last_90d"
-    const limit       = Math.min(parseInt(sp.get("limit") || "50"), 50)
+    const level = (["ad", "adset", "campaign"].includes(sp.get("level") || "") ? sp.get("level") : "ad") as Level
+    const datePreset = sp.get("datePreset") || "last_90d"
+    let since = sp.get("since") || ""
+    let until = sp.get("until") || ""
+    ;({ since, until } = clampTimeToToday(since, until))
+    const attributionWindows = sp.get("action_attribution_windows") || ""
+    const limit = Math.min(parseInt(sp.get("limit") || "50"), 50)
 
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
 
-    const token       = connection.access_token
+    const token = connection.access_token
     const accountPath = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
 
-    // ── Cached fetch ── key excludes section-specific params so all sections share one cache entry
     const forceRefresh = sp.get("refresh") === "true"
-    const cacheKey = `insights:report:${adAccountId}:${datePreset}:limit:${limit}`
+    const dateKey = since && until ? `range:${since}_${until}` : `preset:${datePreset}`
+    const cacheKey = `insights:report:${adAccountId}:${level}:${dateKey}:limit:${limit}:${attributionWindows}`
+
     const result = await getDbCachedFacebookMetadata({
       orgId: ctx.orgId,
       cacheKey,
       ttlMs: 15 * 60_000,
       forceRefresh,
       loader: async () => {
-      const insightParams = new URLSearchParams({
-        level:        "ad",
-        fields:       "ad_id,ad_name,adset_name,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,outbound_clicks,frequency,reach,cpm,actions,action_values,video_thruplay_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p95_watched_actions,video_p100_watched_actions,video_30_sec_watched_actions,video_avg_time_watched_actions,date_start,date_stop",
-        date_preset:  datePreset,
-        sort:         "spend_descending",
-        limit:        String(limit),
-        access_token: token,
-      })
-      // No statusFilter — all statuses fetched; filtering is done client-side per section
+        const insightParams = new URLSearchParams({
+          level,
+          fields: insightFields(level),
+          sort: "spend_descending",
+          limit: String(limit),
+          access_token: token,
+          ...(!attributionWindows ? { use_account_attribution_setting: "true" } : { action_attribution_windows: attributionWindows }),
+        })
+        if (since && until) insightParams.set("time_range", JSON.stringify({ since, until }))
+        else insightParams.set("date_preset", datePreset)
 
-      const insightRes  = await fetch(`${GRAPH}/${accountPath}/insights?${insightParams}`)
-      const insightData = await insightRes.json()
+        const insightRes = await fetch(`${GRAPH}/${accountPath}/insights?${insightParams}`)
+        const insightData = await insightRes.json()
+        if (insightData.error) throw new Error(insightData.error.message)
 
-      if (insightData.error) throw new Error(insightData.error.message)
+        const rows: any[] = insightData.data || []
+        if (rows.length === 0) return []
 
-      const rows: any[] = insightData.data || []
-      if (rows.length === 0) return []
+        const idField = LEVEL_ID_FIELD[level]
+        const ids = [...new Set(rows.map(r => r[idField]).filter(Boolean))] as string[]
 
-    const adIds = rows.map(r => r.ad_id)
+        // ── Object metadata per level ──────────────────────────────────────
+        const metaById: Record<string, ObjectMeta> = {}
 
-    // Step 2: creative + landing page URL + status
-    const step2 = await batchFetch(token, adIds.map(id => ({
-      method:       "GET",
-      relative_url: `${id}?fields=id,name,created_time,effective_status,creative{id,object_type,image_url,thumbnail_url,object_story_spec{link_data{link},video_data{call_to_action{value{link}}}}}`,
-    })))
+        if (level === "ad") {
+          const step2 = await batchFetch(token, ids.map(id => ({
+            method: "GET",
+            relative_url: `${id}?fields=id,name,created_time,effective_status,bid_amount,creative{id,object_type,image_url,thumbnail_url,object_story_spec{link_data{link},video_data{call_to_action{value{link}}}}},adset{daily_budget,lifetime_budget,bid_strategy,attribution_spec,start_time,end_time},campaign{daily_budget,lifetime_budget}`,
+          })))
 
-    type AdInfo = {
-      creativeId:      string
-      objectType:      string
-      imageUrl:        string | null
-      thumbUrl:        string | null
-      createdTime:     string | null
-      effectiveStatus: string
-      landingPageUrl:  string | null
-    }
-    const adInfo: Record<string, AdInfo> = {}
+          const creativeIds: string[] = []
+          const creativeOwner: Record<string, string> = {}
 
-    for (let i = 0; i < step2.length; i++) {
-      const item = step2[i]
-      if (item.code !== 200) continue
-      const parsed   = JSON.parse(item.body)
-      const creative = parsed.creative || {}
-      const linkData = creative.object_story_spec?.link_data
-      const videoData = creative.object_story_spec?.video_data
-      let landingPageUrl: string | null = null
-      if (linkData?.link)                              landingPageUrl = linkData.link
-      else if (videoData?.call_to_action?.value?.link) landingPageUrl = videoData.call_to_action.value.link
+          for (let i = 0; i < step2.length; i++) {
+            const item = step2[i]
+            if (item.code !== 200) continue
+            const parsed = JSON.parse(item.body)
+            const creative = parsed.creative || {}
+            const linkData = creative.object_story_spec?.link_data
+            const videoData = creative.object_story_spec?.video_data
+            let landingPageUrl: string | null = null
+            if (linkData?.link) landingPageUrl = linkData.link
+            else if (videoData?.call_to_action?.value?.link) landingPageUrl = videoData.call_to_action.value.link
 
-      adInfo[adIds[i]] = {
-        creativeId:      creative.id || "",
-        objectType:      (creative.object_type || "IMAGE").toUpperCase(),
-        imageUrl:        creative.image_url    || null,
-        thumbUrl:        creative.thumbnail_url || null,
-        createdTime:     parsed.created_time   || null,
-        effectiveStatus: parsed.effective_status || "UNKNOWN",
-        landingPageUrl,
-      }
-    }
+            const { budget, budgetType } = resolveBudget(parsed.adset, parsed.campaign)
 
-    // Step 3: sized thumbnails
-    const creativeIds = Object.values(adInfo).map(a => a.creativeId).filter(Boolean)
-    const sizedThumbs: Record<string, string> = {}
+            metaById[ids[i]] = {
+              creativeId: creative.id || "",
+              objectType: (creative.object_type || "IMAGE").toUpperCase(),
+              imageUrl: creative.image_url || null,
+              thumbUrl: creative.thumbnail_url || null,
+              createdTime: parsed.created_time || null,
+              effectiveStatus: parsed.effective_status || "UNKNOWN",
+              landingPageUrl,
+              bid: parsed.bid_amount != null ? budgetFromMinor(parsed.bid_amount) : null,
+              bidStrategy: parsed.adset?.bid_strategy || null,
+              attribution: attributionLabel(parsed.adset?.attribution_spec),
+              budget, budgetType,
+              startsAt: parsed.adset?.start_time || null,
+              endsAt: parsed.adset?.end_time || null,
+            }
+            if (creative.id) { creativeIds.push(creative.id); creativeOwner[creative.id] = ids[i] }
+          }
 
-    if (creativeIds.length > 0) {
-      const step3 = await batchFetch(token, creativeIds.map(cid => ({
-        method: "GET",
-        relative_url: `${cid}?thumbnail_width=600&thumbnail_height=750&fields=thumbnail_url,image_url`,
-      })))
-      for (let i = 0; i < step3.length; i++) {
-        if (step3[i].code !== 200) continue
-        const parsed = JSON.parse(step3[i].body)
-        const url = parsed.image_url || parsed.thumbnail_url || null
-        if (url) sizedThumbs[creativeIds[i]] = url
-      }
-    }
+          if (creativeIds.length > 0) {
+            const step3 = await batchFetch(token, creativeIds.map(cid => ({
+              method: "GET",
+              relative_url: `${cid}?thumbnail_width=600&thumbnail_height=750&fields=thumbnail_url,image_url`,
+            })))
+            for (let i = 0; i < step3.length; i++) {
+              if (step3[i].code !== 200) continue
+              const parsed = JSON.parse(step3[i].body)
+              const url = parsed.image_url || parsed.thumbnail_url || null
+              const adId = creativeOwner[creativeIds[i]]
+              if (url && adId && metaById[adId]) metaById[adId].sizedThumb = url
+            }
+          }
+        } else if (level === "adset") {
+          const step2 = await batchFetch(token, ids.map(id => ({
+            method: "GET",
+            relative_url: `${id}?fields=id,name,effective_status,start_time,end_time,bid_amount,bid_strategy,daily_budget,lifetime_budget,attribution_spec,campaign{daily_budget,lifetime_budget}`,
+          })))
+          for (let i = 0; i < step2.length; i++) {
+            const item = step2[i]
+            if (item.code !== 200) continue
+            const parsed = JSON.parse(item.body)
+            const { budget, budgetType } = resolveBudget(parsed, parsed.campaign)
+            metaById[ids[i]] = {
+              effectiveStatus: parsed.effective_status || "UNKNOWN",
+              bid: parsed.bid_amount != null ? budgetFromMinor(parsed.bid_amount) : null,
+              bidStrategy: parsed.bid_strategy || null,
+              attribution: attributionLabel(parsed.attribution_spec),
+              budget, budgetType,
+              startsAt: parsed.start_time || null,
+              endsAt: parsed.end_time || null,
+            }
+          }
+        } else {
+          const step2 = await batchFetch(token, ids.map(id => ({
+            method: "GET",
+            // Campaign has no attribution_spec (adset-only). Asking for it → Meta #100.
+            relative_url: `${id}?fields=id,name,effective_status,daily_budget,lifetime_budget,bid_strategy,start_time,stop_time`,
+          })))
+          for (let i = 0; i < step2.length; i++) {
+            const item = step2[i]
+            if (item.code !== 200) continue
+            const parsed = JSON.parse(item.body)
+            const { budget, budgetType } = resolveBudget(parsed)
+            metaById[ids[i]] = {
+              effectiveStatus: parsed.effective_status || "UNKNOWN",
+              bidStrategy: parsed.bid_strategy || null,
+              attribution: null,
+              budget, budgetType,
+              startsAt: parsed.start_time || null,
+              endsAt: parsed.stop_time || null,
+            }
+          }
+        }
 
-    const PURCHASE_TYPES = ["offsite_conversion.fb_pixel_purchase", "purchase"]
+        // ── Assemble rows ────────────────────────────────────────────────
+        const rawItems = rows.map(r => {
+          const id = r[idField]
+          const meta = metaById[id] || {}
+          const computed = computeInsightMetrics(r, meta)
+          const base: any = {
+            id,
+            adId: r.ad_id ?? null,
+            adsetId: r.adset_id ?? null,
+            campaignId: r.campaign_id ?? null,
+            name: r[LEVEL_NAME_FIELD[level]] || id,
+            adName: r.ad_name ?? undefined,
+            adsetName: r.adset_name ?? undefined,
+            campaignName: r.campaign_name ?? undefined,
+            ...computed,
+            delivery: deliveryLabel(meta.effectiveStatus),
+          }
+          return base
+        })
 
-    const rawAds = rows.map(r => {
-      const info          = adInfo[r.ad_id]
-      const spend         = parseFloat(r.spend || "0")
-      const results       = pickResult(r.actions)
-      const cpr           = results > 0 ? spend / results : 0
-      const purchaseValue = ((r.action_values || []) as { action_type: string; value: string }[])
-        .filter(a => PURCHASE_TYPES.includes(a.action_type))
-        .reduce((s, a) => s + parseFloat(a.value || "0"), 0)
-      const purchases     = ((r.actions || []) as { action_type: string; value: string }[])
-        .filter(a => PURCHASE_TYPES.includes(a.action_type))
-        .reduce((s, a) => s + parseInt(a.value || "0"), 0)
-      const roas          = spend > 0 ? purchaseValue / spend : 0
-      const impressions   = parseInt(r.impressions || "0")
-      const linkClicks    = parseInt(r.inline_link_clicks || "0")
-      const avgPV         = purchases > 0 ? purchaseValue / purchases : 0
-      const purchaseCR    = impressions > 0 ? (purchases / impressions) * 100 : 0
-      const thumbnail     = (info?.creativeId && sizedThumbs[info.creativeId]) || info?.imageUrl || info?.thumbUrl || null
-
-      const getAct = (type: string) =>
-        parseInt(((r.actions || []) as any[]).find((a: any) => a.action_type === type)?.value || "0")
-
-      const video3sViews  = getAct("video_view")
-      const thruplayViews = ((r.video_thruplay_watched_actions || []) as any[])
-        .reduce((s: number, a: any) => s + parseInt(a.value || "0"), 0)
-      const thumbstopRate = impressions > 0 ? (video3sViews / impressions) * 100 : 0
-      const holdRate      = video3sViews > 0 ? (thruplayViews / video3sViews) * 100 : 0
-
-      const videoP25      = parseInt(r.video_p25_watched_actions?.[0]?.value  || "0")
-      const videoP50      = parseInt(r.video_p50_watched_actions?.[0]?.value  || "0")
-      const videoP75      = parseInt(r.video_p75_watched_actions?.[0]?.value  || "0")
-      const videoP95      = parseInt(r.video_p95_watched_actions?.[0]?.value  || "0")
-      const videoP100     = parseInt(r.video_p100_watched_actions?.[0]?.value || "0")
-      const video30s      = parseInt(r.video_30_sec_watched_actions?.[0]?.value || "0")
-      const avgWatchTime  = parseFloat(r.video_avg_time_watched_actions?.[0]?.value || "0")
-      const outboundClicks = parseInt(r.outbound_clicks?.[0]?.value || "0")
-
-      const leads             = getAct("lead")
-      const registrations     = getAct("complete_registration")
-      const contentViews      = getAct("offsite_conversion.fb_pixel_view_content")
-      const addToCart         = getAct("offsite_conversion.fb_pixel_add_to_cart")
-      const appInstalls       = getAct("mobile_app_install") || getAct("app_install")
-      const appActivations    = getAct("app_activation")
-      const postEngagements   = getAct("post_engagement")
-      const postReactions     = getAct("post_reaction")
-      const pageEngagements   = getAct("page_engagement")
-      const like              = getAct("like")
-      const comment           = getAct("comment")
-      const initiateCheckout  = getAct("offsite_conversion.fb_pixel_initiate_checkout") || getAct("initiate_checkout")
-      const addPaymentInfo    = getAct("offsite_conversion.fb_pixel_add_payment_info") || getAct("add_payment_info")
-      const reach             = parseInt(r.reach || "0")
-      const ctr               = parseFloat(r.inline_link_click_ctr || "0")
-
-      return {
-        adId:            r.ad_id,
-        adName:          r.ad_name,
-        adsetName:       r.adset_name  || "",
-        campaignName:    r.campaign_name || "",
-        spend,
-        results,
-        costPerResult:   cpr,
-        purchaseValue,
-        purchases,
-        roas,
-        impressions,
-        linkClicks,
-        outboundClicks,
-        ctr,
-        frequency:       parseFloat(r.frequency || "0"),
-        reach,
-        cpm:             parseFloat(r.cpm || "0"),
-        avgPurchaseValue: avgPV,
-        purchaseCR,
-        leads,
-        registrations,
-        contentViews,
-        addToCart,
-        appInstalls,
-        appActivations,
-        postEngagements,
-        postReactions,
-        pageEngagements,
-        like,
-        comment,
-        initiateCheckout,
-        addPaymentInfo,
-        video3s:         video3sViews,
-        thruplay:        thruplayViews,
-        videoP25,
-        videoP50,
-        videoP75,
-        videoP95,
-        videoP100,
-        video30s,
-        avgWatchTime,
-        // Computed ratio metrics
-        costPerLinkClick:        linkClicks > 0 ? spend / linkClicks : 0,
-        outboundCostPer:         outboundClicks > 0 ? spend / outboundClicks : 0,
-        outboundCtr:             impressions > 0 ? (outboundClicks / impressions) * 100 : 0,
-        costPer3s:               video3sViews > 0 ? spend / video3sViews : 0,
-        costPerThruplay:         thruplayViews > 0 ? spend / thruplayViews : 0,
-        vtr:                     impressions > 0 ? (thruplayViews / impressions) * 100 : 0,
-        watchRate25:             video3sViews > 0 ? (videoP25 / video3sViews) * 100 : 0,
-        watchRate50:             video3sViews > 0 ? (videoP50 / video3sViews) * 100 : 0,
-        watchRate75:             video3sViews > 0 ? (videoP75 / video3sViews) * 100 : 0,
-        watchRate95:             video3sViews > 0 ? (videoP95 / video3sViews) * 100 : 0,
-        watchRate100:            video3sViews > 0 ? (videoP100 / video3sViews) * 100 : 0,
-        costPerVideoP25:         videoP25 > 0 ? spend / videoP25 : 0,
-        costPerVideoP50:         videoP50 > 0 ? spend / videoP50 : 0,
-        costPerVideoP75:         videoP75 > 0 ? spend / videoP75 : 0,
-        costPerVideoP95:         videoP95 > 0 ? spend / videoP95 : 0,
-        costPerVideoP100:        videoP100 > 0 ? spend / videoP100 : 0,
-        costPer1000Reached:      reach > 0 ? (spend / reach) * 1000 : 0,
-        costPerPurchase:         purchases > 0 ? spend / purchases : 0,
-        costPerAddToCart:        addToCart > 0 ? spend / addToCart : 0,
-        costPerLead:             leads > 0 ? spend / leads : 0,
-        costPerInstall:          appInstalls > 0 ? spend / appInstalls : 0,
-        costPerAppActivation:    appActivations > 0 ? spend / appActivations : 0,
-        costPerRegistration:     registrations > 0 ? spend / registrations : 0,
-        costPerContentView:      contentViews > 0 ? spend / contentViews : 0,
-        costPerNewCustomer:      purchases > 0 ? spend / purchases : 0,
-        costPerPageEngagement:   pageEngagements > 0 ? spend / pageEngagements : 0,
-        costPerPostEngagement:   postEngagements > 0 ? spend / postEngagements : 0,
-        costPerPostReaction:     postReactions > 0 ? spend / postReactions : 0,
-        costPerLike:             like > 0 ? spend / like : 0,
-        costPerComment:          comment > 0 ? spend / comment : 0,
-        costPerInitiateCheckout: initiateCheckout > 0 ? spend / initiateCheckout : 0,
-        costPerAddPaymentInfo:   addPaymentInfo > 0 ? spend / addPaymentInfo : 0,
-        dateStart:       r.date_start,
-        createdTime:     info?.createdTime     || null,
-        landingPageUrl:  info?.landingPageUrl  || null,
-        thumbnail,
-        isVideo:         info?.objectType === "VIDEO",
-        effectiveStatus: info?.effectiveStatus || "UNKNOWN",
-        thumbstopRate,
-        holdRate,
-      }
-    })
-
-      return rawAds
+        return rawItems
       },
     }) // end getDbCachedFacebookMetadata
 
     return NextResponse.json({
       ads: result.value,
+      level,
       cached: result.source !== "meta",
       stale: result.stale,
       retryAfterMs: result.retryAfterMs,
@@ -294,10 +267,19 @@ export async function GET(request: NextRequest) {
       const sp2 = request.nextUrl.searchParams
       const ctx2 = await getAuthContext()
       const adAccountId = sp2.get("adAccountId") || ""
+      const level2 = (["ad", "adset", "campaign"].includes(sp2.get("level") || "") ? sp2.get("level") : "ad") as Level
       if (ctx2 && adAccountId) {
-        const { since, until } = datePresetToRange(sp2.get("datePreset") || "last_90d")
-        const snapshot = await adSnapshotFallback(ctx2.orgId, adAccountId, since, until)
-        if (snapshot) return NextResponse.json(snapshot)
+        const { since, until } = datePresetToRange(sp2.get("datePreset") || "last_90d", sp2.get("since") || "", sp2.get("until") || "")
+        if (level2 === "ad") {
+          const snapshot = await adSnapshotFallback(ctx2.orgId, adAccountId, since, until)
+          if (snapshot) return NextResponse.json({ ...snapshot, level: level2 })
+        } else if (level2 === "adset") {
+          const snapshot = await adsetManagerSnapshotFallback(ctx2.orgId, adAccountId, null, since, until)
+          if (snapshot) return NextResponse.json({ ads: snapshot.adSets, level: level2, fromSnapshot: true })
+        } else {
+          const snapshot = await campaignManagerSnapshotFallback(ctx2.orgId, adAccountId, since, until)
+          if (snapshot) return NextResponse.json({ ads: snapshot.campaigns, level: level2, fromSnapshot: true })
+        }
       }
     } catch {}
     const isRateLimit = err.message?.includes("too many calls") || err.message?.includes("Rate limited")

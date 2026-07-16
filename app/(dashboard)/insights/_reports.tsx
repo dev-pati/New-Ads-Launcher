@@ -904,7 +904,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
 
     // ── Section-config filters (moved from server so all sections share one cache entry) ──
     if (config.statusFilter) {
-      const statuses = config.statusFilter.split(",").map(s => s.trim().toUpperCase())
+      const statuses = (config.statusFilter || "").split(",").map((s: string) => s.trim().toUpperCase())
       list = list.filter(a => statuses.includes((a.effectiveStatus || "").toUpperCase()))
     }
     if ((config.frequencyMin ?? 0) > 0) {
