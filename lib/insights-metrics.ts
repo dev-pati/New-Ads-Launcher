@@ -4,7 +4,7 @@
  * Matches the Meta Ads Manager CSV export column semantics.
  */
 
-const PURCHASE_TYPES = ["offsite_conversion.fb_pixel_purchase", "purchase"]
+const PURCHASE_TYPES = ["offsite_conversion.fb_pixel_purchase", "purchase", "omni_purchase"]
 
 const RESULT_PRIORITY = [
   "offsite_conversion.fb_pixel_purchase",
@@ -82,16 +82,17 @@ export function computeInsightMetrics(r: any, meta: ObjectMeta = {}) {
   const uniqueClicks = safe(parseInt(r.unique_clicks || "0"))
   const uniqueLinkClicks = safe(parseInt(r.unique_inline_link_clicks || "0"))
 
-  const purchaseValue = sumActionValue(r.action_values, PURCHASE_TYPES)
-  const purchases = sumAction(r.actions, PURCHASE_TYPES)
+  const val = (a: any, t: string) => parseFloat(a?.find((x: any) => x.action_type === t)?.value || "0");
+  const purchaseValue = val(r.action_values, "offsite_conversion.fb_pixel_purchase") || val(r.action_values, "purchase") || val(r.action_values, "omni_purchase");
+  const purchases = getAct(r.actions, "offsite_conversion.fb_pixel_purchase") || getAct(r.actions, "purchase") || getAct(r.actions, "omni_purchase")
   const roasRaw = safe(parseFloat(r.purchase_roas?.[0]?.value || "0"))
   const roas = roasRaw > 0 ? roasRaw : spend > 0 ? purchaseValue / spend : 0
 
   const video3sViews = getAct(r.actions, "video_view")
   const thruplayViews = (r.video_thruplay_watched_actions || [])
     .reduce((s: number, a: any) => s + parseInt(a.value || "0"), 0)
-  const landingPageViews = sumAction(r.actions, ["landing_page_view", "omni_landing_page_view"])
-  const contentViews = sumAction(r.actions, ["omni_view_content", "offsite_conversion.fb_pixel_view_content", "offsite_conversion.view_content"])
+  const landingPageViews = getAct(r.actions, "landing_page_view") || getAct(r.actions, "omni_landing_page_view")
+  const contentViews = getAct(r.actions, "offsite_conversion.fb_pixel_view_content") || getAct(r.actions, "omni_view_content") || getAct(r.actions, "offsite_conversion.view_content")
 
   const videoP25 = safe(parseInt(r.video_p25_watched_actions?.[0]?.value || "0"))
   const videoP50 = safe(parseInt(r.video_p50_watched_actions?.[0]?.value || "0"))

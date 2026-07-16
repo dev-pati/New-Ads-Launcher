@@ -115,6 +115,7 @@ export async function GET(request: NextRequest) {
           sort: "spend_descending",
           limit: String(limit),
           access_token: token,
+          use_account_attribution_setting: "true",
         })
         if (since && until) insightParams.set("time_range", JSON.stringify({ since, until }))
         else insightParams.set("date_preset", datePreset)

@@ -86,6 +86,7 @@ export async function GET(request: NextRequest) {
           breakdowns: breakdown,
           limit: "100",
           access_token: token,
+          use_account_attribution_setting: "true",
         })
         if (since && until) params.set("time_range", JSON.stringify({ since, until }))
         else params.set("date_preset", datePreset)

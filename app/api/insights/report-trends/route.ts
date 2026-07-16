@@ -95,7 +95,7 @@ function aggregateByGranularity(
 
 function blankAcc() {
   return {
-    spend: 0, impressions: 0, reach: 0, clicks: 0, inline_link_clicks: 0,
+    spend: 0, impressions: 0, reach: 0, clicks: 0, inline_link_clicks: 0, purchaseValue: 0,
     actions: {} as Record<string, number>,
     action_values: {} as Record<string, number>,
     purchase_roas: 0,
@@ -104,7 +104,9 @@ function blankAcc() {
 }
 
 function accumulate(acc: ReturnType<typeof blankAcc>, r: any, m: any) {
-  acc.spend += parseFloat(r.spend || "0")
+  acc.spend += parseFloat(r.spend || "0");
+  const pVal = parseFloat(r.action_values?.find((a: any) => ["offsite_conversion.fb_pixel_purchase", "purchase", "omni_purchase"].includes(a.action_type))?.value || "0");
+  acc.purchaseValue += pVal;
   acc.impressions += parseInt(r.impressions || "0")
   acc.reach += parseInt(r.reach || "0")
   acc.clicks += parseInt(r.clicks || "0")
@@ -128,7 +130,7 @@ function mergeAccToRow(acc: ReturnType<typeof blankAcc>): any {
     inline_link_clicks: String(acc.inline_link_clicks),
     actions: Object.entries(acc.actions).map(([action_type, value]) => ({ action_type, value: String(value) })),
     action_values: Object.entries(acc.action_values).map(([action_type, value]) => ({ action_type, value: String(value) })),
-    purchase_roas: [{ value: String(acc.dates > 0 ? acc.purchase_roas / acc.dates : 0) }],
+    purchase_roas: [{ value: String(acc.spend > 0 ? (acc.purchaseValue || 0) / acc.spend : 0) }],
     date_start: "",
   }
 }
@@ -178,6 +180,7 @@ export async function GET(request: NextRequest) {
           time_increment: "1",
           limit: "100",
           access_token: token,
+          use_account_attribution_setting: "true",
         })
         if (since && until) params.set("time_range", JSON.stringify({ since, until }))
         else params.set("date_preset", datePreset)
