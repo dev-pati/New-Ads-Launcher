@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getDbCachedFacebookMetadata } from "../../facebook/_db-cache"
 import { computeInsightMetrics, deliveryLabel, attributionLabel, budgetFromMinor } from "@/lib/insights-metrics"
+import { clampTimeToToday } from "@/lib/snapshot-fallback"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -61,8 +62,9 @@ export async function GET(request: NextRequest) {
     const adAccountId = sp.get("adAccountId") || ""
     const level = (["ad", "adset", "campaign"].includes(sp.get("level") || "") ? sp.get("level") : "ad") as Level
     const datePreset = sp.get("datePreset") || "last_30d"
-    const since = sp.get("since") || ""
-    const until = sp.get("until") || ""
+    let since = sp.get("since") || ""
+    let until = sp.get("until") || ""
+    ;({ since, until } = clampTimeToToday(since, until))
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
 

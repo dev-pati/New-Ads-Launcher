@@ -342,7 +342,7 @@ export default function AdsManagerPage() {
   const [defaultHeadline, setDefaultHeadline] = useState("")
   const [defaultCta, setDefaultCta] = useState("SHOP_NOW")
   const [defaultLink, setDefaultLink] = useState("")
-  const [columnOrder,       setColumnOrder]       = useState<string[]>(DEFAULT_PRESETS[1].columns)
+  const [columnOrder,       setColumnOrder]       = useState<string[]>(DEFAULT_PRESETS[4].columns)
   const [customPresets,     setCustomPresets]     = useState<ColumnPreset[]>([])
   const [colsOpen,          setColsOpen]          = useState(false)
   const [customizeColsOpen, setCustomizeColsOpen] = useState(false)
@@ -412,7 +412,7 @@ export default function AdsManagerPage() {
   // Load / save column state from localStorage
   useEffect(() => {
     try {
-      const raw = localStorage.getItem("adsmanager_col_order")
+      const raw = localStorage.getItem("adsmanager_col_order_v2")
       if (raw) {
         const parsed = JSON.parse(raw) as string[]
         const valid = parsed.filter(id => id in COLUMN_MAP)
@@ -424,7 +424,7 @@ export default function AdsManagerPage() {
   }, [])
 
   useEffect(() => {
-    try { localStorage.setItem("adsmanager_col_order", JSON.stringify(columnOrder)) } catch {}
+    try { localStorage.setItem("adsmanager_col_order_v2", JSON.stringify(columnOrder)) } catch {}
   }, [columnOrder])
 
   useEffect(() => {
@@ -1047,6 +1047,11 @@ export default function AdsManagerPage() {
         return <span className="text-xs tabular-nums">${(spend / l).toFixed(2)}</span>
       }
 
+      case "shopify_score":
+        // ponytail: no Shopify data source wired yet — column exists for CSV-order parity.
+        // Upgrade: add /api/shopify/score + join by ad/adset/campaign id.
+        return <span className="text-xs tabular-nums">{(row as any).shopifyScore ?? (row as any).shopify_score ?? "—"}</span>
+
       case "leads":
         return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "lead") : "—"}</span>
 
@@ -1144,6 +1149,7 @@ export default function AdsManagerPage() {
       case "cost_per_purchase":{ const p = getVal("omni_purchase"); return <span className="text-xs tabular-nums">{p ? `$${(spend/p).toFixed(2)}` : "—"}</span> }
       case "leads":            { const l = getVal("lead"); return <span className="text-xs tabular-nums">{l || "—"}</span> }
       case "cost_per_lead":    { const l = getVal("lead"); return <span className="text-xs tabular-nums">{l ? `$${(spend/l).toFixed(2)}` : "—"}</span> }
+      case "shopify_score":    return <span className="text-xs tabular-nums">—</span>
       case "add_to_cart":      { const atc = getVal("add_to_cart"); return <span className="text-xs tabular-nums">{atc || "—"}</span> }
       case "video_views_3s":   { const v = getVal("video_view"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
       case "video_25":         { const v = getVal("video_p25_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }

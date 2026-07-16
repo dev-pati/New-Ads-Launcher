@@ -104,8 +104,16 @@ function toInsight(row: {
   }
 }
 
+export function clampTimeToToday(since = "", until = "") {
+  const today = new Date().toISOString().split("T")[0]
+  return {
+    since: since && since > today ? today : since,
+    until: until && until > today ? today : until,
+  }
+}
+
 export function datePresetToRange(preset: string, sinceP = "", untilP = "") {
-  if (sinceP && untilP) return { since: sinceP, until: untilP }
+  if (sinceP && untilP) return clampTimeToToday(sinceP, untilP)
   const now   = new Date()
   const today = now.toISOString().split("T")[0]
   if (preset === "today")      return { since: today, until: today }

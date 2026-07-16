@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getDbCachedFacebookMetadata } from "../../facebook/_db-cache"
-import { adSnapshotFallback, campaignManagerSnapshotFallback, adsetManagerSnapshotFallback, datePresetToRange } from "@/lib/snapshot-fallback"
+import { adSnapshotFallback, campaignManagerSnapshotFallback, adsetManagerSnapshotFallback, datePresetToRange, clampTimeToToday } from "@/lib/snapshot-fallback"
 import { computeInsightMetrics, deliveryLabel, attributionLabel, budgetFromMinor, ObjectMeta } from "@/lib/insights-metrics"
 
 export const runtime = "nodejs"
@@ -90,8 +90,9 @@ export async function GET(request: NextRequest) {
     const adAccountId = sp.get("adAccountId") || ""
     const level = (["ad", "adset", "campaign"].includes(sp.get("level") || "") ? sp.get("level") : "ad") as Level
     const datePreset = sp.get("datePreset") || "last_90d"
-    const since = sp.get("since") || ""
-    const until = sp.get("until") || ""
+    let since = sp.get("since") || ""
+    let until = sp.get("until") || ""
+    ;({ since, until } = clampTimeToToday(since, until))
     const limit = Math.min(parseInt(sp.get("limit") || "50"), 50)
 
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })

@@ -34,6 +34,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
   { id: "roas",              label: "ROAS",                     headerLabel: "ROAS",               description: "Show this column in the manage table.", tab: "key_metrics", section: "results_spend",     sectionLabel: "Results and spend" },
   { id: "cost_per_purchase", label: "Cost Per Purchase",        headerLabel: "Cost/purchase",      description: "Show this column in the manage table.", tab: "key_metrics", section: "results_spend",     sectionLabel: "Results and spend" },
   { id: "cost_per_lead",     label: "Cost Per Lead",            headerLabel: "Cost/lead",          description: "Show this column in the manage table.", tab: "key_metrics", section: "results_spend",     sectionLabel: "Results and spend" },
+  { id: "shopify_score",     label: "Shopify Score",            headerLabel: "Shopify Score",      description: "Shopify score (requires BE integration).", tab: "key_metrics", section: "results_spend",   sectionLabel: "Results and spend" },
 
   // ── Key metrics: Delivery ─────────────────────────────────────────────────
   { id: "delivery",          label: "Delivery",                 headerLabel: "Delivery",           description: "Show this column in the manage table.", tab: "key_metrics", section: "delivery",          sectionLabel: "Delivery" },
@@ -135,14 +136,14 @@ export const DEFAULT_PRESETS: ColumnPreset[] = [
     label: "ECOM",
     isDefault: true,
     columns: [
-      "spend", "roas", "purchase_value", "purchases", "cost_per_purchase",
+      "attribution_setting", "budget", "spend", "roas", "purchase_value",
       "impressions", "frequency", "cpm",
-      "unique_clicks", "unique_link_clicks", "unique_link_ctr", "ctr",
-      "cost_per_unique_click", "cost_per_link_click", "link_clicks",
-      "landing_page_views", "lpv_rate", "content_views",
+      "cost_per_unique_click", "unique_link_ctr", "ctr", "cost_per_link_click",
+      "unique_link_clicks", "lpv_rate", "content_views",
       "add_to_cart", "cost_per_add_to_cart",
       "initiate_checkout", "cost_per_initiate_checkout",
-      "avg_watch_time", "budget", "delivery",
+      "purchases", "cost_per_purchase", "shopify_score",
+      "avg_watch_time", "delivery"
     ],
   },
 ]

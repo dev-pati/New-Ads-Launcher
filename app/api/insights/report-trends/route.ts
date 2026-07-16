@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getDbCachedFacebookMetadata } from "../../facebook/_db-cache"
-import { datePresetToRange } from "@/lib/snapshot-fallback"
+import { datePresetToRange, clampTimeToToday } from "@/lib/snapshot-fallback"
 import { computeInsightMetrics } from "@/lib/insights-metrics"
 
 export const runtime = "nodejs"
@@ -157,8 +157,9 @@ export async function GET(request: NextRequest) {
     const metric = sp.get("metric") || "spend"
     const granularity = (["day", "week", "month"].includes(sp.get("granularity") || "") ? sp.get("granularity") : "day") as "day" | "week" | "month"
     const datePreset = sp.get("datePreset") || "last_30d"
-    const since = sp.get("since") || ""
-    const until = sp.get("until") || ""
+    let since = sp.get("since") || ""
+    let until = sp.get("until") || ""
+    ;({ since, until } = clampTimeToToday(since, until))
 
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
 

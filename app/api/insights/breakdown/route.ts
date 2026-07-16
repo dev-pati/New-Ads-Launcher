@@ -3,6 +3,7 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getDbCachedFacebookMetadata } from "@/app/api/facebook/_db-cache"
 import { metaFetch } from "@/app/api/facebook/_meta-fetch"
 import { computeInsightMetrics } from "@/lib/insights-metrics"
+import { clampTimeToToday } from "@/lib/snapshot-fallback"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -56,8 +57,9 @@ export async function GET(request: NextRequest) {
     const sp = request.nextUrl.searchParams
     const adAccountId = sp.get("adAccountId") || ""
     const datePreset = sp.get("datePreset") || "last_30d"
-    const since = sp.get("since") || ""
-    const until = sp.get("until") || ""
+    let since = sp.get("since") || ""
+    let until = sp.get("until") || ""
+    ;({ since, until } = clampTimeToToday(since, until))
     const level = sp.get("level") || "account"
     const id = sp.get("id") || ""
     const requestedBreakdown = sp.get("breakdown") || "publisher_platform"
