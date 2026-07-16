@@ -128,6 +128,11 @@ export function PerformancePopup({
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // Charts-only: demographics (age,gender) + platform (placement) for the single object
+  const [demoRows, setDemoRows] = useState<BreakdownRow[]>([])
+  const [platRows, setPlatRows] = useState<BreakdownRow[]>([])
+  const [chartsSub, setChartsSub] = useState<"demographics" | "platform">("demographics")
+
   const qsBase = useMemo(() => {
     const p = new URLSearchParams({ adAccountId: accountId, level })
     if (since && until) { p.set("since", since); p.set("until", until) }
@@ -220,6 +225,27 @@ export function PerformancePopup({
     return () => { cancelled = true }
   }, [activeCard, qsBase, capped.map(r => r.id).join(",")])
 
+  // ── Charts mode: demographics + platform for the single object ─────────────
+  useEffect(() => {
+    if (isCompare || capped.length !== 1) return
+    let cancelled = false
+    const row = capped[0]
+    const load = async () => {
+      try {
+        const [ageRes, platRes] = await Promise.all([
+          fetch(`/api/insights/breakdown?${qsBase}&id=${row.id}&breakdown=age,gender`),
+          fetch(`/api/insights/breakdown?${qsBase}&id=${row.id}&breakdown=publisher_platform,platform_position`),
+        ])
+        const [age, plat] = await Promise.all([ageRes.json(), platRes.json()])
+        if (cancelled) return
+        setDemoRows(age.rows || [])
+        setPlatRows(plat.rows || [])
+      } catch { if (!cancelled) { setDemoRows([]); setPlatRows([]) } }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [isCompare, qsBase, capped.map(r => r.id).join(",")])
+
   // ── aggregate KPI headline ─────────────────────────────────────────────────
   const totals = useMemo(() => {
     let spend = 0, purchases = 0, purchaseValue = 0
@@ -265,6 +291,21 @@ export function PerformancePopup({
       .slice(0, 8)
   }, [breakdownByRow, metric, capped.map(r => r.id).join(",")])
 
+  // ── Charts sub-breakdowns (demo/platform) ──────────────────────────────────
+  const demoBarData = useMemo(() => {
+    return demoRows.map(r => ({
+      label: r.label || r.breakdownValue || "Unknown",
+      value: Number(r[metric] ?? r.spend ?? 0) || 0
+    })).sort((a, b) => b.value - a.value).slice(0, 10)
+  }, [demoRows, metric])
+
+  const platBarData = useMemo(() => {
+    return platRows.map(r => ({
+      label: r.label || r.breakdownValue || "Unknown",
+      value: Number(r[metric] ?? r.spend ?? 0) || 0
+    })).sort((a, b) => b.value - a.value).slice(0, 10)
+  }, [platRows, metric])
+
   const cards = [
     { key: "purchases", label: "Website purchases", value: fmtN(totals.purchases), desc: "Purchase events attributed to your ads" },
     { key: "costPerPurchase", label: "Per purchase", value: fmt$(totals.costPerPurchase), desc: "Average cost per website purchase" },
@@ -276,6 +317,76 @@ export function PerformancePopup({
     ? `Compare ${capped.length} ${level}${capped.length > 1 ? "s" : ""}`
     : `Charts · ${capped[0]?.name || ""}`
 
+  // ── Compare: narrow right sidebar, Amount spent only ───────────────────────
+  if (isCompare) {
+    const spendTotal = Object.values(metricsByRow).reduce((s, m: any) => s + (Number(m.spend) || 0), 0)
+    return (
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md border-l bg-background shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Compare · {level}</p>
+            <h2 className="font-semibold text-sm truncate" title={headerTitle}>{headerTitle}</h2>
+          </div>
+          <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/50 shrink-0">
+            <IconX className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
+          <select value={granularity} onChange={e => setGranularity(e.target.value as any)}
+            className="h-8 px-2 text-xs rounded-lg border bg-background">
+            <option value="day">Day</option>
+            <option value="week">Week</option>
+            <option value="month">Month</option>
+          </select>
+          {overCap && (
+            <span className="text-[11px] text-amber-600">First {MAX_ROWS} of {rows.length}</span>
+          )}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div>
+            <p className="text-xs text-muted-foreground">Amount spent</p>
+            <p className="text-2xl font-bold tabular-nums">{fmt$(spendTotal)}</p>
+          </div>
+          {loading ? (
+            <div className="flex items-center justify-center h-40 gap-2 text-sm text-muted-foreground">
+              <IconLoader2 className="size-4 animate-spin" /> Loading…
+            </div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={trendData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={GRID} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: MUTED }} />
+                  <YAxis tick={{ fontSize: 10, fill: MUTED }} width={52} tickFormatter={v => fmt$(Number(v))} />
+                  <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                    formatter={(v: any, name: any) => [fmt$(Number(v)), name]} />
+                  {capped.map((row, i) => (
+                    <Line key={row.id} type="monotone" dataKey={`row_${i}`} name={row.name}
+                      stroke={SERIES[i]} strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+              <div className="flex flex-col gap-1.5">
+                {capped.map((row, i) => (
+                  <div key={row.id} className="flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="size-2.5 rounded-full shrink-0" style={{ background: SERIES[i] }} />
+                      <span className="text-muted-foreground truncate" title={row.name}>{row.name}</span>
+                    </div>
+                    <span className="tabular-nums font-medium shrink-0">{fmt$(Number(metricsByRow[row.id]?.spend) || 0)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Charts: large popup ────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
       <div className="bg-background rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
@@ -453,6 +564,57 @@ export function PerformancePopup({
                 ))}
               </BarChart>
             </ResponsiveContainer>
+          )}
+
+          {/* Charts single-object: Demographics + Platform */}
+          {!isCompare && capped.length === 1 && (
+            <div className="mt-6 border-t pt-5">
+              <div className="flex items-center gap-1 mb-3">
+                {(["demographics", "platform"] as const).map(s => (
+                  <button key={s} onClick={() => setChartsSub(s)}
+                    className={cn("h-8 px-3 text-sm rounded-lg capitalize transition-colors",
+                      chartsSub === s ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50")}>
+                    {s === "demographics" ? "Demographics" : "Platform"}
+                  </button>
+                ))}
+              </div>
+
+              {chartsSub === "demographics" ? (
+                <section className="rounded-xl border bg-card p-4">
+                  <p className="text-sm font-semibold mb-3">Age and gender distribution · {metricLabel(metric)}</p>
+                  {demoRows.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-8">No demographic data</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={Math.max(240, demoRows.length * 20)}>
+                      <BarChart data={demoBarData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => metricFmt(metric)(Number(v))} />
+                        <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: MUTED }} width={110} interval={0} />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any) => [metricFmt(metric)(Number(v)), metricLabel(metric)]} />
+                        <Bar dataKey="value" fill={SERIES[0]} radius={[3, 3, 3, 3]} maxBarSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </section>
+              ) : (
+                <section className="rounded-xl border bg-card p-4">
+                  <p className="text-sm font-semibold mb-3">Placement per platform · {metricLabel(metric)}</p>
+                  {platRows.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-8">No platform data</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={Math.max(240, platBarData.length * 34)}>
+                      <BarChart data={platBarData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => metricFmt(metric)(Number(v))} />
+                        <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: MUTED }} width={150} interval={0} />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any) => [metricFmt(metric)(Number(v)), metricLabel(metric)]} />
+                        <Bar dataKey="value" fill={SERIES[0]} radius={[3, 3, 3, 3]} maxBarSize={24} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
+                </section>
+              )}
+            </div>
           )}
         </div>
       </div>
