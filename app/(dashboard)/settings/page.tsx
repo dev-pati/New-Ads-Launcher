@@ -257,14 +257,24 @@ function SettingsContent() {
     fetchAvailableLarkAccounts()
   }, [fetchMembers, fetchAvailableLarkAccounts])
 
+  const [hasGemini, setHasGemini] = useState(false)
+  const [hasOpenai, setHasOpenai] = useState(false)
+  const [geminiMasked, setGeminiMasked] = useState<string | null>(null)
+  const [openaiMasked, setOpenaiMasked] = useState<string | null>(null)
+
   useEffect(() => {
     async function fetchAiKeys() {
       setLoadingAiKeys(true)
       try {
         const res = await fetch("/api/settings/ai-keys")
         const data = await res.json()
-        setGeminiKey(data.gemini_api_key ?? "")
-        setOpenaiKey(data.openai_api_key ?? "")
+        // API no longer returns full secrets — only presence + last4 mask
+        setHasGemini(Boolean(data.has_gemini))
+        setHasOpenai(Boolean(data.has_openai))
+        setGeminiMasked(data.gemini_api_key_masked ?? null)
+        setOpenaiMasked(data.openai_api_key_masked ?? null)
+        setGeminiKey("")
+        setOpenaiKey("")
       } catch { /* ignore */ } finally {
         setLoadingAiKeys(false)
       }
@@ -277,15 +287,37 @@ function SettingsContent() {
     setAiKeysError("")
     setAiKeysSaved(false)
     try {
+      // Only send fields the user actually typed. Empty draft = keep existing (omit field).
+      const body: Record<string, string | null> = {}
+      if (geminiKey.trim()) body.gemini_api_key = geminiKey.trim()
+      if (openaiKey.trim()) body.openai_api_key = openaiKey.trim()
+      if (Object.keys(body).length === 0) {
+        setAiKeysError("Enter a new key to update, or leave blank to keep existing.")
+        return
+      }
       const res = await fetch("/api/settings/ai-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gemini_api_key: geminiKey, openai_api_key: openaiKey }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
         const d = await res.json()
         setAiKeysError(d.error || "Failed to save")
       } else {
+        const d = await res.json().catch(() => ({}))
+        setHasGemini(Boolean(d.has_gemini ?? (hasGemini || Boolean(geminiKey.trim()))))
+        setHasOpenai(Boolean(d.has_openai ?? (hasOpenai || Boolean(openaiKey.trim()))))
+        setGeminiKey("")
+        setOpenaiKey("")
+        // refresh masks
+        try {
+          const r2 = await fetch("/api/settings/ai-keys")
+          const d2 = await r2.json()
+          setHasGemini(Boolean(d2.has_gemini))
+          setHasOpenai(Boolean(d2.has_openai))
+          setGeminiMasked(d2.gemini_api_key_masked ?? null)
+          setOpenaiMasked(d2.openai_api_key_masked ?? null)
+        } catch { /* ignore */ }
         setAiKeysSaved(true)
         setTimeout(() => setAiKeysSaved(false), 3000)
       }
@@ -945,7 +977,7 @@ function SettingsContent() {
                           type={geminiKeyVisible ? "text" : "password"}
                           value={geminiKey}
                           onChange={e => setGeminiKey(e.target.value)}
-                          placeholder="AIzaSy..."
+                          placeholder={hasGemini ? "Enter new key to replace…" : "AIzaSy..."}
                           className="pr-20 font-mono text-sm"
                         />
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -968,10 +1000,10 @@ function SettingsContent() {
                         </div>
                       </div>
                     </div>
-                    {geminiKey && (
+                    {(hasGemini || geminiKey) && (
                       <div className="flex items-center gap-1.5 text-xs text-emerald-600">
                         <IconCheck className="size-3.5" />
-                        Key configured
+                        {geminiKey ? "New key ready to save" : `Key configured${geminiMasked ? ` (${geminiMasked})` : ""}`}
                       </div>
                     )}
                   </div>
@@ -999,7 +1031,7 @@ function SettingsContent() {
                         type={openaiKeyVisible ? "text" : "password"}
                         value={openaiKey}
                         onChange={e => setOpenaiKey(e.target.value)}
-                        placeholder="sk-proj-..."
+                        placeholder={hasOpenai ? "Enter new key to replace…" : "sk-proj-..."}
                         className="pr-20 font-mono text-sm"
                       />
                       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
@@ -1013,10 +1045,10 @@ function SettingsContent() {
                         )}
                       </div>
                     </div>
-                    {openaiKey && (
+                    {(hasOpenai || openaiKey) && (
                       <div className="flex items-center gap-1.5 text-xs text-emerald-600">
                         <IconCheck className="size-3.5" />
-                        Key configured — OpenAI will be used for text generation
+                        {openaiKey ? "New key ready to save" : `Key configured${openaiMasked ? ` (${openaiMasked})` : ""} — OpenAI used for text generation`}
                       </div>
                     )}
                   </div>

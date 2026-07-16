@@ -85,7 +85,7 @@ export function PageSelector({
         body: JSON.stringify({
           pageId: page.id,
           pageName: page.name,
-          pageAccessToken: page.access_token,
+          // pageAccessToken intentionally omitted — server resolves token
           pageCategory: page.category,
           pagePictureUrl: page.picture?.data?.url,
         }),

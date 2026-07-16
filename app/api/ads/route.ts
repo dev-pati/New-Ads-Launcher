@@ -83,6 +83,28 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
+    // Ownership check: page + ad account must belong to the active org
+    const [{ data: page }, { data: adAccount }] = await Promise.all([
+      supabase
+        .from("pages")
+        .select("id")
+        .eq("id", page_id)
+        .eq("org_id", ctx.orgId)
+        .maybeSingle(),
+      supabase
+        .from("ad_accounts")
+        .select("id")
+        .eq("id", ad_account_id)
+        .eq("org_id", ctx.orgId)
+        .maybeSingle(),
+    ])
+    if (!page || !adAccount) {
+      return NextResponse.json(
+        { error: "page_id or ad_account_id not found in this organization" },
+        { status: 400 }
+      )
+    }
+
     const { data, error } = await supabase
       .from("ads")
       .insert({

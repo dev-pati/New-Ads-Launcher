@@ -8,14 +8,26 @@ import { createCipheriv, createDecipheriv, randomBytes, createHash } from "crypt
 const PREFIX = "enc:v1:"
 
 function keyFromEnv(): Buffer {
-  const raw =
-    process.env.DB_ENCRYPTION_KEY ||
-    process.env.CUSTOM_AUTH_SECRET ||
-    process.env.JWT_SECRET
-  if (!raw) {
-    throw new Error("DB_ENCRYPTION_KEY (or CUSTOM_AUTH_SECRET) is required for secret encryption")
+  const dedicated = process.env.DB_ENCRYPTION_KEY
+  if (dedicated) {
+    if (/^[0-9a-fA-F]{64}$/.test(dedicated)) return Buffer.from(dedicated, "hex")
+    // Allow non-hex only outside production
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("DB_ENCRYPTION_KEY must be 64 hex chars (32 bytes) in production")
+    }
+    return createHash("sha256").update(dedicated).digest()
   }
-  // Accept 64-hex (32 bytes) or arbitrary passphrase → SHA-256
+
+  // Production: dedicated key is required — never fall back to auth secrets.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("DB_ENCRYPTION_KEY is required in production for secret encryption")
+  }
+
+  // Dev fallback only
+  const raw = process.env.CUSTOM_AUTH_SECRET || process.env.JWT_SECRET
+  if (!raw) {
+    throw new Error("DB_ENCRYPTION_KEY (or CUSTOM_AUTH_SECRET in dev) is required for secret encryption")
+  }
   if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, "hex")
   return createHash("sha256").update(raw).digest()
 }
@@ -53,7 +65,7 @@ export function decryptSecret(value: string | null | undefined): string | null {
   return decrypted.toString("utf8")
 }
 
-// Self-check (node -e "require('./lib/crypto')") — skipped in edge; only for node runtime.
+// Self-check — opt-in only.
 if (process.env.NODE_ENV !== "production" && process.env.RUN_CRYPTO_SELFCHECK === "1") {
   const sample = "tok_test_123"
   const enc = encryptSecret(sample)!
