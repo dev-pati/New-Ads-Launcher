@@ -157,6 +157,7 @@ export async function GET(request: NextRequest) {
     const metric = sp.get("metric") || "spend"
     const granularity = (["day", "week", "month"].includes(sp.get("granularity") || "") ? sp.get("granularity") : "day") as "day" | "week" | "month"
     const datePreset = sp.get("datePreset") || "last_30d"
+    const attributionWindows = sp.get("action_attribution_windows") || ""
     let since = sp.get("since") || ""
     let until = sp.get("until") || ""
     ;({ since, until } = clampTimeToToday(since, until))
@@ -169,7 +170,7 @@ export async function GET(request: NextRequest) {
     // Object to query: selected id, else account
     const basePath = id ? id : accountPath
     const dateKey = since && until ? `range:${since}_${until}` : `preset:${datePreset}`
-    const cacheKey = `insights:trends:${adAccountId}:${id || "account"}:${dateKey}:${granularity}:${metric}`
+    const cacheKey = `insights:trends:${adAccountId}:${id || "account"}:${dateKey}:${granularity}:${metric}:${attributionWindows}`
 
     const result = await getDbCachedFacebookMetadata({
       orgId: ctx.orgId,
@@ -181,7 +182,7 @@ export async function GET(request: NextRequest) {
           time_increment: "1",
           limit: "100",
           access_token: token,
-          use_account_attribution_setting: "true",
+          ...(!attributionWindows ? { use_account_attribution_setting: "true" } : { action_attribution_windows: attributionWindows }),
         })
         if (since && until) params.set("time_range", JSON.stringify({ since, until }))
         else params.set("date_preset", datePreset)

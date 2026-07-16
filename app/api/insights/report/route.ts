@@ -93,6 +93,7 @@ export async function GET(request: NextRequest) {
     let since = sp.get("since") || ""
     let until = sp.get("until") || ""
     ;({ since, until } = clampTimeToToday(since, until))
+    const attributionWindows = sp.get("action_attribution_windows") || ""
     const limit = Math.min(parseInt(sp.get("limit") || "50"), 50)
 
     if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
@@ -102,7 +103,7 @@ export async function GET(request: NextRequest) {
 
     const forceRefresh = sp.get("refresh") === "true"
     const dateKey = since && until ? `range:${since}_${until}` : `preset:${datePreset}`
-    const cacheKey = `insights:report:${adAccountId}:${level}:${dateKey}:limit:${limit}`
+    const cacheKey = `insights:report:${adAccountId}:${level}:${dateKey}:limit:${limit}:${attributionWindows}`
 
     const result = await getDbCachedFacebookMetadata({
       orgId: ctx.orgId,
@@ -116,7 +117,7 @@ export async function GET(request: NextRequest) {
           sort: "spend_descending",
           limit: String(limit),
           access_token: token,
-          use_account_attribution_setting: "true",
+          ...(!attributionWindows ? { use_account_attribution_setting: "true" } : { action_attribution_windows: attributionWindows }),
         })
         if (since && until) insightParams.set("time_range", JSON.stringify({ since, until }))
         else insightParams.set("date_preset", datePreset)

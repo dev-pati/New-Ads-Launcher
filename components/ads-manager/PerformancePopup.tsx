@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import {
-  IconChevronDown, IconDownload, IconHistory, IconLoader2, IconPlus,
+  IconChevronDown, IconDownload, IconHistory, IconLoader2, IconPlus, IconCalendar, IconAdjustments,
   IconSettings, IconX,
 } from "@tabler/icons-react"
 import {
@@ -14,6 +14,7 @@ import {
   Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip"
 import type { Level, ReportRow } from "./InsightDrawers"
+import { AdsDateRangePicker } from "./AdsDateRangePicker"
 
 type Tab = "trends" | "breakdowns"
 
@@ -77,6 +78,18 @@ const BREAKDOWN_OPTS = [
   { key: "impression_device", label: "Impression device" },
   { key: "country", label: "Country" },
   { key: "media_type", label: "Media type" },
+]
+
+const STANDARD_ATTR = [
+  { key: "1d_click", label: "1-day click" },
+  { key: "7d_click", label: "7-day click" },
+  { key: "28d_click", label: "28-day click" },
+  { key: "1d_view", label: "1-day view" },
+  { key: "1d_ev", label: "1-day engagement" },
+]
+const SKAN_ATTR = [
+  { key: "skan_view", label: "View from SKAdNetwork" },
+  { key: "skan_click", label: "Click from SKAdNetwork" },
 ]
 
 const MAX_ROWS = 8
@@ -150,6 +163,13 @@ export function PerformancePopup({
   const [tab, setTab] = useState<Tab>("trends")
   const [granularity, setGranularity] = useState<"day" | "week" | "month">("day")
 
+  const [attributionWindows, setAttributionWindows] = useState<string[]>([])
+  const [calOpen, setCalOpen] = useState(false)
+  const [attributionOpen, setAttributionOpen] = useState(false)
+  const [sinceOverride, setSinceOverride] = useState(since)
+  const [untilOverride, setUntilOverride] = useState(until)
+  const [presetOverride, setPresetOverride] = useState(datePreset)
+
   // Charts mode active metric
   const [metric, setMetric] = useState("spend")
   const [activeCard, setActiveCard] = useState<string | null>(null)
@@ -178,6 +198,8 @@ export function PerformancePopup({
   const [breakdownDataStore, setBreakdownDataStore] = useState<Record<string, BreakdownRow[]>>({})
 
   const [metricsByRow, setMetricsByRow] = useState<Record<string, any>>({})
+  const [creativeByRow, setCreativeByRow] = useState<Record<string, any>>({})
+  const [videoByRow, setVideoByRow] = useState<Record<string, any>>({})
   const [activities, setActivities] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -189,10 +211,12 @@ export function PerformancePopup({
 
   const qsBase = useMemo(() => {
     const p = new URLSearchParams({ adAccountId: accountId, level })
-    if (since && until) { p.set("since", since); p.set("until", until) }
-    else p.set("datePreset", datePreset === "custom" ? "last_30d" : datePreset)
+    if (sinceOverride && untilOverride) { p.set("since", sinceOverride); p.set("until", untilOverride) }
+    else if (since && until) { p.set("since", since); p.set("until", until) }
+    else p.set("datePreset", presetOverride === "custom" ? "last_30d" : presetOverride)
+    if (attributionWindows.length > 0) p.set("action_attribution_windows", attributionWindows.join(","))
     return p
-  }, [accountId, level, since, until, datePreset])
+  }, [accountId, level, since, until, sinceOverride, untilOverride, presetOverride, attributionWindows])
 
   // Determine active metrics list based on mode
   const activeMetrics = useMemo(() => {
@@ -256,12 +280,22 @@ export function PerformancePopup({
         const res = await fetch(`/api/insights/report-object?${qsBase}&id=${row.id}`)
         const d = await res.json()
         if (d.error) throw new Error(d.error)
-        return { row, metrics: d.metrics || {} }
+        return { row, metrics: d.metrics || {}, creative: d.creative || {}, video: d.video || {} }
       }))
       if (cancelled) return
-      const next: Record<string, any> = {}
-      results.forEach(r => { if (r.status === "fulfilled") next[r.value.row.id] = r.value.metrics })
-      setMetricsByRow(next)
+      const nextM: Record<string, any> = {}
+      const nextC: Record<string, any> = {}
+      const nextV: Record<string, any> = {}
+      results.forEach(r => {
+        if (r.status === "fulfilled") {
+          nextM[r.value.row.id] = r.value.metrics
+          nextC[r.value.row.id] = r.value.creative
+          nextV[r.value.row.id] = r.value.video
+        }
+      })
+      setMetricsByRow(nextM)
+      setCreativeByRow(nextC)
+      setVideoByRow(nextV)
     }
     load()
     return () => { cancelled = true }
@@ -548,6 +582,28 @@ export function PerformancePopup({
                     )}
                   </div>
 
+                                    {/* Compare Stat Cards */}
+                  {data.length > 0 && tab === "trends" && (() => {
+                    const allVals = data.flatMap(p => capped.map((_, i) => Number(p["row_" + i] || 0))).filter(v => v > 0)
+                    const sum = allVals.reduce((a, b) => a + b, 0)
+                    const mean = allVals.length ? sum / allVals.length : 0
+                    const variance = allVals.length ? allVals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / allVals.length : 0
+                    const stdDev = Math.sqrt(variance)
+                    const volatility = mean > 0 ? (stdDev / mean) * 100 : 0
+                    return (
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="border rounded px-2.5 py-1.5 bg-background">
+                          <p className="text-[10px] text-muted-foreground uppercase">Sum / Avg</p>
+                          <p className="text-sm font-semibold tabular-nums">{metricFmt(mKey)(mean)} <span className="text-[10px] font-normal text-muted-foreground ml-1">(avg)</span></p>
+                        </div>
+                        <div className="border rounded px-2.5 py-1.5 bg-background">
+                          <div className="flex items-center gap-1"><p className="text-[10px] text-muted-foreground uppercase">Volatility</p></div>
+                          <p className="text-sm font-semibold tabular-nums">{volatility.toFixed(1)}%</p>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                  
                   {/* Chart body */}
                   {hasError ? (
                     <div className="h-40 flex items-center justify-center text-xs text-destructive">
@@ -690,8 +746,84 @@ export function PerformancePopup({
                 <option value="status">Status changes</option>
               </select>
 
-              {/* Customize */}
+              {/* Calendar / date range */}
+              <div className="relative">
+                <button
+                  onClick={() => setCalOpen(o => !o)}
+                  className="h-9 px-3 text-sm rounded-lg border bg-background flex items-center gap-1.5 hover:bg-muted/50"
+                  title="Custom date range"
+                >
+                  <IconCalendar className="size-4" />
+                  <span className="hidden sm:inline">{since && until ? `${since} → ${until}` : "Custom range"}</span>
+                </button>
+                {calOpen && (
+                  <div className="absolute right-0 top-10 z-20 bg-background border rounded-xl shadow-xl p-3">
+                    <AdsDateRangePicker
+                      preset={since && until ? "custom" : (datePreset === "custom" ? "last_30d" : datePreset)}
+                      onChange={(p, s, e) => {
+                        if (p === "custom" && s && e) {
+                          setSinceOverride(s.toISOString().split("T")[0])
+                          setUntilOverride(e.toISOString().split("T")[0])
+                        } else {
+                          setSinceOverride(""); setUntilOverride("")
+                          // preset handled by parent; map common presets to datePreset
+                          setPresetOverride(p)
+                        }
+                        setCalOpen(false)
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Attribution settings */}
               <div className="relative ml-auto">
+                <button onClick={() => setAttributionOpen(o => !o)}
+                  className="h-9 px-3 text-sm rounded-lg border bg-background flex items-center gap-1.5 hover:bg-muted/50">
+                  <IconAdjustments className="size-4" />
+                  Attribution
+                  <IconChevronDown className="size-3.5" />
+                </button>
+                {attributionOpen && (
+                  <div className="absolute right-0 top-10 z-10 w-80 bg-background border rounded-xl shadow-xl">
+                    <div className="p-3 border-b">
+                      <p className="text-sm font-semibold">Compare attribution settings</p>
+                      <p className="text-[11px] text-muted-foreground">Compare when and how people take action after engaging with your ads. Selections in this tool are for reporting only and do not change ad optimisation.</p>
+                    </div>
+                    <div className="p-3 max-h-80 overflow-y-auto space-y-3 text-sm">
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5">Standard attribution</p>
+                        {STANDARD_ATTR.map(a => (
+                          <label key={a.key} className="flex items-center gap-2 py-1 cursor-pointer">
+                            <input type="checkbox" checked={attributionWindows.includes(a.key)}
+                              onChange={() => setAttributionWindows(prev => prev.includes(a.key) ? prev.filter(k => k !== a.key) : [...prev, a.key])} />
+                            <span>{a.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="pt-2 border-t">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5">Apple SKAdNetwork <span className="normal-case font-normal">(app ads only)</span></p>
+                        {SKAN_ATTR.map(a => (
+                          <label key={a.key} className="flex items-center gap-2 py-1">
+                            <input type="checkbox" disabled />
+                            <span className="opacity-60">{a.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      <div className="pt-2 border-t">
+                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5">Advanced option</p>
+                        <label className="flex items-center gap-2 py-1">
+                          <input type="checkbox" disabled />
+                          <span className="opacity-60">Incremental attribution</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Customize */}
+              <div className="relative">
                 <button onClick={() => setCustomizeOpen(o => !o)}
                   className="h-9 px-3 text-sm rounded-lg border bg-background flex items-center gap-1.5 hover:bg-muted/50">
                   <IconSettings className="size-4" /> Customise
@@ -798,6 +930,75 @@ export function PerformancePopup({
 
             {/* Demographics + Platform sections */}
             <div className="border-t pt-5">
+              {capped.length === 1 && metricsByRow[capped[0].id]?.isVideo && (
+                <section className="rounded-xl border bg-card p-4 mb-5">
+                  <p className="text-sm font-semibold mb-3">Video performance</p>
+
+                  <div className="grid grid-cols-4 gap-3 mb-4">
+                    {[
+                      { key: "videoPlays", label: "Video plays", link: "https://www.facebook.com/business/help/592054664510127" },
+                      { key: "avgWatchTime", label: "Avg. play time", link: "https://www.facebook.com/business/help/1794520550789165" },
+                      { key: "hookRate", label: "Hook rate", link: "https://www.facebook.com/business/help/1591938568393543" },
+                      { key: "holdRate", label: "Hold rate", link: "https://www.facebook.com/business/help/1216404939613119" }
+                    ].map(c => {
+                      const v = videoByRow[capped[0].id]?.[c.key]
+                      const isPct = c.key.includes("Rate")
+                      const formatted = c.key === "avgWatchTime" ? fmtSec(v) : (isPct ? (v ? fmt(v, 2) + "%" : "—") : fmtN(v))
+                      return (
+                        <div key={c.key} className="border rounded-xl p-3 bg-background flex flex-col justify-between">
+                          <a href={c.link} target="_blank" rel="noopener noreferrer" className="text-[11px] text-muted-foreground hover:underline hover:text-primary mb-1 inline-flex w-fit">
+                            {c.label}
+                          </a>
+                          <p className="text-xl font-bold tabular-nums">{formatted}</p>
+                        </div>
+                      )
+                    })}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="col-span-1 border rounded-lg bg-background p-2 aspect-[4/5] flex items-center justify-center bg-muted relative overflow-hidden group">
+                      {creativeByRow[capped[0].id]?.thumbnail ? (
+                        <>
+                          <img src={creativeByRow[capped[0].id].thumbnail} alt="Video thumbnail" className="w-full h-full object-cover rounded" />
+                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            {creativeByRow[capped[0].id]?.videoId && (
+                              <a href={`https://facebook.com/${creativeByRow[capped[0].id].videoId}`} target="_blank" rel="noopener noreferrer" className="bg-white/90 text-black px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-white transition-colors">
+                                Play video
+                              </a>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No preview</span>
+                      )}
+                    </div>
+
+                    <div className="col-span-2 flex flex-col justify-center">
+                      <p className="text-sm font-semibold mb-1">Time watched</p>
+                      <p className="text-[11px] text-muted-foreground mb-4">
+                        Analyse your video performance by time watched to uncover creative optimisation opportunities. Though a decrease in video play time is normal as the video elapses, significant drops may indicate a lack of engagement.
+                      </p>
+
+                      <div className="h-40 w-full">
+                        {videoByRow[capped[0].id]?.retention?.length > 0 ? (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={videoByRow[capped[0].id].retention} margin={{ top: 8, right: 12, left: -24, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+                              <XAxis dataKey="label" tick={{ fontSize: 10, fill: MUTED }} axisLine={false} tickLine={false} />
+                              <YAxis tick={{ fontSize: 10, fill: MUTED }} axisLine={false} tickLine={false} tickFormatter={v => v + "%"} domain={[0, 100]} />
+                              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any) => [fmt(Number(v), 1) + "%", "Retention"]} />
+                              <Line type="monotone" dataKey="pct" stroke={SERIES[0]} strokeWidth={2} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 5 }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        ) : (
+                          <div className="h-full flex items-center justify-center text-xs text-muted-foreground border rounded bg-background">No retention data</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
               <div className="flex items-center gap-1 mb-3">
                 {(["demographics", "platform"] as const).map(s => (
                   <button key={s} onClick={() => setChartsSub(s)}

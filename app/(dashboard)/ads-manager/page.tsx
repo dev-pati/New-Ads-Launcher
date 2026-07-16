@@ -286,6 +286,59 @@ function SortTh({ label, field, sortField, sortDir, onSort, className }: {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// Per-column header context menu: sort + column management actions (Meta-style).
+function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMoveRight, onRemove, canMoveLeft, canMoveRight }: {
+  colId: string
+  label: string
+  onSortAsc: () => void
+  onSortDesc: () => void
+  onMoveLeft: () => void
+  onMoveRight: () => void
+  onRemove: () => void
+  canMoveLeft: boolean
+  canMoveRight: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [open])
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+        className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10"
+        title="Column options"
+      >
+        <IconChevronDown className="size-3 opacity-50" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-6 z-50 w-44 bg-background border rounded-lg shadow-xl py-1 text-xs">
+          <button onClick={() => { onSortAsc(); setOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 flex items-center gap-2">
+            <IconArrowUp className="size-3.5" /> Sort ascending
+          </button>
+          <button onClick={() => { onSortDesc(); setOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 flex items-center gap-2">
+            <IconArrowDown className="size-3.5" /> Sort descending
+          </button>
+          <div className="my-1 border-t" />
+          <button onClick={() => { onMoveLeft(); setOpen(false) }} disabled={!canMoveLeft} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 disabled:opacity-40 flex items-center gap-2">
+            <IconChevronLeft className="size-3.5" /> Move left
+          </button>
+          <button onClick={() => { onMoveRight(); setOpen(false) }} disabled={!canMoveRight} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 disabled:opacity-40 flex items-center gap-2">
+            <IconChevronRight className="size-3.5" /> Move right
+          </button>
+          <button onClick={() => { onRemove(); setOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 text-destructive flex items-center gap-2">
+            <IconX className="size-3.5" /> Remove column
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function AdsManagerPage() {
   const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
 
@@ -1611,24 +1664,37 @@ export default function AdsManagerPage() {
                 {tab === "ads" && (
                   <th className="w-20 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Preview</th>
                 )}
-                {columnOrder.map(colId => {
+                                {columnOrder.map((colId, i) => {
                   const col = COLUMN_MAP[colId]
                   if (!col) return null
-                  if (col.sortKey) {
-                    return (
-                      <SortTh
-                        key={colId}
-                        label={col.headerLabel}
-                        field={col.sortKey}
-                        sortField={sortField}
-                        sortDir={sortDir}
-                        onSort={handleSort}
-                      />
-                    )
-                  }
+                  const moveLeft = () => setColumnOrder(prev => { const n = [...prev]; [n[i-1], n[i]] = [n[i], n[i-1]]; return n })
+                  const moveRight = () => setColumnOrder(prev => { const n = [...prev]; [n[i], n[i+1]] = [n[i+1], n[i]]; return n })
+                  const remove = () => setColumnOrder(prev => prev.filter(id => id !== colId))
+                  const sortFieldObj = col.sortKey || colId
+                  const active = sortField === sortFieldObj
+                  
                   return (
-                    <th key={colId} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                      {col.headerLabel}
+                    <th key={colId} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap group">
+                      <div className="flex items-center gap-1">
+                        <div className="cursor-pointer hover:text-foreground transition-colors flex items-center gap-1" onClick={() => handleSort(sortFieldObj)}>
+                          {col.headerLabel}
+                          {active
+                            ? (sortDir === "asc" ? <IconArrowUp className="size-3 text-primary" /> : <IconArrowDown className="size-3 text-primary" />)
+                            : <IconArrowsUpDown className="size-3 opacity-0 group-hover:opacity-40" />
+                          }
+                        </div>
+                        <HeaderCellMenu
+                          colId={colId}
+                          label={col.headerLabel}
+                          onSortAsc={() => { setSortField(sortFieldObj); setSortDir("asc") }}
+                          onSortDesc={() => { setSortField(sortFieldObj); setSortDir("desc") }}
+                          onMoveLeft={moveLeft}
+                          onMoveRight={moveRight}
+                          onRemove={remove}
+                          canMoveLeft={i > 0}
+                          canMoveRight={i < columnOrder.length - 1}
+                        />
+                      </div>
                     </th>
                   )
                 })}

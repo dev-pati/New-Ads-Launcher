@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
     const adAccountId = sp.get("adAccountId") || ""
     const level = (["ad", "adset", "campaign"].includes(sp.get("level") || "") ? sp.get("level") : "ad") as Level
     const datePreset = sp.get("datePreset") || "last_30d"
+    const attributionWindows = sp.get("action_attribution_windows") || ""
     let since = sp.get("since") || ""
     let until = sp.get("until") || ""
     ;({ since, until } = clampTimeToToday(since, until))
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     const token = connection.access_token
     const dateKey = since && until ? `range:${since}_${until}` : `preset:${datePreset}`
-    const cacheKey = `insights:report-object:${level}:${id}:${dateKey}`
+    const cacheKey = `insights:report-object:${level}:${id}:${dateKey}:${attributionWindows}`
 
     const result = await getDbCachedFacebookMetadata({
       orgId: ctx.orgId,
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
       ttlMs: 10 * 60_000,
       loader: async () => {
         const params = new URLSearchParams({ fields: INSIGHT_FIELDS, access_token: token,
-          use_account_attribution_setting: "true", })
+          ...(!attributionWindows ? { use_account_attribution_setting: "true" } : { action_attribution_windows: attributionWindows }), })
         if (since && until) params.set("time_range", JSON.stringify({ since, until }))
         else params.set("date_preset", datePreset)
 
