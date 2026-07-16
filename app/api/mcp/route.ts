@@ -189,19 +189,34 @@ async function resolveApiKey(bearer: string) {
 
   // API key (al_xxx)
   if (bearer.startsWith("al_")) {
-    const { data, error } = await admin
+    const { hashMcpApiKey } = await import("@/lib/mcp-keys")
+    const hash = hashMcpApiKey(bearer)
+
+    // Prefer hash lookup (post-migration). Fall back to legacy plaintext column.
+    const { data: hashed, error: hashErr } = await admin
       .from("mcp_api_keys")
       .select("id, org_id, user_id")
-      .eq("api_key", bearer)
-      .single()
+      .eq("api_key_hash", hash)
+      .maybeSingle()
 
-    if (error || !data) return null
+    let row = hashed
+    if (!row) {
+      const { data: legacy } = await admin
+        .from("mcp_api_keys")
+        .select("id, org_id, user_id")
+        .eq("api_key", bearer)
+        .maybeSingle()
+      row = legacy
+    }
 
-    await admin.from("mcp_api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", data.id)
+    if (!row) return null
+    if (hashErr && hashErr.code !== "PGRST116" && hashErr.code !== "42703") return null
 
-    const fbToken = await getFbToken(data.org_id)
+    await admin.from("mcp_api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", row.id)
+
+    const fbToken = await getFbToken(row.org_id)
     if (!fbToken) return null
-    return { orgId: data.org_id, userId: data.user_id, token: fbToken }
+    return { orgId: row.org_id, userId: row.user_id, token: fbToken }
   }
 
   return null

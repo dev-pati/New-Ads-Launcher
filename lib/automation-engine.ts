@@ -5,6 +5,7 @@ import { Resend } from "resend"
 import { sendEmail } from "@/lib/send-email"
 import { buildNotificationEmail } from "@/lib/email-template"
 import { sendLarkMessage, sendLarkGroupMessage } from "@/lib/send-lark"
+import { createApprovalToken } from "@/lib/approval-token"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -986,8 +987,20 @@ async function execSteps(
       // Send approval email
       if (approvalCfg.approvers?.length) {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.APP_URL ?? ""
-        const approveUrl = `${appUrl}/api/automations/executions/${exec?.id}/approve?token=${approval?.id}`
-        const rejectUrl  = `${appUrl}/api/automations/executions/${exec?.id}/reject?token=${approval?.id}`
+        const approveToken = createApprovalToken({
+          approvalId: approval?.id ?? "",
+          executionId: exec?.id ?? "",
+          action: "approve",
+          ttlSeconds: (approvalCfg.timeoutHours ?? 24) * 3600,
+        })
+        const rejectToken = createApprovalToken({
+          approvalId: approval?.id ?? "",
+          executionId: exec?.id ?? "",
+          action: "reject",
+          ttlSeconds: (approvalCfg.timeoutHours ?? 24) * 3600,
+        })
+        const approveUrl = `${appUrl}/api/automations/executions/${exec?.id}/approve?token=${approveToken}`
+        const rejectUrl  = `${appUrl}/api/automations/executions/${exec?.id}/reject?token=${rejectToken}`
 
         const emailBody = `
 Automation "${automation.name}" requires your approval before continuing.

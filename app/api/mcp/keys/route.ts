@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { generateMcpApiKey, hashMcpApiKey, keyPrefix } from "@/lib/mcp-keys"
 
 export const dynamic = "force-dynamic"
-
-function generateApiKey(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-  let key = "al_"
-  for (let i = 0; i < 40; i++) {
-    key += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return key
-}
 
 export async function GET() {
   try {
@@ -21,16 +13,41 @@ export async function GET() {
     const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("mcp_api_keys")
-      .select("id, name, api_key, last_used_at, created_at")
+      .select("id, name, api_key, api_key_prefix, last_used_at, created_at")
       .eq("org_id", ctx.orgId)
       .order("created_at", { ascending: false })
 
     if (error) {
       if (error.code === "42P01") return NextResponse.json({ keys: [] })
+      if (error.message?.includes("api_key_prefix") || error.code === "42703") {
+        const legacy = await supabase
+          .from("mcp_api_keys")
+          .select("id, name, api_key, last_used_at, created_at")
+          .eq("org_id", ctx.orgId)
+          .order("created_at", { ascending: false })
+        if (legacy.error) throw legacy.error
+        return NextResponse.json({
+          keys: (legacy.data || []).map((k: any) => ({
+            id: k.id,
+            name: k.name,
+            api_key_prefix: k.api_key ? String(k.api_key).slice(0, 10) : null,
+            last_used_at: k.last_used_at,
+            created_at: k.created_at,
+          })),
+        })
+      }
       throw error
     }
 
-    return NextResponse.json({ keys: data || [] })
+    return NextResponse.json({
+      keys: (data || []).map((k: any) => ({
+        id: k.id,
+        name: k.name,
+        api_key_prefix: k.api_key_prefix || (k.api_key ? String(k.api_key).slice(0, 10) : null),
+        last_used_at: k.last_used_at,
+        created_at: k.created_at,
+      })),
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
@@ -44,23 +61,58 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const name = body.name || "Default"
 
-    const apiKey = generateApiKey()
+    const plain = generateMcpApiKey()
     const admin = createAdminClient()
 
-    const { data, error } = await admin
+    let data: any = null
+    let error: any = null
+    ;({ data, error } = await admin
       .from("mcp_api_keys")
       .insert({
         org_id: ctx.orgId,
         user_id: ctx.user.id,
-        api_key: apiKey,
         name,
+        api_key_hash: hashMcpApiKey(plain),
+        api_key_prefix: keyPrefix(plain),
+        api_key: null,
       })
-      .select()
-      .single()
+      .select("id, name, api_key_prefix, created_at")
+      .single())
+
+    if (error && (error.message?.includes("api_key_hash") || error.code === "42703" || error.code === "PGRST204")) {
+      ;({ data, error } = await admin
+        .from("mcp_api_keys")
+        .insert({
+          org_id: ctx.orgId,
+          user_id: ctx.user.id,
+          name,
+          api_key: plain,
+        })
+        .select("id, name, api_key, created_at")
+        .single())
+      if (error) throw error
+      return NextResponse.json({
+        key: {
+          id: data.id,
+          name: data.name,
+          api_key_prefix: plain.slice(0, 10),
+          created_at: data.created_at,
+          api_key: plain,
+        },
+      }, { status: 201 })
+    }
 
     if (error) throw error
-    // Return the plaintext key exactly once for the caller to copy.
-    return NextResponse.json({ key: { ...data, api_key: apiKey } }, { status: 201 })
+
+    return NextResponse.json({
+      key: {
+        id: data.id,
+        name: data.name,
+        api_key_prefix: data.api_key_prefix,
+        created_at: data.created_at,
+        api_key: plain,
+      },
+    }, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }

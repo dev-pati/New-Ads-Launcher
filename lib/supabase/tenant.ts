@@ -16,10 +16,8 @@ export async function createTenantClient() {
   }
 
   const cookieStore = await cookies()
-  // Prefer httpOnly session cookie; fall back to client-readable twin used by browser client.
-  const token =
-    cookieStore.get("adlauncher_session")?.value ||
-    cookieStore.get("adlauncher_client_token")?.value
+  // httpOnly session cookie only — never the client-readable twin (XSS-exfiltratable).
+  const token = cookieStore.get("adlauncher_session")?.value
 
   const cfHeaders: Record<string, string> = {}
   const cfId = process.env.CF_ACCESS_CLIENT_ID
