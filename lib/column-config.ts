@@ -111,39 +111,39 @@ export const DEFAULT_PRESETS: ColumnPreset[] = [
     id: "performance",
     label: "Performance",
     isDefault: true,
-    columns: ["spend", "results", "cost_per_result", "budget", "delivery"],
+    columns: ["delivery", "spend", "results", "cost_per_result", "budget"],
   },
   {
     id: "performance_and_clicks",
     label: "Performance and clicks",
     isDefault: true,
-    columns: ["spend", "results", "cost_per_result", "budget", "schedule_start", "schedule_end", "delivery", "impressions", "clicks", "ctr", "cpc"],
+    columns: ["delivery", "spend", "results", "cost_per_result", "budget", "schedule_start", "schedule_end", "impressions", "clicks", "ctr", "cpc"],
   },
   {
     id: "engagement",
     label: "Engagement",
     isDefault: true,
-    columns: ["spend", "results", "cost_per_result", "impressions", "clicks", "ctr", "add_to_cart", "video_views_3s"],
+    columns: ["delivery", "spend", "results", "cost_per_result", "impressions", "clicks", "ctr", "add_to_cart", "video_views_3s"],
   },
   {
     id: "delivery",
     label: "Delivery",
     isDefault: true,
-    columns: ["spend", "delivery", "impressions", "reach", "frequency", "cpm"],
+    columns: ["delivery", "spend", "impressions", "reach", "frequency", "cpm"],
   },
   {
     id: "ecom",
     label: "ECOM",
     isDefault: true,
     columns: [
-      "attribution_setting", "budget", "spend", "roas", "purchase_value",
+      "delivery", "attribution_setting", "budget", "spend", "roas", "purchase_value",
       "impressions", "frequency", "cpm",
       "cost_per_unique_click", "unique_link_ctr", "ctr", "cost_per_link_click",
       "unique_link_clicks", "lpv_rate", "content_views",
       "add_to_cart", "cost_per_add_to_cart",
       "initiate_checkout", "cost_per_initiate_checkout",
-      "purchases", "cost_per_purchase", "shopify_score",
-      "avg_watch_time", "delivery"
+      "purchases", "cost_per_purchase",
+      "avg_watch_time"
     ],
   },
 ]

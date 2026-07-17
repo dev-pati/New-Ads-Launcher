@@ -1,9 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  IconChevronDown, IconDownload, IconHistory, IconLoader2, IconPlus, IconCalendar, IconAdjustments,
-  IconSettings, IconX,
+  IconChevronDown, IconDownload, IconHistory, IconLoader2, IconPlus, IconCalendar,
+  IconSettings, IconX, IconDots, IconMessageCircle,
 } from "@tabler/icons-react"
 import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer,
@@ -80,18 +80,6 @@ const BREAKDOWN_OPTS = [
   { key: "media_type", label: "Media type" },
 ]
 
-const STANDARD_ATTR = [
-  { key: "1d_click", label: "1-day click" },
-  { key: "7d_click", label: "7-day click" },
-  { key: "28d_click", label: "28-day click" },
-  { key: "1d_view", label: "1-day view" },
-  { key: "1d_ev", label: "1-day engagement" },
-]
-const SKAN_ATTR = [
-  { key: "skan_view", label: "View from SKAdNetwork" },
-  { key: "skan_click", label: "Click from SKAdNetwork" },
-]
-
 const MAX_ROWS = 8
 const MAX_ACTIVE_METRICS = 3
 
@@ -130,6 +118,17 @@ function downloadCsv(filename: string, rows: { label: string; value: number | st
   URL.revokeObjectURL(url)
 }
 
+function splitActivity(summary: string, type: string) {
+  const text = summary || type || "Activity"
+  const [activity, ...rest] = text.split(":")
+  return { activity: activity || "Activity", details: rest.join(":").trim() || "—" }
+}
+
+function fmtActivityTime(time: string | null | undefined) {
+  if (!time) return "—"
+  return new Date(time).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).replace(",", " at")
+}
+
 interface Series { date: string; label: string; value: number }
 interface BreakdownRow { label: string; [key: string]: any }
 
@@ -143,8 +142,65 @@ function cardsForLevel(level: Level) {
   return [...base, { key: "roas", label: "Purchase ROAS" }] // adset + ad default
 }
 
+// ── Sidebar tree node action menu (Meta-style) ──────────────────────────────
+function NodeActionMenu({ level, id, onDuplicate, onDelete, onEdit, onViewHistory, onSeeHistory }: {
+  level: string; id: string
+  onDuplicate?: (id: string) => void
+  onDelete?: (id: string) => void
+  onEdit?: (id: string) => void
+  onViewHistory?: (id: string) => void
+  onSeeHistory?: (id: string, level: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener("mousedown", h)
+    return () => document.removeEventListener("mousedown", h)
+  }, [open])
+  const copyId = () => { try { navigator.clipboard?.writeText(id) } catch {} setOpen(false) }
+  const Item = ({ label, shortcut, onClick, disabled }: { label: string; shortcut?: string; onClick: () => void; disabled?: boolean }) => (
+    <button onClick={onClick} disabled={disabled}
+      className={cn("w-full flex items-center justify-between gap-3 px-3 py-1.5 text-left text-xs hover:bg-muted/50", disabled && "opacity-40 cursor-not-allowed")}>
+      <span>{label}</span>
+      {shortcut && <span className="text-[10px] text-muted-foreground">{shortcut}</span>}
+    </button>
+  )
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }} className="p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10">
+        <IconDots className="size-3.5 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-5 z-50 w-52 bg-background border rounded-lg shadow-xl py-1">
+          <p className="px-3 py-1 text-[10px] uppercase text-muted-foreground">Actions for this {level}</p>
+          <div className="border-t my-1" />
+          <Item label="Duplicate" shortcut="Ctrl+Shift+D" disabled={!onDuplicate} onClick={() => onDuplicate?.(id)} />
+          <Item label="Quickly duplicate" shortcut="Ctrl+D" disabled={!onDuplicate} onClick={() => onDuplicate?.(id)} />
+          <Item label="Copy" shortcut="Ctrl+C" disabled onClick={() => {}} />
+          <Item label="Paste" shortcut="Ctrl+V" disabled onClick={() => {}} />
+          <Item label="Delete" shortcut="Ctrl+Del" disabled={!onDelete} onClick={() => onDelete?.(id)} />
+          <div className="border-t my-1" />
+          <Item label="Edit" disabled={!onEdit} onClick={() => onEdit?.(id)} />
+          <Item label="See history" disabled={!onSeeHistory} onClick={() => onSeeHistory?.(id, level)} />
+          <Item label="Edit ad sequence" disabled onClick={() => {}} />
+          <Item label="Create ad" disabled onClick={() => {}} />
+          <Item label="Create multiple ads" disabled onClick={() => {}} />
+          <Item label="Create rule" disabled onClick={() => {}} />
+          <div className="border-t my-1" />
+          <Item label={`ID: ${id}`} onClick={() => {}} />
+          <Item label="Copy ID" onClick={copyId} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function PerformancePopup({
   mode, level, accountId, rows, datePreset, since, until, onClose,
+  campaigns, adSets, ads, onDuplicate, onDelete, onEdit, onViewHistory,
+  attributionWindows,
 }: {
   mode: "charts" | "compare"
   level: Level
@@ -154,8 +210,16 @@ export function PerformancePopup({
   since: string
   until: string
   onClose: () => void
+  campaigns?: any[]
+  adSets?: any[]
+  ads?: any[]
+  onDuplicate?: (id: string) => void
+  onDelete?: (id: string) => void
+  onEdit?: (id: string) => void
+  onViewHistory?: (id: string) => void
+  attributionWindows?: string[]
 }) {
-  const capped = rows.slice(0, MAX_ROWS)
+  const baseCapped = rows.slice(0, MAX_ROWS)
   const overCap = rows.length > MAX_ROWS
   const isCompare = mode === "compare"
 
@@ -163,9 +227,7 @@ export function PerformancePopup({
   const [tab, setTab] = useState<Tab>("trends")
   const [granularity, setGranularity] = useState<"day" | "week" | "month">("day")
 
-  const [attributionWindows, setAttributionWindows] = useState<string[]>([])
   const [calOpen, setCalOpen] = useState(false)
-  const [attributionOpen, setAttributionOpen] = useState(false)
   const [sinceOverride, setSinceOverride] = useState(since)
   const [untilOverride, setUntilOverride] = useState(until)
   const [presetOverride, setPresetOverride] = useState(datePreset)
@@ -183,6 +245,10 @@ export function PerformancePopup({
   const [activityFilter, setActivityFilter] = useState("all")
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(["spend", "purchases", "costPerPurchase"])
+  const [draftMetrics, setDraftMetrics] = useState<string[]>(selectedMetrics)
+  const [previewMode, setPreviewMode] = useState("all")
+  const [commentsFilter, setCommentsFilter] = useState("facebook_feed")
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [prefBenchmark, setPrefBenchmark] = useState(true)
   const [prefSimilar, setPrefSimilar] = useState(true)
   const [customizeTab, setCustomizeTab] = useState<"metrics" | "preferences">("metrics")
@@ -209,14 +275,91 @@ export function PerformancePopup({
   const [platRows, setPlatRows] = useState<BreakdownRow[]>([])
   const [chartsSub, setChartsSub] = useState<"demographics" | "platform">("demographics")
 
+  // ── Charts mode: active-node override (tree click) ─────────────────────────
+  const [activeNodeId, setActiveNodeId] = useState<string | null>(null)
+  const [activeNodeLevel, setActiveNodeLevel] = useState<Level>(level)
+  const [histActivityFilter, setHistActivityFilter] = useState<string>("all") // history table Activity
+  const [histActorFilter, setHistActorFilter] = useState<string>("all") // history table Changed by (Anyone)
+  const [localCampaigns, setLocalCampaigns] = useState<any[]>([])
+  const [localAdSets, setLocalAdSets] = useState<any[]>([])
+  const [localAds, setLocalAds] = useState<any[]>([])
+  const historyRef = useRef<HTMLDivElement>(null)
+
+  // bootstrapped hierarchy merged with parent arrays
+  const allCampaigns = (campaigns && campaigns.length) ? campaigns : localCampaigns
+  const allAdSets = (adSets && adSets.length) ? adSets : localAdSets
+  const allAds = (ads && ads.length) ? ads : localAds
+
+  // Active level for fetches: override if a tree node is selected, else prop level
+  const effectiveLevel: Level = isCompare ? level : (activeNodeId ? activeNodeLevel : level)
+
+  // Reset override when popup target changes
+  useEffect(() => {
+    setActiveNodeId(null)
+    setActiveNodeLevel(level)
+    setHistActivityFilter("all")
+    setHistActorFilter("all")
+    setLocalCampaigns([])
+    setLocalAdSets([])
+    setLocalAds([])
+  }, [rows.map(r => r.id).join(","), level]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Resolve display name for the selected node from the merged hierarchy
+  const activeNodeName = useMemo(() => {
+    if (!activeNodeId) return null
+    const hit = allCampaigns.find(c => c.id === activeNodeId)
+      || allAdSets.find(a => a.id === activeNodeId)
+      || allAds.find(a => a.id === activeNodeId)
+    return hit?.name ?? null
+  }, [activeNodeId, allCampaigns, allAdSets, allAds])
+
+  // In charts mode all fetches target the selected node (or rows[0]); compare uses full rows.
+  const capped: ReportRow[] = isCompare
+    ? baseCapped
+    : [{
+        id: activeNodeId ?? baseCapped[0]?.id ?? "",
+        name: activeNodeName ?? baseCapped[0]?.name ?? "",
+      }]
+
+  const selectNode = (id: string, lvl: Level) => {
+    setActiveNodeId(id)
+    setActiveNodeLevel(lvl)
+  }
+
   const qsBase = useMemo(() => {
-    const p = new URLSearchParams({ adAccountId: accountId, level })
+    const p = new URLSearchParams({ adAccountId: accountId, level: effectiveLevel })
     if (sinceOverride && untilOverride) { p.set("since", sinceOverride); p.set("until", untilOverride) }
     else if (since && until) { p.set("since", since); p.set("until", until) }
     else p.set("datePreset", presetOverride === "custom" ? "last_30d" : presetOverride)
-    if (attributionWindows.length > 0) p.set("action_attribution_windows", attributionWindows.join(","))
+    if (attributionWindows && attributionWindows.length > 0) p.set("action_attribution_windows", attributionWindows.join(","))
     return p
-  }, [accountId, level, since, until, sinceOverride, untilOverride, presetOverride, attributionWindows])
+  }, [accountId, effectiveLevel, since, until, sinceOverride, untilOverride, presetOverride, attributionWindows])
+
+  // Bootstrap missing hierarchy data so the tree works even when the parent only loaded one tab.
+  useEffect(() => {
+    if (isCompare) return
+    const missing = !allCampaigns.length || !allAdSets.length || !allAds.length
+    if (!missing || !accountId) return
+    let cancelled = false
+    const load = async () => {
+      try {
+        const qs = `ad_account_id=${encodeURIComponent(accountId)}`
+        const jobs: Promise<any>[] = []
+        jobs.push(allCampaigns.length ? Promise.resolve({ campaigns: allCampaigns }) : fetch(`/api/facebook/campaigns?${qs}&date_preset=${encodeURIComponent(presetOverride)}`).then(r => r.json()))
+        jobs.push(allAdSets.length ? Promise.resolve({ adSets: allAdSets }) : fetch(`/api/facebook/adsets?${qs}&date_preset=${encodeURIComponent(presetOverride)}`).then(r => r.json()))
+        jobs.push(allAds.length ? Promise.resolve({ ads: allAds }) : fetch(`/api/facebook/ads?${qs}&date_preset=${encodeURIComponent(presetOverride)}`).then(r => r.json()))
+        const [c, s, a] = await Promise.all(jobs)
+        if (cancelled) return
+        if (!allCampaigns.length) setLocalCampaigns(c.campaigns || [])
+        if (!allAdSets.length) setLocalAdSets(s.adSets || [])
+        if (!allAds.length) setLocalAds(a.ads || [])
+      } catch {
+        // Hierarchy is nice-to-have; charts still work for the active row.
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [isCompare, accountId, presetOverride, allCampaigns.length, allAdSets.length, allAds.length])
 
   // Determine active metrics list based on mode
   const activeMetrics = useMemo(() => {
@@ -451,6 +594,7 @@ export function PerformancePopup({
       grouped[label].metric2Val += Number(r[platMetric2] || 0)
     })
 
+    // Show every detected placement/platform (no top-N cap) — X axis = all placements across both devices
     return Object.values(grouped)
       .map(g => ({
         label: g.label,
@@ -458,10 +602,10 @@ export function PerformancePopup({
         metric2: g.metric2Val
       }))
       .sort((a, b) => b.metric1 + b.metric2 - (a.metric1 + a.metric2))
-      .slice(0, 10)
   }, [platRows, platMetric1, platMetric2, deviceFilter])
 
   // Activities filtered by Activity History dropdown
+  // Chart-marker filter only (does not affect the history table).
   const filteredActivities = useMemo(() => {
     if (activityFilter === "all") return activities
     return activities.filter(e => {
@@ -471,6 +615,23 @@ export function PerformancePopup({
       return true
     })
   }, [activities, activityFilter])
+
+  const actorOptions = useMemo(
+    () => Array.from(new Set(activities.map(a => a.actor).filter(Boolean))) as string[],
+    [activities]
+  )
+
+  // History table has its own filters, independent of the chart-marker select.
+  const tableActivities = useMemo(() => {
+    return activities.filter(e => {
+      const type = String(e.type || "").toLowerCase()
+      if (histActivityFilter === "budget" && !(type.includes("budget") || type.includes("bid"))) return false
+      if (histActivityFilter === "status" && !(type.includes("status") || type.includes("pause") || type.includes("resume"))) return false
+      if (histActivityFilter === "delivery" && !(type.includes("deliver") || type.includes("review") || type.includes("active"))) return false
+      if (histActorFilter !== "all" && e.actor !== histActorFilter) return false
+      return true
+    })
+  }, [activities, histActivityFilter, histActorFilter])
 
   // Generate activities markers for Chart Mode Recharts line
   const CustomDot = (props: any) => {
@@ -497,7 +658,7 @@ export function PerformancePopup({
     ? `Compare ${capped.length} ${level}${capped.length > 1 ? "s" : ""}`
     : `Charts · ${capped[0]?.name || ""}`
 
-  const currentCards = cardsForLevel(level)
+  const currentCards = selectedMetrics.map(k => ({ key: k, label: metricLabel(k) }))
 
   // ═══════════════════════════════════════════════════════════════════════════
   // COMPARE MODE — SIDEBAR DRAWER
@@ -582,24 +743,24 @@ export function PerformancePopup({
                     )}
                   </div>
 
-                                    {/* Compare Stat Cards */}
+                                    {/* Compare Stat Cards: large primary + small volatility under */}
                   {data.length > 0 && tab === "trends" && (() => {
-                    const allVals = data.flatMap(p => capped.map((_, i) => Number(p["row_" + i] || 0))).filter(v => v > 0)
+                    const allVals = data.flatMap(p => capped.map((_, i) => Number(p["row_" + i] || 0))).filter(v => Number.isFinite(v))
                     const sum = allVals.reduce((a, b) => a + b, 0)
                     const mean = allVals.length ? sum / allVals.length : 0
                     const variance = allVals.length ? allVals.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / allVals.length : 0
                     const stdDev = Math.sqrt(variance)
                     const volatility = mean > 0 ? (stdDev / mean) * 100 : 0
+                    // Sum for cumulative metrics; mean for ratios
+                    const isRatio = ["roas", "ctr", "ctrAll", "cpm", "frequency", "costPerPurchase", "costPerResult", "hookRate", "holdRate"].includes(mKey)
+                    const primary = isRatio ? mean : sum
                     return (
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="border rounded px-2.5 py-1.5 bg-background">
-                          <p className="text-[10px] text-muted-foreground uppercase">Sum / Avg</p>
-                          <p className="text-sm font-semibold tabular-nums">{metricFmt(mKey)(mean)} <span className="text-[10px] font-normal text-muted-foreground ml-1">(avg)</span></p>
-                        </div>
-                        <div className="border rounded px-2.5 py-1.5 bg-background">
-                          <div className="flex items-center gap-1"><p className="text-[10px] text-muted-foreground uppercase">Volatility</p></div>
-                          <p className="text-sm font-semibold tabular-nums">{volatility.toFixed(1)}%</p>
-                        </div>
+                      <div className="mb-3">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{isRatio ? "Average" : "Sum"}</p>
+                        <p className="text-3xl font-bold tabular-nums leading-tight">{metricFmt(mKey)(primary)}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {mean > 0 ? `${volatility.toFixed(1)}% volatility` : "— volatility"}
+                        </p>
                       </div>
                     )
                   })()}
@@ -686,7 +847,19 @@ export function PerformancePopup({
   // CHARTS MODE — LARGE POPUP (SINGLE OBJECT)
   // ═══════════════════════════════════════════════════════════════════════════
   const trendData = getTrendDataForMetric(metric)
+  const activeId = capped[0]?.id
+  const activeAd = allAds.find(a => a.id === activeId) || null
+  const activeAdSet = allAdSets.find(a => a.id === activeId || a.id === activeAd?.adset_id) || null
+  const activeCampaign = allCampaigns.find(c => c.id === activeId || c.id === activeAdSet?.campaign_id || c.id === activeAd?.campaign_id) || null
+  const treeAdSets = activeCampaign ? allAdSets.filter(a => a.campaign_id === activeCampaign.id) : (activeAdSet ? [activeAdSet] : [])
+  const treeAds = (adSetId: string) => allAds.filter(a => a.adset_id === adSetId)
   const spendTotal = totals.spend
+
+  const seeHistoryLocal = (id: string, lvl: string) => {
+    const lvlNorm: Level = lvl === "campaign" ? "campaign" : lvl === "ad" ? "ad" : "adset"
+    selectNode(id, lvlNorm)
+    setTimeout(() => historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+  }
 
   return (
     <TooltipProvider>
@@ -704,7 +877,50 @@ export function PerformancePopup({
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          <div className="flex-1 min-h-0 flex overflow-hidden">
+            {sidebarOpen && (
+              <aside className="w-80 shrink-0 border-r bg-muted/20 overflow-y-auto p-3">
+                <div className="flex items-center gap-1 mb-3">
+                  <button onClick={() => setSidebarOpen(false)} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">Close</button>
+                  <button onClick={() => setMetric(selectedMetrics[0] || "spend")} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">View charts</button>
+                  <button onClick={() => activeId && onEdit?.(activeId)} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">Edit</button>
+                  <button onClick={() => activeId && seeHistoryLocal(activeId, String(activeNodeLevel))} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">See history</button>
+                </div>
+                <div className="space-y-1 text-xs">
+                  {activeCampaign && (
+                    <div className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", activeCampaign.id === activeId && "bg-primary/10 text-primary")}>
+                      <span className="truncate font-medium" onClick={() => selectNode(activeCampaign.id, "campaign")}>📁 {activeCampaign.name}</span>
+                      <NodeActionMenu level="campaign" id={activeCampaign.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
+                    </div>
+                  )}
+                  {treeAdSets.map(as => (
+                    <div key={as.id} className="ml-4">
+                      <div className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", as.id === activeId && "bg-primary/10 text-primary")}>
+                        <span className="truncate" onClick={() => selectNode(as.id, "adset")}>▦ {as.name}</span>
+                        <NodeActionMenu level="ad set" id={as.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
+                      </div>
+                      <div className="ml-4 space-y-1">
+                        {treeAds(as.id).map(ad => (
+                          <div key={ad.id} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", ad.id === activeId && "bg-primary/10 text-primary")}>
+                            <span className="truncate" onClick={() => selectNode(ad.id, "ad")}>▣ {ad.name}</span>
+                            <NodeActionMenu level="ad" id={ad.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {!activeCampaign && !activeAdSet && (
+                    <p className="text-xs text-muted-foreground px-2 py-4">No hierarchy data loaded.</p>
+                  )}
+                </div>
+              </aside>
+            )}
+            {!sidebarOpen && (
+              <button onClick={() => setSidebarOpen(true)} className="self-start m-3 h-8 px-2 text-xs rounded-md border hover:bg-muted/50 shrink-0">
+                Show hierarchy
+              </button>
+            )}
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
             {/* KPI Cards (level-based) */}
             <div className="grid grid-cols-3 gap-3">
               {currentCards.map(c => {
@@ -738,12 +954,13 @@ export function PerformancePopup({
                 <option value="month">Month</option>
               </select>
 
-              {/* Activity History */}
+              {/* Activity markers on chart */}
               <select value={activityFilter} onChange={e => setActivityFilter(e.target.value)}
-                className="h-9 px-3 text-sm rounded-lg border bg-background">
-                <option value="all">All activity</option>
-                <option value="budget">Budget/Bid changes</option>
-                <option value="status">Status changes</option>
+                className="h-9 px-3 text-sm rounded-lg border bg-background"
+                title="Mark these events on the trend chart">
+                <option value="all">Mark all</option>
+                <option value="budget">Mark budget/bid</option>
+                <option value="status">Mark status</option>
               </select>
 
               {/* Calendar / date range */}
@@ -776,62 +993,19 @@ export function PerformancePopup({
                 )}
               </div>
 
-              {/* Attribution settings */}
+              {/* Customize — draft metrics + Apply */}
               <div className="relative ml-auto">
-                <button onClick={() => setAttributionOpen(o => !o)}
-                  className="h-9 px-3 text-sm rounded-lg border bg-background flex items-center gap-1.5 hover:bg-muted/50">
-                  <IconAdjustments className="size-4" />
-                  Attribution
-                  <IconChevronDown className="size-3.5" />
-                </button>
-                {attributionOpen && (
-                  <div className="absolute right-0 top-10 z-10 w-80 bg-background border rounded-xl shadow-xl">
-                    <div className="p-3 border-b">
-                      <p className="text-sm font-semibold">Compare attribution settings</p>
-                      <p className="text-[11px] text-muted-foreground">Compare when and how people take action after engaging with your ads. Selections in this tool are for reporting only and do not change ad optimisation.</p>
-                    </div>
-                    <div className="p-3 max-h-80 overflow-y-auto space-y-3 text-sm">
-                      <div>
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5">Standard attribution</p>
-                        {STANDARD_ATTR.map(a => (
-                          <label key={a.key} className="flex items-center gap-2 py-1 cursor-pointer">
-                            <input type="checkbox" checked={attributionWindows.includes(a.key)}
-                              onChange={() => setAttributionWindows(prev => prev.includes(a.key) ? prev.filter(k => k !== a.key) : [...prev, a.key])} />
-                            <span>{a.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <div className="pt-2 border-t">
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5">Apple SKAdNetwork <span className="normal-case font-normal">(app ads only)</span></p>
-                        {SKAN_ATTR.map(a => (
-                          <label key={a.key} className="flex items-center gap-2 py-1">
-                            <input type="checkbox" disabled />
-                            <span className="opacity-60">{a.label}</span>
-                          </label>
-                        ))}
-                      </div>
-                      <div className="pt-2 border-t">
-                        <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1.5">Advanced option</p>
-                        <label className="flex items-center gap-2 py-1">
-                          <input type="checkbox" disabled />
-                          <span className="opacity-60">Incremental attribution</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Customize */}
-              <div className="relative">
-                <button onClick={() => setCustomizeOpen(o => !o)}
+                <button
+                  onClick={() => {
+                    if (!customizeOpen) setDraftMetrics(selectedMetrics)
+                    setCustomizeOpen(o => !o)
+                  }}
                   className="h-9 px-3 text-sm rounded-lg border bg-background flex items-center gap-1.5 hover:bg-muted/50">
                   <IconSettings className="size-4" /> Customise
                   <IconChevronDown className="size-3.5" />
                 </button>
                 {customizeOpen && (
                   <div className="absolute right-0 top-10 z-10 w-72 bg-background border rounded-xl shadow-xl">
-                    {/* Tabs */}
                     <div className="flex border-b">
                       {(["metrics", "preferences"] as const).map(t => (
                         <button key={t} onClick={() => setCustomizeTab(t)}
@@ -844,18 +1018,18 @@ export function PerformancePopup({
 
                     {customizeTab === "metrics" ? (
                       <div className="p-3 max-h-80 overflow-y-auto">
-                        <p className="text-[11px] text-muted-foreground mb-2">{selectedMetrics.length} of {MAX_ACTIVE_METRICS} metrics selected</p>
+                        <p className="text-[11px] text-muted-foreground mb-2">{draftMetrics.length} of {MAX_ACTIVE_METRICS} metrics selected</p>
                         {METRIC_GROUPS.map(g => (
                           <div key={g.group} className="mb-2">
                             <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">{g.group}</p>
                             {g.items.map(m => {
-                              const checked = selectedMetrics.includes(m.key)
-                              const disabled = !checked && selectedMetrics.length >= MAX_ACTIVE_METRICS
+                              const checked = draftMetrics.includes(m.key)
+                              const disabled = !checked && draftMetrics.length >= MAX_ACTIVE_METRICS
                               return (
                                 <label key={m.key} className={cn("flex items-center gap-2 py-1 text-sm", disabled ? "opacity-50" : "cursor-pointer")}>
                                   <input type="checkbox" checked={checked} disabled={disabled}
                                     onChange={() => {
-                                      setSelectedMetrics(prev =>
+                                      setDraftMetrics(prev =>
                                         checked ? prev.filter(k => k !== m.key) : [...prev, m.key]
                                       )
                                     }} />
@@ -865,6 +1039,26 @@ export function PerformancePopup({
                             })}
                           </div>
                         ))}
+                        <div className="flex justify-end gap-2 pt-2 border-t mt-2 sticky bottom-0 bg-background">
+                          <button
+                            onClick={() => { setDraftMetrics(selectedMetrics); setCustomizeOpen(false) }}
+                            className="h-8 px-3 text-xs border rounded-md hover:bg-muted/50"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => {
+                              const next = draftMetrics.length ? draftMetrics : selectedMetrics
+                              setSelectedMetrics(next)
+                              if (!next.includes(metric)) setMetric(next[0])
+                              setActiveCard(next.includes(metric) ? metric : next[0])
+                              setCustomizeOpen(false)
+                            }}
+                            className="h-8 px-3 text-xs bg-[#1877f2] text-white rounded-md hover:bg-[#1464d8] font-medium"
+                          >
+                            Apply
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="p-3 space-y-3">
@@ -907,26 +1101,148 @@ export function PerformancePopup({
                 </ResponsiveContainer>
               )}
 
-              {/* Historical edits panel */}
-              {filteredActivities.length > 0 && (
-                <div className="mt-3 border-t pt-3">
-                  <div className="flex items-center gap-1.5 mb-2">
+              {/* Activity History — Meta-style table */}
+              <div ref={historyRef} className="mt-3 border-t pt-3 scroll-mt-4">
+                <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                  <div className="flex items-center gap-1.5">
                     <IconHistory className="size-3.5 text-muted-foreground" />
-                    <p className="text-xs font-medium">Historical edits ({filteredActivities.length})</p>
+                    <p className="text-xs font-medium">Activity History ({tableActivities.length})</p>
                   </div>
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {filteredActivities.slice(0, 20).map((e, i) => (
-                      <div key={i} className="flex items-start gap-2 text-[11px]">
-                        <span className="text-muted-foreground tabular-nums shrink-0">
-                          {e.time ? new Date(e.time).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "2-digit" }) : ""}
-                        </span>
-                        <span className="text-foreground">{e.summary}{e.actor ? ` · ${e.actor}` : ""}</span>
-                      </div>
-                    ))}
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={histActivityFilter}
+                      onChange={e => setHistActivityFilter(e.target.value)}
+                      className="h-7 px-2 text-xs border rounded-md bg-background"
+                      aria-label="Activity filter"
+                    >
+                      <option value="all">All</option>
+                      <option value="budget">Budget · Bid</option>
+                      <option value="status">Status</option>
+                      <option value="delivery">Delivery</option>
+                    </select>
+                    <select
+                      value={histActorFilter}
+                      onChange={e => setHistActorFilter(e.target.value)}
+                      className="h-7 px-2 text-xs border rounded-md bg-background"
+                      aria-label="Changed by filter"
+                    >
+                      <option value="all">Anyone</option>
+                      {actorOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
                   </div>
                 </div>
-              )}
+                {tableActivities.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-1 py-4 text-center">No activity in this date range.</p>
+                ) : (
+                  <div className="overflow-x-auto max-h-[320px] overflow-y-auto border rounded-md">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/40 sticky top-0">
+                        <tr className="text-left text-muted-foreground">
+                          <th className="font-medium px-3 py-2">Activity</th>
+                          <th className="font-medium px-3 py-2">Activity details</th>
+                          <th className="font-medium px-3 py-2">Item changed</th>
+                          <th className="font-medium px-3 py-2">Changed by</th>
+                          <th className="font-medium px-3 py-2 whitespace-nowrap">Date and Time</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {tableActivities.slice(0, 100).map((e, i) => {
+                          const { activity, details } = splitActivity(e.summary, e.type)
+                          return (
+                            <tr key={i} className="hover:bg-muted/30">
+                              <td className="px-3 py-2 font-medium">{activity}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{details}</td>
+                              <td className="px-3 py-2">
+                                <div className="truncate max-w-[200px]">{e.objectName || e.objectId || "—"}</div>
+                                {e.objectId && <div className="text-[10px] text-muted-foreground">ID: {e.objectId}</div>}
+                              </td>
+                              <td className="px-3 py-2">{e.actor || "Meta"}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{fmtActivityTime(e.time)}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
+
+            {/* Ad preview + Comments (Ads only) */}
+            {level === "ad" && (
+              <div className="rounded-xl border bg-card p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Ad preview */}
+                  <div>
+                    <div className="flex items-center gap-1 mb-2">
+                      <p className="text-sm font-semibold">Ad preview</p>
+                    </div>
+                    <div className="flex gap-1 mb-2 flex-wrap">
+                      {[
+                        { k: "all", l: "All" },
+                        { k: "feeds_instream", l: "Feeds and instream ads" },
+                        { k: "stories_reels", l: "Stories and Reels" },
+                        { k: "right_column", l: "Right column" },
+                      ].map(m => (
+                        <button key={m.k} onClick={() => setPreviewMode(m.k)}
+                          className={cn("h-7 px-2 text-[11px] rounded-md border",
+                            previewMode === m.k ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50")}>
+                          {m.l}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="aspect-[4/5] border rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+                      {(() => {
+                        const cr = creativeByRow[capped[0]?.id]
+                        if (cr?.videoId && cr?.postId) {
+                          const href = encodeURIComponent(`https://www.facebook.com/${cr.postId}`)
+                          return (
+                            <iframe
+                              src={`https://www.facebook.com/plugins/video.php?href=${href}&show_text=false&autoplay=false`}
+                              className="w-full h-full"
+                              style={{ border: "none" }}
+                              scrolling="no"
+                              allowFullScreen
+                              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                              title="Ad preview"
+                            />
+                          )
+                        }
+                        if (cr?.thumbnail) return <img src={cr.thumbnail} alt="preview" className="w-full h-full object-cover" />
+                        return <span className="text-xs text-muted-foreground">No preview available</span>
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Comments */}
+                  <div>
+                    <div className="flex items-center gap-1 mb-2">
+                      <p className="text-sm font-semibold">Comments</p>
+                    </div>
+                    <div className="flex gap-1 mb-2 flex-wrap">
+                      {[
+                        { k: "facebook_feed", l: "Facebook Feed" },
+                        { k: "instagram_feed", l: "Instagram Feed" },
+                        { k: "instagram_reels", l: "Instagram Reels" },
+                      ].map(m => (
+                        <button key={m.k} onClick={() => setCommentsFilter(m.k)}
+                          className={cn("h-7 px-2 text-[11px] rounded-md border",
+                            commentsFilter === m.k ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50")}>
+                          {m.l}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="aspect-[4/5] border rounded-lg bg-background flex flex-col items-center justify-center text-center p-6">
+                      <IconMessageCircle className="size-8 text-muted-foreground mb-3" />
+                      <p className="text-sm font-semibold mb-1">Comments not supported</p>
+                      <p className="text-xs text-muted-foreground">
+                        Comment previews are not supported for dynamic ads.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Demographics + Platform sections */}
             <div className="border-t pt-5">
@@ -956,25 +1272,32 @@ export function PerformancePopup({
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
-                    <div className="col-span-1 border rounded-lg bg-background p-2 aspect-[4/5] flex items-center justify-center bg-muted relative overflow-hidden group">
-                      {creativeByRow[capped[0].id]?.thumbnail ? (
-                        <>
-                          <img src={creativeByRow[capped[0].id].thumbnail} alt="Video thumbnail" className="w-full h-full object-cover rounded" />
-                          <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            {creativeByRow[capped[0].id]?.videoId && (
-                              <a href={`https://facebook.com/${creativeByRow[capped[0].id].videoId}`} target="_blank" rel="noopener noreferrer" className="bg-white/90 text-black px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-white transition-colors">
-                                Play video
-                              </a>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No preview</span>
-                      )}
+                    <div className="col-span-1 border rounded-lg bg-background p-2 aspect-[4/5] flex items-center justify-center bg-muted relative overflow-hidden">
+                      {(() => {
+                        const cr = creativeByRow[capped[0].id]
+                        if (cr?.videoId && cr?.postId) {
+                          const href = encodeURIComponent(`https://www.facebook.com/${cr.postId}`)
+                          return (
+                            <iframe
+                              src={`https://www.facebook.com/plugins/video.php?href=${href}&show_text=false&autoplay=false`}
+                              className="w-full h-full rounded"
+                              style={{ border: "none" }}
+                              scrolling="no"
+                              allowFullScreen
+                              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                              title="Ad video preview"
+                            />
+                          )
+                        }
+                        if (cr?.thumbnail) {
+                          return <img src={cr.thumbnail} alt="Video thumbnail" className="w-full h-full object-cover rounded" />
+                        }
+                        return <span className="text-xs text-muted-foreground">No preview</span>
+                      })()}
                     </div>
 
                     <div className="col-span-2 flex flex-col justify-center">
-                      <p className="text-sm font-semibold mb-1">Time watched</p>
+                      <p className="text-sm font-semibold mb-1">Video plays by second</p>
                       <p className="text-[11px] text-muted-foreground mb-4">
                         Analyse your video performance by time watched to uncover creative optimisation opportunities. Though a decrease in video play time is normal as the video elapses, significant drops may indicate a lack of engagement.
                       </p>
@@ -984,9 +1307,9 @@ export function PerformancePopup({
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={videoByRow[capped[0].id].retention} margin={{ top: 8, right: 12, left: -24, bottom: 0 }}>
                               <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
-                              <XAxis dataKey="label" tick={{ fontSize: 10, fill: MUTED }} axisLine={false} tickLine={false} />
+                              <XAxis dataKey="secLabel" tick={{ fontSize: 10, fill: MUTED }} axisLine={false} tickLine={false} />
                               <YAxis tick={{ fontSize: 10, fill: MUTED }} axisLine={false} tickLine={false} tickFormatter={v => v + "%"} domain={[0, 100]} />
-                              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any) => [fmt(Number(v), 1) + "%", "Retention"]} />
+                              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any) => [fmt(Number(v), 1) + "%", "% of video plays"]} labelFormatter={(l: any) => `Second ${l}`} />
                               <Line type="monotone" dataKey="pct" stroke={SERIES[0]} strokeWidth={2} dot={{ r: 3, strokeWidth: 2 }} activeDot={{ r: 5 }} />
                             </LineChart>
                           </ResponsiveContainer>
@@ -1013,7 +1336,18 @@ export function PerformancePopup({
                 <section className="rounded-xl border bg-card p-4">
                   <p className="text-sm font-semibold mb-3">Age and gender distribution · {metricLabel(metric)}</p>
                   {demoBarData.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-8">No demographic data</p>
+                    <div className="flex flex-col items-center gap-2 py-10 text-center">
+                      <p className="text-sm font-semibold">Reach breakdowns not available</p>
+                      <p className="text-xs text-muted-foreground max-w-sm">
+                        Reach breakdowns are only available for the last 13 months. Please select a different date range.
+                      </p>
+                      <button
+                        onClick={() => setCalOpen(true)}
+                        className="mt-2 h-8 px-3 text-xs rounded-lg border bg-background hover:bg-muted/50 font-medium"
+                      >
+                        Change date
+                      </button>
+                    </div>
                   ) : (
                     <ResponsiveContainer width="100%" height={Math.max(240, demoBarData.length * 24)}>
                       <BarChart data={demoBarData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
@@ -1056,6 +1390,10 @@ export function PerformancePopup({
 
                   <p className="text-[11px] text-muted-foreground mb-3">
                     About placement results — Ad delivery is optimised to allocate your budget to the placements likely to perform best with your audience, based on your targeting and bid amount.
+                  </p>
+
+                  <p className="text-[11px] text-muted-foreground mb-3">
+                    * You may see low delivery of ads to the Facebook Stories placement until it's available to everyone who uses Facebook Stories. A more accurate metric is cost per result.
                   </p>
 
                   {platBarData.length === 0 ? (
@@ -1102,6 +1440,7 @@ export function PerformancePopup({
                 </button>
               </div>
             </div>
+          </div>
           </div>
         </div>
       </div>
