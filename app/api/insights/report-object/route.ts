@@ -21,9 +21,17 @@ const INSIGHT_FIELDS = [
   "video_30_sec_watched_actions", "video_avg_time_watched_actions", "date_start", "date_stop",
 ].join(",")
 
-function retentionFromQuartiles(m: any) {
+function fmtSecLabel(sec: number) {
+  const s = Math.max(0, Math.round(sec))
+  const m = Math.floor(s / 60)
+  const r = s % 60
+  return `${m}:${String(r).padStart(2, "0")}`
+}
+
+function retentionFromQuartiles(m: any, videoLength: number | null) {
   const base = m.video3s || 0
   if (base <= 0) return []
+  const hasLen = videoLength != null && videoLength > 0
   return [
     { t: 0, label: "0:00", pct: 100 },
     { t: 25, label: "25%", pct: (m.videoP25 / base) * 100 },
@@ -31,7 +39,11 @@ function retentionFromQuartiles(m: any) {
     { t: 75, label: "75%", pct: (m.videoP75 / base) * 100 },
     { t: 95, label: "95%", pct: (m.videoP95 / base) * 100 },
     { t: 100, label: "100%", pct: (m.videoP100 / base) * 100 },
-  ].map(p => ({ ...p, pct: Number.isFinite(p.pct) ? Math.max(0, Math.min(100, p.pct)) : 0 }))
+  ].map(p => {
+    const pct = Number.isFinite(p.pct) ? Math.max(0, Math.min(100, p.pct)) : 0
+    const sec = hasLen ? Math.round((p.t / 100) * (videoLength as number)) : p.t
+    return { ...p, pct, sec, secLabel: fmtSecLabel(sec) }
+  })
 }
 
 function resolvePostId(creative: any) {
@@ -115,6 +127,21 @@ export async function GET(request: NextRequest) {
         const post = resolvePostId(creative)
         const isVideo = metrics.isVideo || !!creative.video_id
 
+        let videoLength: number | null = null
+        if (isVideo && creative.video_id) {
+          try {
+            const vRes = await fetch(
+              `${GRAPH}/${creative.video_id}?fields=length_seconds&access_token=${encodeURIComponent(token)}`
+            )
+            const vJson = await vRes.json()
+            if (vJson && typeof vJson.length_seconds === "number" && Number.isFinite(vJson.length_seconds)) {
+              videoLength = vJson.length_seconds
+            }
+          } catch {
+            videoLength = null
+          }
+        }
+
         return {
           id,
           level,
@@ -143,7 +170,8 @@ export async function GET(request: NextRequest) {
             avgWatchTime: metrics.avgWatchTime,
             hookRate: metrics.thumbstopRate,
             holdRate: metrics.holdRate,
-            retention: retentionFromQuartiles(metrics),
+            videoLength,
+            retention: retentionFromQuartiles(metrics, videoLength),
             retentionSource: "quartile_estimate",
           } : null,
         }

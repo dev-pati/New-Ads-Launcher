@@ -446,6 +446,17 @@ export async function getCampaigns(
 }
 
 // Ad Set interfaces and functions
+export interface LearningStageInfo {
+  status?: "LEARNING" | "SUCCESS" | "LEARNING_LIMITED" | string
+  conversions?: number
+  last_sig_edit_ts?: number
+}
+
+export interface AttributionSpecEntry {
+  event_type?: string
+  window_days?: number
+}
+
 export interface AdSet {
   id: string
   name: string
@@ -461,6 +472,8 @@ export interface AdSet {
   optimization_goal?: string
   billing_event?: string
   is_dynamic_creative?: boolean
+  attribution_spec?: AttributionSpecEntry[]
+  learning_stage_info?: LearningStageInfo
   targeting?: {
     age_min?: number
     age_max?: number
@@ -487,6 +500,7 @@ export async function getAdSets(
     "id", "name", "status", "effective_status", "campaign_id", "campaign{name}",
     "daily_budget", "lifetime_budget", "budget_remaining", "is_dynamic_creative",
     "optimization_goal", "billing_event", "bid_strategy", "bid_amount",
+    "attribution_spec", "learning_stage_info{status,conversions}",
     "start_time", "end_time", "created_time",
     insightsParam,
   ].join(",")
@@ -564,6 +578,7 @@ export async function getAds(
     : `insights.date_preset(${datePreset}){${adsInsightFields}}`
   const fields = [
     "id", "name", "status", "effective_status", "adset_id", "campaign_id",
+    "adset{attribution_spec,is_dynamic_creative,bid_strategy,learning_stage_info{status,conversions}}",
     "creative{id,name,title,body,image_url,thumbnail_url,asset_feed_spec{bodies{text},titles{text},descriptions{text}}}",
     "created_time",
     insightsParam,
