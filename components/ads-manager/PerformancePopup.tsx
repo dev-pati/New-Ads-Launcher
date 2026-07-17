@@ -132,6 +132,35 @@ function fmtActivityTime(time: string | null | undefined) {
 interface Series { date: string; label: string; value: number }
 interface BreakdownRow { label: string; [key: string]: any }
 
+// Age buckets in Meta's standard ascending order
+const AGE_ORDER = ["13-17", "18-24", "25-34", "35-44", "45-54", "55-64", "65+"]
+const ageRank = (a: string) => {
+  const i = AGE_ORDER.indexOf(a)
+  return i === -1 ? 99 : i
+}
+
+// Compute since/until (YYYY-MM-DD) for a granularity's default window.
+// Day = 7d, Week = 7 weeks (~49d), Month = 6 months (~180d).
+function rangeForGranularity(g: "day" | "week" | "month"): { since: string; until: string } {
+  const until = new Date()
+  const start = new Date(until)
+  if (g === "day") start.setDate(until.getDate() - 6)
+  else if (g === "week") start.setDate(until.getDate() - 48)
+  else start.setMonth(until.getMonth() - 6)
+  const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  return { since: iso(start), until: iso(until) }
+}
+
+// Pretty title for the trend chart's date window
+function titleForGranularity(g: "day" | "week" | "month"): string {
+  const { since, until } = rangeForGranularity(g)
+  const f = (s: string) => {
+    const d = new Date(s + "T00:00:00")
+    return d.toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  }
+  return `${f(since)} – ${f(until)}`
+}
+
 // KPI cards per level (Charts single-object)
 function cardsForLevel(level: Level) {
   const base = [
@@ -254,9 +283,12 @@ export function PerformancePopup({
   const [customizeTab, setCustomizeTab] = useState<"metrics" | "preferences">("metrics")
 
   // Platform Section filters
-  const [platMetric1, setPlatMetric1] = useState("reach")
-  const [platMetric2, setPlatMetric2] = useState("results")
-  const [deviceFilter, setDeviceFilter] = useState<"both" | "mobile" | "desktop">("both")
+  const [platMetric, setPlatMetric] = useState("results")
+  // Demographics (Age/Gender) filters
+  const [demoMetric, setDemoMetric] = useState("results")
+  const [demoGender, setDemoGender] = useState<"all" | "male" | "female">("all")
+  // Charts popup sub-page: main charts vs dedicated activity history
+  const [chartsPage, setChartsPage] = useState<"charts" | "history">("charts")
 
   // Data storage
   // Key: rowId + ":" + metric
@@ -335,6 +367,15 @@ export function PerformancePopup({
     return p
   }, [accountId, effectiveLevel, since, until, sinceOverride, untilOverride, presetOverride, attributionWindows])
 
+  // Trend window follows granularity (Day=7d, Week=7w, Month=6m). Calendar override wins.
+  const trendQs = useMemo(() => {
+    const p = new URLSearchParams({ adAccountId: accountId, level: effectiveLevel })
+    if (sinceOverride && untilOverride) { p.set("since", sinceOverride); p.set("until", untilOverride) }
+    else { const r = rangeForGranularity(granularity); p.set("since", r.since); p.set("until", r.until) }
+    if (attributionWindows && attributionWindows.length > 0) p.set("action_attribution_windows", attributionWindows.join(","))
+    return p
+  }, [accountId, effectiveLevel, granularity, sinceOverride, untilOverride, attributionWindows])
+
   // Bootstrap missing hierarchy data so the tree works even when the parent only loaded one tab.
   useEffect(() => {
     if (isCompare) return
@@ -375,7 +416,7 @@ export function PerformancePopup({
       const queue: { row: ReportRow; metricKey: string }[] = []
       capped.forEach(row => {
         activeMetrics.forEach(m => {
-          const cacheKey = `${row.id}:${m}`
+          const cacheKey = `${row.id}:${m}:${granularity}:${trendQs}`
           if (!trendDataStore[cacheKey]) {
             queue.push({ row, metricKey: m })
           }
@@ -388,10 +429,10 @@ export function PerformancePopup({
       }
 
       const results = await Promise.allSettled(queue.map(async item => {
-        const res = await fetch(`/api/insights/report-trends?${qsBase}&id=${item.row.id}&metric=${item.metricKey}&granularity=${granularity}`)
+        const res = await fetch(`/api/insights/report-trends?${trendQs}&id=${item.row.id}&metric=${item.metricKey}&granularity=${granularity}`)
         const d = await res.json()
         if (d.error) throw new Error(d.error)
-        return { key: `${item.row.id}:${item.metricKey}`, series: (d.series || []) as Series[] }
+        return { key: `${item.row.id}:${item.metricKey}:${granularity}:${trendQs}`, series: (d.series || []) as Series[] }
       }))
 
       if (cancelled) return
@@ -413,7 +454,7 @@ export function PerformancePopup({
     }
     load()
     return () => { cancelled = true }
-  }, [qsBase, activeMetrics.join(","), granularity, capped.map(r => r.id).join(",")])
+  }, [trendQs, activeMetrics.join(","), granularity, capped.map(r => r.id).join(",")])
 
   // ── Fetch KPI metrics (Charts mode initialization) ───────────────────────
   useEffect(() => {
@@ -539,7 +580,7 @@ export function PerformancePopup({
   const getTrendDataForMetric = (mKey: string) => {
     const byDate: Record<string, any> = {}
     capped.forEach((row, i) => {
-      const cacheKey = `${row.id}:${mKey}`
+      const cacheKey = `${row.id}:${mKey}:${granularity}:${trendQs}`
       const series = trendDataStore[cacheKey] || []
       series.forEach(p => {
         if (!byDate[p.date]) byDate[p.date] = { date: p.date, label: p.label }
@@ -568,41 +609,41 @@ export function PerformancePopup({
   }
 
   const demoBarData = useMemo(() => {
-    return demoRows.map(r => ({
-      label: r.label || r.breakdownValue || "Unknown",
-      value: Number(r[metric] ?? r.spend ?? 0) || 0
-    })).sort((a, b) => b.value - a.value).slice(0, 10)
-  }, [demoRows, metric])
+    const pick = (r: any) => Number(r[demoMetric] ?? r.results ?? r.spend ?? 0) || 0
+    const buckets: Record<string, { age: string; men: number; women: number; all: number }> = {}
+    for (const r of demoRows) {
+      const parts = String(r.breakdownValue || r.label || "").split(",").map(s => s.trim())
+      const age = String(r.age || parts[0] || "Unknown").trim()
+      const g = String(r.gender || parts[1] || "").toLowerCase()
+      if (!buckets[age]) buckets[age] = { age, men: 0, women: 0, all: 0 }
+      const v = pick(r)
+      buckets[age].all += v
+      if (g === "male" || g === "men" || g === "m") buckets[age].men += v
+      else if (g === "female" || g === "women" || g === "f") buckets[age].women += v
+    }
+    return Object.values(buckets).sort((a, b) => ageRank(a.age) - ageRank(b.age))
+  }, [demoRows, demoMetric])
 
-  // Platform bar data: apply device type filters client-side
+  // Platform chart: X = publisher_platform, Y = metric, series = device (mobile/desktop/other)
   const platBarData = useMemo(() => {
-    // Group placement results
-    const filtered = platRows.filter(r => {
-      if (deviceFilter === "mobile") return String(r.impression_device || "").toLowerCase().includes("mobile")
-      if (deviceFilter === "desktop") return String(r.impression_device || "").toLowerCase().includes("desktop")
-      return true
-    })
-
-    // Aggregate by publisher_platform + platform_position
-    const grouped: Record<string, { label: string; metric1Val: number; metric2Val: number }> = {}
-    filtered.forEach(r => {
-      const label = `${r.publisher_platform || "Unknown"} - ${r.platform_position || "Unknown"}`
-      if (!grouped[label]) {
-        grouped[label] = { label, metric1Val: 0, metric2Val: 0 }
+    const pick = (r: any) => Number(r[platMetric] ?? r.results ?? r.spend ?? 0) || 0
+    const groups: Record<string, { platform: string; mobile: number; desktop: number; other: number; total: number }> = {}
+    for (const r of platRows) {
+      const platform = String(r.publisher_platform || "Unknown")
+      const device = String(r.impression_device || "").toLowerCase()
+      if (!groups[platform]) groups[platform] = { platform, mobile: 0, desktop: 0, other: 0, total: 0 }
+      const v = pick(r)
+      groups[platform].total += v
+      if (device.includes("mobile") || device.includes("iphone") || device.includes("android") || device.includes("ipad")) {
+        groups[platform].mobile += v
+      } else if (device.includes("desktop") || device.includes("computer")) {
+        groups[platform].desktop += v
+      } else {
+        groups[platform].other += v
       }
-      grouped[label].metric1Val += Number(r[platMetric1] || 0)
-      grouped[label].metric2Val += Number(r[platMetric2] || 0)
-    })
-
-    // Show every detected placement/platform (no top-N cap) — X axis = all placements across both devices
-    return Object.values(grouped)
-      .map(g => ({
-        label: g.label,
-        metric1: g.metric1Val,
-        metric2: g.metric2Val
-      }))
-      .sort((a, b) => b.metric1 + b.metric2 - (a.metric1 + a.metric2))
-  }, [platRows, platMetric1, platMetric2, deviceFilter])
+    }
+    return Object.values(groups).sort((a, b) => b.total - a.total)
+  }, [platRows, platMetric])
 
   // Activities filtered by Activity History dropdown
   // Chart-marker filter only (does not affect the history table).
@@ -858,17 +899,27 @@ export function PerformancePopup({
   const seeHistoryLocal = (id: string, lvl: string) => {
     const lvlNorm: Level = lvl === "campaign" ? "campaign" : lvl === "ad" ? "ad" : "adset"
     selectNode(id, lvlNorm)
-    setTimeout(() => historyRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50)
+    setChartsPage("history")
   }
 
   return (
     <TooltipProvider>
       <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-        <div className="bg-background rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+        <div
+          className="bg-background rounded-2xl shadow-2xl flex flex-col overflow-auto resize"
+          style={{
+            width: "96vw",
+            height: "94vh",
+            minWidth: 640,
+            minHeight: 400,
+            maxWidth: "98vw",
+            maxHeight: "98vh"
+          }}
+        >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Charts</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{chartsPage === "history" ? "Activity history" : "Charts"}</p>
               <h2 className="font-semibold text-base truncate" title={headerTitle}>{headerTitle}</h2>
             </div>
             <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/50">
@@ -882,9 +933,12 @@ export function PerformancePopup({
               <aside className="w-80 shrink-0 border-r bg-muted/20 overflow-y-auto p-3">
                 <div className="flex items-center gap-1 mb-3">
                   <button onClick={() => setSidebarOpen(false)} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">Close</button>
-                  <button onClick={() => setMetric(selectedMetrics[0] || "spend")} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">View charts</button>
+                  <button onClick={() => setChartsPage("charts")} className={cn("h-7 px-2 text-xs rounded-md border hover:bg-muted/50", chartsPage === "charts" && "bg-primary/10 text-primary border-primary/30")}>View charts</button>
                   <button onClick={() => activeId && onEdit?.(activeId)} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">Edit</button>
-                  <button onClick={() => activeId && seeHistoryLocal(activeId, String(activeNodeLevel))} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">See history</button>
+                  <button onClick={() => {
+                    if (activeId) seeHistoryLocal(activeId, String(activeNodeLevel))
+                    setChartsPage("history")
+                  }} className={cn("h-7 px-2 text-xs rounded-md border hover:bg-muted/50", chartsPage === "history" && "bg-primary/10 text-primary border-primary/30")}>See history</button>
                 </div>
                 <div className="space-y-1 text-xs">
                   {activeCampaign && (
@@ -921,6 +975,73 @@ export function PerformancePopup({
               </button>
             )}
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+            {chartsPage === "history" ? (
+              <section ref={historyRef} className="rounded-xl border bg-card p-4">
+                <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <IconHistory className="size-3.5 text-muted-foreground" />
+                    <p className="text-sm font-semibold">Activity History ({tableActivities.length})</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={histActivityFilter}
+                      onChange={e => setHistActivityFilter(e.target.value)}
+                      className="h-7 px-2 text-xs border rounded-md bg-background"
+                      aria-label="Activity filter"
+                    >
+                      <option value="all">All</option>
+                      <option value="budget">Budget · Bid</option>
+                      <option value="status">Status</option>
+                      <option value="delivery">Delivery</option>
+                    </select>
+                    <select
+                      value={histActorFilter}
+                      onChange={e => setHistActorFilter(e.target.value)}
+                      className="h-7 px-2 text-xs border rounded-md bg-background"
+                      aria-label="Changed by filter"
+                    >
+                      <option value="all">Anyone</option>
+                      {actorOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                    <button onClick={() => setChartsPage("charts")} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">← Back to charts</button>
+                  </div>
+                </div>
+                {tableActivities.length === 0 ? (
+                  <p className="text-xs text-muted-foreground px-1 py-8 text-center">No activity in this date range.</p>
+                ) : (
+                  <div className="overflow-x-auto max-h-[60vh] overflow-y-auto border rounded-md">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/40 sticky top-0">
+                        <tr className="text-left text-muted-foreground">
+                          <th className="font-medium px-3 py-2">Activity</th>
+                          <th className="font-medium px-3 py-2">Activity details</th>
+                          <th className="font-medium px-3 py-2">Item changed</th>
+                          <th className="font-medium px-3 py-2">Changed by</th>
+                          <th className="font-medium px-3 py-2 whitespace-nowrap">Date and Time</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {tableActivities.slice(0, 200).map((e, i) => {
+                          const { activity, details } = splitActivity(e.summary, e.type)
+                          return (
+                            <tr key={i} className="hover:bg-muted/30">
+                              <td className="px-3 py-2 font-medium">{activity}</td>
+                              <td className="px-3 py-2 text-muted-foreground">{details}</td>
+                              <td className="px-3 py-2">
+                                <div className="truncate max-w-[200px]">{e.objectName || e.objectId || "—"}</div>
+                                {e.objectId && <div className="text-[10px] text-muted-foreground">ID: {e.objectId}</div>}
+                              </td>
+                              <td className="px-3 py-2">{e.actor || "Meta"}</td>
+                              <td className="px-3 py-2 whitespace-nowrap">{fmtActivityTime(e.time)}</td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            ) : (<>
             {/* KPI Cards (level-based) */}
             <div className="grid grid-cols-3 gap-3">
               {currentCards.map(c => {
@@ -963,27 +1084,29 @@ export function PerformancePopup({
                 <option value="status">Mark status</option>
               </select>
 
-              {/* Calendar / date range */}
+              {/* Calendar / date range — auto-apply, no Apply button, no selection label */}
               <div className="relative">
                 <button
                   onClick={() => setCalOpen(o => !o)}
                   className="h-9 px-3 text-sm rounded-lg border bg-background flex items-center gap-1.5 hover:bg-muted/50"
-                  title="Custom date range"
+                  title={`Trend window: ${titleForGranularity(granularity)}`}
                 >
                   <IconCalendar className="size-4" />
-                  <span className="hidden sm:inline">{since && until ? `${since} → ${until}` : "Custom range"}</span>
+                  <span className="hidden sm:inline">{titleForGranularity(granularity)}</span>
                 </button>
                 {calOpen && (
                   <div className="absolute right-0 top-10 z-20 bg-background border rounded-xl shadow-xl p-3">
                     <AdsDateRangePicker
-                      preset={since && until ? "custom" : (datePreset === "custom" ? "last_30d" : datePreset)}
+                      preset="custom"
+                      autoApply
+                      hideLabel
+                      onClose={() => setCalOpen(false)}
                       onChange={(p, s, e) => {
                         if (p === "custom" && s && e) {
                           setSinceOverride(s.toISOString().split("T")[0])
                           setUntilOverride(e.toISOString().split("T")[0])
                         } else {
                           setSinceOverride(""); setUntilOverride("")
-                          // preset handled by parent; map common presets to datePreset
                           setPresetOverride(p)
                         }
                         setCalOpen(false)
@@ -1101,72 +1224,7 @@ export function PerformancePopup({
                 </ResponsiveContainer>
               )}
 
-              {/* Activity History — Meta-style table */}
-              <div ref={historyRef} className="mt-3 border-t pt-3 scroll-mt-4">
-                <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <IconHistory className="size-3.5 text-muted-foreground" />
-                    <p className="text-xs font-medium">Activity History ({tableActivities.length})</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={histActivityFilter}
-                      onChange={e => setHistActivityFilter(e.target.value)}
-                      className="h-7 px-2 text-xs border rounded-md bg-background"
-                      aria-label="Activity filter"
-                    >
-                      <option value="all">All</option>
-                      <option value="budget">Budget · Bid</option>
-                      <option value="status">Status</option>
-                      <option value="delivery">Delivery</option>
-                    </select>
-                    <select
-                      value={histActorFilter}
-                      onChange={e => setHistActorFilter(e.target.value)}
-                      className="h-7 px-2 text-xs border rounded-md bg-background"
-                      aria-label="Changed by filter"
-                    >
-                      <option value="all">Anyone</option>
-                      {actorOptions.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                  </div>
-                </div>
-                {tableActivities.length === 0 ? (
-                  <p className="text-xs text-muted-foreground px-1 py-4 text-center">No activity in this date range.</p>
-                ) : (
-                  <div className="overflow-x-auto max-h-[320px] overflow-y-auto border rounded-md">
-                    <table className="w-full text-xs">
-                      <thead className="bg-muted/40 sticky top-0">
-                        <tr className="text-left text-muted-foreground">
-                          <th className="font-medium px-3 py-2">Activity</th>
-                          <th className="font-medium px-3 py-2">Activity details</th>
-                          <th className="font-medium px-3 py-2">Item changed</th>
-                          <th className="font-medium px-3 py-2">Changed by</th>
-                          <th className="font-medium px-3 py-2 whitespace-nowrap">Date and Time</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {tableActivities.slice(0, 100).map((e, i) => {
-                          const { activity, details } = splitActivity(e.summary, e.type)
-                          return (
-                            <tr key={i} className="hover:bg-muted/30">
-                              <td className="px-3 py-2 font-medium">{activity}</td>
-                              <td className="px-3 py-2 text-muted-foreground">{details}</td>
-                              <td className="px-3 py-2">
-                                <div className="truncate max-w-[200px]">{e.objectName || e.objectId || "—"}</div>
-                                {e.objectId && <div className="text-[10px] text-muted-foreground">ID: {e.objectId}</div>}
-                              </td>
-                              <td className="px-3 py-2">{e.actor || "Meta"}</td>
-                              <td className="px-3 py-2 whitespace-nowrap">{fmtActivityTime(e.time)}</td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </div>
-            </div>
 
             {/* Ad preview + Comments (Ads only) */}
             {level === "ad" && (
@@ -1334,7 +1392,24 @@ export function PerformancePopup({
 
               {chartsSub === "demographics" ? (
                 <section className="rounded-xl border bg-card p-4">
-                  <p className="text-sm font-semibold mb-3">Age and gender distribution · {metricLabel(metric)}</p>
+                  <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                    <p className="text-sm font-semibold">Age and gender distribution</p>
+                    <div className="flex items-center gap-2">
+                      <select value={demoMetric} onChange={e => setDemoMetric(e.target.value)}
+                        className="h-8 px-2 text-xs rounded-lg border bg-background">
+                        <option value="results">Results (website purchases)</option>
+                        <option value="spend">Amount spent</option>
+                        <option value="reach">Reach</option>
+                        <option value="impressions">Impressions</option>
+                      </select>
+                      <select value={demoGender} onChange={e => setDemoGender(e.target.value as any)}
+                        className="h-8 px-2 text-xs rounded-lg border bg-background">
+                        <option value="all">All</option>
+                        <option value="male">Men</option>
+                        <option value="female">Women</option>
+                      </select>
+                    </div>
+                  </div>
                   {demoBarData.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 py-10 text-center">
                       <p className="text-sm font-semibold">Reach breakdowns not available</p>
@@ -1349,13 +1424,19 @@ export function PerformancePopup({
                       </button>
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height={Math.max(240, demoBarData.length * 24)}>
-                      <BarChart data={demoBarData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => metricFmt(metric)(Number(v))} />
-                        <YAxis type="category" dataKey="label" tick={{ fontSize: 10, fill: MUTED }} width={110} interval={0} />
-                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any) => [metricFmt(metric)(Number(v)), metricLabel(metric)]} />
-                        <Bar dataKey="value" fill={SERIES[0]} radius={[3, 3, 3, 3]} maxBarSize={20} />
+                    <ResponsiveContainer width="100%" height={320}>
+                      <BarChart data={demoBarData} margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
+                        <XAxis dataKey="age" tick={{ fontSize: 11, fill: MUTED }} interval={0} />
+                        <YAxis tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => metricFmt(demoMetric)(Number(v))} />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any, n: any) => [metricFmt(demoMetric)(Number(v)), n]} />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        {(demoGender === "all" || demoGender === "male") && (
+                          <Bar dataKey="men" name="Men" fill={SERIES[0]} radius={[3, 3, 0, 0]} maxBarSize={28} />
+                        )}
+                        {(demoGender === "all" || demoGender === "female") && (
+                          <Bar dataKey="women" name="Women" fill={SERIES[3]} radius={[3, 3, 0, 0]} maxBarSize={28} />
+                        )}
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -1363,27 +1444,13 @@ export function PerformancePopup({
               ) : (
                 <section className="rounded-xl border bg-card p-4">
                   <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
-                    <p className="text-sm font-semibold">Placement per platform</p>
-                    {/* Device filter */}
-                    <select value={deviceFilter} onChange={e => setDeviceFilter(e.target.value as any)}
-                      className="h-8 px-2 text-xs rounded-lg border bg-background">
-                      <option value="both">Mobile and desktop</option>
-                      <option value="mobile">Mobile</option>
-                      <option value="desktop">Desktop</option>
-                    </select>
-                  </div>
-
-                  {/* Dual metric filters */}
-                  <div className="flex items-center gap-2 mb-3 flex-wrap">
-                    <select value={platMetric1} onChange={e => setPlatMetric1(e.target.value)}
-                      className="h-8 px-2 text-xs rounded-lg border bg-background">
-                      <option value="reach">Reach</option>
-                      <option value="impressions">Impressions</option>
-                    </select>
-                    <select value={platMetric2} onChange={e => setPlatMetric2(e.target.value)}
+                    <p className="text-sm font-semibold">Per platform · by device</p>
+                    <select value={platMetric} onChange={e => setPlatMetric(e.target.value)}
                       className="h-8 px-2 text-xs rounded-lg border bg-background">
                       <option value="results">Results</option>
                       <option value="spend">Amount spent</option>
+                      <option value="reach">Reach</option>
+                      <option value="impressions">Impressions</option>
                       <option value="purchases">Website purchases</option>
                     </select>
                   </div>
@@ -1399,15 +1466,16 @@ export function PerformancePopup({
                   {platBarData.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-8">No platform data</p>
                   ) : (
-                    <ResponsiveContainer width="100%" height={Math.max(240, platBarData.length * 34)}>
+                    <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={platBarData} margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={GRID} vertical={false} />
-                        <XAxis dataKey="label" tick={{ fontSize: 9, fill: MUTED }} interval={0} angle={-15} textAnchor="end" height={60} />
-                        <YAxis tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => fmtN(Number(v))} />
-                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+                        <XAxis dataKey="platform" tick={{ fontSize: 10, fill: MUTED }} interval={0} angle={-15} textAnchor="end" height={60} />
+                        <YAxis tick={{ fontSize: 10, fill: MUTED }} tickFormatter={v => metricFmt(platMetric)(Number(v))} />
+                        <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} formatter={(v: any, n: any) => [metricFmt(platMetric)(Number(v)), n]} />
                         <Legend wrapperStyle={{ fontSize: 11 }} />
-                        <Bar dataKey="metric1" name={metricLabel(platMetric1)} fill={SERIES[0]} radius={[3, 3, 0, 0]} maxBarSize={32} />
-                        <Bar dataKey="metric2" name={metricLabel(platMetric2)} fill={SERIES[3]} radius={[3, 3, 0, 0]} maxBarSize={32} />
+                        <Bar dataKey="mobile" name="Mobile" fill={SERIES[0]} radius={[3, 3, 0, 0]} maxBarSize={32} />
+                        <Bar dataKey="desktop" name="Desktop" fill={SERIES[3]} radius={[3, 3, 0, 0]} maxBarSize={32} />
+                        <Bar dataKey="other" name="Other" fill={SERIES[1]} radius={[3, 3, 0, 0]} maxBarSize={32} />
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -1426,9 +1494,12 @@ export function PerformancePopup({
                 </div>
                 <button
                   onClick={() => {
-                    const csvRows = platBarData.map(r => ({ label: r.label, value: `${metricLabel(platMetric1)}: ${r.metric1}, ${metricLabel(platMetric2)}: ${r.metric2}` }))
+                    const csvRows = platBarData.map(r => ({
+                      label: r.platform,
+                      value: `Mobile: ${r.mobile}, Desktop: ${r.desktop}, Other: ${r.other}`,
+                    }))
                     if (csvRows.length === 0) {
-                      const demoRows = demoBarData.map(r => ({ label: r.label, value: r.value }))
+                      const demoRows = demoBarData.map(r => ({ label: r.age, value: `Men: ${r.men}, Women: ${r.women}` }))
                       downloadCsv("placement_report.csv", demoRows)
                     } else {
                       downloadCsv("placement_report.csv", csvRows)
@@ -1440,6 +1511,7 @@ export function PerformancePopup({
                 </button>
               </div>
             </div>
+          </>)}
           </div>
           </div>
         </div>

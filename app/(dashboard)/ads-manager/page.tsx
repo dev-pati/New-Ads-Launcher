@@ -11,11 +11,11 @@ import {
   IconArrowUp, IconArrowDown, IconHistory, IconTable, IconCheck,
   IconChevronRight as IconDrillRight,
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
-  IconAdjustments,
+  IconAdjustments, IconDownload,
 } from "@tabler/icons-react"
 import { type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
 import { PerformancePopup } from "@/components/ads-manager/PerformancePopup"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -23,9 +23,28 @@ import { Button } from "@/components/ui/button"
 import { CreateCampaignModal } from "@/components/ads-manager/create-flow/CreateCampaignModal"
 import { CustomizeColumnsModal } from "@/components/ads-manager/CustomizeColumnsModal"
 import { AdsDateRangePicker, getPresetRange } from "@/components/ads-manager/AdsDateRangePicker"
-import { COLUMN_MAP, DEFAULT_PRESETS, ColumnPreset, getActivePreset } from "@/lib/column-config"
+import { COLUMN_DEFS, COLUMN_MAP, DEFAULT_PRESETS, ColumnPreset, CustomMetricConfig, getActivePreset, toColumnDef } from "@/lib/column-config"
+import { evalCustomMetric } from "@/lib/custom-metric-eval"
 import { BreakdownDropdown } from "@/components/ads-manager/BreakdownDropdown"
 import { BREAKDOWN_API_MAP } from "@/lib/breakdown-config"
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
+  if (rows.length === 0) return
+  const headers = Object.keys(rows[0])
+  const esc = (v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`
+  const csv = [
+    headers.map(esc).join(","),
+    ...rows.map(r => headers.map(h => esc(r[h])).join(","))
+  ].join("\n")
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,8 +166,8 @@ const ACTION_ALIASES: Record<string, string[]> = {
   lead: ["lead", "omni_lead", "offsite_conversion.fb_pixel_lead", "onsite_conversion.lead_grouped", "onsite_conversion.lead"],
   link_click: ["link_click", "omni_link_click"],
   add_to_cart: ["omni_add_to_cart", "add_to_cart", "offsite_conversion.fb_pixel_add_to_cart", "onsite_conversion.add_to_cart"],
-  initiate_checkout: ["offsite_conversion.fb_pixel_initiate_checkout", "initiate_checkout", "omni_initiate_checkout"],
-  view_content: ["offsite_conversion.fb_pixel_view_content", "omni_view_content", "view_content"],
+  initiate_checkout: ["omni_initiate_checkout", "initiate_checkout", "offsite_conversion.fb_pixel_initiate_checkout"],
+  view_content: ["omni_view_content", "view_content", "offsite_conversion.fb_pixel_view_content"],
   landing_page_view: ["landing_page_view", "omni_landing_page_view"],
 }
 
@@ -181,7 +200,7 @@ function getBreakdownLabel(item: Record<string, string>, selectedIds: string[]):
 
 function fmtBudget(cents?: string) {
   if (!cents) return "—"
-  return `$${(parseInt(cents) / 100).toFixed(2)}`
+  return `$${(parseInt(cents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 function fmtDate(iso?: string) {
@@ -202,11 +221,16 @@ function getInsight(item: Campaign | AdSet | Ad): Insight | null {
 
 function getMetricValue(items: { action_type: string; value: string }[] | undefined, actionType: string): number {
   if (!items?.length) return 0
+  // Meta returns the same conversion under multiple action_type keys (e.g. a purchase
+  // shows as omni_purchase, purchase, AND offsite_conversion.fb_pixel_purchase in the
+  // same actions[] array). Summing aliases double/triple-counts. Pick the first alias
+  // that exists, in priority order — that matches the Ads Manager UI count.
   const aliases = ACTION_ALIASES[actionType] || [actionType]
-  return aliases.reduce((sum, alias) => {
+  for (const alias of aliases) {
     const item = items.find(entry => entry.action_type === alias)
-    return sum + (parseFloat(item?.value || "0") || 0)
-  }, 0)
+    if (item) return parseFloat(item.value || "0") || 0
+  }
+  return 0
 }
 
 function getActionCount(ins: Insight | null, actionType: string): number {
@@ -218,7 +242,19 @@ function getActionValueAmount(ins: Insight | null, actionType: string): number {
 }
 
 function formatMoneyAmount(value: number): string {
-  return Number.isFinite(value) && value > 0 ? `$${value.toFixed(2)}` : "—"
+  return Number.isFinite(value) && value > 0 ? `$${value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"
+}
+
+// Inline money formatter with thousands separators — used in JSX cell renders.
+function fmtMoney(v: number): string {
+  if (!Number.isFinite(v) || v === 0) return "$0.00"
+  return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+// Inline percentage formatter with thousands separators for large values.
+function fmtPct(v: number): string {
+  if (!Number.isFinite(v)) return "0.00%"
+  return `${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`
 }
 
 function getSpend(item: Campaign | AdSet | Ad) {
@@ -265,12 +301,12 @@ function getCostPerResult(item: Campaign | AdSet | Ad, objective?: string) {
   const cpa = ins?.cost_per_action_type?.find(a => (ACTION_ALIASES[obj.actionType] || [obj.actionType]).includes(a.action_type))
   if (!cpa) {
     const count = getActionCount(ins, obj.actionType)
-    return count > 0 ? `$${(spend / count).toFixed(2)}` : null
+    return count > 0 ? fmtMoney((spend / count)) : null
   }
   const value = parseFloat(cpa.value)
-  if (Number.isFinite(value)) return `$${value.toFixed(2)}`
+  if (Number.isFinite(value)) return fmtMoney(value)
   const count = getActionCount(ins, obj.actionType)
-  return count > 0 ? `$${(spend / count).toFixed(2)}` : null
+  return count > 0 ? fmtMoney((spend / count)) : null
 }
 
 // ─── Status Toggle ────────────────────────────────────────────────────────────
@@ -330,54 +366,63 @@ function formatBidStrategy(raw: string | null | undefined): string {
   return raw.replace(/_/g, " ").toLowerCase()
 }
 
-function DeliveryBadge({ effective_status, budget_remaining, learning }: { effective_status: string; budget_remaining?: string; learning?: LearningStageInfo }) {
+function DeliveryBadge({ effective_status, learning }: { effective_status: string; budget_remaining?: string; learning?: LearningStageInfo }) {
+  // Campaigns have no learning state here → Active / Off only.
+  // Ad sets and ads pass learning_stage_info → keep Meta's Learning state.
+  // Budget remaining (including $0.00 remaining) must not turn Active into a warning state.
   const isActive = effective_status === "ACTIVE"
-  const isOutOfBudget = isActive && budget_remaining !== undefined && budget_remaining === "0"
-  const remainingDollars = budget_remaining !== undefined ? (parseInt(budget_remaining) / 100).toFixed(2) : null
-  // Meta "Learning" is a delivery state distinct from effective_status — only meaningful while ACTIVE.
   const learnStatus = isActive ? learning?.status : undefined
   const isLearning = learnStatus === "LEARNING"
   const isLearningLimited = learnStatus === "LEARNING_LIMITED"
-  const dot = isOutOfBudget || isLearningLimited ? "bg-[#f0a500]" : isLearning ? "bg-[#1877f2]" : isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]"
-  const mainLabel = isActive
-    ? (isLearning ? "Learning" : isLearningLimited ? "Learning limited" : "Active")
-    : effective_status === "PAUSED" ? "Off" : effective_status.charAt(0) + effective_status.slice(1).toLowerCase()
-  const learnConv = learning?.conversions
+  const dot = isLearning || isLearningLimited ? "bg-[#1877f2]" : isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]"
+  const label = isLearning ? "Learning" : isLearningLimited ? "Learning limited" : isActive ? "Active" : "Off"
   return (
-    <span className="flex flex-col gap-0.5">
-      <span className="flex items-center gap-1.5 text-xs text-[#1c2b33] dark:text-gray-300">
-        <span className={cn("size-[7px] rounded-full shrink-0", dot)} />
-        {mainLabel}
-        {isLearning && typeof learnConv === "number" && (
-          <span className="text-[#65676b]">({learnConv}/50)</span>
-        )}
-      </span>
-      {isOutOfBudget && remainingDollars !== null && (
-        <span className="text-xs text-[#f0a500] pl-3.5">${remainingDollars} remaining</span>
-      )}
+    <span className="flex items-center gap-1.5 text-sm font-medium text-[#1c2b33] dark:text-gray-300">
+      <span className={cn("size-[7px] rounded-full shrink-0", dot)} />
+      {label}
+      {isLearning && typeof learning?.conversions === "number" && <span className="text-[#65676b]">({learning.conversions}/50)</span>}
     </span>
   )
 }
 
 // ─── Sort Header ──────────────────────────────────────────────────────────────
 
-function SortTh({ label, field, sortField, sortDir, onSort, className }: {
+function SortTh({ label, field, sortField, sortDir, onSort, width, onResize, className }: {
   label: string; field: string; sortField: string | null; sortDir: SortDir
-  onSort: (f: string) => void; className?: string
+  onSort: (f: string) => void; width?: number; onResize?: (w: number) => void; className?: string
 }) {
   const active = sortField === field
+  const handleDrag = (e: React.MouseEvent) => {
+    if (!onResize || !width) return
+    e.preventDefault()
+    const startX = e.clientX
+    const startW = width
+    const onMove = (me: MouseEvent) => onResize(Math.max(60, startW + me.clientX - startX))
+    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp) }
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+  }
+
   return (
     <th
-      className={cn("px-3 py-2 text-left text-xs font-semibold text-[#65676b] dark:text-muted-foreground cursor-pointer select-none whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5", className)}
+      style={{ width: width ? `${width}px` : undefined, minWidth: width ? `${width}px` : undefined, maxWidth: width ? `${width}px` : undefined }}
+      className={cn("relative px-3 py-2 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground cursor-pointer select-none whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5", className)}
       onClick={() => onSort(field)}
     >
-      <span className="flex items-center gap-1">
-        {label}
+      <span className="flex items-center gap-1 overflow-hidden">
+        <span className="truncate">{label}</span>
         {active
-          ? (sortDir === "asc" ? <IconArrowUp className="size-3 text-[#1877f2]" /> : <IconArrowDown className="size-3 text-[#1877f2]" />)
-          : <IconArrowsUpDown className="size-3 opacity-0 group-hover:opacity-50" />
+          ? (sortDir === "asc" ? <IconArrowUp className="size-3 shrink-0 text-[#1877f2]" /> : <IconArrowDown className="size-3 shrink-0 text-[#1877f2]" />)
+          : <IconArrowsUpDown className="size-3 shrink-0 opacity-0 group-hover:opacity-50" />
         }
       </span>
+      {onResize && (
+        <div
+          onMouseDown={handleDrag}
+          onClick={e => e.stopPropagation()}
+          className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 opacity-0 hover:opacity-100 transition-opacity"
+        />
+      )}
     </th>
   )
 }
@@ -385,7 +430,7 @@ function SortTh({ label, field, sortField, sortDir, onSort, className }: {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 // Per-column header context menu: sort + column management actions (Meta-style).
-function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMoveRight, onRemove, canMoveLeft, canMoveRight }: {
+function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMoveRight, onRemove, canMoveLeft, canMoveRight, onOpenAttributionCompare }: {
   colId: string
   label: string
   onSortAsc: () => void
@@ -395,6 +440,7 @@ function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMov
   onRemove: () => void
   canMoveLeft: boolean
   canMoveRight: boolean
+  onOpenAttributionCompare?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -414,7 +460,7 @@ function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMov
         <IconChevronDown className="size-3 opacity-50" />
       </button>
       {open && (
-        <div className="absolute right-0 top-6 z-50 w-44 bg-background border rounded-lg shadow-xl py-1 text-xs">
+        <div className="absolute right-0 top-6 z-50 w-56 bg-background border rounded-lg shadow-xl py-1 text-xs">
           <button onClick={() => { onSortAsc(); setOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 flex items-center gap-2">
             <IconArrowUp className="size-3.5" /> Sort ascending
           </button>
@@ -431,6 +477,18 @@ function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMov
           <button onClick={() => { onRemove(); setOpen(false) }} className="w-full text-left px-3 py-1.5 hover:bg-muted/50 text-destructive flex items-center gap-2">
             <IconX className="size-3.5" /> Remove column
           </button>
+
+          {colId === "attribution_setting" && onOpenAttributionCompare && (
+            <>
+              <div className="my-1 border-t" />
+              <button
+                onClick={() => { onOpenAttributionCompare(); setOpen(false) }}
+                className="w-full text-left px-3 py-1.5 hover:bg-muted/50 flex items-center gap-2"
+              >
+                <IconAdjustments className="size-3.5" /> Compare attribution settings
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -444,6 +502,7 @@ export default function AdsManagerPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [adSets, setAdSets] = useState<AdSet[]>([])
   const [ads, setAds] = useState<Ad[]>([])
+  const [accountSummary, setAccountSummary] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadedMs, setLoadedMs] = useState<number | null>(null)
   const [error, setError] = useState("")
@@ -494,11 +553,14 @@ export default function AdsManagerPage() {
   const [defaultCta, setDefaultCta] = useState("SHOP_NOW")
   const [defaultLink, setDefaultLink] = useState("")
   const [columnOrder,       setColumnOrder]       = useState<string[]>(DEFAULT_PRESETS[4].columns)
+  const [columnWidths,      setColumnWidths]      = useState<Record<string, number>>({})
   const [customPresets,     setCustomPresets]     = useState<ColumnPreset[]>([])
+  const [customMetrics,     setCustomMetrics]     = useState<CustomMetricConfig[]>([])
   const [colsOpen,          setColsOpen]          = useState(false)
   const [customizeColsOpen, setCustomizeColsOpen] = useState(false)
-  const [attributionOpen,   setAttributionOpen]   = useState(false)
   const [attributionWindows, setAttributionWindows] = useState<string[]>([])
+  const [attributionCompareOpen, setAttributionCompareOpen] = useState(false)
+  const [draftAttribution, setDraftAttribution] = useState<string[]>([])
   const [breakdowns,        setBreakdowns]        = useState<string[]>([])
   const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
   const [breakdownError,    setBreakdownError]    = useState("")
@@ -511,6 +573,29 @@ export default function AdsManagerPage() {
   const drawerUntil = usesCustomRange ? formatMetaDate(customDateRange.end) : ""
   const toReportRow = (node: { id: string; name: string }): ReportRow =>
     ({ id: node.id, name: node.name, adId: tab === "ads" ? node.id : undefined })
+  const customColumnMap = useMemo(() => ({ ...COLUMN_MAP, ...Object.fromEntries(customMetrics.map(m => [m.id, toColumnDef(m)])) }), [customMetrics])
+  const customMetricById = useMemo(() => new Map(customMetrics.map(m => [m.id, m])), [customMetrics])
+  const getColWidth = (id: string) => {
+    const label = customColumnMap[id]?.headerLabel || ""
+    const def = label.length > 34 ? 160 : label.length > 20 ? 135 : 112
+    return columnWidths[id] || def
+  }
+  const isTextCol = (id: string) => [
+    "delivery", "effective_status", "attribution_setting", "budget", "lifetime_budget",
+    "schedule_start", "schedule_end", "bid_strategy", "boosted_object_id", "buying_type",
+    "objective", "smart_promotion_type", "special_ad_category", "account_id", "date_created",
+    "issues_info", "optimization_goal", "updated_time",
+  ].includes(id)
+  const setColWidth = (id: string, width: number) => setColumnWidths(prev => ({ ...prev, [id]: width }))
+  const startColResize = (id: string, startWidth: number, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const onMove = (me: MouseEvent) => setColWidth(id, Math.max(60, startWidth + me.clientX - startX))
+    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp) }
+    document.addEventListener("mousemove", onMove)
+    document.addEventListener("mouseup", onUp)
+  }
 
   // Open the big Meta-style popup. Compare uses the multi-selection when the clicked
   // row is part of it; otherwise falls back to just the clicked row.
@@ -566,14 +651,20 @@ export default function AdsManagerPage() {
   // Load / save column state from localStorage
   useEffect(() => {
     try {
+      const rawMetrics = localStorage.getItem("adsmanager_custom_metrics_v1")
+      const storedCustomMetrics = rawMetrics ? JSON.parse(rawMetrics) as CustomMetricConfig[] : []
+      if (storedCustomMetrics.length) setCustomMetrics(storedCustomMetrics)
+      const validIds = new Set([...COLUMN_DEFS.map(c => c.id), ...storedCustomMetrics.map(c => c.id)])
       const raw = localStorage.getItem("adsmanager_col_order_v3")
       if (raw) {
         const parsed = JSON.parse(raw) as string[]
-        const valid = parsed.filter(id => id in COLUMN_MAP)
+        const valid = parsed.filter(id => validIds.has(id))
         if (valid.length > 0) setColumnOrder(valid)
       }
       const rawPresets = localStorage.getItem("adsmanager_col_presets")
       if (rawPresets) setCustomPresets(JSON.parse(rawPresets))
+      const rawWidths = localStorage.getItem("adsmanager_col_widths_v1")
+      if (rawWidths) setColumnWidths(JSON.parse(rawWidths))
     } catch {}
   }, [])
 
@@ -582,8 +673,16 @@ export default function AdsManagerPage() {
   }, [columnOrder])
 
   useEffect(() => {
+    try { localStorage.setItem("adsmanager_col_widths_v1", JSON.stringify(columnWidths)) } catch {}
+  }, [columnWidths])
+
+  useEffect(() => {
     try { localStorage.setItem("adsmanager_col_presets", JSON.stringify(customPresets)) } catch {}
   }, [customPresets])
+
+  useEffect(() => {
+    try { localStorage.setItem("adsmanager_custom_metrics_v1", JSON.stringify(customMetrics)) } catch {}
+  }, [customMetrics])
 
   const saveCustomPreset = (name: string, cols: string[]) => {
     setCustomPresets(prev => [
@@ -715,6 +814,32 @@ export default function AdsManagerPage() {
 
   // Main data: account / tab / date change → immediate refetch
   useEffect(() => { fetchMainData() }, [fetchMainData])
+
+  // Account-level summary for footer metrics that Meta dedupes across the whole ad account.
+  // Do not derive these by summing campaign/ad set/ad rows; reach/unique users overlap.
+  useEffect(() => {
+    if (!selectedAccountId) { setAccountSummary(null); return }
+    let cancelled = false
+    const load = async () => {
+      try {
+        const params = new URLSearchParams({ adAccountId: selectedAccountId })
+        if ((datePreset === "custom" || datePreset === "maximum") && customDateRange) {
+          params.set("since", formatMetaDate(customDateRange.start))
+          params.set("until", formatMetaDate(customDateRange.end))
+        } else {
+          params.set("datePreset", datePreset)
+        }
+        if (attributionWindows.length) params.set("action_attribution_windows", attributionWindows.join(","))
+        const r = await fetch(`/api/insights/account-summary?${params}`)
+        const d = await r.json()
+        if (!cancelled) setAccountSummary(r.ok ? (d.summary || null) : null)
+      } catch {
+        if (!cancelled) setAccountSummary(null)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [selectedAccountId, datePreset, customDateRange, attributionWindows.join(",")])
 
   // Breakdown data: debounced 300ms so rapid multi-select fires only one request
   useEffect(() => {
@@ -983,7 +1108,7 @@ export default function AdsManagerPage() {
   // Aggregate every insight metric across the current rows for the totals footer.
   const agg = useMemo(() => {
     const t = {
-      spend: 0, impressions: 0, reach: 0, clicks: 0, linkClicks: 0, uniqueClicks: 0,
+      spend: 0, impressions: 0, reach: 0, clicks: 0, linkClicks: 0, uniqueClicks: 0, uniqueLinkClicks: 0,
       purchases: 0, purchaseValue: 0, addToCart: 0, initiateCheckout: 0, leads: 0,
       landingPageViews: 0, contentViews: 0, video3s: 0,
       dailyBudget: 0, lifetimeBudget: 0, watchWeighted: 0, watchImp: 0,
@@ -1000,6 +1125,7 @@ export default function AdsManagerPage() {
       t.clicks       += parseFloat(ins.clicks || "0") || 0
       t.linkClicks   += parseFloat(ins.inline_link_clicks || "0") || 0
       t.uniqueClicks += parseFloat(ins.unique_clicks || "0") || 0
+      t.uniqueLinkClicks += parseFloat(ins.unique_inline_link_clicks || "0") || 0
       t.purchases        += getActionCount(ins, "omni_purchase")
       t.purchaseValue    += getActionValueAmount(ins, "omni_purchase")
       t.addToCart        += getActionCount(ins, "add_to_cart")
@@ -1017,15 +1143,22 @@ export default function AdsManagerPage() {
 
   // Footer cell: Total / Average / Per 1,000 Impressions / Per Meta account / Per Action.
   function renderTotalCell(colId: string) {
-    const money = (v: number) => `$${v.toFixed(2)}`
+    const money = (v: number) => fmtMoney(v)
     const num = (v: number) => v > 0 ? Math.round(v).toLocaleString() : "—"
     const cell = (value: string, label: string) => (
       <>
-        <span>{value}</span>
+        <span className="text-sm font-semibold tabular-nums">{value}</span>
         <p className="text-xs text-muted-foreground font-normal">{label}</p>
       </>
     )
     const avg = (n: number, d: number, fmt: (x: number) => string) => d > 0 ? fmt(n / d) : "—"
+    const acctSpend = parseFloat(accountSummary?.spend || "0") || agg.spend
+    const acctImpressions = parseFloat(accountSummary?.impressions || "0") || agg.impressions
+    const acctClicks = parseFloat(accountSummary?.clicks || "0") || agg.clicks
+    const acctReach = parseFloat(accountSummary?.reach || "0") || agg.reach
+    const acctUniqueClicks = parseFloat(accountSummary?.unique_clicks || "0") || agg.uniqueClicks
+    const acctUniqueLinkClicks = parseFloat(accountSummary?.unique_inline_link_clicks || "0") || agg.uniqueLinkClicks
+    const acctFrequency = parseFloat(accountSummary?.frequency || "0") || (acctReach > 0 ? acctImpressions / acctReach : 0)
     switch (colId) {
       case "spend":              return cell(money(agg.spend), "Total spent")
       case "results":            return cell(totalResultsCount > 0 ? totalResultsCount.toLocaleString() : "—", "Total")
@@ -1041,23 +1174,25 @@ export default function AdsManagerPage() {
       case "impressions":        return cell(num(agg.impressions), "Total")
       case "reach":              return cell(num(agg.reach), "Per Meta account")
       case "cpm":                return cell(agg.impressions > 0 ? money(agg.spend / agg.impressions * 1000) : "—", "Per 1,000 Impressions")
-      case "frequency":          return cell(avg(agg.impressions, agg.reach, x => x.toFixed(2)), "Average")
+      case "frequency":          return cell(acctFrequency > 0 ? acctFrequency.toFixed(2) : "—", "Per Meta account")
       case "clicks":             return cell(num(agg.clicks), "Total")
-      case "ctr":                return cell(agg.impressions > 0 ? `${(agg.clicks / agg.impressions * 100).toFixed(2)}%` : "—", "Average")
+      case "ctr":                return cell(acctImpressions > 0 ? fmtPct((acctClicks / acctImpressions * 100)) : "—", "Per 1,000 Impressions")
       case "cpc":                return cell(avg(agg.spend, agg.clicks, money), "Average")
       case "link_clicks":        return cell(num(agg.linkClicks), "Total")
-      case "unique_clicks":      return cell(num(agg.uniqueClicks), "Total")
+      case "unique_clicks":      return cell(num(acctUniqueClicks), "Per Meta account")
+      case "unique_link_clicks": return cell(num(acctUniqueLinkClicks), "Per Meta account")
+      case "unique_link_ctr":    return cell(acctReach > 0 ? fmtPct((acctUniqueLinkClicks / acctReach * 100)) : "—", "Per Meta account")
       case "cost_per_link_click":return cell(avg(agg.spend, agg.linkClicks, money), "Per Action")
-      case "cost_per_unique_click": return cell(avg(agg.spend, agg.uniqueClicks, money), "Per Action")
+      case "cost_per_unique_click": return cell(avg(acctSpend, acctUniqueClicks, money), "Per Meta account")
       case "landing_page_views": return cell(num(agg.landingPageViews), "Total")
-      case "lpv_rate":           return cell(agg.linkClicks > 0 ? `${(agg.landingPageViews / agg.linkClicks * 100).toFixed(2)}%` : "—", "Average")
+      case "lpv_rate":           return cell(agg.linkClicks > 0 ? fmtPct(Math.min(100, agg.landingPageViews / agg.linkClicks * 100)) : "—", "Average")
       case "content_views":      return cell(num(agg.contentViews), "Total")
       case "add_to_cart":        return cell(num(agg.addToCart), "Total")
       case "cost_per_add_to_cart": return cell(avg(agg.spend, agg.addToCart, money), "Per Action")
       case "initiate_checkout":  return cell(num(agg.initiateCheckout), "Total")
       case "cost_per_initiate_checkout": return cell(avg(agg.spend, agg.initiateCheckout, money), "Per Action")
       case "leads":              return cell(num(agg.leads), "Total")
-      case "purchase_conv_rate": return cell(agg.linkClicks > 0 ? `${(agg.purchases / agg.linkClicks * 100).toFixed(2)}%` : "—", "Average")
+      case "purchase_conv_rate": return cell(agg.linkClicks > 0 ? fmtPct((agg.purchases / agg.linkClicks * 100)) : "—", "Average")
       case "video_views_3s":     return cell(num(agg.video3s), "Total")
       case "avg_watch_time":     return cell(agg.watchImp > 0 ? fmtWatch(agg.watchWeighted / agg.watchImp) : "—", "Average")
       default:                   return null
@@ -1077,11 +1212,265 @@ export default function AdsManagerPage() {
     if (headerCheckRef.current) headerCheckRef.current.indeterminate = someSelected
   }, [someSelected])
 
+  function exportTable() {
+    const list = selectedIds.size > 0
+      ? currentData.filter(item => selectedIds.has(item.id))
+      : currentData
+
+    if (list.length === 0) return
+
+    const rows = list.map(item => {
+      const ins = getInsight(item)
+      const spend = getSpend(item)
+      const objective =
+        tab === "campaigns" ? (item as Campaign).objective
+        : tab === "adsets"  ? campaigns.find(c => c.id === (item as AdSet).campaign_id)?.objective
+        :                     campaigns.find(c => c.id === (item as Ad).campaign_id)?.objective
+
+      const row: Record<string, string | number> = {
+        "Name": item.name,
+        "ID": item.id,
+      }
+
+      for (const colId of columnOrder) {
+        const colDef = customColumnMap[colId]
+        if (!colDef) continue
+        const label = colDef.headerLabel
+
+        let val: string | number = "—"
+        const customMetric = customMetricById.get(colId)
+        if (customMetric) {
+          val = formatCustomMetric(evalCustomMetric(customMetric.formula, id => resolveMetricNumber(id, ins, item, objective)), customMetric.format)
+          row[label] = val
+          continue
+        }
+        switch (colId) {
+          case "spend":
+            val = ins ? fmtMoney(spend) : "—"
+            break
+          case "results": {
+            const { count } = getResults(item, objective)
+            val = ins ? count : "—"
+            break
+          }
+          case "cost_per_result": {
+            const cpr = getCostPerResult(item, objective)
+            val = cpr || "—"
+            break
+          }
+          case "budget": {
+            const daily = (item as any).daily_budget
+            val = daily ? fmtBudget(daily) : "Using ad set budget"
+            break
+          }
+          case "lifetime_budget":
+            val = (item as any).lifetime_budget ? fmtBudget((item as any).lifetime_budget) : "—"
+            break
+          case "delivery":
+          case "effective_status":
+            val = item.effective_status
+            break
+          case "impressions":
+            val = ins?.impressions ? parseInt(ins.impressions) : "—"
+            break
+          case "clicks":
+            val = ins?.clicks ? parseInt(ins.clicks) : "—"
+            break
+          case "reach":
+            val = ins?.reach ? parseInt(ins.reach) : "—"
+            break
+          case "cpm":
+            if (ins && ins.impressions && parseFloat(ins.impressions) > 0) {
+              val = fmtMoney(((parseFloat(ins.spend || "0") / parseFloat(ins.impressions)) * 1000))
+            }
+            break
+          case "frequency":
+            if (ins?.frequency) val = parseFloat(ins.frequency).toFixed(2)
+            else if (ins?.impressions && ins?.reach) val = (parseFloat(ins.impressions) / parseFloat(ins.reach)).toFixed(2)
+            break
+          case "ctr":
+            if (ins?.ctr) val = fmtPct(parseFloat(ins.ctr))
+            else if (ins?.clicks && ins?.impressions && parseFloat(ins.impressions) > 0) val = fmtPct(((parseFloat(ins.clicks) / parseFloat(ins.impressions)) * 100))
+            break
+          case "cpc":
+            if (ins?.clicks && parseFloat(ins.clicks) > 0) val = fmtMoney((spend / parseFloat(ins.clicks)))
+            break
+          case "link_clicks":
+            val = ins?.inline_link_clicks ? parseInt(ins.inline_link_clicks) : "—"
+            break
+          case "unique_clicks":
+            val = ins?.unique_clicks ? parseInt(ins.unique_clicks) : "—"
+            break
+          case "unique_link_clicks":
+            val = ins?.unique_inline_link_clicks ? parseInt(ins.unique_inline_link_clicks) : "—"
+            break
+          case "unique_link_ctr":
+            if (ins?.unique_link_clicks_ctr) val = fmtPct(parseFloat(ins.unique_link_clicks_ctr))
+            else if (ins?.unique_inline_link_clicks && ins?.reach && parseFloat(ins.reach) > 0) val = fmtPct(((parseFloat(ins.unique_inline_link_clicks) / parseFloat(ins.reach)) * 100))
+            break
+          case "cost_per_unique_click":
+            if (ins?.unique_clicks && parseFloat(ins.unique_clicks) > 0) val = fmtMoney((spend / parseFloat(ins.unique_clicks)))
+            break
+          case "cost_per_link_click":
+            if (ins?.inline_link_clicks && parseFloat(ins.inline_link_clicks) > 0) val = fmtMoney((spend / parseFloat(ins.inline_link_clicks)))
+            break
+          case "landing_page_views":
+            val = getActionValue(ins, "landing_page_view") || "—"
+            break
+          case "lpv_rate": {
+            const lpv = getActionValue(ins, "landing_page_view")
+            const lc = parseFloat(ins?.inline_link_clicks || "0")
+            if (lpv && lc > 0) val = fmtPct(((lpv / lc) * 100))
+            break
+          }
+          case "content_views":
+            val = getActionValue(ins, "view_content") || "—"
+            break
+          case "add_to_cart":
+            val = getActionValue(ins, "add_to_cart") || "—"
+            break
+          case "cost_per_add_to_cart": {
+            const atc = getActionValue(ins, "add_to_cart")
+            if (atc > 0) val = fmtMoney((spend / atc))
+            break
+          }
+          case "initiate_checkout":
+            val = getActionValue(ins, "initiate_checkout") || "—"
+            break
+          case "cost_per_initiate_checkout": {
+            const ic = getActionValue(ins, "initiate_checkout")
+            if (ic > 0) val = fmtMoney((spend / ic))
+            break
+          }
+          case "leads":
+            val = getActionValue(ins, "lead") || "—"
+            break
+          case "cost_per_lead": {
+            const lead = getActionValue(ins, "lead")
+            if (lead > 0) val = fmtMoney((spend / lead))
+            break
+          }
+          case "purchases":
+            val = getActionValue(ins, "omni_purchase") || "—"
+            break
+          case "purchase_value":
+            val = formatMoneyAmount(getActionValueAmount(ins, "omni_purchase"))
+            break
+          case "roas": {
+            const pVal = getActionValueAmount(ins, "omni_purchase")
+            if (spend > 0 && pVal > 0) val = `${(pVal / spend).toFixed(2)}x`
+            break
+          }
+          case "cost_per_purchase": {
+            const pur = getActionValue(ins, "omni_purchase")
+            if (pur > 0) val = fmtMoney((spend / pur))
+            break
+          }
+          case "avg_order_value": {
+            const pur = getActionValue(ins, "omni_purchase")
+            const pVal = getActionValueAmount(ins, "omni_purchase")
+            if (pur > 0 && pVal > 0) val = fmtMoney((pVal / pur))
+            break
+          }
+          case "purchase_conv_rate": {
+            const pur = getActionValue(ins, "omni_purchase")
+            const cl = parseFloat(ins?.clicks || "0")
+            if (cl > 0) val = fmtPct(((pur / cl) * 100))
+            break
+          }
+          case "avg_watch_time": {
+            const sec = parseFloat(ins?.video_avg_time_watched_actions?.[0]?.value || "0")
+            if (sec > 0) val = sec.toFixed(1)
+            break
+          }
+          case "video_views_3s":
+            val = getActionValue(ins, "video_view") || "—"
+            break
+          case "video_25":
+            val = getActionValue(ins, "video_p25_watched_actions") || "—"
+            break
+          case "video_50":
+            val = getActionValue(ins, "video_p50_watched_actions") || "—"
+            break
+          case "video_75":
+            val = getActionValue(ins, "video_p75_watched_actions") || "—"
+            break
+          case "video_100":
+            val = getActionValue(ins, "video_p100_watched_actions") || "—"
+            break
+          case "schedule_start":
+            val = fmtDate((item as any).start_time)
+            break
+          case "schedule_end":
+            val = fmtDate((item as any).stop_time || (item as any).end_time)
+            break
+          case "optimization_goal":
+            val = (item as AdSet).optimization_goal || "—"
+            break
+          case "bid_strategy":
+            val = (item as any).bid_strategy ?? (item as Ad).adset?.bid_strategy ?? "—"
+            break
+          case "objective":
+            val = objective || "—"
+            break
+          case "attribution_setting": {
+            if (tab === "campaigns") {
+              const kids = adSets.filter(a => a.campaign_id === item.id)
+              const labels = Array.from(new Set(kids.map(k => formatAttributionSpec(k.attribution_spec))))
+              val = labels.length ? labels.join(" · ") : "All conversions"
+            } else {
+              const spec = (item as any).attribution_spec ?? (item as Ad).adset?.attribution_spec ?? (item as any).attributionSetting ?? (item as any).metrics?.attributionSetting
+              val = formatAttributionSpec(spec)
+            }
+            break
+          }
+        }
+        row[label] = val
+      }
+      return row
+    })
+
+    downloadCsv(`${tab}_export.csv`, rows)
+  }
+
   // ─── Config-driven cell renderer ─────────────────────────────────────────────
 
   function getActionValue(ins: Insight | null, actionType: string): number {
     return getActionCount(ins, actionType)
   }
+
+  function resolveMetricNumber(metricId: string, ins: Insight | null, row: Campaign | AdSet | Ad, objective?: string): number | null {
+    const spend = getSpend(row)
+    switch (metricId) {
+      case "spend": return spend
+      case "results": return getResults(row, objective).count
+      case "cost_per_result": { const count = getResults(row, objective).count; return count ? spend / count : null }
+      case "budget": return parseFloat((row as any).daily_budget || (row as any).lifetime_budget || "0") / 100
+      case "lifetime_budget": return parseFloat((row as any).lifetime_budget || "0") / 100
+      case "impressions": return parseFloat(ins?.impressions || "0")
+      case "reach": return parseFloat(ins?.reach || "0")
+      case "clicks": return parseFloat(ins?.clicks || "0")
+      case "link_clicks": return parseFloat(ins?.inline_link_clicks || "0")
+      case "unique_clicks": return parseFloat(ins?.unique_clicks || "0")
+      case "unique_link_clicks": return parseFloat(ins?.unique_inline_link_clicks || "0")
+      case "purchases": return getActionValue(ins, "omni_purchase")
+      case "purchase_value": return getActionValueAmount(ins, "omni_purchase")
+      case "add_to_cart": return getActionValue(ins, "add_to_cart")
+      case "initiate_checkout": return getActionValue(ins, "initiate_checkout")
+      case "leads": return getActionValue(ins, "lead")
+      case "landing_page_views": return getActionValue(ins, "landing_page_view")
+      case "content_views": return getActionValue(ins, "view_content")
+      case "video_views_3s": return getActionValue(ins, "video_view")
+      case "post_engagements": return getActionValue(ins, "post_engagement")
+      default: return null
+    }
+  }
+
+  const formatCustomMetric = (value: number | null, format: CustomMetricConfig["format"]) => value == null
+    ? "—"
+    : format === "currency" ? fmtMoney(value)
+    : format === "percentage" ? fmtPct(value * 100)
+    : value.toLocaleString("en-US", { maximumFractionDigits: 2 })
 
   function renderCellContent(colId: string, row: Campaign | AdSet | Ad) {
     const ins   = getInsight(row)
@@ -1090,15 +1479,20 @@ export default function AdsManagerPage() {
       tab === "campaigns" ? (row as Campaign).objective
       : tab === "adsets"  ? campaigns.find(c => c.id === (row as AdSet).campaign_id)?.objective
       :                     campaigns.find(c => c.id === (row as Ad).campaign_id)?.objective
+    const customMetric = customMetricById.get(colId)
+    if (customMetric) {
+      const value = evalCustomMetric(customMetric.formula, id => resolveMetricNumber(id, ins, row, objective))
+      return <span className="text-sm font-medium tabular-nums leading-5">{formatCustomMetric(value, customMetric.format)}</span>
+    }
 
     switch (colId) {
       case "spend":
-        return <span className="text-xs tabular-nums">{ins ? `$${spend.toFixed(2)}` : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? fmtMoney(spend) : "—"}</span>
 
       case "results": {
         const { count, type } = getResults(row, objective)
         return <>
-          <span className="text-xs tabular-nums font-semibold text-[#1c2b33] dark:text-white">{ins ? count : "—"}</span>
+          <span className="text-sm font-medium tabular-nums leading-5 font-semibold text-[#1c2b33] dark:text-white">{ins ? count : "—"}</span>
           {ins && count > 0 && <p className="text-xs text-[#65676b]">{type}</p>}
           {(() => {
             const d = getResultsDetail(row, objective)
@@ -1129,7 +1523,7 @@ export default function AdsManagerPage() {
         const { type } = getResults(row, objective)
         const cpr = getCostPerResult(row, objective)
         return <>
-          <span className="text-xs tabular-nums">{cpr || "—"}</span>
+          <span className="text-sm font-medium tabular-nums leading-5">{cpr || "—"}</span>
           {cpr && <p className="text-xs text-[#65676b]">Per {type}</p>}
         </>
       }
@@ -1139,7 +1533,7 @@ export default function AdsManagerPage() {
         if (daily) {
           return (
             <>
-              <span className="text-xs tabular-nums">{fmtBudget(daily)}</span>
+              <span className="text-sm font-medium tabular-nums leading-5">{fmtBudget(daily)}</span>
               <p className="text-xs text-[#65676b]">Daily</p>
             </>
           )
@@ -1149,7 +1543,7 @@ export default function AdsManagerPage() {
       }
 
       case "lifetime_budget":
-        return <span className="text-xs tabular-nums">{(row as any).lifetime_budget ? fmtBudget((row as any).lifetime_budget) : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{(row as any).lifetime_budget ? fmtBudget((row as any).lifetime_budget) : "—"}</span>
 
       case "delivery": {
         let budgetRemaining: string | undefined = (row as any).budget_remaining
@@ -1175,28 +1569,28 @@ export default function AdsManagerPage() {
         return <span className="text-xs">{row.effective_status.charAt(0) + row.effective_status.slice(1).toLowerCase()}</span>
 
       case "impressions":
-        return <span className="text-xs tabular-nums">{ins?.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins?.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
 
       case "clicks":
-        return <span className="text-xs tabular-nums">{ins?.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins?.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
 
       case "reach":
-        return <span className="text-xs tabular-nums">{ins?.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins?.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
 
       case "cpm": {
         if (!ins || !ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
         const cpmVal = (parseFloat(ins.spend || "0") / parseFloat(ins.impressions)) * 1000
-        return <span className="text-xs tabular-nums">${cpmVal.toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney(cpmVal)}</span>
       }
 
       case "frequency": {
         if (ins?.frequency != null && ins.frequency !== "") {
-          return <span className="text-xs tabular-nums">{parseFloat(ins.frequency).toFixed(2)}</span>
+          return <span className="text-sm font-medium tabular-nums leading-5">{parseFloat(ins.frequency).toFixed(2)}</span>
         }
         const imp = parseFloat(ins?.impressions || "0")
         const rch = parseFloat(ins?.reach || "0")
         if (!imp || !rch) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">{(imp / rch).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{(imp / rch).toFixed(2)}</span>
       }
 
       case "ctr": {
@@ -1204,83 +1598,83 @@ export default function AdsManagerPage() {
         const ctrVal = ins.ctr != null && ins.ctr !== ""
           ? parseFloat(ins.ctr)
           : (parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100
-        return <span className="text-xs tabular-nums">{ctrVal.toFixed(2)}%</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ctrVal.toFixed(2)}%</span>
       }
 
       case "cpc": {
         if (!ins || !ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((spend / parseFloat(ins.clicks)))}</span>
       }
 
       case "link_clicks": {
         const n = parseInt(ins?.inline_link_clicks || "0")
-        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{n ? n.toLocaleString() : "—"}</span>
       }
 
       case "unique_clicks": {
         const n = parseInt(ins?.unique_clicks || "0")
-        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{n ? n.toLocaleString() : "—"}</span>
       }
 
       case "unique_link_clicks": {
         const n = parseInt(ins?.unique_inline_link_clicks || "0")
-        return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{n ? n.toLocaleString() : "—"}</span>
       }
 
       case "unique_link_ctr": {
         if (ins?.unique_link_clicks_ctr != null && ins.unique_link_clicks_ctr !== "") {
-          return <span className="text-xs tabular-nums">{parseFloat(ins.unique_link_clicks_ctr).toFixed(2)}%</span>
+          return <span className="text-sm font-medium tabular-nums leading-5">{parseFloat(ins.unique_link_clicks_ctr).toFixed(2)}%</span>
         }
         const rch = parseFloat(ins?.reach || "0")
         const ulc = parseFloat(ins?.unique_inline_link_clicks || "0")
         if (!rch || !ulc) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">{((ulc / rch) * 100).toFixed(2)}%</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{((ulc / rch) * 100).toFixed(2)}%</span>
       }
 
       case "cost_per_unique_click": {
         const n = parseFloat(ins?.unique_clicks || "0")
         if (!n) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((spend / n))}</span>
       }
 
       case "cost_per_link_click": {
         const n = parseFloat(ins?.inline_link_clicks || "0")
         if (!n) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((spend / n))}</span>
       }
 
       case "landing_page_views": {
         const n = getActionValue(ins, "landing_page_view")
-        return <span className="text-xs tabular-nums">{n || "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{n || "—"}</span>
       }
 
       case "lpv_rate": {
         const lpv = getActionValue(ins, "landing_page_view")
         const lc = parseFloat(ins?.inline_link_clicks || "0")
         if (!lpv || !lc) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">{((lpv / lc) * 100).toFixed(2)}%</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{((lpv / lc) * 100).toFixed(2)}%</span>
       }
 
       case "content_views": {
         const n = getActionValue(ins, "view_content")
-        return <span className="text-xs tabular-nums">{n || "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{n || "—"}</span>
       }
 
       case "cost_per_add_to_cart": {
         const n = getActionValue(ins, "add_to_cart")
         if (!n) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((spend / n))}</span>
       }
 
       case "initiate_checkout": {
         const n = getActionValue(ins, "initiate_checkout")
-        return <span className="text-xs tabular-nums">{n || "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{n || "—"}</span>
       }
 
       case "cost_per_initiate_checkout": {
         const n = getActionValue(ins, "initiate_checkout")
         if (!n) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(spend / n).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((spend / n))}</span>
       }
 
       case "avg_watch_time": {
@@ -1290,70 +1684,70 @@ export default function AdsManagerPage() {
         const s = Math.round(sec)
         const mm = Math.floor(s / 60)
         const rr = s % 60
-        return <span className="text-xs tabular-nums">{mm > 0 ? `${mm}:${String(rr).padStart(2, "0")}` : `0:${String(rr).padStart(2, "0")}`}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{mm > 0 ? `${mm}:${String(rr).padStart(2, "0")}` : `0:${String(rr).padStart(2, "0")}`}</span>
       }
 
       case "purchases":
-        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "omni_purchase") : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? getActionValue(ins, "omni_purchase") : "—"}</span>
 
       case "purchase_value": {
         const value = getActionValueAmount(ins, "omni_purchase")
-        return <span className="text-xs tabular-nums">{formatMoneyAmount(value)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{formatMoneyAmount(value)}</span>
       }
 
       case "avg_order_value": {
         const purchasesN = getActionValue(ins, "omni_purchase")
         const purchaseValue = getActionValueAmount(ins, "omni_purchase")
         if (!ins || purchasesN === 0 || purchaseValue === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(purchaseValue / purchasesN).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((purchaseValue / purchasesN))}</span>
       }
 
       case "roas": {
         const purchaseValue = getActionValueAmount(ins, "omni_purchase")
         if (!ins || spend === 0 || purchaseValue === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">{(purchaseValue / spend).toFixed(2)}x</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{(purchaseValue / spend).toFixed(2)}x</span>
       }
 
       case "cost_per_purchase": {
         const p = getActionValue(ins, "omni_purchase")
         if (!ins || p === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(spend / p).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((spend / p))}</span>
       }
 
       case "cost_per_lead": {
         const l = getActionValue(ins, "lead")
         if (!ins || l === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(spend / l).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((spend / l))}</span>
       }
 
       case "shopify_score":
         // ponytail: no Shopify data source wired yet — column exists for CSV-order parity.
         // Upgrade: add /api/shopify/score + join by ad/adset/campaign id.
-        return <span className="text-xs tabular-nums">{(row as any).shopifyScore ?? (row as any).shopify_score ?? "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{(row as any).shopifyScore ?? (row as any).shopify_score ?? "—"}</span>
 
       case "leads":
-        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "lead") : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? getActionValue(ins, "lead") : "—"}</span>
 
       case "add_to_cart":
-        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "add_to_cart") : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? getActionValue(ins, "add_to_cart") : "—"}</span>
 
       case "purchase_conv_rate": {
         const p = getActionValue(ins, "omni_purchase")
         const cl = ins ? parseInt(ins.clicks || "0") : 0
         if (!ins || cl === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">{((p / cl) * 100).toFixed(2)}%</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{((p / cl) * 100).toFixed(2)}%</span>
       }
 
       case "video_views_3s":
-        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_view") : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? getActionValue(ins, "video_view") : "—"}</span>
       case "video_25":
-        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_p25_watched_actions") : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? getActionValue(ins, "video_p25_watched_actions") : "—"}</span>
       case "video_50":
-        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_p50_watched_actions") : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? getActionValue(ins, "video_p50_watched_actions") : "—"}</span>
       case "video_75":
-        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_p75_watched_actions") : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? getActionValue(ins, "video_p75_watched_actions") : "—"}</span>
       case "video_100":
-        return <span className="text-xs tabular-nums">{ins ? getActionValue(ins, "video_p100_watched_actions") : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? getActionValue(ins, "video_p100_watched_actions") : "—"}</span>
 
       case "schedule_start":
         return <span className="text-xs text-[#65676b]">{fmtDate((row as any).start_time)}</span>
@@ -1402,14 +1796,20 @@ export default function AdsManagerPage() {
     const spend = parseFloat(ins.spend || "0")
     const getVal = (type: string) => getActionCount(ins, type)
     const getValue = (type: string) => getActionValueAmount(ins, type)
+    const customMetric = customMetricById.get(colId)
+    if (customMetric) {
+      const results = OBJECTIVE_RESULT[objective || ""]
+      const value = evalCustomMetric(customMetric.formula, id => id === "results" ? (results ? getVal(results.actionType) : null) : resolveMetricNumber(id, ins, {} as any, objective))
+      return <span className="text-sm font-medium tabular-nums leading-5">{formatCustomMetric(value, customMetric.format)}</span>
+    }
     switch (colId) {
       case "spend":
-        return <span className="text-xs tabular-nums">{ins.spend ? `$${spend.toFixed(2)}` : "—"}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{ins.spend ? fmtMoney(spend) : "—"}</span>
       case "results": {
         const obj = OBJECTIVE_RESULT[objective || ""]
         if (!obj) return <span className="text-xs">—</span>
         const count = getVal(obj.actionType)
-        const perAction = count > 0 ? `$${(spend / count).toFixed(2)}` : null
+        const perAction = count > 0 ? fmtMoney((spend / count)) : null
         const linkClicks = parseFloat(ins.inline_link_clicks || "0")
         const rate = count > 0 && linkClicks > 0 ? (count / linkClicks) * 100 : null
         const avgWatchRaw = ins.video_avg_time_watched_actions?.find(a => a.action_type === "video_view")?.value
@@ -1417,7 +1817,7 @@ export default function AdsManagerPage() {
         const avgWatch = avgWatchRaw ? parseFloat(avgWatchRaw) : null
         return (
           <>
-            <span className="text-xs tabular-nums font-semibold">{count || "—"}</span>
+            <span className="text-sm font-medium tabular-nums leading-5 font-semibold">{count || "—"}</span>
             {count > 0 && <p className="text-xs text-[#65676b]">{obj.type}</p>}
             {count > 0 && (
               <div className="mt-1 space-y-0.5">
@@ -1447,50 +1847,50 @@ export default function AdsManagerPage() {
         const count = getVal(obj.actionType)
         const value = cpa ? parseFloat(cpa.value) : (count > 0 ? spend / count : NaN)
         if (!Number.isFinite(value)) return <span className="text-xs">—</span>
-        return <><span className="text-xs tabular-nums">${value.toFixed(2)}</span><p className="text-xs text-[#65676b]">Per {obj.type}</p></>
+        return <><span className="text-sm font-medium tabular-nums leading-5">{fmtMoney(value)}</span><p className="text-xs text-[#65676b]">Per {obj.type}</p></>
       }
-      case "impressions": return <span className="text-xs tabular-nums">{ins.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
-      case "clicks":      return <span className="text-xs tabular-nums">{ins.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
-      case "reach":       return <span className="text-xs tabular-nums">{ins.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
+      case "impressions": return <span className="text-sm font-medium tabular-nums leading-5">{ins.impressions ? parseInt(ins.impressions).toLocaleString() : "—"}</span>
+      case "clicks":      return <span className="text-sm font-medium tabular-nums leading-5">{ins.clicks ? parseInt(ins.clicks).toLocaleString() : "—"}</span>
+      case "reach":       return <span className="text-sm font-medium tabular-nums leading-5">{ins.reach ? parseInt(ins.reach).toLocaleString() : "—"}</span>
       case "cpm": {
         if (!ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${((spend / parseFloat(ins.impressions)) * 1000).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney(((spend / parseFloat(ins.impressions)) * 1000))}</span>
       }
       case "ctr": {
         if (!ins.impressions || parseFloat(ins.impressions) === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">{((parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100).toFixed(2)}%</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{((parseFloat(ins.clicks || "0") / parseFloat(ins.impressions)) * 100).toFixed(2)}%</span>
       }
       case "cpc": {
         if (!ins.clicks || parseFloat(ins.clicks) === 0) return <span className="text-xs">—</span>
-        return <span className="text-xs tabular-nums">${(spend / parseFloat(ins.clicks)).toFixed(2)}</span>
+        return <span className="text-sm font-medium tabular-nums leading-5">{fmtMoney((spend / parseFloat(ins.clicks)))}</span>
       }
-      case "link_clicks":      { const n = parseInt(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
-      case "unique_clicks":    { const n = parseInt(ins.unique_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
-      case "unique_link_clicks": { const n = parseInt(ins.unique_inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? n.toLocaleString() : "—"}</span> }
-      case "unique_link_ctr":  { const v = parseFloat(ins.unique_link_clicks_ctr || "0"); return <span className="text-xs tabular-nums">{v ? `${v.toFixed(2)}%` : "—"}</span> }
-      case "cost_per_unique_click": { const n = parseFloat(ins.unique_clicks || "0"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
-      case "cost_per_link_click": { const n = parseFloat(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
-      case "landing_page_views": { const n = getVal("landing_page_view"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
-      case "lpv_rate":         { const lpv = getVal("landing_page_view"); const lc = parseFloat(ins.inline_link_clicks || "0"); return <span className="text-xs tabular-nums">{lpv && lc ? `${((lpv/lc)*100).toFixed(2)}%` : "—"}</span> }
-      case "content_views":    { const n = getVal("view_content"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
-      case "cost_per_add_to_cart": { const n = getVal("add_to_cart"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
-      case "initiate_checkout": { const n = getVal("initiate_checkout"); return <span className="text-xs tabular-nums">{n || "—"}</span> }
-      case "cost_per_initiate_checkout": { const n = getVal("initiate_checkout"); return <span className="text-xs tabular-nums">{n ? `$${(spend/n).toFixed(2)}` : "—"}</span> }
-      case "avg_watch_time":   { const sec = parseFloat(ins.video_avg_time_watched_actions?.[0]?.value || "0"); const s = Math.round(sec); const mm = Math.floor(s / 60); const rr = s % 60; return <span className="text-xs tabular-nums">{s ? (mm > 0 ? `${mm}:${String(rr).padStart(2, "0")}` : `0:${String(rr).padStart(2, "0")}`) : "—"}</span> }
-      case "purchases":        { const p = getVal("omni_purchase"); return <span className="text-xs tabular-nums">{p || "—"}</span> }
-      case "purchase_value":   { const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{formatMoneyAmount(value)}</span> }
-      case "avg_order_value":  { const p = getVal("omni_purchase"); const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{p && value ? `$${(value / p).toFixed(2)}` : "—"}</span> }
-      case "roas":             { const value = getValue("omni_purchase"); return <span className="text-xs tabular-nums">{spend && value ? `${(value / spend).toFixed(2)}x` : "—"}</span> }
-      case "cost_per_purchase":{ const p = getVal("omni_purchase"); return <span className="text-xs tabular-nums">{p ? `$${(spend/p).toFixed(2)}` : "—"}</span> }
-      case "leads":            { const l = getVal("lead"); return <span className="text-xs tabular-nums">{l || "—"}</span> }
-      case "cost_per_lead":    { const l = getVal("lead"); return <span className="text-xs tabular-nums">{l ? `$${(spend/l).toFixed(2)}` : "—"}</span> }
-      case "shopify_score":    return <span className="text-xs tabular-nums">—</span>
-      case "add_to_cart":      { const atc = getVal("add_to_cart"); return <span className="text-xs tabular-nums">{atc || "—"}</span> }
-      case "video_views_3s":   { const v = getVal("video_view"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
-      case "video_25":         { const v = getVal("video_p25_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
-      case "video_50":         { const v = getVal("video_p50_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
-      case "video_75":         { const v = getVal("video_p75_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
-      case "video_100":        { const v = getVal("video_p100_watched_actions"); return <span className="text-xs tabular-nums">{v || "—"}</span> }
+      case "link_clicks":      { const n = parseInt(ins.inline_link_clicks || "0"); return <span className="text-sm font-medium tabular-nums leading-5">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_clicks":    { const n = parseInt(ins.unique_clicks || "0"); return <span className="text-sm font-medium tabular-nums leading-5">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_link_clicks": { const n = parseInt(ins.unique_inline_link_clicks || "0"); return <span className="text-sm font-medium tabular-nums leading-5">{n ? n.toLocaleString() : "—"}</span> }
+      case "unique_link_ctr":  { const v = parseFloat(ins.unique_link_clicks_ctr || "0"); return <span className="text-sm font-medium tabular-nums leading-5">{v ? fmtPct(v) : "—"}</span> }
+      case "cost_per_unique_click": { const n = parseFloat(ins.unique_clicks || "0"); return <span className="text-sm font-medium tabular-nums leading-5">{n ? fmtMoney((spend/n)) : "—"}</span> }
+      case "cost_per_link_click": { const n = parseFloat(ins.inline_link_clicks || "0"); return <span className="text-sm font-medium tabular-nums leading-5">{n ? fmtMoney((spend/n)) : "—"}</span> }
+      case "landing_page_views": { const n = getVal("landing_page_view"); return <span className="text-sm font-medium tabular-nums leading-5">{n || "—"}</span> }
+      case "lpv_rate":         { const lpv = getVal("landing_page_view"); const lc = parseFloat(ins.inline_link_clicks || "0"); return <span className="text-sm font-medium tabular-nums leading-5">{lpv && lc ? fmtPct(((lpv/lc)*100)) : "—"}</span> }
+      case "content_views":    { const n = getVal("view_content"); return <span className="text-sm font-medium tabular-nums leading-5">{n || "—"}</span> }
+      case "cost_per_add_to_cart": { const n = getVal("add_to_cart"); return <span className="text-sm font-medium tabular-nums leading-5">{n ? fmtMoney((spend/n)) : "—"}</span> }
+      case "initiate_checkout": { const n = getVal("initiate_checkout"); return <span className="text-sm font-medium tabular-nums leading-5">{n || "—"}</span> }
+      case "cost_per_initiate_checkout": { const n = getVal("initiate_checkout"); return <span className="text-sm font-medium tabular-nums leading-5">{n ? fmtMoney((spend/n)) : "—"}</span> }
+      case "avg_watch_time":   { const sec = parseFloat(ins.video_avg_time_watched_actions?.[0]?.value || "0"); const s = Math.round(sec); const mm = Math.floor(s / 60); const rr = s % 60; return <span className="text-sm font-medium tabular-nums leading-5">{s ? (mm > 0 ? `${mm}:${String(rr).padStart(2, "0")}` : `0:${String(rr).padStart(2, "0")}`) : "—"}</span> }
+      case "purchases":        { const p = getVal("omni_purchase"); return <span className="text-sm font-medium tabular-nums leading-5">{p || "—"}</span> }
+      case "purchase_value":   { const value = getValue("omni_purchase"); return <span className="text-sm font-medium tabular-nums leading-5">{formatMoneyAmount(value)}</span> }
+      case "avg_order_value":  { const p = getVal("omni_purchase"); const value = getValue("omni_purchase"); return <span className="text-sm font-medium tabular-nums leading-5">{p && value ? fmtMoney((value / p)) : "—"}</span> }
+      case "roas":             { const value = getValue("omni_purchase"); return <span className="text-sm font-medium tabular-nums leading-5">{spend && value ? `${(value / spend).toFixed(2)}x` : "—"}</span> }
+      case "cost_per_purchase":{ const p = getVal("omni_purchase"); return <span className="text-sm font-medium tabular-nums leading-5">{p ? fmtMoney((spend/p)) : "—"}</span> }
+      case "leads":            { const l = getVal("lead"); return <span className="text-sm font-medium tabular-nums leading-5">{l || "—"}</span> }
+      case "cost_per_lead":    { const l = getVal("lead"); return <span className="text-sm font-medium tabular-nums leading-5">{l ? fmtMoney((spend/l)) : "—"}</span> }
+      case "shopify_score":    return <span className="text-sm font-medium tabular-nums leading-5">—</span>
+      case "add_to_cart":      { const atc = getVal("add_to_cart"); return <span className="text-sm font-medium tabular-nums leading-5">{atc || "—"}</span> }
+      case "video_views_3s":   { const v = getVal("video_view"); return <span className="text-sm font-medium tabular-nums leading-5">{v || "—"}</span> }
+      case "video_25":         { const v = getVal("video_p25_watched_actions"); return <span className="text-sm font-medium tabular-nums leading-5">{v || "—"}</span> }
+      case "video_50":         { const v = getVal("video_p50_watched_actions"); return <span className="text-sm font-medium tabular-nums leading-5">{v || "—"}</span> }
+      case "video_75":         { const v = getVal("video_p75_watched_actions"); return <span className="text-sm font-medium tabular-nums leading-5">{v || "—"}</span> }
+      case "video_100":        { const v = getVal("video_p100_watched_actions"); return <span className="text-sm font-medium tabular-nums leading-5">{v || "—"}</span> }
       default: return <span className="text-xs">—</span>
     }
   }
@@ -1572,14 +1972,11 @@ export default function AdsManagerPage() {
           <span className="text-xs text-muted-foreground">{selectedAccount.id}</span>
         )}
         <div className="ml-auto flex items-center gap-2">
-          {loadedMs !== null && (
-            <span className="text-xs text-muted-foreground border rounded px-2 py-1">
-              Loaded {loadedMs}ms
-            </span>
-          )}
-          <button onClick={() => { setHistoryOpen(true); fetchHistory() }} className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors">
+          <button onClick={() => { setHistoryOpen(true); fetchHistory() }} className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors mr-2">
             <IconHistory className="size-3.5" />History
           </button>
+
+          <span className="text-xs text-muted-foreground">Updated just now</span>
           <button
             onClick={() => fetchMainData(true)}
             disabled={loading}
@@ -1738,9 +2135,6 @@ export default function AdsManagerPage() {
 
       {/* ── Action toolbar ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0 flex-wrap bg-white dark:bg-background">
-        <button onClick={() => setDefaultsOpen(true)} className="flex items-center gap-1.5 h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm">
-          <IconSettings className="size-3.5" />Ad defaults
-        </button>
         <button onClick={() => setCreateModalOpen(true)} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded bg-[#31a24c] hover:bg-[#2b9244] text-white transition-colors font-semibold shadow-sm">
           <IconPlus className="size-3.5" />Create
         </button>
@@ -1789,14 +2183,6 @@ export default function AdsManagerPage() {
           </div>
         )}
 
-        {/* Sync pair */}
-        <button onClick={() => fetchMainData(true)} className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Sync">
-          <IconRefresh className="size-3.5 text-muted-foreground" />
-        </button>
-        <button onClick={() => fetchMainData(true)} className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors" title="Refresh">
-          <IconRefresh className="size-3.5 text-muted-foreground rotate-180" />
-        </button>
-
         {/* Selection indicator — only shown when items selected */}
         {selectedIds.size > 0 && (
           <div className="flex items-center gap-1.5 px-2.5 h-7 border rounded-lg bg-blue-50 dark:bg-blue-950/20 text-xs text-blue-700 dark:text-blue-400 font-medium">
@@ -1841,87 +2227,6 @@ export default function AdsManagerPage() {
           {/* Breakdown */}
           <BreakdownDropdown selected={breakdowns} onChange={setBreakdowns} />
 
-          {/* Attribution settings — report numbers + column data context */}
-          <div className="relative">
-            <button
-              onClick={() => setAttributionOpen(v => !v)}
-              className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground"
-            >
-              <IconAdjustments className="size-3.5 shrink-0" />
-              <span className="max-w-[160px] truncate">
-                Attribution: {attributionWindows.length ? `${attributionWindows.length} selected` : "Account default"}
-              </span>
-              <IconChevronDown className="size-3 shrink-0" />
-            </button>
-            {attributionOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-80 py-2">
-                <div className="px-3 pb-2 border-b">
-                  <p className="text-xs font-semibold">Compare attribution settings</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Selections are for reporting only and do not change ad optimisation.
-                  </p>
-                </div>
-                <div className="p-3 space-y-3 text-xs">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">Standard attribution</p>
-                    <div className="mb-2 rounded-md bg-muted/40 px-2 py-1.5">
-                      <p className="font-medium">All conversions</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        Account default — totals conversions across all attribution windows.
-                      </p>
-                    </div>
-                    {STANDARD_ATTR.map(a => (
-                      <label key={a.key} className="flex items-start gap-2 py-1.5 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={attributionWindows.includes(a.key)}
-                          onChange={() => setAttributionWindows(prev => prev.includes(a.key) ? prev.filter(k => k !== a.key) : [...prev, a.key])}
-                        />
-                        <span>
-                          <span className="block">{a.label}</span>
-                          <span className="block text-[10px] text-muted-foreground mt-0.5">{a.desc}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="pt-2 border-t">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">Apple SKAdNetwork</p>
-                    {SKAN_ATTR.map(a => (
-                      <label key={a.key} className="flex items-start gap-2 py-1.5">
-                        <input type="checkbox" disabled className="mt-0.5" />
-                        <span className="opacity-60">
-                          <span className="block">{a.label}</span>
-                          <span className="block text-[10px] text-muted-foreground mt-0.5">{a.desc}</span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="pt-2 border-t">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">Advanced option</p>
-                    <label className="flex items-start gap-2 py-1.5">
-                      <input type="checkbox" disabled className="mt-0.5" />
-                      <span className="opacity-60">
-                        <span className="block">Incremental attribution</span>
-                        <span className="block text-[10px] text-muted-foreground mt-0.5">
-                          Optimisation and reporting based on predicted incremental conversions.
-                        </span>
-                      </span>
-                    </label>
-                  </div>
-                  {attributionWindows.length > 0 && (
-                    <button
-                      onClick={() => setAttributionWindows([])}
-                      className="w-full h-7 text-xs border rounded-md hover:bg-muted/50"
-                    >
-                      Reset to All conversions
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Columns preset picker */}
           <div ref={colsDropRef} className="relative">
             <button
@@ -1936,61 +2241,87 @@ export default function AdsManagerPage() {
             </button>
 
             {colsOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-64 py-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">POPULAR</p>
-                {DEFAULT_PRESETS.map(preset => {
-                  const isActive = getActivePreset(columnOrder, customPresets)?.id === preset.id
+              <div className="absolute right-0 top-full mt-1 bg-popover border rounded-xl shadow-lg z-50 w-72 py-2">
+                {(() => {
+                  const activePreset = getActivePreset(columnOrder, customPresets)
+                  const presetButton = (id: string) => {
+                    const preset = [...DEFAULT_PRESETS, ...customPresets].find(p => p.id === id)
+                    if (!preset) return null
+                    const isActive = activePreset?.id === preset.id
+                    return (
+                      <button
+                        key={preset.id}
+                        onClick={() => { setColumnOrder(preset.columns); setColsOpen(false) }}
+                        className="w-full flex items-center gap-3 px-3 py-1.5 hover:bg-muted/50 transition-colors"
+                      >
+                        <span className={cn("size-3.5 rounded-full border-2 shrink-0", isActive ? "border-[#1877f2] bg-[#1877f2]" : "border-muted-foreground/40")} />
+                        <span className="text-xs">{preset.label}</span>
+                      </button>
+                    )
+                  }
                   return (
-                    <button
-                      key={preset.id}
-                      onClick={() => { setColumnOrder(preset.columns); setColsOpen(false) }}
-                      className="w-full flex items-center gap-3 px-3 py-1.5 hover:bg-muted/50 transition-colors"
-                    >
-                      <span className={cn(
-                        "size-3.5 rounded-full border-2 shrink-0 transition-colors",
-                        isActive ? "border-[#1877f2] bg-[#1877f2]" : "border-muted-foreground/40"
-                      )} />
-                      <span className="text-xs">{preset.label}</span>
-                    </button>
+                    <>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">Recently used</p>
+                      {presetButton("ecom")}
+                      {presetButton("performance")}
+
+                      <div className="border-t my-1.5" />
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">Popular</p>
+                      {presetButton("performance_and_clicks")}
+                      {presetButton("engagement")}
+                      {presetButton("delivery")}
+
+                      <div className="border-t my-1.5" />
+                      <button className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs text-left">
+                        <span>Discover more column presets</span>
+                        <IconDrillRight className="size-3.5 text-muted-foreground" />
+                      </button>
+                      <button
+                        onClick={() => { setColsOpen(false); setCustomizeColsOpen(true) }}
+                        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs text-left"
+                      >
+                        <span>View your column presets</span>
+                        <IconDrillRight className="size-3.5 text-muted-foreground" />
+                      </button>
+
+                      <div className="border-t my-1.5" />
+                      <button
+                        onClick={() => { setDraftAttribution(attributionWindows); setAttributionCompareOpen(true); setColsOpen(false) }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs text-left"
+                      >
+                        <IconAdjustments className="size-3.5 text-muted-foreground" /> Compare attribution settings
+                      </button>
+                      <button disabled className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left opacity-50 cursor-not-allowed">
+                        Conditional formatting
+                      </button>
+                      <button
+                        onClick={() => { setColumnWidths({}); setColsOpen(false) }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs text-left"
+                      >
+                        Reset column width
+                      </button>
+                      <button
+                        onClick={() => { setColsOpen(false); setCustomizeColsOpen(true) }}
+                        className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/50 transition-colors"
+                      >
+                        <span className="flex items-center gap-2 text-xs"><IconTable className="size-3.5 text-muted-foreground" /> Customize columns</span>
+                        <IconDrillRight className="size-3.5 text-muted-foreground" />
+                      </button>
+                    </>
                   )
-                })}
-
-                <div className="border-t my-1.5" />
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-3 mb-1">SAVED IN YOUR ORG</p>
-                {customPresets.length === 0
-                  ? <p className="text-xs text-muted-foreground px-3 py-1.5">No saved presets yet.</p>
-                  : customPresets.map(preset => {
-                      const isActive = getActivePreset(columnOrder, customPresets)?.id === preset.id
-                      return (
-                        <button
-                          key={preset.id}
-                          onClick={() => { setColumnOrder(preset.columns); setColsOpen(false) }}
-                          className="w-full flex items-center gap-3 px-3 py-1.5 hover:bg-muted/50 transition-colors"
-                        >
-                          <span className={cn(
-                            "size-3.5 rounded-full border-2 shrink-0",
-                            isActive ? "border-[#1877f2] bg-[#1877f2]" : "border-muted-foreground/40"
-                          )} />
-                          <span className="text-xs">{preset.label}</span>
-                        </button>
-                      )
-                    })
-                }
-
-                <div className="border-t my-1.5" />
-                <button
-                  onClick={() => { setColsOpen(false); setCustomizeColsOpen(true) }}
-                  className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/50 transition-colors"
-                >
-                  <span className="flex items-center gap-2 text-xs">
-                    <IconTable className="size-3.5 text-muted-foreground" />
-                    Customize columns
-                  </span>
-                  <IconDrillRight className="size-3.5 text-muted-foreground" />
-                </button>
+                })()}
               </div>
             )}
           </div>
+
+          {/* Export */}
+          <button
+            onClick={exportTable}
+            title="Export to CSV"
+            className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors text-muted-foreground ml-1"
+          >
+            <IconDownload className="size-3.5 shrink-0" />
+          </button>
         </div>
       </div>
 
@@ -2010,42 +2341,48 @@ export default function AdsManagerPage() {
             <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <table className="w-full text-sm border-collapse" style={{ minWidth: 1100 }}>
+          <table className="w-full text-sm border-collapse" style={{ minWidth: 1100, tableLayout: "fixed" }}>
             <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted/80 border-b border-[#e4e6eb] dark:border-gray-800">
               <tr>
                 <th className="w-10 px-3 py-2.5">
                   <input ref={headerCheckRef} type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
                 </th>
-                <th className="w-16 px-2 py-2.5 text-left text-xs font-semibold text-muted-foreground">Off/On</th>
+                <th className="w-16 px-2 py-2.5 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground resize-x overflow-auto">Off/On</th>
                 <SortTh
                   label={tab === "ads" ? "Ad name" : tab === "adsets" ? "Ad set" : "Campaign"}
                   field="name"
                   sortField={sortField}
                   sortDir={sortDir}
                   onSort={handleSort}
-                  className="min-w-[220px]"
+                  width={columnWidths.__name || 320}
+                  onResize={w => setColWidth("__name", w)}
                 />
                 {tab === "ads" && (
-                  <th className="w-20 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground">Preview</th>
+                  <th className="w-20 px-3 py-2.5 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground resize-x overflow-auto">Preview</th>
                 )}
                                 {columnOrder.map((colId, i) => {
-                  const col = COLUMN_MAP[colId]
+                  const col = customColumnMap[colId]
                   if (!col) return null
                   const moveLeft = () => setColumnOrder(prev => { const n = [...prev]; [n[i-1], n[i]] = [n[i], n[i-1]]; return n })
                   const moveRight = () => setColumnOrder(prev => { const n = [...prev]; [n[i], n[i+1]] = [n[i+1], n[i]]; return n })
                   const remove = () => setColumnOrder(prev => prev.filter(id => id !== colId))
                   const sortFieldObj = col.sortKey || colId
                   const active = sortField === sortFieldObj
-                  
+                  const colWidth = getColWidth(colId)
+
                   return (
-                    <th key={colId} className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground whitespace-nowrap group">
-                      <div className="flex items-center gap-1">
-                        <div className="cursor-pointer hover:text-foreground transition-colors flex items-center gap-1" onClick={() => handleSort(sortFieldObj)}>
-                          {col.headerLabel}
+                    <th key={colId} style={{ width: colWidth, minWidth: colWidth, maxWidth: colWidth }} className="group/header relative px-2 py-1.5 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground">
+                      <div className="flex items-start gap-1">
+                        <div className="cursor-pointer hover:text-foreground transition-colors flex items-start gap-0.5 min-w-0" onClick={() => handleSort(sortFieldObj)}>
+                          <span className="line-clamp-2 break-words leading-tight">{col.headerLabel}</span>
                           {active
-                            ? (sortDir === "asc" ? <IconArrowUp className="size-3 text-primary" /> : <IconArrowDown className="size-3 text-primary" />)
-                            : <IconArrowsUpDown className="size-3 opacity-0 group-hover:opacity-40" />
+                            ? (sortDir === "asc" ? <IconArrowUp className="size-3 shrink-0 text-primary" /> : <IconArrowDown className="size-3 shrink-0 text-primary" />)
+                            : <IconArrowsUpDown className="size-3 shrink-0 opacity-0 group-hover/header:opacity-40" />
                           }
+                        </div>
+                        <div className="pointer-events-none absolute left-1/2 top-full z-50 mt-1 -translate-x-1/2 w-max max-w-[240px] rounded-xl border bg-popover p-3 text-[11px] font-normal leading-snug text-popover-foreground shadow-xl opacity-0 translate-y-1 transition-all group-hover/header:opacity-100 group-hover/header:translate-y-0">
+                          <p className="mb-1 text-sm font-semibold leading-tight">{col.headerLabel}</p>
+                          <p className="text-muted-foreground">{col.description}</p>
                         </div>
                         <HeaderCellMenu
                           colId={colId}
@@ -2057,8 +2394,13 @@ export default function AdsManagerPage() {
                           onRemove={remove}
                           canMoveLeft={i > 0}
                           canMoveRight={i < columnOrder.length - 1}
+                          onOpenAttributionCompare={() => { setDraftAttribution(attributionWindows); setAttributionCompareOpen(true) }}
                         />
                       </div>
+                      <div
+                        onMouseDown={e => startColResize(colId, colWidth, e)}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-primary/50 opacity-0 hover:opacity-100 transition-opacity z-10"
+                      />
                     </th>
                   )
                 })}
@@ -2104,7 +2446,7 @@ export default function AdsManagerPage() {
                         <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(c.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />}
                         </td>
-                        <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell overflow-hidden", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === c.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(c.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -2125,7 +2467,7 @@ export default function AdsManagerPage() {
                             </div>
                           )}
                         </td>
-                        {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, c)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, c)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -2134,7 +2476,7 @@ export default function AdsManagerPage() {
                           <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -2155,7 +2497,7 @@ export default function AdsManagerPage() {
                         <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell overflow-hidden", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -2176,7 +2518,7 @@ export default function AdsManagerPage() {
                             </div>
                           )}
                         </td>
-                        {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, a)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -2185,7 +2527,7 @@ export default function AdsManagerPage() {
                           <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -2208,7 +2550,7 @@ export default function AdsManagerPage() {
                         <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell overflow-hidden", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -2240,7 +2582,7 @@ export default function AdsManagerPage() {
                             )}
                           </div>
                         </td>
-                        {columnOrder.map(colId => <td key={colId} className="px-3 py-2.5">{renderCellContent(colId, a)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, a)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -2250,7 +2592,7 @@ export default function AdsManagerPage() {
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
                           <td className="px-3 py-2 bg-[#f5f6f7] dark:bg-muted/10" />
-                          {columnOrder.map(colId => <td key={colId} className="px-3 py-2">{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -2267,7 +2609,7 @@ export default function AdsManagerPage() {
                     Results from {currentData.length} {tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"}
                   </td>
                   {columnOrder.map(colId => (
-                    <td key={colId} className="px-3 py-2.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white">
+                    <td key={colId} className={cn("px-2 py-1.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", isTextCol(colId) ? "text-right" : "text-left")}>
                       {renderTotalCell(colId)}
                     </td>
                   ))}
@@ -2411,12 +2753,100 @@ export default function AdsManagerPage() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Compare Attribution Settings Modal ── */}
+      <Dialog open={attributionCompareOpen} onOpenChange={setAttributionCompareOpen}>
+        <DialogContent className="sm:max-w-[560px] p-0 gap-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-3 border-b">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <DialogTitle>Compare attribution settings</DialogTitle>
+                <DialogDescription className="mt-1 text-xs leading-relaxed">
+                  Compare when and how people take action after engaging with your ads.<br />
+                  Selections in this tool are for reporting only and do not change ad optimisation.
+                </DialogDescription>
+              </div>
+              <DialogClose className="rounded p-1 hover:bg-muted/50">×</DialogClose>
+            </div>
+          </DialogHeader>
+
+          <div className="px-4 py-4 space-y-5 text-sm">
+            <div>
+              <p className="font-semibold mb-3">Standard attribution</p>
+              <div className="space-y-3">
+                {STANDARD_ATTR.map(a => (
+                  <label key={a.key} className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="size-5 rounded border-muted-foreground/40"
+                      checked={draftAttribution.includes(a.key)}
+                      onChange={() => setDraftAttribution(prev => prev.includes(a.key) ? prev.filter(k => k !== a.key) : [...prev, a.key])}
+                    />
+                    <span>{a.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <button type="button" className="w-full flex items-center justify-between text-left">
+                <span>
+                  <span className="block">Apple SKAdNetwork</span>
+                  <span className="block text-xs text-muted-foreground">App ads only</span>
+                </span>
+                <IconChevronDown className="size-4" />
+              </button>
+              <div className="mt-3 space-y-3">
+                {SKAN_ATTR.map(a => (
+                  <label key={a.key} className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="size-5 rounded border-muted-foreground/40"
+                      checked={draftAttribution.includes(a.key)}
+                      onChange={() => setDraftAttribution(prev => prev.includes(a.key) ? prev.filter(k => k !== a.key) : [...prev, a.key])}
+                    />
+                    <span>{a.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <p className="font-semibold mb-3">Advanced option</p>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="size-5 rounded border-muted-foreground/40"
+                  checked={draftAttribution.includes("incremental")}
+                  onChange={() => setDraftAttribution(prev => prev.includes("incremental") ? prev.filter(k => k !== "incremental") : [...prev, "incremental"])}
+                />
+                <span>Incremental attribution</span>
+              </label>
+            </div>
+          </div>
+
+          <DialogFooter className="px-4 py-3 border-t bg-muted/10">
+            <Button variant="outline" onClick={() => setAttributionCompareOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                setAttributionWindows(draftAttribution)
+                setAttributionCompareOpen(false)
+              }}
+              className="bg-[#1877f2] hover:bg-[#1464d8] text-white"
+            >
+              Apply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Customize Columns Modal ── */}
       <CustomizeColumnsModal
         open={customizeColsOpen}
         columnOrder={columnOrder}
+        customMetrics={customMetrics}
         onApply={setColumnOrder}
         onSavePreset={saveCustomPreset}
+        onSaveCustomMetric={m => setCustomMetrics(p => [...p, m])}
         onClose={() => setCustomizeColsOpen(false)}
       />
 
@@ -2490,7 +2920,7 @@ export default function AdsManagerPage() {
                   {insight && (
                     <div className="grid grid-cols-4 gap-2">
                       {[
-                        { label: "Spend",  value: `$${getSpend(editingNode).toFixed(2)}`, accent: true },
+                        { label: "Spend",  value: fmtMoney(getSpend(editingNode)), accent: true },
                         { label: "Results",value: String(getResults(editingNode, node.objective).count) },
                         { label: "Impr.",  value: parseInt(insight.impressions).toLocaleString() },
                         { label: "Clicks", value: parseInt(insight.clicks).toLocaleString() },
@@ -2561,7 +2991,7 @@ export default function AdsManagerPage() {
                           </div>
                           {isAdSet && node.budget_remaining != null && (
                             <p className="text-xs text-muted-foreground">
-                              Remaining: <span className="font-medium text-foreground">${(parseInt(node.budget_remaining) / 100).toFixed(2)}</span>
+                              Remaining: <span className="font-medium text-foreground">{fmtMoney((parseInt(node.budget_remaining) / 100))}</span>
                             </p>
                           )}
                         </div>

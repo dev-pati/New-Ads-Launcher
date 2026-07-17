@@ -22,6 +22,7 @@ const VALID_BREAKDOWNS = [
   "impression_device",
   "publisher_platform,impression_device",
   "platform_position,impression_device",
+  "publisher_platform,platform_position,impression_device",
   "country",
   "region",
   "media_type",
@@ -100,7 +101,14 @@ export async function GET(request: NextRequest) {
 
         return (data.data || []).map((d: any) => {
           const m = computeInsightMetrics(d)
-          return { label: labelForRow(d, breakdown), breakdownValue: labelForRow(d, breakdown), ...m }
+          const dims: Record<string, string> = {}
+          for (const k of breakdown.split(",")) dims[k] = d[k] || "Unknown"
+          return {
+            label: labelForRow(d, breakdown),
+            breakdownValue: labelForRow(d, breakdown),
+            ...dims,
+            ...m,
+          }
         }).sort((a: any, b: any) => b.spend - a.spend)
       },
     })

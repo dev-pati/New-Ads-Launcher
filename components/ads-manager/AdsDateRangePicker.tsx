@@ -163,14 +163,24 @@ interface Props {
   customEnd?: Date
   accountId?: string
   onChange: (preset: string, customStart?: Date, customEnd?: Date) => void
+  /** Always show the panel (no trigger button). Used when parent owns the open state. */
+  inline?: boolean
+  /** Apply on preset click / completed custom range; hide Apply button. */
+  autoApply?: boolean
+  /** Hide the selected range label on the trigger button. */
+  hideLabel?: boolean
+  onClose?: () => void
 }
 
 type Mode = "preset" | "custom"
 
-export function AdsDateRangePicker({ preset, customStart, customEnd, accountId, onChange }: Props) {
+export function AdsDateRangePicker({
+  preset, customStart, customEnd, accountId, onChange,
+  inline = false, autoApply = false, hideLabel = false, onClose,
+}: Props) {
   const [maxStart, setMaxStart] = useState<Date | null>(null)
-  const [open,        setOpen]        = useState(false)
-  // pending mode + selection (not applied until Apply)
+  const [open,        setOpen]        = useState(inline)
+  // pending mode + selection (not applied until Apply, unless autoApply)
   const [mode,        setMode]        = useState<Mode>(preset === "custom" ? "custom" : "preset")
   const [pending,     setPending]     = useState(preset === "custom" ? "" : preset)
   const [rangeStart,  setRangeStart]  = useState<Date | null>(null)
@@ -237,6 +247,11 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, accountId, 
     return () => { cancelled = true }
   }, [open, accountId, maxStart])
 
+  const closePicker = () => {
+    setOpen(false)
+    onClose?.()
+  }
+
   const selectPreset = (p: string) => {
     setMode("preset")
     setPending(p)
@@ -245,6 +260,11 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, accountId, 
     setRangeEnd(end)
     setLeftYear(start.getFullYear())
     setLeftMonth(start.getMonth())
+    if (autoApply) {
+      if (p === "maximum") onChange("maximum", start, end)
+      else onChange(p)
+      closePicker()
+    }
   }
 
   const switchToCustom = () => {
@@ -261,8 +281,14 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, accountId, 
     if (!rangeStart || (rangeStart && rangeEnd)) {
       setRangeStart(d); setRangeEnd(null)
     } else {
-      if (d < rangeStart) { setRangeEnd(rangeStart); setRangeStart(d) }
-      else setRangeEnd(d)
+      const start = d < rangeStart ? d : rangeStart
+      const end = d < rangeStart ? rangeStart : d
+      setRangeStart(start)
+      setRangeEnd(end)
+      if (autoApply) {
+        onChange("custom", start, end)
+        closePicker()
+      }
     }
   }
 
@@ -275,7 +301,7 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, accountId, 
     } else if (rangeStart) {
       onChange("custom", rangeStart, rangeEnd ?? rangeStart)
     }
-    setOpen(false)
+    closePicker()
   }
 
   const reset = () => {
@@ -312,151 +338,163 @@ export function AdsDateRangePicker({ preset, customStart, customEnd, accountId, 
 
   return (
     <div ref={wrapRef} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="flex items-center gap-1.5 h-8 px-3 text-xs border rounded-lg hover:bg-muted/50 transition-colors whitespace-nowrap"
-      >
-        <IconCalendar className="size-3.5 text-muted-foreground shrink-0" />
-        <span className="text-[#1c2b33] dark:text-foreground">{btnLabel}</span>
-        <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
-      </button>
+      {!inline && (
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1.5 h-8 px-3 text-xs border rounded-lg hover:bg-muted/50 transition-colors whitespace-nowrap"
+        >
+          <IconCalendar className="size-3.5 text-muted-foreground shrink-0" />
+          {!hideLabel && <span className="text-[#1c2b33] dark:text-foreground">{btnLabel}</span>}
+          <IconChevronDown className="size-3 text-muted-foreground shrink-0" />
+        </button>
+      )}
 
-      {open && (
+      {(open || inline) && (
         <>
           {/* click-away shield */}
-          <div className="fixed inset-0 z-[59]" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-[60] bg-white dark:bg-card border rounded-xl shadow-2xl overflow-hidden">
+          {!inline && <div className="fixed inset-0 z-[59]" onClick={closePicker} />}
+          <div className={cn(
+            "bg-white dark:bg-card border rounded-xl shadow-2xl overflow-hidden w-[600px]",
+            inline ? "relative z-[60]" : "absolute right-0 top-full mt-1 z-[60]",
+          )}>
             <div className="flex">
-              {/* ── Left: presets + custom + footer ── */}
-              <div className="w-[180px] border-r shrink-0 flex flex-col bg-white dark:bg-card">
-                <div className="py-1.5 flex-1">
-                  {DATE_PICKER_PRESETS.map(p => (
-                    <button
-                      key={p.value}
-                      onClick={() => selectPreset(p.value)}
-                      className={cn(
-                        "w-full text-left px-4 py-[7px] text-xs transition-colors",
-                        mode === "preset" && pending === p.value
-                          ? "bg-[#e7f3ff] text-[#1877f2] font-semibold"
-                          : "text-[#1c2b33] dark:text-foreground hover:bg-muted/40"
-                      )}
-                    >
-                      {p.label}
-                    </button>
-                  ))}
-                  <div className="border-t my-1.5" />
+              {/* ── Left: preset list ── */}
+              <div className="w-[150px] border-r shrink-0 flex flex-col bg-white dark:bg-card py-1.5 max-h-[420px] overflow-y-auto">
+                {DATE_PICKER_PRESETS.map(p => (
                   <button
-                    onClick={switchToCustom}
+                    key={p.value}
+                    onClick={() => selectPreset(p.value)}
                     className={cn(
-                      "w-full text-left px-4 py-[7px] text-xs transition-colors",
-                      mode === "custom"
+                      "w-full text-left px-4 py-[7px] text-xs transition-colors whitespace-nowrap",
+                      mode === "preset" && pending === p.value
                         ? "bg-[#e7f3ff] text-[#1877f2] font-semibold"
                         : "text-[#1c2b33] dark:text-foreground hover:bg-muted/40"
                     )}
                   >
-                    Custom range
+                    {p.label}
                   </button>
-                </div>
-
-                {/* From / To inputs (visible in custom mode) */}
-                {mode === "custom" && (
-                  <div className="px-3 pb-3 space-y-2 border-t pt-3">
-                    <label className="block">
-                      <span className="text-[10px] uppercase font-medium text-muted-foreground">From</span>
-                      <input
-                        type="date"
-                        max={fmtInput(todayMidnight())}
-                        value={rangeStart ? fmtInput(rangeStart) : ""}
-                        onChange={e => {
-                          const v = e.target.value
-                          if (!v) return
-                          const d = new Date(v + "T00:00:00")
-                          if (d > todayMidnight()) return
-                          setRangeStart(d)
-                          if (rangeEnd && d > rangeEnd) setRangeEnd(null)
-                        }}
-                        className="mt-1 w-full h-8 px-2 text-xs border rounded-md bg-background"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="text-[10px] uppercase font-medium text-muted-foreground">To</span>
-                      <input
-                        type="date"
-                        max={fmtInput(todayMidnight())}
-                        value={rangeEnd ? fmtInput(rangeEnd) : ""}
-                        onChange={e => {
-                          const v = e.target.value
-                          if (!v) return
-                          const d = new Date(v + "T00:00:00")
-                          if (d > todayMidnight()) return
-                          setRangeEnd(d)
-                          if (rangeStart && d < rangeStart) setRangeStart(d)
-                        }}
-                        className="mt-1 w-full h-8 px-2 text-xs border rounded-md bg-background"
-                      />
-                    </label>
-                  </div>
-                )}
-
-                {/* Footer actions */}
-                <div className="flex items-center justify-end gap-2 p-3 border-t">
-                  <button
-                    onClick={reset}
-                    className="h-8 px-3 text-xs border rounded-lg hover:bg-muted/50 transition-colors font-medium text-[#1c2b33] dark:text-foreground"
-                  >
-                    Reset
-                  </button>
-                  <button
-                    onClick={apply}
-                    disabled={!canApply}
-                    className={cn(
-                      "h-8 px-4 text-xs rounded-lg font-semibold transition-colors",
-                      canApply
-                        ? "bg-[#1877f2] text-white hover:bg-[#1464d8]"
-                        : "bg-muted text-muted-foreground cursor-not-allowed"
-                    )}
-                  >
-                    Apply
-                  </button>
-                </div>
+                ))}
               </div>
 
-              {/* ── Right: two-month calendar ── */}
-              <div className="flex flex-col p-4 bg-white dark:bg-card">
-                <div className="flex items-start gap-4 relative">
+              {/* ── Right: month nav + two-month calendar + inputs + footer ── */}
+              <div className="flex-1 flex flex-col p-4 bg-white dark:bg-card min-w-0">
+                <div className="flex items-start justify-between relative mb-2">
                   <button
                     onClick={prevMonth}
-                    className="absolute left-0 top-[1px] p-1 rounded hover:bg-muted/50 transition-colors"
+                    className="p-1 rounded hover:bg-muted/50 transition-colors"
                     aria-label="Previous month"
                   >
                     <IconChevronLeft className="size-4 text-muted-foreground" />
                   </button>
-
-                  <div className="pl-7">
-                    <CalGrid
-                      year={leftYear} month={leftMonth}
-                      startDate={rangeStart} endDate={rangeEnd} hoverDate={hoverDate}
-                      onDay={handleDay} onHover={setHoverDate}
-                    />
-                  </div>
-
-                  <CalGrid
-                    year={rightYear} month={rightMonth}
-                    startDate={rangeStart} endDate={rangeEnd} hoverDate={hoverDate}
-                    onDay={handleDay} onHover={setHoverDate}
-                  />
-
                   <button
                     onClick={nextMonth}
                     disabled={disableNextMonth}
                     className={cn(
-                      "absolute right-0 top-[1px] p-1 rounded transition-colors",
+                      "p-1 rounded transition-colors",
                       disableNextMonth ? "opacity-30 cursor-not-allowed" : "hover:bg-muted/50"
                     )}
                     aria-label="Next month"
                   >
                     <IconChevronRight className="size-4 text-muted-foreground" />
                   </button>
+                </div>
+
+                <div className="flex items-start justify-center gap-6">
+                  <CalGrid
+                    year={leftYear} month={leftMonth}
+                    startDate={rangeStart} endDate={rangeEnd} hoverDate={hoverDate}
+                    onDay={handleDay} onHover={setHoverDate}
+                  />
+                  <CalGrid
+                    year={rightYear} month={rightMonth}
+                    startDate={rangeStart} endDate={rangeEnd} hoverDate={hoverDate}
+                    onDay={handleDay} onHover={setHoverDate}
+                  />
+                </div>
+
+                {/* From / To inputs — always visible, editing switches to custom mode */}
+                <div className="flex items-center gap-2 mt-4">
+                  <button
+                    onClick={switchToCustom}
+                    className={cn(
+                      "size-2 rounded-full shrink-0",
+                      mode === "custom" ? "bg-[#1877f2]" : "bg-muted-foreground/30"
+                    )}
+                    aria-label="Use custom range"
+                  />
+                  <select
+                    value={mode === "custom" ? "custom" : pending}
+                    onChange={e => e.target.value === "custom" ? switchToCustom() : selectPreset(e.target.value)}
+                    className="h-9 px-2 text-xs border rounded-md bg-background w-[130px] shrink-0"
+                  >
+                    {DATE_PICKER_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                    <option value="custom">Custom</option>
+                  </select>
+                  <input
+                    type="date"
+                    max={fmtInput(todayMidnight())}
+                    value={rangeStart ? fmtInput(rangeStart) : ""}
+                    onChange={e => {
+                      const v = e.target.value
+                      if (!v) return
+                      const d = new Date(v + "T00:00:00")
+                      if (d > todayMidnight()) return
+                      setMode("custom")
+                      setPending("")
+                      setRangeStart(d)
+                      if (rangeEnd && d > rangeEnd) setRangeEnd(null)
+                    }}
+                    className="h-9 px-2 text-xs border rounded-md bg-background flex-1 min-w-0"
+                  />
+                  <span className="text-muted-foreground text-xs shrink-0">–</span>
+                  <input
+                    type="date"
+                    max={fmtInput(todayMidnight())}
+                    value={rangeEnd ? fmtInput(rangeEnd) : ""}
+                    onChange={e => {
+                      const v = e.target.value
+                      if (!v) return
+                      const d = new Date(v + "T00:00:00")
+                      if (d > todayMidnight()) return
+                      setMode("custom")
+                      setPending("")
+                      setRangeEnd(d)
+                      if (rangeStart && d < rangeStart) setRangeStart(d)
+                      if (autoApply && rangeStart) {
+                        const start = d < rangeStart ? d : rangeStart
+                        const end = d < rangeStart ? rangeStart : d
+                        onChange("custom", start, end)
+                        closePicker()
+                      }
+                    }}
+                    className="h-9 px-2 text-xs border rounded-md bg-background flex-1 min-w-0"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between mt-4 pt-3 border-t">
+                  <span className="text-[11px] text-muted-foreground">Dates are shown in Pacific Time</span>
+                  {!autoApply && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={closePicker}
+                        className="h-8 px-3 text-xs border rounded-lg hover:bg-muted/50 transition-colors font-medium text-[#1c2b33] dark:text-foreground"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={apply}
+                        disabled={!canApply}
+                        className={cn(
+                          "h-8 px-4 text-xs rounded-lg font-semibold transition-colors",
+                          canApply
+                            ? "bg-[#1877f2] text-white hover:bg-[#1464d8]"
+                            : "bg-muted text-muted-foreground cursor-not-allowed"
+                        )}
+                      >
+                        Update
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
