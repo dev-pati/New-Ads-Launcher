@@ -3,7 +3,7 @@ import { getAuthUser } from "@/lib/auth"
 // Allowlist of PM emails who can view the cross-org feedback dashboard at /pm-feedback.
 // Sourced from PM_FEEDBACK_EMAILS env (comma-separated). Falls back to a single
 // default PM email so it works locally without env wiring.
-const DEFAULT_PM_EMAILS = ["raymond.nguyen1707@gmail.com"]
+const DEFAULT_PM_EMAILS = ["raymond.nguyen1707@gmail.com", "seth@patigroup.com"]
 
 export function getPmEmails(): string[] {
   const raw = process.env.PM_FEEDBACK_EMAILS
