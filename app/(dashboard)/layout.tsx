@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { OrgProvider, useOrg } from "@/lib/org-context"
 import { AdAccountProvider } from "@/lib/ad-account-context"
+import { FeedbackBubble } from "@/components/feedback-bubble"
 import { IconLoader2, IconAlertTriangle, IconX } from "@tabler/icons-react"
 
 type MetaStatus = { connected: boolean; status: string; message: string | null; accountName: string | null }
@@ -81,6 +82,7 @@ function DashboardContent({
           {children}
         </main>
       </div>
+      <FeedbackBubble />
     </div>
   )
 }
