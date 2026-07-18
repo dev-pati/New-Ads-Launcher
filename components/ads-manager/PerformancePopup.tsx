@@ -1226,82 +1226,6 @@ export function PerformancePopup({
 
               </div>
 
-            {/* Ad preview + Comments (Ads only) */}
-            {level === "ad" && (
-              <div className="rounded-xl border bg-card p-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Ad preview */}
-                  <div>
-                    <div className="flex items-center gap-1 mb-2">
-                      <p className="text-sm font-semibold">Ad preview</p>
-                    </div>
-                    <div className="flex gap-1 mb-2 flex-wrap">
-                      {[
-                        { k: "all", l: "All" },
-                        { k: "feeds_instream", l: "Feeds and instream ads" },
-                        { k: "stories_reels", l: "Stories and Reels" },
-                        { k: "right_column", l: "Right column" },
-                      ].map(m => (
-                        <button key={m.k} onClick={() => setPreviewMode(m.k)}
-                          className={cn("h-7 px-2 text-[11px] rounded-md border",
-                            previewMode === m.k ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50")}>
-                          {m.l}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="aspect-[4/5] border rounded-lg bg-muted flex items-center justify-center overflow-hidden">
-                      {(() => {
-                        const cr = creativeByRow[capped[0]?.id]
-                        if (cr?.videoId && cr?.postId) {
-                          const href = encodeURIComponent(`https://www.facebook.com/${cr.postId}`)
-                          return (
-                            <iframe
-                              src={`https://www.facebook.com/plugins/video.php?href=${href}&show_text=false&autoplay=false`}
-                              className="w-full h-full"
-                              style={{ border: "none" }}
-                              scrolling="no"
-                              allowFullScreen
-                              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                              title="Ad preview"
-                            />
-                          )
-                        }
-                        if (cr?.thumbnail) return <img src={cr.thumbnail} alt="preview" className="w-full h-full object-cover" />
-                        return <span className="text-xs text-muted-foreground">No preview available</span>
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Comments */}
-                  <div>
-                    <div className="flex items-center gap-1 mb-2">
-                      <p className="text-sm font-semibold">Comments</p>
-                    </div>
-                    <div className="flex gap-1 mb-2 flex-wrap">
-                      {[
-                        { k: "facebook_feed", l: "Facebook Feed" },
-                        { k: "instagram_feed", l: "Instagram Feed" },
-                        { k: "instagram_reels", l: "Instagram Reels" },
-                      ].map(m => (
-                        <button key={m.k} onClick={() => setCommentsFilter(m.k)}
-                          className={cn("h-7 px-2 text-[11px] rounded-md border",
-                            commentsFilter === m.k ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50")}>
-                          {m.l}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="aspect-[4/5] border rounded-lg bg-background flex flex-col items-center justify-center text-center p-6">
-                      <IconMessageCircle className="size-8 text-muted-foreground mb-3" />
-                      <p className="text-sm font-semibold mb-1">Comments not supported</p>
-                      <p className="text-xs text-muted-foreground">
-                        Comment previews are not supported for dynamic ads.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Demographics + Platform sections */}
             <div className="border-t pt-5">
               {capped.length === 1 && metricsByRow[capped[0].id]?.isVideo && (
@@ -1330,21 +1254,13 @@ export function PerformancePopup({
                   </div>
 
                   <div className="grid grid-cols-3 gap-4">
-                    <div className="col-span-1 border rounded-lg bg-background p-2 aspect-[4/5] flex items-center justify-center bg-muted relative overflow-hidden">
+                    <div className="col-span-1 border rounded-lg bg-background p-2 aspect-[4/5] flex items-center justify-center bg-muted relative overflow-auto">
                       {(() => {
                         const cr = creativeByRow[capped[0].id]
-                        if (cr?.videoId && cr?.postId) {
-                          const href = encodeURIComponent(`https://www.facebook.com/${cr.postId}`)
+                        if (cr?.videoId) {
                           return (
-                            <iframe
-                              src={`https://www.facebook.com/plugins/video.php?href=${href}&show_text=false&autoplay=false`}
-                              className="w-full h-full rounded"
-                              style={{ border: "none" }}
-                              scrolling="no"
-                              allowFullScreen
-                              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                              title="Ad video preview"
-                            />
+                            <video src={`/api/insights/video-proxy?videoId=${encodeURIComponent(cr.videoId)}&pageId=${encodeURIComponent(cr.pageId || "")}`} poster={cr.thumbnail || undefined}
+                              controls playsInline preload="metadata" className="max-h-full max-w-full object-contain rounded" />
                           )
                         }
                         if (cr?.thumbnail) {
@@ -1482,6 +1398,72 @@ export function PerformancePopup({
                 </section>
               )}
             </div>
+
+            {/* Ad preview + Comments (Ads only) */}
+            {level === "ad" && (
+              <div className="rounded-xl border bg-card p-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="flex items-center gap-1 mb-2">
+                      <p className="text-sm font-semibold">Ad preview</p>
+                    </div>
+                    <div className="flex gap-1 mb-2 flex-wrap">
+                      {[
+                        { k: "all", l: "All" },
+                        { k: "feeds_instream", l: "Feeds and instream ads" },
+                        { k: "stories_reels", l: "Stories and Reels" },
+                        { k: "right_column", l: "Right column" },
+                      ].map(m => (
+                        <button key={m.k} onClick={() => setPreviewMode(m.k)}
+                          className={cn("h-7 px-2 text-[11px] rounded-md border",
+                            previewMode === m.k ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50")}>
+                          {m.l}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="aspect-[4/5] border rounded-lg bg-muted flex items-center justify-center overflow-auto">
+                      {(() => {
+                        const cr = creativeByRow[capped[0]?.id]
+                        if (cr?.videoId) {
+                          return (
+                            <video src={`/api/insights/video-proxy?videoId=${encodeURIComponent(cr.videoId)}&pageId=${encodeURIComponent(cr.pageId || "")}`} poster={cr.thumbnail || undefined}
+                              controls playsInline preload="metadata" className="max-h-full max-w-full object-contain" />
+                          )
+                        }
+                        if (cr?.thumbnail) return <img src={cr.thumbnail} alt="preview" className="w-full h-full object-cover" />
+                        return <span className="text-xs text-muted-foreground">No preview available</span>
+                      })()}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-1 mb-2">
+                      <p className="text-sm font-semibold">Comments</p>
+                    </div>
+                    <div className="flex gap-1 mb-2 flex-wrap">
+                      {[
+                        { k: "facebook_feed", l: "Facebook Feed" },
+                        { k: "instagram_feed", l: "Instagram Feed" },
+                        { k: "instagram_reels", l: "Instagram Reels" },
+                      ].map(m => (
+                        <button key={m.k} onClick={() => setCommentsFilter(m.k)}
+                          className={cn("h-7 px-2 text-[11px] rounded-md border",
+                            commentsFilter === m.k ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:bg-muted/50")}>
+                          {m.l}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="aspect-[4/5] border rounded-lg bg-background flex flex-col items-center justify-center text-center p-6">
+                      <IconMessageCircle className="size-8 text-muted-foreground mb-3" />
+                      <p className="text-sm font-semibold mb-1">Comments not supported</p>
+                      <p className="text-xs text-muted-foreground">
+                        Comment previews are not supported for dynamic ads.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Download Reports Block */}
             <div className="rounded-xl border bg-card p-4">

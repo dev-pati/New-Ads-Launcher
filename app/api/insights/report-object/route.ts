@@ -3,6 +3,8 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getDbCachedFacebookMetadata } from "../../facebook/_db-cache"
 import { computeInsightMetrics, deliveryLabel, attributionLabel, budgetFromMinor } from "@/lib/insights-metrics"
 import { clampTimeToToday } from "@/lib/snapshot-fallback"
+import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -83,7 +85,8 @@ export async function GET(request: NextRequest) {
 
     const token = connection.access_token
     const dateKey = since && until ? `range:${since}_${until}` : `preset:${datePreset}`
-    const cacheKey = `insights:report-object:${level}:${id}:${dateKey}:${attributionWindows}`
+    // v5 uses Page token to fetch dark-post video source.
+    const cacheKey = `insights:report-object:v5:${level}:${id}:${dateKey}:${attributionWindows}`
 
     const result = await getDbCachedFacebookMetadata({
       orgId: ctx.orgId,
@@ -125,22 +128,46 @@ export async function GET(request: NextRequest) {
         }
         const metrics = computeInsightMetrics(raw, meta)
         const post = resolvePostId(creative)
-        const isVideo = metrics.isVideo || !!creative.video_id
+        const videoId = creative.video_id || creative.object_story_spec?.video_data?.video_id || null
+        const isVideo = metrics.isVideo || !!videoId
 
         let videoLength: number | null = null
-        if (isVideo && creative.video_id) {
+        let videoSource: string | null = null
+        let videoThumbnail: string | null = null
+        if (isVideo && videoId) {
+          // Dark-post videos are owned by the Page; ad-account token often can't
+          // read `source`. Prefer a Page access token, fall back to the ad token.
+          let videoToken = token
+          if (post.pageId) {
+            try {
+              const supabase = createAdminClient()
+              const pageToken = await resolveOrgPageAccessToken(supabase, ctx.orgId, ctx.user.id, post.pageId)
+              if (pageToken?.token) videoToken = pageToken.token
+            } catch {
+              /* keep ad token */
+            }
+          }
           try {
             const vRes = await fetch(
-              `${GRAPH}/${creative.video_id}?fields=length_seconds&access_token=${encodeURIComponent(token)}`
+              `${GRAPH}/${videoId}?fields=length_seconds,source,thumbnails,permalink_url&access_token=${encodeURIComponent(videoToken)}`
             )
             const vJson = await vRes.json()
             if (vJson && typeof vJson.length_seconds === "number" && Number.isFinite(vJson.length_seconds)) {
               videoLength = vJson.length_seconds
             }
+            if (vJson && typeof vJson.source === "string" && vJson.source.startsWith("http")) {
+              videoSource = vJson.source
+            }
+            const thumbs = vJson?.thumbnails?.data as any[] | undefined
+            if (Array.isArray(thumbs) && thumbs.length > 0) {
+              videoThumbnail = thumbs[0].uri || thumbs[0].uri_alt || null
+            }
           } catch {
             videoLength = null
           }
         }
+        const videoData = creative.object_story_spec?.video_data
+        if (!videoThumbnail) videoThumbnail = videoData?.image_url || creative.thumbnail_url || creative.image_url || null
 
         return {
           id,
@@ -153,13 +180,14 @@ export async function GET(request: NextRequest) {
           creative: level === "ad" ? {
             creativeId: creative.id || null,
             mediaType: isVideo ? "video" : "image",
-            thumbnail: creative.thumbnail_url || creative.image_url || null,
-            imageUrl: creative.image_url || null,
-            videoId: creative.video_id || null,
+            thumbnail: videoThumbnail,
+            imageUrl: creative.image_url || videoThumbnail,
+            videoId,
             objectStoryId: post.objectStoryId,
             pageId: post.pageId,
             postId: post.postId,
             permalink: null,
+            videoSource,
             primaryText: creative.object_story_spec?.link_data?.message || creative.object_story_spec?.video_data?.message || null,
             headline: creative.object_story_spec?.link_data?.name || creative.object_story_spec?.video_data?.title || null,
             callToAction: creative.object_story_spec?.link_data?.call_to_action?.type || creative.object_story_spec?.video_data?.call_to_action?.type || null,
@@ -187,7 +215,7 @@ export async function GET(request: NextRequest) {
 
 function objectFields(level: Level) {
   if (level === "ad") {
-    return "id,name,created_time,effective_status,bid_amount,creative{id,name,object_type,image_url,thumbnail_url,video_id,object_story_id,effective_object_story_id,object_story_spec{page_id,link_data{message,name,link,call_to_action},video_data{message,title,call_to_action{type,value{link}}}}},adset{daily_budget,lifetime_budget,bid_strategy,attribution_spec,start_time,end_time},campaign{daily_budget,lifetime_budget}"
+    return "id,name,created_time,effective_status,bid_amount,creative{id,name,object_type,image_url,thumbnail_url,video_id,object_story_id,effective_object_story_id,object_story_spec{page_id,link_data{message,name,link,call_to_action,image_hash},video_data{video_id,message,title,image_url,image_hash,call_to_action{type,value{link}}}}},adset{daily_budget,lifetime_budget,bid_strategy,attribution_spec,start_time,end_time},campaign{daily_budget,lifetime_budget}"
   }
   if (level === "adset") {
     return "id,name,effective_status,start_time,end_time,bid_amount,bid_strategy,daily_budget,lifetime_budget,attribution_spec,campaign{daily_budget,lifetime_budget}"
