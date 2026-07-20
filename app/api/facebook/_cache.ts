@@ -43,6 +43,20 @@ export function peekCachedFacebookMetadata<T>(key: string): T | undefined {
   return undefined
 }
 
+// ponytail: stale-while-revalidate support — returns prior value even when expired,
+// so callers can paint instantly and refresh in the background. Upgrade path: move
+// this store to Redis/DB so it survives cold starts and works across instances.
+export function peekStaleCachedFacebookMetadata<T>(key: string): T | undefined {
+  const entry = getStore().get(key) as CacheEntry<T> | undefined
+  return entry?.value
+}
+
+/** True when a fresh value exists (not expired, not in-flight, not in backoff). */
+export function isCachedFacebookMetadataFresh(key: string): boolean {
+  const entry = getStore().get(key)
+  return !!entry && entry.value !== undefined && entry.expiresAt > Date.now()
+}
+
 export function setCachedFacebookMetadata<T>(key: string, value: T, ttlMs: number): void {
   getStore().set(key, { value, expiresAt: Date.now() + ttlMs, retryAfter: 0 })
 }

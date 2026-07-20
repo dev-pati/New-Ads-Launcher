@@ -152,6 +152,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Case 2: Binary file upload through server
+    // ponytail: legacy slow path — buffers full file in memory then awaits Meta upload.
+    // Preferred path is Case 1 (JSON metadata) after uploading directly browser→Meta.
+    // Remaining caller: app/(dashboard)/ads/page.tsx. Migrate it, then delete this branch.
+    console.warn("[creatives] multipart upload (legacy) — prefer JSON metadata path")
     const formData = await request.formData()
     const file = formData.get("file") as File
     const headline = formData.get("headline") as string

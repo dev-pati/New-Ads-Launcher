@@ -366,9 +366,22 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
       return data.creative
     }
 
-    // Upload tất cả song song
+    // Upload song song, giới hạn concurrency — tránh spam Meta rate limit khi chọn nhiều file
+    const UPLOAD_CONCURRENCY = 3
     const pending = rows.filter(r => r.status !== "done")
-    const results = await Promise.allSettled(pending.map(row => uploadRow(row)))
+    const results: PromiseSettledResult<unknown>[] = new Array(pending.length)
+    let nextIndex = 0
+    const worker = async () => {
+      while (nextIndex < pending.length) {
+        const i = nextIndex++
+        try {
+          results[i] = { status: "fulfilled", value: await uploadRow(pending[i]) }
+        } catch (err) {
+          results[i] = { status: "rejected", reason: err }
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(UPLOAD_CONCURRENCY, pending.length) }, worker))
     results.forEach((result, i) => {
       const row = pending[i]
       if (result.status === "fulfilled") {
@@ -475,7 +488,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                   <td className="px-3 py-2 text-xs text-muted-foreground text-center font-medium">{i + 1}</td>
                   <td className="px-2 py-2">
                     {row.previewUrl
-                      ? <img src={row.previewUrl} alt="" className="size-12 rounded object-cover border" />
+                      ? <img src={row.previewUrl} alt="" loading="lazy" className="size-12 rounded object-cover border" />
                       : <div className="size-12 rounded bg-muted border flex items-center justify-center"><IconVideo className="size-5 text-muted-foreground" /></div>}
                   </td>
                   <td className="px-2 py-2">

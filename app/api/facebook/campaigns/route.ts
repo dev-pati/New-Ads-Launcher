@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getCampaigns } from "@/lib/facebook"
-import { getCachedFacebookMetadata, clearCachedFacebookMetadata } from "../_cache"
+import { getCachedFacebookMetadata, clearCachedFacebookMetadata, isCachedFacebookMetadataFresh } from "../_cache"
 import { campaignManagerSnapshotFallback, datePresetToRange } from "@/lib/snapshot-fallback"
 
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+const CACHE_TTL = 15 * 60 * 1000 // 15 minutes for P0 optimization
 
 export async function GET(request: NextRequest) {
   try {
@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
 
     if (forceRefresh) clearCachedFacebookMetadata(cacheKey)
 
+    const isFresh = isCachedFacebookMetadataFresh(cacheKey)
     let campaigns
     try {
       campaigns = await getCachedFacebookMetadata(
@@ -51,7 +52,14 @@ export async function GET(request: NextRequest) {
       throw err
     }
 
-    return NextResponse.json({ campaigns })
+    return new NextResponse(JSON.stringify({ campaigns }), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Cache": isFresh ? "HIT" : "MISS",
+        "Cache-Control": `private, max-age=${isFresh ? 900 : 0}, stale-while-revalidate=900`,
+      },
+    })
   } catch (err: any) {
     console.error("[campaigns]", err)
     const isRateLimit = err?.name === "MetaRateLimitError"

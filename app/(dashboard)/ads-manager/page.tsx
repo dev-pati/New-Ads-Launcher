@@ -13,16 +13,19 @@ import {
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
   IconAdjustments, IconDownload,
 } from "@tabler/icons-react"
+import dynamic from "next/dynamic"
 import { type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
-import { PerformancePopup } from "@/components/ads-manager/PerformancePopup"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
-import { CreateCampaignModal } from "@/components/ads-manager/create-flow/CreateCampaignModal"
-import { CustomizeColumnsModal } from "@/components/ads-manager/CustomizeColumnsModal"
 import { AdsDateRangePicker, getPresetRange } from "@/components/ads-manager/AdsDateRangePicker"
+
+// Modals only render when opened — load their JS on demand instead of in the main bundle
+const PerformancePopup = dynamic(() => import("@/components/ads-manager/PerformancePopup").then(m => m.PerformancePopup), { ssr: false })
+const CreateCampaignModal = dynamic(() => import("@/components/ads-manager/create-flow/CreateCampaignModal").then(m => m.CreateCampaignModal), { ssr: false })
+const CustomizeColumnsModal = dynamic(() => import("@/components/ads-manager/CustomizeColumnsModal").then(m => m.CustomizeColumnsModal), { ssr: false })
 import { COLUMN_DEFS, COLUMN_MAP, DEFAULT_PRESETS, ColumnPreset, CustomMetricConfig, getActivePreset, toColumnDef } from "@/lib/column-config"
 import { evalCustomMetric } from "@/lib/custom-metric-eval"
 import { BreakdownDropdown } from "@/components/ads-manager/BreakdownDropdown"
@@ -714,19 +717,37 @@ export default function AdsManagerPage() {
 
   // Fetches campaigns/adsets/ads only — `breakdowns` intentionally excluded from
   // deps so that toggling a breakdown never triggers a redundant main-data refetch.
+  const clientCache = useRef<Map<string, { campaigns?: Campaign[]; adSets?: AdSet[]; ads?: Ad[] }>>(new Map())
+
   const fetchMainData = useCallback(async (forceRefresh = false) => {
     if (!selectedAccountId) return
-    setLoading(true)
-    setError("")
-    const t0 = Date.now()
+
     const dateParam = buildDateParam()
     const refreshParam = forceRefresh ? "&refresh=true" : ""
+    const cacheKey = `${selectedAccountId}:${datePreset}:${customDateRange ? 'custom' : 'preset'}:${tab}`
+
+    const cached = forceRefresh ? undefined : clientCache.current.get(cacheKey)
+    if (cached) {
+      // Paint stale data immediately from client cache; background fetch updates it below
+      if (tab === "campaigns") {
+        setCampaigns(cached.campaigns || [])
+        setAdSets(cached.adSets || [])
+      } else if (tab === "adsets") {
+        setAdSets(cached.adSets || [])
+      } else {
+        setAds(cached.ads || [])
+      }
+    } else {
+      setLoading(true)
+    }
+
+    setError("")
+    const t0 = Date.now()
 
     try {
       if (tab === "campaigns") {
         const [r, ar] = await Promise.all([
           fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`),
-          // Campaigns have no attribution_spec; fetch ad sets too so the column can align to child settings.
           fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`),
         ])
         const [d, ad] = await Promise.all([r.json(), ar.json()])
@@ -734,16 +755,19 @@ export default function AdsManagerPage() {
         if (!ar.ok) throw new Error(ad.error || "Failed")
         setCampaigns(d.campaigns || [])
         setAdSets(ad.adSets || [])
+        clientCache.current.set(cacheKey, { campaigns: d.campaigns || [], adSets: ad.adSets || [] })
       } else if (tab === "adsets") {
         const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
+        clientCache.current.set(cacheKey, { adSets: d.adSets || [] })
       } else {
         const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
+        clientCache.current.set(cacheKey, { ads: d.ads || [] })
       }
       setLoadedMs(Date.now() - t0)
     } catch (e: any) {
@@ -751,7 +775,7 @@ export default function AdsManagerPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedAccountId, tab, buildDateParam])
+  }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange])
 
   // Fetches breakdown-insights rows — only when breakdowns are selected.
   // Receives the current breakdown list as an arg so callers can pass the
@@ -2336,12 +2360,12 @@ export default function AdsManagerPage() {
           </div>
         )}
 
-        {loading ? (
+        {loading && currentData.length === 0 ? (
           <div className="flex items-center justify-center h-40">
             <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <table className="w-full text-sm border-collapse" style={{ minWidth: 1100, tableLayout: "fixed" }}>
+          <table className={cn("w-full text-sm border-collapse", loading && "opacity-60 transition-opacity")} style={{ minWidth: 1100, tableLayout: "fixed" }}>
             <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted/80 border-b border-[#e4e6eb] dark:border-gray-800">
               <tr>
                 <th className="w-10 px-3 py-2.5">
