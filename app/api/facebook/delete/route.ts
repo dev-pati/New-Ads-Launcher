@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError } from "@/lib/auth"
+import { getResourceAccountId } from "@/lib/facebook"
+import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
+import { secureMetaFetch } from "@/lib/meta-secure-fetch"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -26,17 +29,34 @@ export async function POST(request: NextRequest) {
     }
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
+    const token = connection.access_token
+    const manual = isManual(connection)
     const results: { id: string; success: boolean; error?: string }[] = []
 
     for (const id of ids as string[]) {
-      const res = await fetch(`${GRAPH}/${id}?access_token=${connection.access_token}`, {
-        method: "DELETE",
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        results.push({ id, success: false, error: data.error?.message || "Failed" })
-      } else {
-        results.push({ id, success: true })
+      try {
+        const resourceAccountId = await getResourceAccountId(id, token, { isManual: manual })
+        if (!resourceAccountId) {
+          results.push({ id, success: false, error: "Could not verify resource ownership" })
+          continue
+        }
+        const belongs = await adAccountBelongsToOrg(ctx.orgId, "act_" + resourceAccountId, token)
+        if (!belongs) {
+          results.push({ id, success: false, error: "Access denied" })
+          continue
+        }
+
+        const res = await secureMetaFetch(`${GRAPH}/${id}?access_token=${token}`, {
+          method: "DELETE",
+        }, { skipProof: manual })
+        const data = await res.json()
+        if (!res.ok) {
+          results.push({ id, success: false, error: data.error?.message || "Failed" })
+        } else {
+          results.push({ id, success: true })
+        }
+      } catch (err: any) {
+        results.push({ id, success: false, error: err.message || "Failed" })
       }
     }
 

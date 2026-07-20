@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
-import { duplicateNode } from "@/lib/facebook"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError } from "@/lib/auth"
+import { duplicateNode, getResourceAccountId } from "@/lib/facebook"
+import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,16 +27,28 @@ export async function POST(request: NextRequest) {
     }
     if (!connection) return NextResponse.json({ error: "No Facebook connection found" }, { status: 401 })
 
+    const token = connection.access_token
+    const manual = isManual(connection)
+
+    const resourceAccountId = await getResourceAccountId(id, token, { isManual: manual })
+    if (!resourceAccountId) {
+      return NextResponse.json({ error: "Could not verify resource ownership" }, { status: 400 })
+    }
+    const belongs = await adAccountBelongsToOrg(ctx.orgId, "act_" + resourceAccountId, token)
+    if (!belongs) {
+      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    }
+
     const numCopies = Math.min(Math.max(parseInt(copies) || 1, 1), 20)
     const results = []
 
     for (let i = 0; i < numCopies; i++) {
       const copyName = numCopies > 1 && name ? `${name} - Copy ${i + 1}` : name
-      const res = await duplicateNode(id, connection.access_token, {
+      const res = await duplicateNode(id, token, {
         name: copyName,
         deep_copy,
         status_option,
-      })
+      }, { isManual: manual })
       results.push(res.id)
     }
 

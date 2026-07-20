@@ -2155,14 +2155,15 @@ export async function duplicateNode(
     name?: string
     deep_copy?: boolean
     status_option?: "ACTIVE" | "PAUSED" | "INHERITED"
-  }
+  },
+  opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
   const body = new URLSearchParams({ access_token: accessToken })
   if (params.name) body.set("rename_strategy", JSON.stringify({ strategy: "NEW_NAME", new_name: params.name }))
   if (params.deep_copy !== undefined) body.set("deep_copy", String(params.deep_copy))
   if (params.status_option) body.set("status_option", params.status_option)
 
-  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${nodeId}/copies`, { method: "POST", body })
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${nodeId}/copies`, { method: "POST", body }, { skipProof: opts?.isManual })
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError } from "@/lib/auth"
+import { getResourceAccountId } from "@/lib/facebook"
+import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
+import { secureMetaFetch } from "@/lib/meta-secure-fetch"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -29,12 +32,25 @@ export async function POST(request: NextRequest) {
     }
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
-    const body = new URLSearchParams({ status: newStatus, access_token: connection.access_token })
-    const res = await fetch(`${GRAPH}/${id}`, {
+    const token = connection.access_token
+    const manual = isManual(connection)
+
+    // Verify ownership
+    const resourceAccountId = await getResourceAccountId(id, token, { isManual: manual })
+    if (!resourceAccountId) {
+      return NextResponse.json({ error: "Could not find resource account" }, { status: 400 })
+    }
+    const belongs = await adAccountBelongsToOrg(ctx.orgId, "act_" + resourceAccountId, token)
+    if (!belongs) {
+      return NextResponse.json({ error: "Resource does not belong to your org's ad accounts" }, { status: 403 })
+    }
+
+    const body = new URLSearchParams({ status: newStatus })
+    const res = await secureMetaFetch(`${GRAPH}/${id}?access_token=${token}`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: body.toString(),
-    })
+    }, { skipProof: manual })
     const data = await res.json()
     if (!res.ok) {
       return NextResponse.json({ error: data.error?.message || "Failed to update status" }, { status: res.status })

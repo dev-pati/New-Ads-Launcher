@@ -253,6 +253,9 @@ export async function POST(request: NextRequest) {
     const matched = requestedId && adAccounts.find(
       (a: any) => normalizeAdAccountId(a.fb_ad_account_id) === normalizeAdAccountId(requestedId)
     )
+    if (requestedId && !matched) {
+      return NextResponse.json({ error: "Ad account not found in this workspace" }, { status: 400 })
+    }
     const adAccountId = matched ? matched.fb_ad_account_id : adAccounts[0].fb_ad_account_id
 
     // Via MECE: launch = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
