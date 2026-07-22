@@ -1533,6 +1533,7 @@ export default function PageManagerPage() {
   const [inboxAiResult, setInboxAiResult] = useState<AiReplyResult | null>(null)
   const [inboxAutoReplies, setInboxAutoReplies] = useState<Record<string, InboxReplyRecord>>({})
   const [inboxHandledThreads, setInboxHandledThreads] = useState<Record<string, boolean>>({})
+  const [inboxUnreadOverrides, setInboxUnreadOverrides] = useState<Record<string, number>>({})
   const [inboxAssignments, setInboxAssignments] = useState<Record<string, string>>({})
 
   const toggleFilter = useCallback((group: keyof typeof filterSelections, value: string) => {
@@ -1994,13 +1995,15 @@ export default function PageManagerPage() {
           ? conversation.messages.filter(message => !isFacebookCommentBridgeMessage(message.message))
           : conversation.messages
         const lastDisplayMessage = displayMessages[displayMessages.length - 1]
+        const unreadOverride = inboxUnreadOverrides[id]
+        const unreadCount = unreadOverride !== undefined ? unreadOverride : (conversation.unread_count || 0)
         const baseThread: ThreadItem = {
           id,
           pageId: conversation.page_id,
           name: conversation.customer_name || conversation.customer_psid || "Messenger user",
           lastMessage: lastDisplayMessage?.message || conversation.last_message || `${sourceLabel} interaction`,
           updatedAt: conversation.last_message_at ? postDate(conversation.last_message_at) : "No timestamp",
-          unread: conversation.unread_count || 0,
+          unread: unreadCount,
           label: "Lead",
           sentiment: "neutral",
         }
@@ -2017,7 +2020,7 @@ export default function PageManagerPage() {
           latestMessage: reply ? `You: ${reply.text}` : baseThread.lastMessage,
           latestAt: reply?.at || baseThread.updatedAt,
           lastInteractionAt,
-          responseStatus: replied ? "replied" : pending ? "pending" : "open",
+          responseStatus: closed ? "closed" : (replied ? "replied" : pending ? "pending" : "open"),
           status: replied ? "replied" : closed ? "closed" : pending ? "pending" : conversation.status || settings.defaultStatus,
           taskState: inboxTaskState[id] || (conversation.status === "closed" ? "closed" : "open"),
           assignedTo: inboxAssignments[id] || conversation.assigned_to || getThreadAssignment(baseThread),
@@ -2030,20 +2033,20 @@ export default function PageManagerPage() {
       .filter(t => !settings.ignoreStickerOnlyMessages || !/^(\s*sticker\s*|[👍😀😂❤️]+\s*)$/i.test(t.lastMessage.trim()))
       .map(thread => {
         const reply = inboxAutoReplies[thread.id]
-        const handled = Boolean(inboxHandledThreads[thread.id])
+        const closed = Boolean(inboxTaskState[thread.id] === "closed" || inboxHandledThreads[thread.id])
         const replied = Boolean(reply)
-        const pending = thread.unread > 0 && !replied && !handled
+        const pending = thread.unread > 0 && !replied && !closed
         const lastInteractionAt = reply?.timestamp || getRelativeThreadTimestamp(thread.updatedAt)
         return {
           ...thread,
           sourceType: "messenger",
           sourceLabel: "Messenger",
-          unread: replied || handled ? 0 : thread.unread,
+          unread: replied || closed ? 0 : thread.unread,
           latestMessage: reply ? `You: ${reply.text}` : thread.lastMessage,
           latestAt: reply?.at || thread.updatedAt,
           lastInteractionAt,
-          responseStatus: handled ? "closed" : (replied ? "replied" : pending ? "pending" : "open"),
-          status: handled ? "closed" : (replied ? "replied" : inboxTaskState[thread.id] === "closed" ? "closed" : pending ? "pending" : settings.defaultStatus),
+          responseStatus: closed ? "closed" : (replied ? "replied" : pending ? "pending" : "open"),
+          status: closed ? "closed" : (replied ? "replied" : pending ? "pending" : settings.defaultStatus),
           taskState: inboxTaskState[thread.id] || "open",
           assignedTo: getThreadAssignment(thread),
           tags: getThreadTags(thread),
@@ -2055,16 +2058,18 @@ export default function PageManagerPage() {
       .map(comment => {
         const id = `comment:${comment.id}`
         const reply = inboxAutoReplies[id]
-        const handled = Boolean(inboxHandledThreads[id] || comment.is_replied)
+        const closed = Boolean(inboxTaskState[id] === "closed" || inboxHandledThreads[id])
         const replied = Boolean(reply || comment.is_replied)
-        const pending = !replied && !handled && !comment.is_hidden
+        const pending = !replied && !closed && !comment.is_hidden
+        const unreadOverride = inboxUnreadOverrides[id]
+        const unreadCount = unreadOverride !== undefined ? unreadOverride : (pending ? 1 : 0)
         const baseThread: ThreadItem = {
           id,
           pageId: comment.page_id,
           name: comment.from_name || "Facebook user",
           lastMessage: comment.message,
           updatedAt: comment.fb_created_time ? postDate(comment.fb_created_time) : "No timestamp",
-          unread: pending ? 1 : 0,
+          unread: unreadCount,
           label: comment.sentiment === "negative" ? "Support" : comment.sentiment === "positive" ? "Lead" : "Sales",
           sentiment: comment.sentiment,
         }
@@ -2084,12 +2089,12 @@ export default function PageManagerPage() {
           commentId: comment.id,
           postId: comment.fb_post_id,
           postMessage: comment.fb_post_message,
-          unread: replied || handled ? 0 : baseThread.unread,
+          unread: replied || closed ? 0 : unreadCount,
           latestMessage: reply ? `You: ${reply.text}` : comment.message,
           latestAt: reply?.at || baseThread.updatedAt,
           lastInteractionAt,
-          responseStatus: handled ? "closed" : (comment.is_hidden ? "hidden" : replied ? "replied" : pending ? "pending" : "open"),
-          status: handled ? "closed" : (comment.is_hidden ? "hidden" : replied ? "replied" : inboxTaskState[id] === "closed" ? "closed" : pending ? "pending" : settings.defaultStatus),
+          responseStatus: closed ? "closed" : (comment.is_hidden ? "hidden" : replied ? "replied" : pending ? "pending" : "open"),
+          status: closed ? "closed" : (comment.is_hidden ? "hidden" : replied ? "replied" : pending ? "pending" : settings.defaultStatus),
           taskState: inboxTaskState[id] || (replied ? "closed" : "open"),
           assignedTo: getThreadAssignment(baseThread),
           tags,
@@ -2108,6 +2113,7 @@ export default function PageManagerPage() {
     comments,
     messengerConversations,
     inboxHandledThreads,
+    inboxUnreadOverrides,
     inboxAutoReplies,
     inboxAssignments,
     inboxPinnedThreads,
@@ -2156,7 +2162,7 @@ export default function PageManagerPage() {
       return [...matched].sort((a, b) => a.name.localeCompare(b.name))
     }
     return matched
-  }, [allPageThreads, inboxSearchQuery, inboxChannel, inboxStatuses, inboxFolders, filterSelections, inboxFollowUps, inboxSortMode])
+  }, [allPageThreads, inboxSearchQuery, inboxChannel, inboxStatuses, inboxFolders, filterSelections, inboxFollowUps, inboxSortMode, inboxHandledThreads, inboxTaskState, inboxUnreadOverrides])
 
   const togglePinThread = useCallback((threadId: string) => {
     setInboxPinnedThreads(prev => {
@@ -2402,9 +2408,7 @@ export default function PageManagerPage() {
                     Close conversation
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => {
-                    if (thread.customerPsid) window.open(`https://facebook.com/${thread.customerPsid}`, "_blank")
-                  }} disabled={!thread.customerPsid}>
+                  <DropdownMenuItem disabled className="opacity-50">
                     <IconExternalLink className="mr-2 size-3.5" />
                     View profile
                   </DropdownMenuItem>
@@ -2870,10 +2874,20 @@ export default function PageManagerPage() {
     }
 
     setInboxAiError("")
-    let persistedReply = false
+
+    // Optimistic UI update: instantly show message and clear input
+    markInboxThreadReplied(selectedThread.id, message, "agent")
+    setInboxReplyText("")
+    setInboxScheduleAt("")
+    setInboxAttachmentNote("")
+    setInboxGifQuery("")
+    setInboxReplyDrafts(prev => {
+      const next = { ...prev }
+      delete next[selectedThread.id]
+      return next
+    })
 
     if (selectedThread.sourceType === "facebook_comment" && selectedThread.commentId) {
-      setCommentActionLoading(true)
       try {
         const res = await fetch(`/api/comments/${selectedThread.commentId}/reply`, {
           method: "POST",
@@ -2888,18 +2902,10 @@ export default function PageManagerPage() {
             ? { ...comment, is_replied: true, draft_reply: message }
             : comment
         )))
-        persistedReply = true
       } catch (err: any) {
         setInboxAiError(err?.message || "Unable to reply to comment.")
-        setCommentActionLoading(false)
-        return
-      } finally {
-        setCommentActionLoading(false)
       }
-    }
-
-    if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
-      setMessengerLoading(true)
+    } else if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
       try {
         const res = await fetch("/api/page-manager/messenger/reply", {
           method: "POST",
@@ -2912,29 +2918,11 @@ export default function PageManagerPage() {
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok || data.error) throw new Error(data.error || "Unable to send Messenger reply.")
-        await loadMessengerInbox()
-        persistedReply = true
+        void loadMessengerInbox()
       } catch (err: any) {
         setInboxAiError(err?.message || "Unable to send Messenger reply.")
-        setMessengerLoading(false)
-        return
-      } finally {
-        setMessengerLoading(false)
       }
     }
-
-    if (!persistedReply) {
-      markInboxThreadReplied(selectedThread.id, message, "agent")
-    }
-    setInboxReplyText("")
-    setInboxScheduleAt("")
-    setInboxAttachmentNote("")
-    setInboxGifQuery("")
-    setInboxReplyDrafts(prev => {
-      const next = { ...prev }
-      delete next[selectedThread.id]
-      return next
-    })
   }, [
     inboxAttachmentNote,
     inboxGifQuery,
@@ -4994,6 +4982,21 @@ export default function PageManagerPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          className={cn(
+                            "size-7 rounded-full",
+                            (inboxStatuses.length > 0 || inboxFolders.length > 0 || Object.values(filterSelections).some(arr => arr.length > 0)) && "bg-[#E7F3FF] text-[#0084FF]"
+                          )}
+                          title="Filters"
+                          onClick={() => {
+                            if (isSidebarCollapsed) setIsSidebarCollapsed(false)
+                            setFilterModalOpen(true)
+                          }}
+                        >
+                          <IconFilter className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className={cn("size-7 rounded-full", inboxSearchOpen && "bg-[#E7F3FF] text-[#0084FF]")}
                           title="Search"
                           onClick={() => {
@@ -5418,21 +5421,12 @@ export default function PageManagerPage() {
                       </div>
                     ) : null}
                   </CardContent>
-                  <CardFooter className="shrink-0 border-t border-[#E4E6EB] p-2 dark:border-border flex items-center justify-between">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs font-semibold gap-1.5 text-[#0084FF] hover:bg-[#E7F3FF] dark:text-primary dark:hover:bg-primary/15"
-                      onClick={() => setFilterModalOpen(true)}
-                    >
-                      <IconFilter className="size-3.5" />
-                      Filters
-                    </Button>
-                    {inboxStatuses.length > 0 || inboxFolders.length > 0 || Object.values(filterSelections).some(arr => arr.length > 0) ? (
+                  {inboxStatuses.length > 0 || inboxFolders.length > 0 || Object.values(filterSelections).some(arr => arr.length > 0) ? (
+                    <CardFooter className="shrink-0 border-t border-[#E4E6EB] p-2 dark:border-border flex items-center justify-center">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-xs text-muted-foreground hover:bg-muted"
+                        className="text-xs text-muted-foreground hover:bg-muted w-full"
                         onClick={() => {
                           setInboxStatuses([])
                           setInboxFolders([])
@@ -5441,8 +5435,8 @@ export default function PageManagerPage() {
                       >
                         Clear filters
                       </Button>
-                    ) : null}
-                  </CardFooter>
+                    </CardFooter>
+                  ) : null}
                 </Card>
 
                 <div
@@ -5453,68 +5447,6 @@ export default function PageManagerPage() {
 
                 <Card className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
                   <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border">
-                    <div className="mb-2 flex items-center justify-end gap-1.5">
-                      <Popover open={assignPopoverOpen} onOpenChange={setAssignPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-7 gap-1.5 rounded-full text-xs" title="Assign conversation">
-                            <IconUserPlus className="size-3.5" />
-                            {inboxAssignments[selectedThread.id] && inboxAssignments[selectedThread.id] !== "Unassigned" ? inboxAssignments[selectedThread.id] : "Assign"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="w-64 rounded-2xl p-2">
-                          <p className="px-2 pb-1 pt-1 text-sm font-semibold">Assign conversation</p>
-                          <input
-                            type="text"
-                            placeholder="Select someone from your business"
-                            className="mb-1 w-full rounded-lg border px-2 py-1.5 text-xs"
-                            value={assignSearch}
-                            onChange={event => setAssignSearch(event.target.value)}
-                          />
-                          <div className="max-h-56 overflow-y-auto">
-                            {STAFF_LIST.filter(s => s.toLowerCase().includes(assignSearch.toLowerCase())).map(staff => (
-                              <button
-                                key={staff}
-                                type="button"
-                                onClick={() => {
-                                  setInboxAssignments(prev => ({ ...prev, [selectedThread.id]: staff }))
-                                  if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
-                                    void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, { assigned_to: staff })
-                                  }
-                                  setAssignPopoverOpen(false)
-                                }}
-                                className={cn(
-                                  "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted",
-                                  inboxAssignments[selectedThread.id] === staff && "bg-muted font-medium"
-                                )}
-                              >
-                                <span className="flex size-6 items-center justify-center rounded-full bg-[#E7F3FF] text-[10px] font-semibold text-[#0084FF]">
-                                  {staff.charAt(0)}
-                                </span>
-                                {staff}
-                              </button>
-                            ))}
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" className={cn("h-7 gap-1.5 rounded-full text-xs", inboxScheduleAt && "border-primary text-primary")} title="Schedule reply">
-                            <IconCalendarTime className="size-3.5" />
-                            {inboxScheduleAt ? new Date(inboxScheduleAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Schedule"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="w-64 rounded-2xl p-3">
-                          <p className="px-1 pb-2 text-sm font-semibold">Schedule reply</p>
-                          <input
-                            type="datetime-local"
-                            className="w-full rounded-lg border px-2 py-1.5 text-sm"
-                            value={inboxScheduleAt}
-                            onChange={event => setInboxScheduleAt(event.target.value)}
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-3">
                         <InboxAvatar
@@ -5530,7 +5462,7 @@ export default function PageManagerPage() {
                               : "Messenger"}
                             {` · ${selectedThread.updatedAt}`}
                           </CardDescription>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
                             <Badge
                               variant="outline"
                               className={cn(
@@ -5554,13 +5486,66 @@ export default function PageManagerPage() {
                                 {selectedThread.label === "Lead" ? "Pricing" : selectedThread.label}
                               </Badge>
                             )}
-                            <Badge
-                              variant="outline"
-                              className="rounded-full text-xs px-2.5 py-0.5 gap-1 bg-muted/50 text-muted-foreground"
-                            >
-                              <IconUsers className="size-3" />
-                              {selectedThread.assignedTo && selectedThread.assignedTo !== "Unassigned" ? selectedThread.assignedTo : "Unassigned"}
-                            </Badge>
+                            <Popover open={assignPopoverOpen} onOpenChange={setAssignPopoverOpen}>
+                              <PopoverTrigger asChild>
+                                <button type="button" className="flex items-center gap-1 rounded-full border border-[#E4E6EB] px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted dark:border-border dark:hover:bg-muted/50 transition-colors" title="Assign conversation">
+                                  <IconUserPlus className="size-3" />
+                                  {inboxAssignments[selectedThread.id] && inboxAssignments[selectedThread.id] !== "Unassigned" ? inboxAssignments[selectedThread.id] : "Support"}
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="start" className="w-64 rounded-2xl p-2">
+                                <p className="px-2 pb-1 pt-1 text-sm font-semibold">Assign conversation</p>
+                                <input
+                                  type="text"
+                                  placeholder="Select someone from your business"
+                                  className="mb-1 w-full rounded-lg border px-2 py-1.5 text-xs"
+                                  value={assignSearch}
+                                  onChange={event => setAssignSearch(event.target.value)}
+                                />
+                                <div className="max-h-56 overflow-y-auto">
+                                  {STAFF_LIST.filter(s => s.toLowerCase().includes(assignSearch.toLowerCase())).map(staff => (
+                                    <button
+                                      key={staff}
+                                      type="button"
+                                      onClick={() => {
+                                        setInboxAssignments(prev => ({ ...prev, [selectedThread.id]: staff }))
+                                        if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
+                                          void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, { assigned_to: staff })
+                                        }
+                                        setAssignPopoverOpen(false)
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted",
+                                        inboxAssignments[selectedThread.id] === staff && "bg-muted font-medium"
+                                      )}
+                                    >
+                                      <span className="flex size-6 items-center justify-center rounded-full bg-[#E7F3FF] text-[10px] font-semibold text-[#0084FF]">
+                                        {staff.charAt(0)}
+                                      </span>
+                                      {staff}
+                                    </button>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button type="button" className={cn("flex items-center gap-1 rounded-full border border-[#E4E6EB] px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted dark:border-border dark:hover:bg-muted/50 transition-colors", inboxScheduleAt && "border-primary text-primary")} title="Schedule reply">
+                                  <IconCalendarTime className="size-3" />
+                                  {inboxScheduleAt ? new Date(inboxScheduleAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Schedule"}
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent align="start" className="w-64 rounded-2xl p-3">
+                                <p className="px-1 pb-2 text-sm font-semibold">Schedule reply</p>
+                                <input
+                                  type="datetime-local"
+                                  className="w-full rounded-lg border px-2 py-1.5 text-sm"
+                                  value={inboxScheduleAt}
+                                  onChange={event => setInboxScheduleAt(event.target.value)}
+                                />
+                              </PopoverContent>
+                            </Popover>
                           </div>
                         </div>
                       </div>
@@ -5840,70 +5825,105 @@ export default function PageManagerPage() {
                     ) : null}
 
                     <div className="border-t border-[#E4E6EB] bg-white p-3 dark:border-border dark:bg-background">
-                      <div className="rounded-[20px] border border-[#E4E6EB] bg-white p-3 shadow-sm dark:border-border dark:bg-background">
-                        <Textarea
-                          placeholder="Enter to send, Shift+Enter for newline"
-                          value={inboxReplyText}
-                          onChange={event => {
-                            const val = event.target.value
-                            setInboxReplyText(val)
-                            if (val.endsWith("/")) {
-                              setTemplatePickerOpen(true)
-                            }
-                          }}
-                          onKeyDown={event => {
-                            if (event.key === "/") {
-                              setTemplatePickerOpen(true)
-                            }
-                            if (!["Tab", "Enter", " "].includes(event.key)) return
-                            const lastToken = inboxReplyText.split(/\s+/).at(-1)?.trim()
-                            if (!lastToken?.startsWith("/")) return
-                            const template = pageManagerSettings.quickReplyTemplates.templates.find(item => item.shortcut === lastToken)
-                            if (!template) return
-                            event.preventDefault()
-                            applyQuickReplyTemplate(template)
-                          }}
-                          className="min-h-14 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-                        />
+                      <div className="rounded-[20px] border border-[#E4E6EB] bg-white p-3 shadow-sm dark:border-border dark:bg-background flex flex-col gap-2">
+                        <div className="flex items-start gap-2">
+                          <Textarea
+                            placeholder="Enter to send, Ctrl+Enter or Shift+Enter for newline"
+                            value={inboxReplyText}
+                            onChange={event => {
+                              const val = event.target.value
+                              setInboxReplyText(val)
+                              if (val.endsWith("/")) {
+                                setTemplatePickerOpen(true)
+                              }
+                            }}
+                            onKeyDown={event => {
+                              if (event.key === "Enter") {
+                                if (event.shiftKey || event.ctrlKey) {
+                                  if (event.ctrlKey) {
+                                    event.preventDefault()
+                                    const target = event.currentTarget
+                                    const start = target.selectionStart
+                                    const end = target.selectionEnd
+                                    const val = target.value
+                                    setInboxReplyText(val.substring(0, start) + "\n" + val.substring(end))
+                                    setTimeout(() => {
+                                      target.selectionStart = target.selectionEnd = start + 1
+                                    }, 0)
+                                  }
+                                  return
+                                }
+                                event.preventDefault()
+                                if (inboxReplyText.trim() || inboxAttachmentNote.trim() || inboxGifQuery.trim()) {
+                                  if (!commentActionLoading && !messengerLoading && selectedThread.id !== "empty-inbox") {
+                                    void handleReplyInboxThread()
+                                  }
+                                }
+                                return
+                              }
+                              if (event.key === "/") {
+                                setTemplatePickerOpen(true)
+                              }
+                              if (!["Tab", "Enter", " "].includes(event.key)) return
+                              const lastToken = inboxReplyText.split(/\s+/).at(-1)?.trim()
+                              if (!lastToken?.startsWith("/")) return
+                              const template = pageManagerSettings.quickReplyTemplates.templates.find(item => item.shortcut === lastToken)
+                              if (!template) return
+                              event.preventDefault()
+                              applyQuickReplyTemplate(template)
+                            }}
+                            className="min-h-14 flex-1 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                          />
+                          <Button
+                            className="mt-auto h-8 w-8 shrink-0 rounded-full bg-[#2548D8] p-0 text-white hover:bg-[#1C36A3]"
+                            disabled={(!inboxReplyText.trim() && !inboxAttachmentNote.trim() && !inboxGifQuery.trim()) || commentActionLoading || messengerLoading || selectedThread.id === "empty-inbox"}
+                            onClick={() => void handleReplyInboxThread()}
+                            title="Send message"
+                          >
+                            {commentActionLoading || messengerLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSend className="size-3.5" />}
+                          </Button>
+                        </div>
 
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <button type="button" onClick={() => setInboxReplyText(prev => prev + " Product price is 599k. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/price</button>
-                          <button type="button" onClick={() => setInboxReplyText(prev => prev + " We offer free shipping nationwide. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/ship</button>
-                          <button type="button" onClick={() => setInboxReplyText(prev => prev + " This item is currently in stock in all sizes. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/stock</button>
-                          <button type="button" onClick={() => setInboxReplyText(prev => prev + " 100% refund policy for manufacturer defects. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/refund</button>
-                          <Popover open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
-                            <PopoverTrigger asChild>
-                              <button type="button" className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">+ Template</button>
-                            </PopoverTrigger>
-                            <PopoverContent align="start" className="w-80 rounded-2xl p-2">
-                              <div className="px-2 pb-2 pt-1">
-                                <p className="text-sm font-semibold">Quick replies</p>
-                                <p className="text-xs text-muted-foreground">Saved per Page in Settings.</p>
-                              </div>
-                              <div className="space-y-1">
-                                {pageManagerSettings.quickReplyTemplates.templates.length > 0 ? (
-                                  pageManagerSettings.quickReplyTemplates.templates.map(template => (
-                                    <button
-                                      key={template.id}
-                                      type="button"
-                                      onClick={() => applyQuickReplyTemplate(template)}
-                                      className="w-full rounded-xl px-3 py-2 text-left hover:bg-muted"
-                                    >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium">{template.name}</span>
-                                        <span className="text-xs text-muted-foreground">{template.shortcut}</span>
-                                      </div>
-                                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{template.body}</p>
-                                    </button>
-                                  ))
-                                ) : (
-                                  <div className="rounded-xl bg-muted/50 px-3 py-4 text-sm text-muted-foreground">
-                                    No templates yet. Add some in Settings.
-                                  </div>
-                                )}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
+                        <div className="flex flex-wrap items-center justify-between border-t border-[#E4E6EB] pt-2 dark:border-border">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <button type="button" onClick={() => setInboxReplyText(prev => prev + " Product price is 599k. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/price</button>
+                            <button type="button" onClick={() => setInboxReplyText(prev => prev + " We offer free shipping nationwide. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/ship</button>
+                            <button type="button" onClick={() => setInboxReplyText(prev => prev + " This item is currently in stock in all sizes. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/stock</button>
+                            <button type="button" onClick={() => setInboxReplyText(prev => prev + " 100% refund policy for manufacturer defects. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/refund</button>
+                            <Popover open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+                              <PopoverTrigger asChild>
+                                <button type="button" className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">+ Template</button>
+                              </PopoverTrigger>
+                              <PopoverContent align="start" className="w-80 rounded-2xl p-2">
+                                <div className="px-2 pb-2 pt-1">
+                                  <p className="text-sm font-semibold">Quick replies</p>
+                                  <p className="text-xs text-muted-foreground">Saved per Page in Settings.</p>
+                                </div>
+                                <div className="space-y-1">
+                                  {pageManagerSettings.quickReplyTemplates.templates.length > 0 ? (
+                                    pageManagerSettings.quickReplyTemplates.templates.map(template => (
+                                      <button
+                                        key={template.id}
+                                        type="button"
+                                        onClick={() => applyQuickReplyTemplate(template)}
+                                        className="w-full rounded-xl px-3 py-2 text-left hover:bg-muted"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-sm font-medium">{template.name}</span>
+                                          <span className="text-xs text-muted-foreground">{template.shortcut}</span>
+                                        </div>
+                                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{template.body}</p>
+                                      </button>
+                                    ))
+                                  ) : (
+                                    <div className="rounded-xl bg-muted/50 px-3 py-4 text-sm text-muted-foreground">
+                                      No templates yet. Add some in Settings.
+                                    </div>
+                                  )}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
 
                           <div className="ml-auto flex flex-wrap items-center gap-1">
                             {inboxIsRecording && (
@@ -6046,16 +6066,8 @@ export default function PageManagerPage() {
                             {inboxAiLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSparkles className="size-3.5" />}
                             AI Auto Reply
                           </Button>
-
-                          <Button
-                            className="h-8 gap-1.5 rounded-full bg-[#2548D8] px-4 text-xs text-white hover:bg-[#1C36A3]"
-                            disabled={(!inboxReplyText.trim() && !inboxAttachmentNote.trim() && !inboxGifQuery.trim()) || commentActionLoading || messengerLoading || selectedThread.id === "empty-inbox"}
-                            onClick={() => void handleReplyInboxThread()}
-                          >
-                            {commentActionLoading || messengerLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSend className="size-3.5" />}
-                            Send
-                          </Button>
                         </div>
+
                         {(inboxAttachmentNote || inboxGifQuery || inboxScheduleAt) && (
                           <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
                             {inboxScheduleAt ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Scheduled: {new Date(inboxScheduleAt).toLocaleString("en-US")}</span> : null}
@@ -6108,24 +6120,10 @@ export default function PageManagerPage() {
                           <p className="text-sm font-semibold">{selectedThread.name}</p>
                           <p className="text-xs text-muted-foreground capitalize">{selectedThread.sourceLabel}</p>
                         </div>
-                        {(() => {
-                          const fromId = selectedThread.comment?.from_id
-                          const profileId = fromId || selectedThread.customerPsid
-                          const href = profileId
-                            ? `https://www.facebook.com/${profileId}`
-                            : `https://www.facebook.com/search/people/?q=${encodeURIComponent(selectedThread.name)}`
-                          return (
-                            <a
-                              href={href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-xs font-medium text-[#0084FF] hover:underline inline-flex items-center gap-1"
-                            >
-                              <IconExternalLink className="size-3" />
-                              View Facebook profile
-                            </a>
-                          )
-                        })()}
+                        <span className="text-xs font-medium text-[#0084FF] opacity-50 cursor-not-allowed inline-flex items-center gap-1">
+                          <IconExternalLink className="size-3" />
+                          View Facebook profile
+                        </span>
                       </div>
 
                       {/* Contact details */}
