@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getGeminiApiKey } from "@/lib/get-ai-key"
 import { getDarkPostAds } from "@/lib/facebook"
@@ -38,18 +39,14 @@ ${numbered}
 Return ONLY a JSON array, no markdown.`
 
   try {
-    const res = await fetch(`${GEMINI_API}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 2000 },
-      }),
+    const genAI = new GoogleGenerativeAI(apiKey)
+    const gModel = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      generationConfig: { temperature: 0.1, maxOutputTokens: 2000, responseMimeType: "application/json" },
     })
-    const data = await res.json()
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]"
-    const cleaned = raw.replace(/```json?\n?/g, "").replace(/```/g, "").trim()
-    const parsed = JSON.parse(cleaned)
+    const result = await gModel.generateContent(prompt)
+    const raw = result.response.text() || "[]"
+    const parsed = JSON.parse(raw)
     if (Array.isArray(parsed)) return parsed
   } catch {}
   return messages.map(() => ({ sentiment: "neutral", score: 0, themes: [] }))

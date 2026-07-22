@@ -5,6 +5,7 @@
  */
 
 import { buildMetaHeaders } from "@/lib/meta-secure-fetch"
+import { createAdminClient } from "@/lib/supabase/admin"
 
 const GRAPH = "https://graph.facebook.com/v21.0"
 
@@ -38,6 +39,17 @@ function hoursAgo(h: number) {
 
 function daysAgo(d: number) {
   return new Date(Date.now() - d * 86_400_000).toISOString().split("T")[0]
+}
+
+async function resolvePageTokenFromCache(orgId: string | undefined, pageId: string) {
+  if (!orgId) return null
+  const { data: page } = await createAdminClient()
+    .from("pages")
+    .select("page_access_token")
+    .eq("org_id", orgId)
+    .eq("fb_page_id", pageId)
+    .maybeSingle()
+  return page?.page_access_token || null
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -467,12 +479,17 @@ export async function checkBestPerformingOrganicPost(
 
   if (!pageId) return { fired: false, reason: "No Facebook Page selected" }
 
+  // ponytail: endpoint /{page}/posts requires a Page Access Token; we fall back
+  // to any token cached on `pages` (system context has no userId). Upgrade path:
+  // thread an orgId+systemUserId into checkMetaTrigger and call resolveOrgPageAccessToken().
+  const pageToken = await resolvePageTokenFromCache(triggerConfig.org, pageId) ?? token
+
   const since = daysAgo(lookbackDays)
   const fields = "id,message,created_time,full_picture,reactions.summary(true),comments.summary(true),shares,insights.metric(post_impressions,post_reach,post_video_views)"
 
   const data = await metaGet(
     `/${pageId}/posts?fields=${encodeURIComponent(fields)}&since=${since}&limit=50`,
-    token
+    pageToken
   )
 
   let posts: any[] = data.data || []

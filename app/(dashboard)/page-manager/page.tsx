@@ -21,6 +21,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -1372,6 +1379,11 @@ export default function PageManagerPage() {
   const [inboxSearchOpen, setInboxSearchOpen] = useState(false)
   const [inboxSortMode, setInboxSortMode] = useState<"recent" | "alphabet">("recent")
   const [inboxSortMenuOpen, setInboxSortMenuOpen] = useState(false)
+  const [newConversationOpen, setNewConversationOpen] = useState(false)
+  const [newConversationSearch, setNewConversationSearch] = useState("")
+  const [newConversationPsid, setNewConversationPsid] = useState("")
+  const [newConversationText, setNewConversationText] = useState("")
+  const [newConversationSending, setNewConversationSending] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(220)
   const [queueWidth, setQueueWidth] = useState(360)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
@@ -2205,8 +2217,10 @@ export default function PageManagerPage() {
     }
 
     return (
-      <button
+      <div
         key={thread.id}
+        role="button"
+        tabIndex={0}
         draggable
         onDragStart={event => {
           setDraggingThreadId(thread.id)
@@ -2224,12 +2238,18 @@ export default function PageManagerPage() {
           setDraggingThreadId(null)
         }}
         onClick={() => setSelectedThreadId(thread.id)}
+        onKeyDown={event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
+            setSelectedThreadId(thread.id)
+          }
+        }}
         onContextMenu={event => {
           event.preventDefault()
           setPinnedContextMenu({ threadId: thread.id, x: event.clientX, y: event.clientY })
         }}
         className={cn(
-          "grid w-full min-w-0 items-start gap-2.5 rounded-2xl px-3 text-left transition-colors",
+          "group grid w-full min-w-0 cursor-pointer items-start gap-2.5 rounded-2xl px-3 text-left transition-colors",
           isCompact ? "min-h-[64px] grid-cols-[36px_minmax(0,1fr)] py-1.5" : "min-h-[92px] grid-cols-[48px_minmax(0,1fr)] py-2",
           isActive ? "bg-[#E7F3FF] dark:bg-primary/15" : "hover:bg-[#F0F2F5] dark:hover:bg-muted/70",
           isPinned && "ring-1 ring-[#0084FF]/25"
@@ -2249,7 +2269,51 @@ export default function PageManagerPage() {
               {isPinned ? <IconPin className="mr-1 inline size-3.5 text-[#0084FF]" /> : null}
               {thread.name}
             </p>
-            <span className="max-w-[84px] truncate text-xs text-[#65676B]">{thread.latestAt}</span>
+            <div className="flex items-center gap-1">
+              <span className="max-w-[84px] truncate text-xs text-[#65676B]">{thread.latestAt}</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={event => event.stopPropagation()}
+                    className="flex size-6 items-center justify-center rounded-full text-[#65676B] opacity-0 transition-opacity hover:bg-[#E4E6EB] group-hover:opacity-100 dark:text-muted-foreground dark:hover:bg-muted"
+                    title="More actions"
+                  >
+                    <IconDots className="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48" onClick={event => event.stopPropagation()}>
+                  <DropdownMenuItem onClick={() => togglePinThread(thread.id)}>
+                    <IconPin className="mr-2 size-3.5" />
+                    {isPinned ? "Unpin" : "Pin to top"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    const nextUnread = thread.unread > 0 ? 0 : 1
+                    if (thread.sourceType === "messenger" && thread.conversationId) {
+                      void patchMessengerConversation(thread.conversationId, thread.pageId, { unread_count: nextUnread })
+                    }
+                  }}>
+                    <IconCheck className="mr-2 size-3.5" />
+                    {thread.unread > 0 ? "Mark as read" : "Mark as unread"}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    if (thread.sourceType === "messenger" && thread.conversationId) {
+                      void patchMessengerConversation(thread.conversationId, thread.pageId, { status: "closed" })
+                    }
+                  }}>
+                    <IconCheck className="mr-2 size-3.5" />
+                    Close conversation
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => {
+                    if (thread.customerPsid) window.open(`https://facebook.com/${thread.customerPsid}`, "_blank")
+                  }} disabled={!thread.customerPsid}>
+                    <IconExternalLink className="mr-2 size-3.5" />
+                    View profile
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
           {!isCompact && (
             <div className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
@@ -2299,13 +2363,8 @@ export default function PageManagerPage() {
               <Badge variant="outline" className="h-5 whitespace-nowrap rounded-full border-slate-200 bg-slate-50 px-2 text-xs text-slate-700">Grouped</Badge>
             ) : null}
           </div>
-          {!isCompact && (
-            <div className="mt-1 flex max-w-full items-center gap-1 text-xs text-[#65676B]">
-              {thread.assignedTo && thread.assignedTo !== "Unassigned" ? <span className="truncate">{thread.assignedTo}</span> : <span>Unassigned</span>}
-            </div>
-          )}
         </div>
-      </button>
+      </div>
     )
   }, [
     draggingThreadId,
@@ -2537,6 +2596,46 @@ export default function PageManagerPage() {
       setInboxTaskState(prev => ({ ...prev, [threadId]: "closed" }))
     }
   }, [pageManagerSettings.conversations.autoMarkRead, pageManagerSettings.conversations.taskManagementEnabled])
+
+  const handleMarkAllInboxRead = useCallback(async () => {
+    const unreadThreads = allPageThreads.filter(t => t.unread > 0 && t.sourceType === "messenger" && t.conversationId)
+    if (!unreadThreads.length) return
+    await Promise.allSettled(
+      unreadThreads.map(t => patchMessengerConversation(t.conversationId!, t.pageId, { unread_count: 0 }))
+    )
+  }, [allPageThreads, patchMessengerConversation])
+
+  const handleSendNewConversation = useCallback(async () => {
+    if (!selectedPage?.id) return
+    const psid = newConversationPsid.trim()
+    const msg = newConversationText.trim()
+    if (!psid || !msg) return
+
+    setNewConversationSending(true)
+    try {
+      const res = await fetch("/api/page-manager/messenger/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          page_id: selectedPage.id,
+          customer_psid: psid,
+          message: msg,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || data.error) throw new Error(data.error || "Unable to send message.")
+
+      setNewConversationOpen(false)
+      setNewConversationText("")
+      setNewConversationPsid("")
+      setNewConversationSearch("")
+      await loadMessengerInbox()
+    } catch (err: any) {
+      alert(err.message || "Failed to send message.")
+    } finally {
+      setNewConversationSending(false)
+    }
+  }, [selectedPage?.id, newConversationPsid, newConversationText, loadMessengerInbox])
 
   const handleReplyInboxThread = useCallback(async () => {
     if (!selectedThread || !selectedPage?.id) return
@@ -4306,7 +4405,7 @@ export default function PageManagerPage() {
                   })}
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs italic text-muted-foreground">
                 Each tab maps to a real workflow: inbox first, then posts, then comments.
               </p>
             </div>
@@ -4829,10 +4928,32 @@ export default function PageManagerPage() {
                   </CardContent>
                   {!isSidebarCollapsed && (
                     <div className="mt-auto flex items-center gap-1 border-t border-[#E4E6EB] p-2 dark:border-border">
-                      <Button variant="ghost" size="icon" className="size-8 rounded-full" title="More inbox actions">
-                        <IconDots className="size-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" className="size-8 rounded-full" title="New conversation">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="size-8 rounded-full" title="More inbox actions">
+                            <IconDots className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-48">
+                          <DropdownMenuItem onClick={handleMarkAllInboxRead}>
+                            <IconCheck className="mr-2 size-3.5" />
+                            Mark all as read
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={async () => {
+                            await subscribeMessengerWebhooks()
+                            await Promise.allSettled([syncMessenger(), syncComments(), loadMessengerInbox()])
+                          }}>
+                            <IconRefresh className="mr-2 size-3.5" />
+                            Refresh inbox
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setTab("settings")}>
+                            <IconSettings className="mr-2 size-3.5" />
+                            Inbox settings
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button variant="ghost" size="icon" className="size-8 rounded-full" title="New conversation" onClick={() => setNewConversationOpen(true)}>
                         <IconCirclePlus className="size-4" />
                       </Button>
                     </div>
@@ -4956,28 +5077,28 @@ export default function PageManagerPage() {
                         ) : null}
                         {pageThreads.length > 0 ? (
                           <div className="space-y-2">
-                            <div
-                              className={cn(
-                                "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 transition-colors",
-                                draggingThreadId
-                                  ? "border-dashed border-[#0084FF] bg-[#E7F3FF]"
-                                  : pinnedPageThreads.length
-                                    ? "border-border/70 bg-muted/20"
-                                    : "border-dashed border-border/70 bg-muted/20 text-muted-foreground"
-                              )}
-                              onDragOver={event => {
-                                if (draggingThreadId) event.preventDefault()
-                              }}
-                              onDrop={event => {
-                                event.preventDefault()
-                                const draggedId = event.dataTransfer.getData("text/plain") || draggingThreadId
-                                if (!draggedId) return
-                                setInboxPinnedThreads(prev => ({ ...prev, [draggedId]: true }))
-                                setDraggingThreadId(null)
-                              }}
-                            >
-                              {pinnedPageThreads.map(thread => renderPinnedAvatar(thread))}
-                            </div>
+                            {(pinnedPageThreads.length > 0 || draggingThreadId) && (
+                              <div
+                                className={cn(
+                                  "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 transition-colors",
+                                  draggingThreadId
+                                    ? "border-dashed border-[#0084FF] bg-[#E7F3FF]"
+                                    : "border-border/70 bg-muted/20"
+                                )}
+                                onDragOver={event => {
+                                  if (draggingThreadId) event.preventDefault()
+                                }}
+                                onDrop={event => {
+                                  event.preventDefault()
+                                  const draggedId = event.dataTransfer.getData("text/plain") || draggingThreadId
+                                  if (!draggedId) return
+                                  setInboxPinnedThreads(prev => ({ ...prev, [draggedId]: true }))
+                                  setDraggingThreadId(null)
+                                }}
+                              >
+                                {pinnedPageThreads.map(thread => renderPinnedAvatar(thread))}
+                              </div>
+                            )}
 
                             {groupedPageThreads.map(item => {
                               if (item.kind === "thread") return renderInboxThreadCard(item.thread)
@@ -6494,6 +6615,77 @@ export default function PageManagerPage() {
                   </Card>
                 </div>
               </div>
+
+              <Dialog open={newConversationOpen} onOpenChange={setNewConversationOpen}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>New conversation</DialogTitle>
+                    <DialogDescription>
+                      Send a message to an existing customer on {selectedPage?.name || "the selected Page"}.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Select customer</label>
+                      <Input
+                        placeholder="Search existing customer by name..."
+                        value={newConversationSearch}
+                        onChange={e => setNewConversationSearch(e.target.value)}
+                        className="mt-1"
+                      />
+                      {newConversationSearch && (
+                        <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-background p-1 space-y-1">
+                          {allPageThreads
+                            .filter(t => t.name.toLowerCase().includes(newConversationSearch.toLowerCase()))
+                            .slice(0, 5)
+                            .map(thread => (
+                              <button
+                                key={thread.id}
+                                type="button"
+                                onClick={() => {
+                                  setNewConversationPsid(thread.customerPsid || "")
+                                  setNewConversationSearch(thread.name)
+                                }}
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-muted"
+                              >
+                                <span className="font-medium">{thread.name}</span>
+                                <span className="text-xs text-muted-foreground">({thread.sourceLabel})</span>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Customer PSID</label>
+                      <Input
+                        placeholder="PSID (Facebook user ID for Page)"
+                        value={newConversationPsid}
+                        onChange={e => setNewConversationPsid(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">First message</label>
+                      <Textarea
+                        placeholder="Type first message..."
+                        value={newConversationText}
+                        onChange={e => setNewConversationText(e.target.value)}
+                        className="mt-1 min-h-20"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setNewConversationOpen(false)}>Cancel</Button>
+                    <Button
+                      className="bg-[#2548D8] text-white hover:bg-[#1C36A3]"
+                      disabled={!newConversationPsid.trim() || !newConversationText.trim() || newConversationSending}
+                      onClick={handleSendNewConversation}
+                    >
+                      {newConversationSending ? "Sending..." : "Send message"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
               <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
                 <DialogContent className="sm:max-w-lg">

@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
 
   // ── Process each automation ──────────────────────────────────────────────
   for (const automation of metaAutomations) {
-    const triggerConfig = automation.trigger_config as any
+    const triggerConfig = { ...(automation.trigger_config as any), org: automation.org_id }
     const checkFreqHours = CHECK_FREQUENCY_HOURS[triggerConfig.checkFrequency ?? "daily"] ?? 24
 
     // Skip if ran too recently (respect check frequency)
@@ -96,6 +96,7 @@ export async function GET(request: NextRequest) {
         .select("access_token")
         .eq("org_id", automation.org_id)
         .eq("is_active", true)
+        .eq("connection_type", "oauth")
         .order("created_at", { ascending: false })
         .limit(1)
         .single()

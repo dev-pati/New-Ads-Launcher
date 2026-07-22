@@ -5,6 +5,7 @@ import { Resend } from "resend"
 import { sendEmail } from "@/lib/send-email"
 import { buildNotificationEmail } from "@/lib/email-template"
 import { sendLarkMessage, sendLarkGroupMessage } from "@/lib/send-lark"
+import { buildMetaHeaders, sequentialMap } from "@/lib/meta-secure-fetch"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -101,13 +102,13 @@ async function execMetaAction(
     case "pause_adset": {
       const ids = resolveTargetIds(action, payload)
       if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
-      const results = await Promise.all(ids.map(async id => {
-        const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      const results = await sequentialMap(ids, async id => {
+        const res = await fetch(`${GRAPH}/${id}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...buildMetaHeaders(token) },
           body: new URLSearchParams({ status: "PAUSED" }).toString(),
         })
         return res.json()
-      }))
+      })
       const failed = results.filter(r => r.error)
       if (failed.length) return { event: ev, status: "failed", message: failed[0].error.message }
       addLog(logs, `${ev}: paused ${ids.length} item(s)`)
@@ -120,13 +121,13 @@ async function execMetaAction(
     case "enable_adset": {
       const ids = resolveTargetIds(action, payload)
       if (!ids.length) return { event: ev, status: "skipped", message: "No target IDs configured" }
-      const results = await Promise.all(ids.map(async id => {
-        const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      const results = await sequentialMap(ids, async id => {
+        const res = await fetch(`${GRAPH}/${id}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...buildMetaHeaders(token) },
           body: new URLSearchParams({ status: "ACTIVE" }).toString(),
         })
         return res.json()
-      }))
+      })
       const failed = results.filter(r => r.error)
       if (failed.length) return { event: ev, status: "failed", message: failed[0].error.message }
       addLog(logs, `${ev}: enabled ${ids.length} item(s)`)
@@ -148,8 +149,8 @@ async function execMetaAction(
 
       if (!amount || amount <= 0) return { event: ev, status: "skipped", message: "No valid budget amount configured — amount must be > 0" }
 
-      const updates = await Promise.all(ids.map(async id => {
-        const fetchRes = await fetch(`${GRAPH}/${id}?fields=${budgetField}&access_token=${token}`)
+      const updates = await sequentialMap(ids, async id => {
+        const fetchRes = await fetch(`${GRAPH}/${id}?fields=${budgetField}`, { headers: buildMetaHeaders(token) })
         const fetchData = await fetchRes.json()
         if (fetchData.error) return { id, error: fetchData.error.message }
 
@@ -166,14 +167,14 @@ async function execMetaAction(
         }
         next = Math.max(next, 100)
 
-        const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        const res = await fetch(`${GRAPH}/${id}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...buildMetaHeaders(token) },
           body: new URLSearchParams({ [budgetField]: String(next) }).toString(),
         })
         const data = await res.json()
         if (data.error) return { id, error: data.error.message }
         return { id, prev: current, next }
-      }))
+      })
 
       const failed = updates.filter(r => r.error)
       if (failed.length) return { event: ev, status: "failed", message: (failed[0] as any).error }
@@ -192,15 +193,15 @@ async function execMetaAction(
       const statusOpt  = action.duplicateStatus ?? "PAUSED"
       const deepCopy   = ev !== "duplicate_ad"
 
-      const results = await Promise.all(ids.map(async id => {
-        const qs = new URLSearchParams({ access_token: token, status_option: statusOpt, deep_copy: String(deepCopy) })
+      const results = await sequentialMap(ids, async id => {
+        const qs = new URLSearchParams({ status_option: statusOpt, deep_copy: String(deepCopy) })
         if (copies > 1) qs.set("count", String(copies))
-        const res = await fetch(`${GRAPH}/${id}/copies?${qs}`, { method: "POST" })
+        const res = await fetch(`${GRAPH}/${id}/copies?${qs}`, { method: "POST", headers: buildMetaHeaders(token) })
         const data = await res.json()
         if (data.error) return { id, error: data.error.message }
         const newId = data.copied_adset_id ?? data.copied_campaign_id ?? data.id
         return { id, newId }
-      }))
+      })
 
       const failed = results.filter(r => (r as any).error)
       if (failed.length) return { event: ev, status: "failed", message: (failed[0] as any).error }
@@ -215,15 +216,15 @@ async function execMetaAction(
       if (!adIds.length) return { event: ev, status: "skipped", message: "No target ad IDs configured" }
       if (!newCreativeId) return { event: ev, status: "skipped", message: "No new creative ID configured" }
 
-      const results = await Promise.all(adIds.map(async adId => {
-        const res = await fetch(`${GRAPH}/${adId}?access_token=${token}`, {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      const results = await sequentialMap(adIds, async adId => {
+        const res = await fetch(`${GRAPH}/${adId}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...buildMetaHeaders(token) },
           body: new URLSearchParams({ creative: JSON.stringify({ creative_id: newCreativeId }) }).toString(),
         })
         const data = await res.json()
         if (data.error) return { adId, error: data.error.message }
         return { adId, success: true }
-      }))
+      })
 
       const failed = results.filter(r => (r as any).error)
       if (failed.length) return { event: ev, status: "failed", message: (failed[0] as any).error }
@@ -238,15 +239,15 @@ async function execMetaAction(
       if (!ids.length) return { event: ev, status: "skipped", message: "No target ad set IDs configured" }
       if (!amount)     return { event: ev, status: "skipped", message: "No minimum spend amount configured" }
 
-      const results = await Promise.all(ids.map(async id => {
-        const res = await fetch(`${GRAPH}/${id}?access_token=${token}`, {
-          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      const results = await sequentialMap(ids, async id => {
+        const res = await fetch(`${GRAPH}/${id}`, {
+          method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...buildMetaHeaders(token) },
           body: new URLSearchParams({ spend_cap: String(Math.round(amount * 100)) }).toString(),
         })
         const data = await res.json()
         if (data.error) return { id, error: data.error.message }
         return { id, spendCap: amount }
-      }))
+      })
 
       const failed = results.filter(r => (r as any).error)
       if (failed.length) return { event: ev, status: "failed", message: (failed[0] as any).error }
@@ -261,7 +262,6 @@ async function execMetaAction(
 
       const actId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
       const ruleBody = new URLSearchParams({
-        access_token: token,
         account_id:   actId,
         name:         action.ruleName ?? "Auto Rule",
         evaluation_spec: JSON.stringify({ evaluation_type: "SCHEDULE", filters: action.ruleFilters ?? [] }),
@@ -270,7 +270,7 @@ async function execMetaAction(
         status:       "ENABLED",
       })
 
-      const res  = await fetch(`${GRAPH}/me/ad_rules`, { method: "POST", body: ruleBody })
+      const res  = await fetch(`${GRAPH}/me/ad_rules`, { method: "POST", body: ruleBody, headers: buildMetaHeaders(token) })
       const data = await res.json()
       if (data.error) return { event: ev, status: "failed", message: data.error.message }
       addLog(logs, `${ev}: created rule "${action.ruleName}" (id: ${data.id})`)
@@ -282,8 +282,8 @@ async function execMetaAction(
       const enable = action.enable !== false
       if (!ruleId) return { event: ev, status: "skipped", message: "No rule ID configured" }
 
-      const res  = await fetch(`${GRAPH}/${ruleId}?access_token=${token}`, {
-        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      const res  = await fetch(`${GRAPH}/${ruleId}`, {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", ...buildMetaHeaders(token) },
         body: new URLSearchParams({ status: enable ? "ENABLED" : "DISABLED" }).toString(),
       })
       const data = await res.json()
@@ -296,7 +296,7 @@ async function execMetaAction(
       const ruleId = action.ruleId
       if (!ruleId) return { event: ev, status: "skipped", message: "No rule ID configured" }
 
-      const res  = await fetch(`${GRAPH}/${ruleId}/execute?access_token=${token}`, { method: "POST" })
+      const res  = await fetch(`${GRAPH}/${ruleId}/execute`, { method: "POST", headers: buildMetaHeaders(token) })
       const data = await res.json()
       if (data.error) return { event: ev, status: "failed", message: data.error.message }
       addLog(logs, `${ev}: executed rule ${ruleId}`)

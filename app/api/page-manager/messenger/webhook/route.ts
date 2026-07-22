@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { after, NextRequest, NextResponse } from "next/server"
 import { getMessengerUserPicture, getMessengerUserProfile } from "@/lib/facebook"
 import { insertMessengerMessage, messengerMessageExists } from "@/lib/messenger-storage"
 import { storeCommentEvent } from "@/lib/page-manager-comment-webhook"
@@ -174,45 +174,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true }, { status: 200 })
     }
 
-    const supabase = createAdminClient()
-    const jobs: Promise<void>[] = []
+    // ponytail: Meta requires 200 OK within ~3s. Defer all DB/AI work to after()
+    // so we never block the response. Upgrade path: swap `after()` for a durable
+    // queue (QStash/Inngest) if `after()` is dropped from serverless billing.
+    after(() => processWebhookBody(body))
 
-    for (const entry of body.entry || []) {
-      const pageId = entry.id
-      if (!pageId) continue
-
-      const { data: pages } = await supabase
-        .from("pages")
-        .select("org_id, fb_page_id, name, page_access_token")
-        .eq("fb_page_id", pageId)
-
-      if (!pages?.length) continue
-
-      for (const event of entry.messaging || []) {
-        for (const page of pages) {
-          jobs.push(storeMessengerEvent(page, event))
-        }
-      }
-
-      for (const change of entry.changes || []) {
-        if (change?.field !== "feed") continue
-        const value = change.value
-        if (value?.item !== "comment" || !value?.comment_id) continue
-        for (const page of pages) {
-          jobs.push(
-            storeCommentEvent(supabase, page, value).then(() => undefined).catch(err => {
-              console.error("[messenger/webhook] comment ingest failed", err)
-            })
-          )
-        }
-      }
-    }
-
-    // Respond quickly to Meta and finish processing in this request lifecycle.
-    await Promise.allSettled(jobs)
     return NextResponse.json({ received: true }, { status: 200 })
   } catch (err) {
     console.error("[messenger/webhook]", err)
     return NextResponse.json({ error: err instanceof Error ? err.message : "Webhook error" }, { status: 500 })
   }
+}
+
+async function processWebhookBody(body: any) {
+  const supabase = createAdminClient()
+  const jobs: Promise<void>[] = []
+
+  for (const entry of body.entry || []) {
+    const pageId = entry.id
+    if (!pageId) continue
+
+    const { data: pages } = await supabase
+      .from("pages")
+      .select("org_id, fb_page_id, name, page_access_token")
+      .eq("fb_page_id", pageId)
+
+    if (!pages?.length) continue
+
+    for (const event of entry.messaging || []) {
+      for (const page of pages) {
+        jobs.push(storeMessengerEvent(page, event))
+      }
+    }
+
+    for (const change of entry.changes || []) {
+      if (change?.field !== "feed") continue
+      const value = change.value
+      if (value?.item !== "comment" || !value?.comment_id) continue
+      for (const page of pages) {
+        jobs.push(
+          storeCommentEvent(supabase, page, value).then(() => undefined).catch(err => {
+            console.error("[messenger/webhook] comment ingest failed", err)
+          })
+        )
+      }
+    }
+  }
+
+  await Promise.allSettled(jobs)
 }
