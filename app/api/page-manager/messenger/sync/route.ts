@@ -84,8 +84,9 @@ export async function POST(request: NextRequest) {
       const customerProfilePic = customerProfile?.profile_pic
         || await getMessengerUserPicture(customerPsid, pageToken.token)
       const profileName = [customerProfile?.first_name, customerProfile?.last_name].filter(Boolean).join(" ")
+      const participantName = typeof customer.name === "string" && customer.name.trim() ? customer.name.trim() : ""
       const customerName = profileName
-        || customer.name
+        || participantName
         || "Messenger User"
 
       // 2. Fetch message history for this conversation thread.

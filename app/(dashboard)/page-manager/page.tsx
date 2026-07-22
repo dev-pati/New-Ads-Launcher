@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ElementType, type React
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
   Popover,
@@ -56,18 +56,21 @@ import {
   IconDots,
   IconClock,
   IconGif,
+  IconUserPlus,
   IconInfoCircle,
   IconEye,
   IconEyeOff,
   IconExternalLink,
   IconFilter,
   IconMessage,
+  IconMoodHeart,
+  IconUser,
   IconBrandMessenger,
   IconLayoutList,
   IconList,
   IconClockPlay,
   IconMicrophone,
-  IconMoodSmile,
+  IconStar,
   IconPaperclip,
   IconPin,
   IconPhoto,
@@ -100,6 +103,31 @@ type PageItem = {
   posts: number
   note: string
 }
+
+const STICKER_PACKS = [
+  {
+    name: "Meep",
+    stickers: ["😊", "😍", "😘", "😜", "😂", "😢", "😡", "🤔", "😴", "👍", "👎", "👏"]
+  },
+  {
+    name: "Classic",
+    stickers: ["👍", "❤️", "😆", "😮", "😥", "😡", "✅", "❌", "💯", "🔥", "✨", "👋"]
+  }
+]
+
+const TRENDING_GIFS = [
+  { id: "gif_lol", emoji: "😂", label: "LOL" },
+  { id: "gif_thanks", emoji: "🙏", label: "Thank you" },
+  { id: "gif_love", emoji: "💖", label: "Love" },
+  { id: "gif_hello", emoji: "👋", label: "Hello" },
+  { id: "gif_ok", emoji: "👌", label: "OK" },
+  { id: "gif_sad", emoji: "😭", label: "Sad" },
+  { id: "gif_wow", emoji: "😲", label: "Wow" },
+  { id: "gif_party", emoji: "🎉", label: "Party" },
+]
+
+
+const STAFF_LIST = ["Antonio Sala", "Curtis Cribb", "Leonel Filipe", "Mohamed Safras", "Muhasin Husen Monir"]
 
 type PageOption = {
   id: string
@@ -146,7 +174,7 @@ type UnifiedInboxThread = {
   unread: number
   label: ThreadItem["label"]
   sentiment: ThreadItem["sentiment"]
-  responseStatus: "pending" | "replied" | "open" | "hidden"
+  responseStatus: "pending" | "replied" | "open" | "hidden" | "closed"
   status: string
   taskState: "open" | "closed"
   assignedTo: string
@@ -1374,7 +1402,27 @@ export default function PageManagerPage() {
   const [postScope, setPostScope] = useState<"all" | "public" | "dark">("all")
   const [darkPostPageScope, setDarkPostPageScope] = useState<"ad_account" | "selected_page">("selected_page")
   const [selectedThreadId, setSelectedThreadId] = useState(THREADS[0].id)
-  const [inboxSourceFilter, setInboxSourceFilter] = useState<"all" | "unread" | "messenger" | "comments" | "ad_comments" | "needs_human" | "orders" | "mentions" | "created_by_me" | "spam">("all")
+  const [inboxChannel, setInboxChannel] = useState<"all" | "messenger" | "instagram" | "fb_comments" | "ig_comments" | "comments">("all")
+  const [inboxStatuses, setInboxStatuses] = useState<string[]>([])
+  const [inboxFolders, setInboxFolders] = useState<string[]>([])
+  const [filterModalOpen, setFilterModalOpen] = useState(false)
+  const [filterSelections, setFilterSelections] = useState<{
+    frequentlyUsed: string[]
+    ads: string[]
+    labels: string[]
+    assignedAdmin: string[]
+    status: string[]
+    folder: string[]
+  }>({ frequentlyUsed: [], ads: [], labels: [], assignedAdmin: [], status: [], folder: [] })
+  const [assignPopoverOpen, setAssignPopoverOpen] = useState(false)
+  const [assignSearch, setAssignSearch] = useState("")
+  const [inboxFollowUps, setInboxFollowUps] = useState<Record<string, boolean>>({})
+  const [createOrderOpen, setCreateOrderOpen] = useState(false)
+  const [orderForm, setOrderForm] = useState({ productQuery: "", productName: "", amount: "", currency: "VND", description: "", attachmentName: "" })
+  const [inboxOrders, setInboxOrders] = useState<Record<string, { productName: string, amount: string, currency: string, description: string }[]>>({})
+  const [inboxLeadStages, setInboxLeadStages] = useState<Record<string, string>>({})
+  const [inboxNotes, setInboxNotes] = useState<Record<string, string>>({})
+  const [stickerPickerOpen, setStickerPickerOpen] = useState(false)
   const [inboxSearchQuery, setInboxSearchQuery] = useState("")
   const [inboxSearchOpen, setInboxSearchOpen] = useState(false)
   const [inboxSortMode, setInboxSortMode] = useState<"recent" | "alphabet">("recent")
@@ -1409,7 +1457,7 @@ export default function PageManagerPage() {
     document.addEventListener("mouseup", onMouseUp)
   }, [sidebarWidth, queueWidth])
   const [inboxListScrollTop, setInboxListScrollTop] = useState(0)
-  const [inboxContextOpen, setInboxContextOpen] = useState(false)
+  const [inboxContextOpen, setInboxContextOpen] = useState(true)
   const [selectedCommentFilter, setSelectedCommentFilter] = useState<CommentFilter>("all")
   const [commentSort, setCommentSort] = useState<CommentSort>("newest")
   const [query, setQuery] = useState("")
@@ -1474,15 +1522,35 @@ export default function PageManagerPage() {
   const [inboxReplyText, setInboxReplyText] = useState("")
   const [inboxReplyDrafts, setInboxReplyDrafts] = useState<Record<string, string>>({})
   const [inboxScheduleAt, setInboxScheduleAt] = useState("")
-  const [inboxEmotionStatus, setInboxEmotionStatus] = useState<"neutral" | "happy" | "concerned" | "urgent">("neutral")
   const [inboxAttachmentNote, setInboxAttachmentNote] = useState("")
   const [inboxGifQuery, setInboxGifQuery] = useState("")
+  const [inboxIsRecording, setInboxIsRecording] = useState(false)
+  const [inboxRecordingSecs, setInboxRecordingSecs] = useState(0)
+  const [activeStickerTab, setActiveStickerTab] = useState("Meep")
+  const [gifPickerOpen, setGifPickerOpen] = useState(false)
   const [inboxAiLoading, setInboxAiLoading] = useState(false)
   const [inboxAiError, setInboxAiError] = useState("")
   const [inboxAiResult, setInboxAiResult] = useState<AiReplyResult | null>(null)
   const [inboxAutoReplies, setInboxAutoReplies] = useState<Record<string, InboxReplyRecord>>({})
   const [inboxHandledThreads, setInboxHandledThreads] = useState<Record<string, boolean>>({})
   const [inboxAssignments, setInboxAssignments] = useState<Record<string, string>>({})
+
+  const toggleFilter = useCallback((group: keyof typeof filterSelections, value: string) => {
+    setFilterSelections(prev => ({
+      ...prev,
+      [group]: prev[group].includes(value)
+        ? prev[group].filter(v => v !== value)
+        : [...prev[group], value]
+    }))
+  }, [filterSelections])
+
+  const toggleStatus = useCallback((id: string) => {
+    setInboxStatuses(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
+  }, [])
+
+  const toggleFolder = useCallback((id: string) => {
+    setInboxFolders(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
+  }, [])
   const [inboxTaskState, setInboxTaskState] = useState<Record<string, "open" | "closed">>({})
   const [inboxPinnedThreads, setInboxPinnedThreads] = useState<Record<string, boolean>>({})
   const [inboxGroups, setInboxGroups] = useState<Record<string, string[]>>({})
@@ -1768,6 +1836,21 @@ export default function PageManagerPage() {
     }
   }, [copyTargetPageId, loadPageManagerSettings, pageOptions, selectedPage?.id])
 
+  const getThreadAvatarSrc = useCallback((t: UnifiedInboxThread): string | null | undefined => {
+    if ((t.sourceType === "facebook_comment" || t.sourceType === "instagram_comment") && t.comment?.from_id) {
+      return `https://graph.facebook.com/${t.comment.from_id}/picture?type=normal`
+    }
+    if ((t.sourceType === "messenger" || t.sourceType === "instagram_dm") && t.customerPsid && t.pageId) {
+      // Stored customerProfilePic is a Meta CDN URL that expires; proxy re-fetches a live one.
+      return `/api/facebook/user-picture?page_id=${t.pageId}&psid=${t.customerPsid}`
+    }
+    if (t.customerProfilePic) return t.customerProfilePic
+    if (t.id === "thread-1") {
+      return selectedPage?.picture || (selectedPage?.id ? `/api/facebook/page-picture?page_id=${selectedPage.id}` : "/applogo.webp")
+    }
+    return null
+  }, [selectedPage?.id, selectedPage?.picture])
+
   const generateAiReplyPreview = useCallback(async () => {
     const pageId = selectedPage?.id
     if (!pageId) return
@@ -1959,8 +2042,8 @@ export default function PageManagerPage() {
           latestMessage: reply ? `You: ${reply.text}` : thread.lastMessage,
           latestAt: reply?.at || thread.updatedAt,
           lastInteractionAt,
-          responseStatus: replied || handled ? "replied" : pending ? "pending" : "open",
-          status: replied || handled ? "replied" : inboxTaskState[thread.id] === "closed" ? "closed" : pending ? "pending" : settings.defaultStatus,
+          responseStatus: handled ? "closed" : (replied ? "replied" : pending ? "pending" : "open"),
+          status: handled ? "closed" : (replied ? "replied" : inboxTaskState[thread.id] === "closed" ? "closed" : pending ? "pending" : settings.defaultStatus),
           taskState: inboxTaskState[thread.id] || "open",
           assignedTo: getThreadAssignment(thread),
           tags: getThreadTags(thread),
@@ -2005,8 +2088,8 @@ export default function PageManagerPage() {
           latestMessage: reply ? `You: ${reply.text}` : comment.message,
           latestAt: reply?.at || baseThread.updatedAt,
           lastInteractionAt,
-          responseStatus: comment.is_hidden ? "hidden" : replied || handled ? "replied" : pending ? "pending" : "open",
-          status: comment.is_hidden ? "hidden" : replied || handled ? "replied" : inboxTaskState[id] === "closed" ? "closed" : pending ? "pending" : settings.defaultStatus,
+          responseStatus: handled ? "closed" : (comment.is_hidden ? "hidden" : replied ? "replied" : pending ? "pending" : "open"),
+          status: handled ? "closed" : (comment.is_hidden ? "hidden" : replied ? "replied" : inboxTaskState[id] === "closed" ? "closed" : pending ? "pending" : settings.defaultStatus),
           taskState: inboxTaskState[id] || (replied ? "closed" : "open"),
           assignedTo: getThreadAssignment(baseThread),
           tags,
@@ -2044,22 +2127,36 @@ export default function PageManagerPage() {
         const haystack = `${thread.name} ${thread.latestMessage} ${thread.sourceLabel} ${groupLabel} ${thread.assignedTo || ""} ${thread.tags.join(" ")} ${thread.responseStatus} ${thread.responseStatus === "pending" ? "open inbox" : ""}`.toLowerCase()
         if (!haystack.includes(normalizedQuery)) return false
       }
-      if (inboxSourceFilter === "unread") return thread.unread > 0 || thread.responseStatus === "pending"
-      if (inboxSourceFilter === "messenger") return thread.sourceType === "messenger"
-      if (inboxSourceFilter === "comments") return thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment"
-      if (inboxSourceFilter === "ad_comments") return (thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment") && Boolean(thread.postId)
-      if (inboxSourceFilter === "needs_human") return thread.sentiment === "negative" || thread.tags.some(tag => /support|hidden|spam|complaint|medical/i.test(tag))
-      if (inboxSourceFilter === "orders") return thread.tags.some(tag => /order|cod/i.test(tag))
-      if (inboxSourceFilter === "mentions") return thread.latestMessage.includes("@") || thread.tags.some(tag => tag.toLowerCase() === "mention")
-      if (inboxSourceFilter === "created_by_me") return thread.latestMessage.startsWith("You:") || thread.responseStatus === "replied"
-      if (inboxSourceFilter === "spam") return thread.tags.some(tag => /spam/i.test(tag))
+      const fs = filterSelections
+      if (inboxFolders.includes("done")) {
+        if (thread.responseStatus !== "closed") return false
+      } else {
+        if (thread.responseStatus === "closed") return false
+      }
+
+      if (inboxChannel === "messenger" && thread.sourceType !== "messenger") return false
+      if (inboxChannel === "instagram" && !thread.sourceType.includes("instagram_dm")) return false
+      if (inboxChannel === "fb_comments" && thread.sourceType !== "facebook_comment") return false
+      if (inboxChannel === "ig_comments" && thread.sourceType !== "instagram_comment") return false
+      if (inboxChannel === "comments" && !thread.sourceType.includes("comment")) return false
+
+      if (inboxStatuses.includes("unread") && !(thread.unread > 0 || thread.responseStatus === "pending")) return false
+      if (inboxStatuses.includes("priority") && thread.sentiment === "negative") return false
+      if (inboxStatuses.includes("ad_replies") && !thread.postId) return false
+      if (inboxStatuses.includes("follow_up") && !inboxFollowUps[thread.id]) return false
+
+      if (fs.labels.length > 0 && !fs.labels.some(l => thread.tags.includes(l))) return false
+      if (fs.assignedAdmin.length > 0 && !fs.assignedAdmin.some(x => (thread.assignedTo || "").includes(x))) return false
+      if (fs.status.length > 0 && !fs.status.includes(thread.responseStatus)) return false
+      if (fs.frequentlyUsed.includes("unread") && thread.unread <= 0) return false
+      if (fs.ads.includes("ad_comments") && !thread.postId) return false
       return true
     })
     if (inboxSortMode === "alphabet") {
       return [...matched].sort((a, b) => a.name.localeCompare(b.name))
     }
     return matched
-  }, [allPageThreads, inboxSearchQuery, inboxSourceFilter, inboxSortMode])
+  }, [allPageThreads, inboxSearchQuery, inboxChannel, inboxStatuses, inboxFolders, filterSelections, inboxFollowUps, inboxSortMode])
 
   const togglePinThread = useCallback((threadId: string) => {
     setInboxPinnedThreads(prev => {
@@ -2257,19 +2354,19 @@ export default function PageManagerPage() {
       >
         <InboxAvatar
           name={thread.name}
-          src={thread.customerProfilePic || (thread.id === "thread-1" ? (selectedPage?.picture || (selectedPage?.id ? `/api/facebook/page-picture?page_id=${selectedPage.id}` : "/applogo.webp")) : null)}
+          src={getThreadAvatarSrc(thread)}
           online={thread.unread > 0 || thread.responseStatus === "pending"}
           size={isCompact ? "sm" : "default"}
           sourceType={thread.sourceType as any}
         />
 
-        <div className="min-w-0 max-w-full">
+        <div className="min-w-0 max-w-full relative">
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
             <p className={cn("min-w-0 max-w-full truncate text-sm text-[#050505] dark:text-foreground", thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold" : "font-medium")}>
               {isPinned ? <IconPin className="mr-1 inline size-3.5 text-[#0084FF]" /> : null}
               {thread.name}
             </p>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 group-hover:opacity-0 transition-opacity">
               <span className="max-w-[84px] truncate text-xs text-[#65676B]">{thread.latestAt}</span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -2326,42 +2423,30 @@ export default function PageManagerPage() {
               {thread.unread > 0 ? <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0084FF] text-xs font-bold text-white">{thread.unread}</span> : null}
             </div>
           )}
-          <div className="mt-1 flex max-w-full flex-wrap items-center gap-1">
-            {slaText && (
-              <Badge className={cn("h-5 whitespace-nowrap rounded-full px-2 text-[10px] font-bold border-none", slaColorClass)}>
-                <IconClockPlay className="mr-0.5 size-3" />
-                {slaText}
-              </Badge>
-            )}
-            <Badge
-              variant="outline"
-              className={cn(
-                "h-5 whitespace-nowrap rounded-full px-2 text-xs",
-                thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment"
-                  ? "border-violet-200 bg-violet-50 text-violet-700"
-                  : "border-blue-200 bg-blue-50 text-blue-700"
-              )}
+
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-background/90 p-1 rounded-md">
+            <button
+              type="button"
+              title="Mark to follow up"
+              onClick={(e) => { e.stopPropagation(); setInboxFollowUps(p => ({ ...p, [thread.id]: !p[thread.id] })) }}
+              className={cn("p-1.5 rounded-full hover:bg-muted", inboxFollowUps[thread.id] && "text-orange-500")}
             >
-              {thread.sourceLabel}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={cn(
-                "h-5 whitespace-nowrap rounded-full px-2 text-xs",
-                thread.responseStatus === "replied" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-                thread.responseStatus === "pending" && "border-amber-200 bg-amber-50 text-amber-700",
-                thread.responseStatus === "hidden" && "border-slate-200 bg-slate-100 text-slate-700",
-                thread.responseStatus === "open" && "border-border/70 bg-muted/40 text-muted-foreground"
-              )}
+              <IconStar className={cn("size-4", inboxFollowUps[thread.id] && "fill-current")} />
+            </button>
+            <button
+              type="button"
+              title="Done"
+              onClick={(e) => {
+                e.stopPropagation()
+                if (thread.sourceType === "messenger" && thread.conversationId) {
+                  void patchMessengerConversation(thread.conversationId, thread.pageId, { status: "closed" })
+                }
+                setInboxHandledThreads(p => ({ ...p, [thread.id]: true }))
+              }}
+              className="p-1.5 rounded-full hover:bg-muted text-emerald-600"
             >
-              {thread.responseStatus === "replied" ? "Replied" : thread.responseStatus === "pending" ? "Pending" : thread.responseStatus === "hidden" ? "Hidden" : "Open"}
-            </Badge>
-            {isPinned && !isCompact ? (
-              <Badge variant="outline" className="h-5 whitespace-nowrap rounded-full border-blue-200 bg-blue-50 px-2 text-xs text-blue-700">Pinned</Badge>
-            ) : null}
-            {groupId && !isCompact ? (
-              <Badge variant="outline" className="h-5 whitespace-nowrap rounded-full border-slate-200 bg-slate-50 px-2 text-xs text-slate-700">Grouped</Badge>
-            ) : null}
+              <IconCheck className="size-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -2597,6 +2682,120 @@ export default function PageManagerPage() {
     }
   }, [pageManagerSettings.conversations.autoMarkRead, pageManagerSettings.conversations.taskManagementEnabled])
 
+  const sendLike = useCallback((threadId: string) => {
+    const thread = allPageThreads.find(t => t.id === threadId)
+    if (!thread) return
+    if (thread.sourceType === "messenger" && thread.conversationId && selectedPage?.id) {
+      void fetch("/api/page-manager/messenger/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_id: selectedPage.id, conversation_id: thread.conversationId, message: "👍" }),
+      }).then(() => loadMessengerInbox())
+    }
+    markInboxThreadReplied(threadId, "👍", "agent")
+  }, [allPageThreads, selectedPage?.id, loadMessengerInbox, markInboxThreadReplied])
+
+  const postSticker = useCallback((threadId: string, stickerEmoji: string) => {
+    const thread = allPageThreads.find(t => t.id === threadId)
+    if (!thread) return
+    const tag = `[Sticker: ${stickerEmoji}]`
+    if (thread.sourceType === "messenger" && thread.conversationId && selectedPage?.id) {
+      void fetch("/api/page-manager/messenger/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_id: selectedPage.id, conversation_id: thread.conversationId, message: tag }),
+      }).then(() => loadMessengerInbox())
+    }
+    markInboxThreadReplied(threadId, tag, "agent")
+    setStickerPickerOpen(false)
+  }, [allPageThreads, selectedPage?.id, loadMessengerInbox, markInboxThreadReplied])
+
+  const postGif = useCallback((threadId: string, gifEmoji: string) => {
+    const thread = allPageThreads.find(t => t.id === threadId)
+    if (!thread) return
+    const tag = `[GIF: ${gifEmoji}]`
+    if (thread.sourceType === "messenger" && thread.conversationId && selectedPage?.id) {
+      void fetch("/api/page-manager/messenger/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ page_id: selectedPage.id, conversation_id: thread.conversationId, message: tag }),
+      }).then(() => loadMessengerInbox())
+    }
+    markInboxThreadReplied(threadId, tag, "agent")
+    setGifPickerOpen(false)
+  }, [allPageThreads, selectedPage?.id, loadMessengerInbox, markInboxThreadReplied])
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (inboxIsRecording) {
+      interval = setInterval(() => {
+        setInboxRecordingSecs(s => s + 1)
+      }, 1000)
+    }
+    return () => clearInterval(interval)
+  }, [inboxIsRecording])
+
+  const toggleInboxRecording = useCallback(() => {
+    if (inboxIsRecording) {
+      setInboxIsRecording(false)
+      setInboxAttachmentNote(`voice_note_${inboxRecordingSecs}s.mp3`)
+    } else {
+      setInboxIsRecording(true)
+      setInboxRecordingSecs(0)
+    }
+  }, [inboxIsRecording, inboxRecordingSecs])
+
+  const createOrder = useCallback(() => {
+    if (!orderForm.productName.trim() || !orderForm.amount.trim()) return
+    const t = selectedThread
+    if (t?.id) {
+      const order = {
+        productName: orderForm.productName.trim(),
+        amount: orderForm.amount.trim(),
+        currency: orderForm.currency,
+        description: orderForm.description.trim(),
+      }
+      setInboxOrders(prev => ({ ...prev, [t.id]: [...(prev[t.id] || []), order] }))
+
+      const invoiceText = `🧾 Order created\nProduct: ${order.productName}\nAmount: ${Number(order.amount).toLocaleString()} ${order.currency}${order.description ? `\nNote: ${order.description}` : ""}`
+
+      if (t.sourceType === "messenger" && t.conversationId && selectedPage?.id) {
+        void fetch("/api/page-manager/messenger/reply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page_id: selectedPage.id, conversation_id: t.conversationId, message: invoiceText }),
+        }).then(() => loadMessengerInbox())
+      } else if ((t.sourceType === "facebook_comment" || t.sourceType === "instagram_comment") && t.commentId) {
+        void fetch("/api/page-manager/comment-reply", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comment_id: t.commentId, message: invoiceText }),
+        })
+      }
+      markInboxThreadReplied(t.id, invoiceText, "agent")
+    }
+    setCreateOrderOpen(false)
+    setOrderForm({ productQuery: "", productName: "", amount: "", currency: "VND", description: "", attachmentName: "" })
+  }, [orderForm, selectedThread, selectedPage?.id, loadMessengerInbox, markInboxThreadReplied])
+
+  const reloadCustomerProfile = useCallback((threadId: string) => {
+    if (!selectedThread || selectedThread.id !== threadId || !selectedPage?.id) return
+    void (async () => {
+      try {
+        if (selectedThread.sourceType === "messenger" || selectedThread.sourceType === "instagram_dm") {
+          await fetch("/api/page-manager/messenger/sync", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ page_id: selectedPage.id }),
+          })
+          await loadMessengerInbox()
+        }
+      } catch (e) {
+        console.warn("[reloadCustomerProfile] sync failed", e)
+      }
+    })()
+  }, [selectedThread, selectedPage?.id, loadMessengerInbox])
+
   const handleMarkAllInboxRead = useCallback(async () => {
     const unreadThreads = allPageThreads.filter(t => t.unread > 0 && t.sourceType === "messenger" && t.conversationId)
     if (!unreadThreads.length) return
@@ -2643,7 +2842,6 @@ export default function PageManagerPage() {
     if (!base && !inboxAttachmentNote.trim() && !inboxGifQuery.trim()) return
 
     const extras = [
-      inboxEmotionStatus !== "neutral" ? `[${inboxEmotionStatus}]` : "",
       inboxScheduleAt ? `[Scheduled: ${inboxScheduleAt}]` : "",
       inboxAttachmentNote.trim() ? `[Attachment: ${inboxAttachmentNote.trim()}]` : "",
       inboxGifQuery.trim() ? `[GIF: ${inboxGifQuery.trim()}]` : "",
@@ -2667,7 +2865,6 @@ export default function PageManagerPage() {
       setInboxScheduleAt("")
       setInboxAttachmentNote("")
       setInboxGifQuery("")
-      setInboxEmotionStatus("neutral")
       markInboxThreadReplied(selectedThread.id, `Scheduled: ${when.toLocaleString("en-US")}`, "agent")
       return
     }
@@ -2733,7 +2930,6 @@ export default function PageManagerPage() {
     setInboxScheduleAt("")
     setInboxAttachmentNote("")
     setInboxGifQuery("")
-    setInboxEmotionStatus("neutral")
     setInboxReplyDrafts(prev => {
       const next = { ...prev }
       delete next[selectedThread.id]
@@ -2741,7 +2937,6 @@ export default function PageManagerPage() {
     })
   }, [
     inboxAttachmentNote,
-    inboxEmotionStatus,
     inboxGifQuery,
     inboxReplyText,
     inboxScheduleAt,
@@ -2787,7 +2982,6 @@ export default function PageManagerPage() {
     setInboxAiError("")
     setInboxAiResult(null)
     setInboxScheduleAt("")
-    setInboxEmotionStatus("neutral")
     setInboxAttachmentNote("")
     setInboxGifQuery("")
     // Only restore when thread changes — not when drafts map updates from typing.
@@ -4843,85 +5037,108 @@ export default function PageManagerPage() {
                   <CardContent className="min-h-0 flex-1 overflow-y-auto p-1.5">
                     {isSidebarCollapsed && (
                       <div className="flex flex-col items-center gap-1 py-2">
-                        <button type="button" title="Your inbox" className="flex size-8 items-center justify-center rounded-lg text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted">
+                        <button type="button" title="All messages" onClick={() => setInboxChannel("all")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "all" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
                           <IconInbox className="size-4" />
                         </button>
-                        <button type="button" title="All" onClick={() => setInboxSourceFilter("all")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxSourceFilter === "all" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
-                          <IconLayoutList className="size-4" />
+                        <button type="button" title="Messenger" onClick={() => setInboxChannel("messenger")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "messenger" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                          <IconBrandMessenger className="size-4" />
+                        </button>
+                        <button type="button" title="Instagram" onClick={() => setInboxChannel("instagram")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "instagram" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                          <IconBrandInstagram className="size-4" />
+                        </button>
+                        <button type="button" title="Comments" onClick={() => setInboxChannel("comments")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "comments" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                          <IconMessage className="size-4" />
+                        </button>
+                        <button type="button" title="Follow up" onClick={() => toggleStatus("follow_up")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxStatuses.includes("follow_up") ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                          <IconStar className="size-4" />
+                        </button>
+                        <button type="button" title="Done" onClick={() => toggleFolder("done")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxFolders.includes("done") ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                          <IconCheck className="size-4" />
                         </button>
                       </div>
                     )}
                     {!isSidebarCollapsed && (
                       <>
                         <div className="space-y-0.5">
+                          <p className="px-2.5 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-[#65676B]">Messages</p>
                           {[
-                            { id: "all" as const, label: "Your inbox", count: allPageThreads.filter(thread => thread.assignedTo === "Me").length },
-                            { id: "mentions" as const, label: "Mentions", count: allPageThreads.filter(thread => thread.latestMessage.includes("@") || thread.tags.some(tag => tag.toLowerCase() === "mention")).length },
-                            { id: "created_by_me" as const, label: "Created by me", count: allPageThreads.filter(thread => thread.latestMessage.startsWith("You:") || thread.responseStatus === "replied").length },
-                          ].map(item => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => setInboxSourceFilter(item.id as typeof inboxSourceFilter)}
-                              className={cn(
-                                "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1 text-left text-sm font-medium transition-colors",
-                                inboxSourceFilter === item.id
-                                  ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
-                                  : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
-                              )}
-                            >
-                              <span className="truncate mr-1">{item.label}</span>
-                              {item.count > 0 ? <span className="shrink-0 text-xs opacity-70">{item.count}</span> : null}
-                            </button>
-                          ))}
-                        </div>
-
-                        <div className="mt-2 space-y-0.5">
-                          {[
-                            { id: "all", label: "All", count: allPageThreads.length },
-                            { id: "unread", label: "Needs action", count: allPageThreads.filter(thread => thread.unread > 0 || thread.responseStatus === "pending").length },
-                            { id: "messenger", label: "Messenger", count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
-                            { id: "comments", label: "Comments", count: allPageThreads.filter(thread => thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment").length },
-                            { id: "ad_comments", label: "Ad comments", count: allPageThreads.filter(thread => (thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment") && Boolean(thread.postId)).length },
-                            { id: "needs_human", label: "Needs Human", count: allPageThreads.filter(thread => thread.sentiment === "negative" || thread.tags.some(tag => /support|hidden|spam|complaint|medical/i.test(tag))).length },
-                            { id: "orders", label: "Orders", count: allPageThreads.filter(thread => thread.tags.some(tag => /order|cod/i.test(tag))).length },
-                          ].map(item => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => setInboxSourceFilter(item.id as typeof inboxSourceFilter)}
-                              className={cn(
-                                "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1 text-left text-sm font-medium transition-colors",
-                                inboxSourceFilter === item.id
-                                  ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
-                                  : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
-                              )}
-                            >
-                              <span className="truncate mr-1">{item.label}</span>
-                              <span className="shrink-0 text-xs opacity-70">{item.count}</span>
-                            </button>
-                          ))}
+                            { id: "all" as const, label: "All messages", icon: IconInbox, count: allPageThreads.length },
+                            { id: "messenger" as const, label: "Messenger", icon: IconBrandMessenger, count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
+                            { id: "instagram" as const, label: "Instagram", icon: IconBrandInstagram, count: allPageThreads.filter(thread => thread.sourceType.includes("instagram_dm")).length },
+                            { id: "comments" as const, label: "Comments", icon: IconMessage, count: allPageThreads.filter(thread => thread.sourceType.includes("comment")).length },
+                          ].map(item => {
+                            const active = inboxChannel === item.id
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => setInboxChannel(item.id)}
+                                className={cn(
+                                  "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
+                                  active
+                                    ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                    : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                                )}
+                              >
+                                <item.icon className="size-4 shrink-0" />
+                                <span className="truncate mr-1 flex-1">{item.label}</span>
+                                {item.count > 0 ? <span className="shrink-0 text-xs opacity-70">{item.count}</span> : null}
+                              </button>
+                            )
+                          })}
                         </div>
 
                         <div className="mt-2 space-y-0.5 border-t border-[#E4E6EB] pt-2 dark:border-border">
+                          <p className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-[#65676B]">Status</p>
                           {[
-                            { id: "spam" as const, label: "Spam", count: allPageThreads.filter(thread => thread.tags.some(tag => /spam/i.test(tag))).length },
-                          ].map(item => (
-                            <button
-                              key={item.id}
-                              type="button"
-                              onClick={() => setInboxSourceFilter(item.id as typeof inboxSourceFilter)}
-                              className={cn(
-                                "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1 text-left text-sm font-medium transition-colors",
-                                inboxSourceFilter === item.id
-                                  ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
-                                  : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
-                              )}
-                            >
-                              <span className="truncate mr-1">{item.label}</span>
-                              {item.count > 0 ? <span className="shrink-0 text-xs opacity-70">{item.count}</span> : null}
-                            </button>
-                          ))}
+                            { id: "unread", label: "Unread", count: allPageThreads.filter(thread => thread.unread > 0 || thread.responseStatus === "pending").length },
+                            { id: "priority", label: "Priority", count: allPageThreads.filter(thread => thread.sentiment === "negative").length },
+                            { id: "ad_replies", label: "Ad replies", count: allPageThreads.filter(thread => Boolean(thread.postId)).length },
+                            { id: "follow_up", label: "Follow up", count: Object.values(inboxFollowUps).filter(Boolean).length },
+                          ].map(item => {
+                            const active = inboxStatuses.includes(item.id)
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => toggleStatus(item.id)}
+                                className={cn(
+                                  "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
+                                  active
+                                    ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                    : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                                )}
+                              >
+                                <span className="truncate mr-1">{item.label}</span>
+                                {item.count > 0 ? <span className="shrink-0 text-xs opacity-70">{item.count}</span> : null}
+                              </button>
+                            )
+                          })}
+                        </div>
+
+                        <div className="mt-2 space-y-0.5 border-t border-[#E4E6EB] pt-2 dark:border-border">
+                          <p className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-[#65676B]">Folders</p>
+                          {[
+                            { id: "done", label: "Done / Closed", count: allPageThreads.filter(thread => thread.responseStatus === "closed").length },
+                          ].map(item => {
+                            const active = inboxFolders.includes(item.id)
+                            return (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => toggleFolder(item.id)}
+                                className={cn(
+                                  "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
+                                  active
+                                    ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                    : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                                )}
+                              >
+                                <span className="truncate mr-1">{item.label}</span>
+                                {item.count > 0 ? <span className="shrink-0 text-xs opacity-70">{item.count}</span> : null}
+                              </button>
+                            )
+                          })}
                         </div>
                       </>
                     )}
@@ -4970,67 +5187,69 @@ export default function PageManagerPage() {
                   className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background"
                   style={{ width: queueWidth }}
                 >
-                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border">
+                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border space-y-2">
+                    {/* Row 1: Channel Tabs (Meta style) */}
+                    <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none border-b border-muted">
+                      {[
+                        { id: "all" as const, label: "All messages", count: allPageThreads.length },
+                        { id: "messenger" as const, label: "Messenger", count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
+                        { id: "instagram" as const, label: "Instagram", count: allPageThreads.filter(thread => thread.sourceType.includes("instagram")).length },
+                        { id: "fb_comments" as const, label: "Facebook comments", count: allPageThreads.filter(thread => thread.sourceType === "facebook_comment").length },
+                        { id: "ig_comments" as const, label: "Instagram comments", count: allPageThreads.filter(thread => thread.sourceType === "instagram_comment").length },
+                      ].map(item => {
+                        const active = inboxChannel === item.id
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => setInboxChannel(item.id)}
+                            className={cn(
+                              "relative px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors rounded-lg",
+                              active ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#65676B] hover:bg-[#F0F2F5] dark:hover:bg-muted"
+                            )}
+                          >
+                            {item.label}
+                            {item.count > 0 ? (
+                              <span className="ml-1.5 rounded-full bg-red-500 px-1 py-0.5 text-[10px] font-bold text-white leading-none">
+                                {item.count > 9 ? "9+" : item.count}
+                              </span>
+                            ) : null}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    {/* Row 2: Open badge + Density */}
                     <div className="flex items-center justify-between gap-1.5">
-                      <Badge variant="outline" className="h-8 gap-1.5 rounded-full border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-400">
+                      <Badge variant="outline" className="h-7 gap-1.5 rounded-full border-emerald-200 bg-emerald-50 px-2.5 text-[11px] font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-400">
                         <span className="size-1.5 rounded-full bg-emerald-500" />
                         {allPageThreads.filter(thread => thread.responseStatus === "pending" || thread.responseStatus === "open").length} Open
                       </Badge>
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Popover open={inboxSortMenuOpen} onOpenChange={setInboxSortMenuOpen}>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" size="icon" className="size-8 rounded-full" title="Sort / filter">
-                              <IconFilter className="size-3.5" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="end" className="w-56 rounded-2xl p-2">
-                            <p className="px-2 pb-1 pt-1 text-xs font-semibold text-muted-foreground">Sort by</p>
-                            {([
-                              { id: "recent" as const, label: "Last activity" },
-                              { id: "alphabet" as const, label: "Name (A → Z)" },
-                            ]).map(opt => (
-                              <button
-                                key={opt.id}
-                                type="button"
-                                onClick={() => { setInboxSortMode(opt.id); setInboxSortMenuOpen(false) }}
-                                className={cn(
-                                  "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-sm hover:bg-muted",
-                                  inboxSortMode === opt.id && "bg-muted font-medium"
-                                )}
-                              >
-                                {opt.label}
-                                {inboxSortMode === opt.id ? <IconCheck className="size-3.5" /> : null}
-                              </button>
-                            ))}
-                          </PopoverContent>
-                        </Popover>
-                        <div className="flex items-center gap-0.5 rounded-full border border-[#E4E6EB] p-0.5 dark:border-border">
-                          <button
-                            type="button"
-                            title="Comfortable view"
-                            onClick={() => setViewDensity("comfortable")}
-                            className={cn(
-                              "flex size-7 items-center justify-center rounded-full transition-colors",
-                              viewDensity === "comfortable" ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] hover:bg-[#F0F2F5]"
-                            )}
-                          >
-                            <IconLayoutList className="size-4" />
-                          </button>
-                          <button
-                            type="button"
-                            title="Compact view"
-                            onClick={() => setViewDensity("compact")}
-                            className={cn(
-                              "flex size-7 items-center justify-center rounded-full transition-colors",
-                              viewDensity === "compact" ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] hover:bg-[#F0F2F5]"
-                            )}
-                          >
-                            <IconList className="size-4" />
-                          </button>
-                        </div>
+                      <div className="flex items-center gap-0.5 rounded-full border border-[#E4E6EB] p-0.5 dark:border-border">
+                        <button
+                          type="button"
+                          title="Comfortable view"
+                          onClick={() => setViewDensity("comfortable")}
+                          className={cn(
+                            "flex size-6 items-center justify-center rounded-full transition-colors",
+                            viewDensity === "comfortable" ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] hover:bg-[#F0F2F5]"
+                          )}
+                        >
+                          <IconLayoutList className="size-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Compact view"
+                          onClick={() => setViewDensity("compact")}
+                          className={cn(
+                            "flex size-6 items-center justify-center rounded-full transition-colors",
+                            viewDensity === "compact" ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] hover:bg-[#F0F2F5]"
+                          )}
+                        >
+                          <IconList className="size-3.5" />
+                        </button>
                       </div>
                     </div>
-
                   </CardHeader>
 
                   <CardContent className="flex min-h-0 flex-1 flex-col p-0">
@@ -5199,6 +5418,31 @@ export default function PageManagerPage() {
                       </div>
                     ) : null}
                   </CardContent>
+                  <CardFooter className="shrink-0 border-t border-[#E4E6EB] p-2 dark:border-border flex items-center justify-between">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs font-semibold gap-1.5 text-[#0084FF] hover:bg-[#E7F3FF] dark:text-primary dark:hover:bg-primary/15"
+                      onClick={() => setFilterModalOpen(true)}
+                    >
+                      <IconFilter className="size-3.5" />
+                      Filters
+                    </Button>
+                    {inboxStatuses.length > 0 || inboxFolders.length > 0 || Object.values(filterSelections).some(arr => arr.length > 0) ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs text-muted-foreground hover:bg-muted"
+                        onClick={() => {
+                          setInboxStatuses([])
+                          setInboxFolders([])
+                          setFilterSelections({ frequentlyUsed:[], ads:[], labels:[], assignedAdmin:[], status:[], folder:[] })
+                        }}
+                      >
+                        Clear filters
+                      </Button>
+                    ) : null}
+                  </CardFooter>
                 </Card>
 
                 <div
@@ -5209,6 +5453,68 @@ export default function PageManagerPage() {
 
                 <Card className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
                   <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border">
+                    <div className="mb-2 flex items-center justify-end gap-1.5">
+                      <Popover open={assignPopoverOpen} onOpenChange={setAssignPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-7 gap-1.5 rounded-full text-xs" title="Assign conversation">
+                            <IconUserPlus className="size-3.5" />
+                            {inboxAssignments[selectedThread.id] && inboxAssignments[selectedThread.id] !== "Unassigned" ? inboxAssignments[selectedThread.id] : "Assign"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-64 rounded-2xl p-2">
+                          <p className="px-2 pb-1 pt-1 text-sm font-semibold">Assign conversation</p>
+                          <input
+                            type="text"
+                            placeholder="Select someone from your business"
+                            className="mb-1 w-full rounded-lg border px-2 py-1.5 text-xs"
+                            value={assignSearch}
+                            onChange={event => setAssignSearch(event.target.value)}
+                          />
+                          <div className="max-h-56 overflow-y-auto">
+                            {STAFF_LIST.filter(s => s.toLowerCase().includes(assignSearch.toLowerCase())).map(staff => (
+                              <button
+                                key={staff}
+                                type="button"
+                                onClick={() => {
+                                  setInboxAssignments(prev => ({ ...prev, [selectedThread.id]: staff }))
+                                  if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
+                                    void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, { assigned_to: staff })
+                                  }
+                                  setAssignPopoverOpen(false)
+                                }}
+                                className={cn(
+                                  "flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted",
+                                  inboxAssignments[selectedThread.id] === staff && "bg-muted font-medium"
+                                )}
+                              >
+                                <span className="flex size-6 items-center justify-center rounded-full bg-[#E7F3FF] text-[10px] font-semibold text-[#0084FF]">
+                                  {staff.charAt(0)}
+                                </span>
+                                {staff}
+                              </button>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className={cn("h-7 gap-1.5 rounded-full text-xs", inboxScheduleAt && "border-primary text-primary")} title="Schedule reply">
+                            <IconCalendarTime className="size-3.5" />
+                            {inboxScheduleAt ? new Date(inboxScheduleAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Schedule"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-64 rounded-2xl p-3">
+                          <p className="px-1 pb-2 text-sm font-semibold">Schedule reply</p>
+                          <input
+                            type="datetime-local"
+                            className="w-full rounded-lg border px-2 py-1.5 text-sm"
+                            value={inboxScheduleAt}
+                            onChange={event => setInboxScheduleAt(event.target.value)}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-3">
                         <InboxAvatar
@@ -5295,10 +5601,10 @@ export default function PageManagerPage() {
                           size="sm"
                           className={cn("h-8 gap-1.5 rounded-full text-xs", inboxContextOpen && "border-primary bg-primary/5 text-primary")}
                           onClick={() => setInboxContextOpen(open => !open)}
-                          title={inboxContextOpen ? "Hide context panel" : "Show context panel"}
+                          title={inboxContextOpen ? "Hide profile panel" : "Show profile panel"}
                         >
-                          <IconColumns3 className="size-3.5" />
-                          Context
+                          <IconUser className="size-3.5" />
+                          Profile
                         </Button>
 
                         {selectedThread.sourceType === "facebook_comment" && selectedThread.comment?.fb_post_permalink ? (
@@ -5312,17 +5618,6 @@ export default function PageManagerPage() {
                             <IconExternalLink className="size-3.5" />
                           </Button>
                         ) : null}
-
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 gap-1.5 rounded-full bg-[#F0F2F5] text-xs text-[#050505] hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground"
-                          onClick={() => void runInboxAiAutoReply()}
-                          disabled={inboxAiLoading || !selectedThread?.lastMessage || selectedThread.id === "empty-inbox"}
-                        >
-                          {inboxAiLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSparkles className="size-3.5" />}
-                          AI Auto Reply
-                        </Button>
                       </div>
                     </div>
                   </CardHeader>
@@ -5611,16 +5906,31 @@ export default function PageManagerPage() {
                           </Popover>
 
                           <div className="ml-auto flex flex-wrap items-center gap-1">
-                            <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                            {inboxIsRecording && (
+                              <span className="animate-pulse text-xs font-semibold text-rose-500 mr-1">
+                                Recording ({Math.floor(inboxRecordingSecs / 60)}:{String(inboxRecordingSecs % 60).padStart(2, "0")})
+                              </span>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={cn(
+                                "size-8 rounded-full hover:bg-[#E7F3FF]",
+                                inboxIsRecording ? "bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700" : "text-[#0084FF] hover:text-[#0084FF]"
+                              )}
+                              title={inboxIsRecording ? "Stop and save recording" : "Record voice note"}
+                              onClick={toggleInboxRecording}
+                            >
                               <IconMicrophone className="size-4" />
                             </Button>
                             <label
                               className="inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-[#0084FF] hover:bg-[#E7F3FF]"
-                              title="Attach file / voice note (<100MB)"
+                              title="Đính kèm file hoặc ảnh (<100MB)"
                             >
                               <IconPaperclip className="size-4" />
                               <input
                                 type="file"
+                                accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.rar"
                                 className="hidden"
                                 onChange={event => {
                                   const file = event.target.files?.[0]
@@ -5635,26 +5945,10 @@ export default function PageManagerPage() {
                                 }}
                               />
                             </label>
-                            <Popover>
+
+                            <Popover open={gifPickerOpen} onOpenChange={setGifPickerOpen}>
                               <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                                  <IconPhoto className="size-4" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent align="start" className="w-72 rounded-2xl p-3">
-                                <p className="px-1 pb-2 text-sm font-semibold">Send photo / attachment</p>
-                                <input
-                                  type="url"
-                                  placeholder="https://..."
-                                  className="mb-2 w-full rounded-lg border px-2 py-1.5 text-sm"
-                                  onChange={event => setInboxAttachmentNote(event.target.value)}
-                                />
-                                <p className="text-xs text-muted-foreground">Ponytail: stores the filename/url as a note. Once real media upload exists, attach sends the file via Graph API.</p>
-                              </PopoverContent>
-                            </Popover>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]" title="Post a GIF">
                                   <IconGif className="size-4" />
                                 </Button>
                               </PopoverTrigger>
@@ -5663,43 +5957,76 @@ export default function PageManagerPage() {
                                 <input
                                   type="text"
                                   placeholder="e.g. thank you"
-                                  className="w-full rounded-lg border px-2 py-1.5 text-sm"
+                                  className="w-full rounded-lg border px-2 py-1.5 text-sm mb-3"
                                   value={inboxGifQuery}
                                   onChange={event => setInboxGifQuery(event.target.value)}
                                 />
-                                <p className="mt-2 text-xs text-muted-foreground">Ponytail: inserts a [GIF: …] tag. Tenor/GIPHY integration comes later.</p>
-                              </PopoverContent>
-                            </Popover>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                                  <IconMoodSmile className="size-4" />
-                                </Button>
-                              </PopoverTrigger>
-                              <PopoverContent align="end" className="w-56 rounded-2xl p-2">
-                                <p className="px-2 pb-1 pt-1 text-sm font-semibold">Emotion status</p>
-                                <div className="space-y-0.5">
-                                  {([
-                                    { id: "neutral", label: "Neutral" },
-                                    { id: "happy", label: "Happy" },
-                                    { id: "concerned", label: "Concerned" },
-                                    { id: "urgent", label: "Urgent" },
-                                  ] as const).map(opt => (
+                                <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+                                  {TRENDING_GIFS.filter(g => !inboxGifQuery || g.label.toLowerCase().includes(inboxGifQuery.toLowerCase())).map(gif => (
                                     <button
-                                      key={opt.id}
+                                      key={gif.id}
                                       type="button"
-                                      onClick={() => setInboxEmotionStatus(opt.id)}
-                                      className={cn(
-                                        "w-full rounded-lg px-3 py-1.5 text-left text-sm hover:bg-muted",
-                                        inboxEmotionStatus === opt.id && "bg-muted font-medium"
-                                      )}
+                                      onClick={() => postGif(selectedThread.id, gif.emoji)}
+                                      className="flex flex-col items-center justify-center rounded-lg border p-1 text-2xl hover:bg-muted"
+                                      title={gif.label}
                                     >
-                                      {opt.label}
+                                      <span>{gif.emoji}</span>
+                                      <span className="text-[9px] text-muted-foreground mt-0.5 truncate w-full text-center">{gif.label}</span>
                                     </button>
                                   ))}
                                 </div>
                               </PopoverContent>
                             </Popover>
+
+                            <Popover open={stickerPickerOpen} onOpenChange={setStickerPickerOpen}>
+                              <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]" title="Post a sticker">
+                                  <IconMoodHeart className="size-4" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent align="end" className="w-64 rounded-2xl p-3">
+                                <div className="flex items-center justify-between border-b pb-2 mb-2">
+                                  <p className="px-1 text-sm font-semibold">Stickers</p>
+                                  <div className="flex gap-1">
+                                    {STICKER_PACKS.map(pack => (
+                                      <button
+                                        key={pack.name}
+                                        type="button"
+                                        onClick={() => setActiveStickerTab(pack.name)}
+                                        className={cn(
+                                          "px-2 py-0.5 text-xs rounded-full border",
+                                          activeStickerTab === pack.name ? "bg-blue-50 border-blue-200 text-blue-600 font-medium" : "border-gray-200 text-gray-500"
+                                        )}
+                                      >
+                                        {pack.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto">
+                                  {(STICKER_PACKS.find(p => p.name === activeStickerTab)?.stickers || []).map((s, idx) => (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      onClick={() => postSticker(selectedThread.id, s)}
+                                      className="rounded-lg border p-2 text-2xl hover:bg-muted text-center flex items-center justify-center"
+                                    >
+                                      {s}
+                                    </button>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]"
+                              title="Send a like"
+                              onClick={() => sendLike(selectedThread.id)}
+                            >
+                              <IconThumbUp className="size-4" />
+                            </Button>
                           </div>
                         </div>
 
@@ -5708,59 +6035,18 @@ export default function PageManagerPage() {
                             <IconShield className="size-3.5" />
                             <span>AI must not invent prices, stock, discounts, or refund promises.</span>
                           </div>
+
                           <Button
-                            variant="outline"
+                            variant="secondary"
                             size="sm"
-                            className="h-8 gap-1.5 rounded-full bg-[#F8F9FA] text-[#050505] border-[#E4E6EB] hover:bg-[#E4E6EB] dark:bg-muted/50 dark:text-foreground dark:hover:bg-muted"
-                            onClick={() => {
-                              const current = inboxAssignments[selectedThread.id]
-                              const selfLabel = "Me"
-                              const next = current === selfLabel
-                                ? (pageManagerSettings.assignmentRules.defaultTeam || "Sales")
-                                : selfLabel
-                              setInboxAssignments(prev => ({
-                                ...prev,
-                                [selectedThread.id]: next,
-                              }))
-                              if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
-                                void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
-                                  assigned_to: next,
-                                })
-                              }
-                            }}
-                            disabled={!pageManagerSettings.assignmentRules.enabled}
-                            title={pageManagerSettings.assignmentRules.selfAssignEnabled ? "Click to self-assign / reassign" : "Enable assignment in Settings"}
+                            className="h-8 gap-1.5 rounded-full bg-[#F0F2F5] text-xs text-[#050505] hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground"
+                            onClick={() => void runInboxAiAutoReply()}
+                            disabled={inboxAiLoading || !selectedThread?.lastMessage || selectedThread.id === "empty-inbox"}
                           >
-                            <IconUsers className="size-3.5" />
-                            {inboxAssignments[selectedThread.id] === "Me"
-                              ? "Assigned to me"
-                              : inboxAssignments[selectedThread.id] || "Assign"}
+                            {inboxAiLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSparkles className="size-3.5" />}
+                            AI Auto Reply
                           </Button>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full bg-[#F8F9FA] text-[#050505] border-[#E4E6EB] hover:bg-[#E4E6EB] dark:bg-muted/50 dark:text-foreground dark:hover:bg-muted">
-                                <IconCalendarTime className="size-3.5" />
-                                Schedule
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="start" className="w-64 rounded-2xl p-3">
-                              <p className="px-1 pb-2 text-sm font-semibold">Schedule reply</p>
-                              <input
-                                type="datetime-local"
-                                className="w-full rounded-lg border px-2 py-1.5 text-sm"
-                                value={inboxScheduleAt}
-                                onChange={event => setInboxScheduleAt(event.target.value)}
-                              />
-                              <p className="mt-2 text-xs text-muted-foreground">Ponytail: stores a local scheduled draft. Real timed send needs a scheduled_messages worker later.</p>
-                            </PopoverContent>
-                          </Popover>
-                          <Button
-                            variant="outline"
-                            className="h-8 rounded-full px-4 text-xs"
-                            onClick={() => alert("Mock: Local draft saved")}
-                          >
-                            Save draft
-                          </Button>
+
                           <Button
                             className="h-8 gap-1.5 rounded-full bg-[#2548D8] px-4 text-xs text-white hover:bg-[#1C36A3]"
                             disabled={(!inboxReplyText.trim() && !inboxAttachmentNote.trim() && !inboxGifQuery.trim()) || commentActionLoading || messengerLoading || selectedThread.id === "empty-inbox"}
@@ -5770,9 +6056,8 @@ export default function PageManagerPage() {
                             Send
                           </Button>
                         </div>
-                        {(inboxAttachmentNote || inboxGifQuery || inboxScheduleAt || inboxEmotionStatus !== "neutral") && (
+                        {(inboxAttachmentNote || inboxGifQuery || inboxScheduleAt) && (
                           <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-                            {inboxEmotionStatus !== "neutral" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">Emotion: {inboxEmotionStatus}</span> : null}
                             {inboxScheduleAt ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Scheduled: {new Date(inboxScheduleAt).toLocaleString("en-US")}</span> : null}
                             {inboxAttachmentNote ? <span className="rounded-full bg-muted px-2 py-0.5">Attachment: {inboxAttachmentNote}</span> : null}
                             {inboxGifQuery ? <span className="rounded-full bg-muted px-2 py-0.5">GIF: {inboxGifQuery}</span> : null}
@@ -5784,143 +6069,234 @@ export default function PageManagerPage() {
                 </Card>
 
                 {inboxContextOpen ? (
-                  <Card className="flex h-full min-h-0 flex-col overflow-hidden rounded-none border-0 border-l border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
-                    <CardHeader className="shrink-0 border-b border-[#E4E6EB] p-3 dark:border-border">
-                      <CardTitle className="text-sm font-semibold">Context</CardTitle>
-                      <CardDescription className="text-xs">Thread details beside chat</CardDescription>
+                  <Card className="w-[250px] shrink-0 h-full min-h-0 flex flex-col overflow-hidden rounded-none border-0 border-l border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
+                    <CardHeader className="shrink-0 border-b border-[#E4E6EB] p-2 dark:border-border">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            title="Collapse panel"
+                            onClick={() => setInboxContextOpen(false)}
+                          >
+                            <IconX className="size-3.5" />
+                          </Button>
+                          <CardTitle className="text-xs font-semibold">Profile</CardTitle>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7"
+                          title="Reload profile"
+                          onClick={() => reloadCustomerProfile(selectedThread.id)}
+                        >
+                          <IconRefresh className="size-3.5" />
+                        </Button>
+                      </div>
                     </CardHeader>
                     <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 text-sm">
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-muted-foreground">Source</span>
-                          <Badge variant="outline" className="rounded-full text-xs">{selectedThread.sourceLabel}</Badge>
+                      {/* Profile Header */}
+                      <div className="flex flex-col items-center gap-2 pb-3 border-b border-[#E4E6EB] dark:border-border">
+                        <InboxAvatar
+                          name={selectedThread.name}
+                          src={selectedThread.customerProfilePic}
+                          size="lg"
+                          sourceType={selectedThread.sourceType === "messenger" ? "messenger" : selectedThread.sourceType === "facebook_comment" ? "facebook_comment" : selectedThread.sourceType === "instagram_comment" ? "instagram_comment" : "instagram_message"}
+                        />
+                        <div className="text-center">
+                          <p className="text-sm font-semibold">{selectedThread.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{selectedThread.sourceLabel}</p>
                         </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-muted-foreground">Status</span>
-                          <span className="font-medium capitalize">{selectedThreadMeta.taskState || selectedThread.responseStatus}</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-muted-foreground">Assignee</span>
-                          <span className="font-medium">{selectedThread.assignedTo || "Unassigned"}</span>
-                        </div>
-                        {selectedThread.sentiment ? (
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-muted-foreground">Sentiment</span>
-                            <span className="font-medium capitalize">{selectedThread.sentiment}</span>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {inboxAiResult ? (
-                        <div className="rounded-xl border border-border/70 bg-muted/30 p-3 space-y-2">
-                          <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
-                            <IconSparkles className="size-3.5" />
-                            AI suggestion
-                          </div>
-                          <div className="flex flex-wrap gap-1.5">
-                            <Badge variant="outline" className="rounded-full text-[11px]">Intent: {inboxAiResult.intent}</Badge>
-                            <Badge variant="outline" className="rounded-full text-[11px]">Confidence: {Math.round(inboxAiResult.confidence || 0)}%</Badge>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "rounded-full text-[11px]",
-                                inboxAiResult.riskLevel === "high" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              )}
-                            >
-                              Risk: {inboxAiResult.riskLevel}
-                            </Badge>
-                          </div>
-                          {inboxAiResult.draftReply ? (
-                            <p className="text-xs leading-relaxed text-muted-foreground line-clamp-6">{inboxAiResult.draftReply}</p>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
-                          Run AI Auto Reply to populate intent, confidence, and draft here.
-                        </div>
-                      )}
-
-                      {selectedThread.sourceType === "facebook_comment" || selectedThread.sourceType === "instagram_comment" ? (
-                        <div className="rounded-xl border border-border/70 p-3 space-y-2">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Post context</div>
-                          <p className="text-sm font-medium line-clamp-3">
-                            {selectedThread.comment?.fb_post_message || selectedThread.lastMessage || "Comment on Page post"}
-                          </p>
-                          {selectedThread.comment?.fb_post_permalink ? (
+                        {(() => {
+                          const fromId = selectedThread.comment?.from_id
+                          const profileId = fromId || selectedThread.customerPsid
+                          const href = profileId
+                            ? `https://www.facebook.com/${profileId}`
+                            : `https://www.facebook.com/search/people/?q=${encodeURIComponent(selectedThread.name)}`
+                          return (
                             <a
-                              href={selectedThread.comment.fb_post_permalink}
+                              href={href}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                              className="text-xs font-medium text-[#0084FF] hover:underline inline-flex items-center gap-1"
                             >
-                              <IconExternalLink className="size-3.5" />
-                              Open on Facebook
+                              <IconExternalLink className="size-3" />
+                              View Facebook profile
                             </a>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {selectedThread.tags?.length ? (
-                        <div className="space-y-2">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</div>
-                          <div className="flex flex-wrap gap-1.5">
-                            {selectedThread.tags.map(tag => (
-                              <Badge key={tag} variant="outline" className="rounded-full text-[11px]">{tag}</Badge>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {/* Mock Stripe Widget */}
-                      <div className="rounded-xl border border-border/70 p-3 space-y-3 bg-slate-50/50 dark:bg-muted/10">
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Stripe Billing</div>
-                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 rounded-full text-[10px]">Active</Badge>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Last payment</span>
-                            <span className="font-medium">$120.00</span>
-                          </div>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Card</span>
-                            <span>Visa ending in •••• 4242</span>
-                          </div>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full text-xs h-8 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950"
-                          onClick={() => alert("Mock Action: Refund flow would start here.")}
-                        >
-                          Issue Refund
-                        </Button>
+                          )
+                        })()}
                       </div>
 
-                      {/* Mock Shopify Widget */}
-                      <div className="rounded-xl border border-border/70 p-3 space-y-3 bg-emerald-50/50 dark:bg-emerald-950/10">
+                      {/* Contact details */}
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Contact details</p>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-muted-foreground">Phone</span>
+                          <span className="font-medium">{(selectedThread.latestMessage.match(/\d{8,}/) || ["—"])[0]}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-muted-foreground">Email</span>
+                          <span className="font-medium">—</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-muted-foreground">First seen</span>
+                          <span className="font-medium">{selectedThread.latestAt || "—"}</span>
+                        </div>
+                      </div>
+
+                      {/* Facebook profile */}
+                      <div className="space-y-1.5 border-t border-[#E4E6EB] pt-3 dark:border-border">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Facebook profile</p>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-muted-foreground">Local time</span>
+                          <span className="font-medium">GMT+7</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-muted-foreground">Lives in</span>
+                          <span className="font-medium">Ho Chi Minh City</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="text-muted-foreground">From</span>
+                          <span className="font-medium">Vietnam</span>
+                        </div>
+                      </div>
+
+                      {/* Activity (Recommended) */}
+                      <div className="space-y-2 border-t border-[#E4E6EB] pt-3 dark:border-border">
                         <div className="flex items-center justify-between">
-                          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Shopify Orders</div>
-                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 rounded-full text-[10px]">2 Orders</Badge>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Activity</p>
+                          <Badge variant="outline" className="border-[#E4E6EB] text-[10px] text-[#65676B] rounded-full">Recommended</Badge>
                         </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">Order #10294</span>
-                            <span className="font-medium">In Transit</span>
+
+                        {inboxAiResult ? (
+                          <div className="rounded-xl border border-border/70 bg-muted/30 p-2.5 space-y-1.5">
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-primary">
+                              <IconSparkles className="size-3" />
+                              AI suggestion
+                            </div>
+                            {inboxAiResult.draftReply ? (
+                              <p className="text-[11px] leading-relaxed text-muted-foreground line-clamp-4">{inboxAiResult.draftReply}</p>
+                            ) : null}
                           </div>
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Updated</span>
-                            <span>2 hours ago</span>
+                        ) : null}
+
+                        {/* Order status */}
+                        <div className="rounded-lg border border-[#E4E6EB] px-2.5 py-2 dark:border-border">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs font-semibold">Order status</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs border-[#0084FF]/30 text-[#0084FF] hover:bg-[#E7F3FF]"
+                              onClick={() => setCreateOrderOpen(true)}
+                            >
+                              + Create order
+                            </Button>
                           </div>
+                          {(inboxOrders[selectedThread.id]?.length ?? 0) > 0 ? (
+                            <div className="mt-1.5 space-y-1">
+                              {inboxOrders[selectedThread.id].map((o, i) => (
+                                <div key={i} className="rounded-md bg-[#E7F3FF]/60 px-2 py-1 text-[11px]">
+                                  <p className="font-medium text-[#050505] dark:text-foreground">{o.productName}</p>
+                                  <p className="text-[#65676B]">{Number(o.amount).toLocaleString()} {o.currency}{o.description ? ` · ${o.description}` : ""}</p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-1 text-[11px] text-muted-foreground">No order yet</p>
+                          )}
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full text-xs h-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-400 dark:hover:bg-emerald-950"
-                          onClick={() => window.open("https://shopify.com", "_blank")}
-                        >
-                          Track Package
-                        </Button>
+
+                        {/* Lead stage */}
+                        <div className="flex items-center justify-between rounded-lg border border-[#E4E6EB] px-2.5 py-2 dark:border-border">
+                          <div>
+                            <p className="text-xs font-semibold">Lead stage</p>
+                            <p className="text-[11px] text-muted-foreground capitalize">{inboxLeadStages[selectedThread.id] || "Not a lead"}</p>
+                          </div>
+                          <Select
+                            value={inboxLeadStages[selectedThread.id] || "none"}
+                            onValueChange={val => setInboxLeadStages(prev => ({ ...prev, [selectedThread.id]: val === "none" ? "" : val }))}
+                          >
+                            <SelectTrigger className="h-7 w-28 text-xs">
+                              <SelectValue placeholder="Mark as lead" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">None</SelectItem>
+                              <SelectItem value="lead">Lead</SelectItem>
+                              <SelectItem value="qualified">Qualified</SelectItem>
+                              <SelectItem value="customer">Customer</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Labels */}
+                      <div className="space-y-2 border-t border-[#E4E6EB] pt-3 dark:border-border">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Labels</p>
+                          <button
+                            type="button"
+                            onClick={() => { setTab("settings"); setSettingsTab("tags") }}
+                            className="text-[11px] font-semibold text-[#0084FF] hover:underline"
+                          >
+                            Manage labels
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(selectedThread.tags || []).map(tag => (
+                            <Badge key={tag} variant="outline" className="rounded-full text-[11px] border-[#0084FF]/30 bg-[#E7F3FF] text-[#0084FF]">
+                              {tag}
+                            </Badge>
+                          ))}
+                          {(!selectedThread.tags || selectedThread.tags.length === 0) && (
+                            <span className="text-[11px] text-muted-foreground">No labels yet</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] font-semibold text-[#65676B] pt-1">Suggested labels</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {pageManagerSettings.tags.availableTags
+                            .filter(t => !(selectedThread.tags || []).includes(t))
+                            .slice(0, 4)
+                            .map(tag => (
+                              <button
+                                key={tag}
+                                type="button"
+                                className="rounded-full border border-dashed border-[#E4E6EB] px-2 py-0.5 text-[11px] text-[#65676B] hover:bg-[#F0F2F5]"
+                              >
+                                + {tag}
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+
+                      {/* Notes */}
+                      <div className="space-y-2 border-t border-[#E4E6EB] pt-3 dark:border-border">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Notes</p>
+                          {inboxNotes[selectedThread.id] ? (
+                            <button
+                              type="button"
+                              onClick={() => setInboxNotes(prev => ({ ...prev, [selectedThread.id]: "" }))}
+                              className="text-[11px] font-semibold text-[#0084FF] hover:underline"
+                            >
+                              Clear
+                            </button>
+                          ) : null}
+                        </div>
+                        {inboxNotes[selectedThread.id] ? (
+                          <div className="rounded-lg border border-[#E4E6EB] bg-slate-50 p-2.5 text-xs whitespace-pre-wrap dark:bg-muted/10 dark:border-border">
+                            {inboxNotes[selectedThread.id]}
+                          </div>
+                        ) : (
+                          <Textarea
+                            placeholder="Add a note about this customer..."
+                            rows={3}
+                            className="text-xs resize-none"
+                            value={inboxNotes[selectedThread.id] || ""}
+                            onChange={e => setInboxNotes(prev => ({ ...prev, [selectedThread.id]: e.target.value }))}
+                          />
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -6718,6 +7094,271 @@ export default function PageManagerPage() {
                     <Button onClick={() => void publishPost()} disabled={composerLoading}>
                       {composerLoading ? <IconLoader2 className="mr-2 size-4 animate-spin" /> : null}
                       Publish
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Meta-style Filter Modal */}
+              <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
+                <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col p-0">
+                  <DialogHeader className="p-4 border-b">
+                    <DialogTitle className="text-base font-semibold flex items-center justify-between">
+                      Filters
+                    </DialogTitle>
+                  </DialogHeader>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* Frequently used */}
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Frequently used</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { id: "unread", label: "Unread" },
+                          { id: "needs_action", label: "Needs action" },
+                          { id: "follow_up", label: "Follow up" }
+                        ].map(item => (
+                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.frequentlyUsed.includes(item.id)}
+                              onChange={() => toggleFilter("frequentlyUsed", item.id)}
+                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
+                            />
+                            {item.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Ads */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Ads</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { id: "ad_comments", label: "Ad comments" },
+                          { id: "ad_replies", label: "Ad replies" }
+                        ].map(item => (
+                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.ads.includes(item.id)}
+                              onChange={() => toggleFilter("ads", item.id)}
+                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
+                            />
+                            {item.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Labels */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Labels</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {pageManagerSettings.tags.availableTags.map(tag => (
+                          <label key={tag} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.labels.includes(tag)}
+                              onChange={() => toggleFilter("labels", tag)}
+                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
+                            />
+                            {tag}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Assigned admin */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Assigned admin</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {STAFF_LIST.map(staff => (
+                          <label key={staff} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.assignedAdmin.includes(staff)}
+                              onChange={() => toggleFilter("assignedAdmin", staff)}
+                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
+                            />
+                            {staff}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Status</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { id: "open", label: "Open" },
+                          { id: "pending", label: "Pending" },
+                          { id: "replied", label: "Replied" },
+                          { id: "closed", label: "Closed" }
+                        ].map(item => (
+                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.status.includes(item.id)}
+                              onChange={() => toggleFilter("status", item.id)}
+                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
+                            />
+                            {item.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Folder */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Folder</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { id: "inbox", label: "Done" },
+                          { id: "spam", label: "Spam" }
+                        ].map(item => (
+                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.folder.includes(item.id)}
+                              onChange={() => toggleFilter("folder", item.id)}
+                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
+                            />
+                            {item.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="p-4 border-t flex items-center justify-between sm:justify-between bg-slate-50 dark:bg-muted/10">
+                    <Button
+                      variant="ghost"
+                      onClick={() => setFilterSelections({ frequentlyUsed: [], ads: [], labels: [], assignedAdmin: [], status: [], folder: [] })}
+                      className="text-[#65676B]"
+                    >
+                      Clear all
+                    </Button>
+                    <Button onClick={() => setFilterModalOpen(false)} className="bg-[#0084FF] text-white hover:bg-[#0073DF]">
+                      Apply
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Meta-style Create Order Modal */}
+              <Dialog open={createOrderOpen} onOpenChange={setCreateOrderOpen}>
+                <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="text-base font-semibold">Create order</DialogTitle>
+                    <DialogDescription className="text-xs">
+                      Send {selectedThread?.name || "customer"} details about their order and your preferred payment methods.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Search catalog</Label>
+                      <Input
+                        placeholder="Search products"
+                        value={orderForm.productQuery}
+                        onChange={e => setOrderForm(p => ({ ...p, productQuery: e.target.value }))}
+                        className="text-sm h-9"
+                      />
+                      <button type="button" className="text-xs font-semibold text-[#0084FF] hover:underline">
+                        Or enter details manually
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Product name · Optional</Label>
+                      <Input
+                        placeholder="Add a product name"
+                        value={orderForm.productName}
+                        onChange={e => setOrderForm(p => ({ ...p, productName: e.target.value }))}
+                        className="text-sm h-9"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-[1fr_120px] gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Amount</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#65676B] font-medium">$</span>
+                          <Input
+                            type="number"
+                            placeholder="0.00"
+                            value={orderForm.amount}
+                            onChange={e => setOrderForm(p => ({ ...p, amount: e.target.value }))}
+                            className="pl-7 text-sm h-9"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Currency</Label>
+                        <Select
+                          value={orderForm.currency}
+                          onValueChange={val => setOrderForm(p => ({ ...p, currency: val }))}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="VND" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="VND">VND</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="SGD">SGD</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Description · Optional</Label>
+                      <Textarea
+                        placeholder="Add description"
+                        value={orderForm.description}
+                        onChange={e => setOrderForm(p => ({ ...p, description: e.target.value }))}
+                        rows={3}
+                        className="text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Attach payment instructions · Optional</Label>
+                      <div className="border border-dashed rounded-xl p-6 text-center hover:bg-slate-50 dark:hover:bg-muted/10 cursor-pointer transition-colors relative">
+                        <input
+                          type="file"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={e => {
+                            const name = e.target.files?.[0]?.name || ""
+                            setOrderForm(p => ({ ...p, attachmentName: name }))
+                          }}
+                        />
+                        <p className="text-sm font-semibold text-[#050505] dark:text-foreground">
+                          {orderForm.attachmentName || "Drag and drop files"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Or <span className="text-[#0084FF]">choose files on your device</span>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-2">
+                          Three attachments maximum. Accepted file formats: .png, .jpg
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="border-t pt-4 flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setCreateOrderOpen(false)} className="text-sm h-9 px-4">
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={createOrder}
+                      disabled={!orderForm.productName.trim() || !orderForm.amount.trim()}
+                      className="bg-[#0084FF] text-white hover:bg-[#0073DF] text-sm h-9 px-4"
+                    >
+                      Create order
                     </Button>
                   </DialogFooter>
                 </DialogContent>
