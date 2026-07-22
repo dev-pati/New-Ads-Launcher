@@ -5,7 +5,7 @@ export type PageManageModule = "content" | "comment" | "inbox"
 export async function logPageManageActivity(
   supabase: any,
   params: {
-    actorId: string
+    actorId?: string | null
     orgId: string
     pageId: string
     module: PageManageModule
@@ -16,7 +16,7 @@ export async function logPageManageActivity(
   try {
     await supabase.from("page_manage_activity").insert({
       org_id: params.orgId,
-      actor_id: params.actorId,
+      actor_id: params.actorId ?? null,
       page_id: params.pageId,
       module: params.module,
       action: params.action,

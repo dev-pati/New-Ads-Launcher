@@ -42,6 +42,7 @@ import {
   IconBrandFacebook,
   IconBrandInstagram,
   IconArrowBackUp,
+  IconCalendarTime,
   IconCheck,
   IconChevronDown,
   IconCirclePlus,
@@ -54,8 +55,14 @@ import {
   IconExternalLink,
   IconFilter,
   IconMessage,
+  IconBrandMessenger,
+  IconLayoutList,
+  IconList,
+  IconClockPlay,
   IconMicrophone,
   IconMoodSmile,
+  IconPaperclip,
+  IconPin,
   IconPhoto,
   IconPlayerPlay,
   IconPlus,
@@ -65,9 +72,14 @@ import {
   IconSend,
   IconSettings,
   IconSparkles,
+  IconShield,
   IconThumbUp,
   IconVideo,
   IconUsers,
+  IconColumns3,
+  IconX,
+  IconInbox,
+  IconLayoutSidebar,
 } from "@tabler/icons-react"
 
 type PageItem = {
@@ -289,6 +301,7 @@ type AiReplyResult = {
   reason: string
   matchedRules: string[]
   matchedTemplate?: { id: string; name: string; shortcut: string } | null
+  evidence?: Array<{ id: string; title: string; kind: string; shortcut?: string }>
   customerLanguage?: "vi" | "en"
   guardrails?: {
     threshold: number
@@ -350,6 +363,11 @@ type ManagedComment = {
   is_replied: boolean
   draft_reply?: string | null
   fb_created_time: string | null
+  intent?: string | null
+  risk_level?: "low" | "medium" | "high" | null
+  assigned_to?: string | null
+  needs_human?: boolean | null
+  has_phone?: boolean | null
 }
 
 type MessengerMessage = {
@@ -434,8 +452,26 @@ type CommentAnalytics = {
   themes?: Array<{ theme: string; count: number }>
 }
 
-type CommentFilter = "all" | "unreplied" | "positive" | "neutral" | "negative"
+type CommentFilter = "all" | "unreplied" | "positive" | "neutral" | "negative" | "has_phone" | "competitor" | "ad_comments"
 type CommentSort = "newest" | "oldest" | "most-liked"
+
+const COMMENT_PHONE_RE = /(?:\+?84|0)\d[\d\s.()-]{7,14}\d|\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/
+
+function commentHasPhone(comment: { message?: string | null; has_phone?: boolean | null }) {
+  if (comment.has_phone) return true
+  return COMMENT_PHONE_RE.test(comment.message || "")
+}
+
+function commentIsCompetitor(
+  comment: { message?: string | null; themes?: string[] | null },
+  keywords: string[]
+) {
+  const msg = (comment.message || "").toLowerCase()
+  if (!msg) return false
+  if (/(?:inbox\s+mình|shop\s+bán\s+bên|zalo\s*:|liên\s*hệ\s*zalo)/i.test(msg)) return true
+  const fromSettings = (keywords || []).map(k => k.trim().toLowerCase()).filter(Boolean)
+  return fromSettings.some(k => msg.includes(k)) || (comment.themes || []).some(t => /competitor|spam|đối thủ/i.test(t))
+}
 
 type CacheEnvelope<T> = {
   ts: number
@@ -461,7 +497,7 @@ function readCachedValue<T>(key: string, ttlMs: number) {
 function writeCachedValue<T>(key: string, value: T) {
   try {
     sessionStorage.setItem(key, JSON.stringify({ ts: Date.now(), value } satisfies CacheEnvelope<T>))
-  } catch {}
+  } catch { }
 }
 
 function getTimeValue(value?: string | null) {
@@ -668,10 +704,10 @@ const RULES: RuleItem[] = [
 
 const PAGE_MANAGER_TABS = [
   { id: "inbox", label: "Inbox" },
-  { id: "posts", label: "Posts" },
-  { id: "comments", label: "Comments" },
-  { id: "statistics", label: "Statistics" },
-  { id: "settings", label: "Settings" },
+  { id: "posts", label: "Post" },
+  { id: "comments", label: "Comment" },
+  { id: "statistics", label: "Statistic" },
+  { id: "settings", label: "Setting" },
 ] as const
 
 const PERMISSIONS = [
@@ -816,11 +852,11 @@ function getMessengerAttachmentPreviews(message: MessengerMessage): MessengerAtt
 
       const title =
         type.includes("image") ? "Image" :
-        type.includes("video") ? "Video" :
-        type.includes("audio") ? "Audio" :
-        type.includes("file") ? "File" :
-        type.includes("sticker") ? "Sticker" :
-        "Attachment"
+          type.includes("video") ? "Video" :
+            type.includes("audio") ? "Audio" :
+              type.includes("file") ? "File" :
+                type.includes("sticker") ? "Sticker" :
+                  "Attachment"
 
       return { type, url, title }
     })
@@ -1010,19 +1046,35 @@ function InboxAvatar({
   src,
   size = "default",
   online,
+  sourceType,
 }: {
   name: string
   src?: string | null
   size?: "sm" | "default" | "lg"
   online?: boolean
+  sourceType?: "messenger" | "facebook_comment" | "instagram_comment" | "instagram_message"
 }) {
   const initial = name?.trim()?.charAt(0)?.toUpperCase() || "?"
   return (
-    <Avatar size={size} className={cn(size === "lg" && "size-14", size === "default" && "size-10", size === "sm" && "size-8")}>
-      {src ? <AvatarImage src={src} alt={name} /> : null}
-      <AvatarFallback className="bg-[#E4E6EB] text-[#050505]">{initial}</AvatarFallback>
-      {online ? <span className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-white bg-emerald-500" /> : null}
-    </Avatar>
+    <div className="relative inline-block">
+      <Avatar size={size} className={cn(size === "lg" && "size-14", size === "default" && "size-10", size === "sm" && "size-8")}>
+        {src ? <AvatarImage src={src} alt={name} /> : null}
+        <AvatarFallback className="bg-[#E4E6EB] text-[#050505]">{initial}</AvatarFallback>
+        {online ? <span className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-white bg-emerald-500" /> : null}
+      </Avatar>
+      {sourceType && (
+        <span className={cn(
+          "absolute -bottom-1 -right-1 flex items-center justify-center rounded-full border border-white p-0.5 shadow-sm",
+          sourceType === "messenger" ? "bg-[#0084FF] text-white" : "bg-[#1877F2] text-white"
+        )}>
+          {sourceType === "messenger" ? (
+            <IconBrandMessenger className="size-2.5" />
+          ) : (
+            <IconMessage className="size-2.5" />
+          )}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -1308,12 +1360,44 @@ export default function PageManagerPage() {
   const [adAccountsError, setAdAccountsError] = useState("")
   const [datePreset, setDatePreset] = useState("last_30d")
   const [tab, setTab] = useState<(typeof PAGE_MANAGER_TABS)[number]["id"]>("inbox")
+  const [viewDensity, setViewDensity] = useState<"comfortable" | "compact">("comfortable")
+  const [activeAgents, setActiveAgents] = useState<{ [threadId: string]: string[] }>({
+    "thread-1": ["Kevin", "Seth"] // Mock state for Agent Collision testing
+  })
   const [postScope, setPostScope] = useState<"all" | "public" | "dark">("all")
   const [darkPostPageScope, setDarkPostPageScope] = useState<"ad_account" | "selected_page">("selected_page")
   const [selectedThreadId, setSelectedThreadId] = useState(THREADS[0].id)
-  const [inboxSourceFilter, setInboxSourceFilter] = useState<"all" | "unread" | "messenger" | "comments">("all")
+  const [inboxSourceFilter, setInboxSourceFilter] = useState<"all" | "unread" | "messenger" | "comments" | "ad_comments" | "needs_human" | "orders" | "mentions" | "created_by_me" | "spam">("all")
   const [inboxSearchQuery, setInboxSearchQuery] = useState("")
+  const [inboxSearchOpen, setInboxSearchOpen] = useState(false)
+  const [inboxSortMode, setInboxSortMode] = useState<"recent" | "alphabet">("recent")
+  const [inboxSortMenuOpen, setInboxSortMenuOpen] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(220)
+  const [queueWidth, setQueueWidth] = useState(360)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
+
+  const handleDragResize = useCallback((type: "sidebar" | "queue") => (e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = type === "sidebar" ? sidebarWidth : queueWidth
+    const frameMax = Math.round(window.innerWidth * 0.3)
+    const min = type === "sidebar" ? 180 : 280
+    const max = Math.min(frameMax, type === "sidebar" ? 480 : 720)
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = moveEvent.clientX - startX
+      const newWidth = Math.max(min, Math.min(startWidth + delta, max))
+      if (type === "sidebar") setSidebarWidth(newWidth)
+      else setQueueWidth(newWidth)
+    }
+    const onMouseUp = () => {
+      document.removeEventListener("mousemove", onMouseMove)
+      document.removeEventListener("mouseup", onMouseUp)
+    }
+    document.addEventListener("mousemove", onMouseMove)
+    document.addEventListener("mouseup", onMouseUp)
+  }, [sidebarWidth, queueWidth])
   const [inboxListScrollTop, setInboxListScrollTop] = useState(0)
+  const [inboxContextOpen, setInboxContextOpen] = useState(false)
   const [selectedCommentFilter, setSelectedCommentFilter] = useState<CommentFilter>("all")
   const [commentSort, setCommentSort] = useState<CommentSort>("newest")
   const [query, setQuery] = useState("")
@@ -1376,6 +1460,11 @@ export default function PageManagerPage() {
   const [aiReplyError, setAiReplyError] = useState("")
   const [aiReplyResult, setAiReplyResult] = useState<AiReplyResult | null>(null)
   const [inboxReplyText, setInboxReplyText] = useState("")
+  const [inboxReplyDrafts, setInboxReplyDrafts] = useState<Record<string, string>>({})
+  const [inboxScheduleAt, setInboxScheduleAt] = useState("")
+  const [inboxEmotionStatus, setInboxEmotionStatus] = useState<"neutral" | "happy" | "concerned" | "urgent">("neutral")
+  const [inboxAttachmentNote, setInboxAttachmentNote] = useState("")
+  const [inboxGifQuery, setInboxGifQuery] = useState("")
   const [inboxAiLoading, setInboxAiLoading] = useState(false)
   const [inboxAiError, setInboxAiError] = useState("")
   const [inboxAiResult, setInboxAiResult] = useState<AiReplyResult | null>(null)
@@ -1383,6 +1472,11 @@ export default function PageManagerPage() {
   const [inboxHandledThreads, setInboxHandledThreads] = useState<Record<string, boolean>>({})
   const [inboxAssignments, setInboxAssignments] = useState<Record<string, string>>({})
   const [inboxTaskState, setInboxTaskState] = useState<Record<string, "open" | "closed">>({})
+  const [inboxPinnedThreads, setInboxPinnedThreads] = useState<Record<string, boolean>>({})
+  const [inboxGroups, setInboxGroups] = useState<Record<string, string[]>>({})
+  const [inboxGroupCollapsed, setInboxGroupCollapsed] = useState<Record<string, boolean>>({})
+  const [draggingThreadId, setDraggingThreadId] = useState<string | null>(null)
+  const [pinnedContextMenu, setPinnedContextMenu] = useState<{ threadId: string; x: number; y: number } | null>(null)
   const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
   const [inboxAiProcessedThreads, setInboxAiProcessedThreads] = useState<Record<string, boolean>>({})
   const [messengerConversations, setMessengerConversations] = useState<MessengerConversation[]>([])
@@ -1921,6 +2015,7 @@ export default function PageManagerPage() {
     inboxHandledThreads,
     inboxAutoReplies,
     inboxAssignments,
+    inboxPinnedThreads,
     inboxTaskState,
     pageManagerSettings.conversations,
     selectedDemoPage,
@@ -1929,34 +2024,299 @@ export default function PageManagerPage() {
 
   const pageThreads = useMemo(() => {
     const normalizedQuery = inboxSearchQuery.trim().toLowerCase()
-    return allPageThreads.filter(thread => {
+    const matched = allPageThreads.filter(thread => {
       if (normalizedQuery) {
-        const haystack = `${thread.name} ${thread.latestMessage} ${thread.sourceLabel} ${thread.assignedTo || ""}`.toLowerCase()
+        const groupLabel = thread.sourceType === "facebook_comment"
+          ? thread.postId ? "ad comments" : "comments"
+          : "messenger"
+        const haystack = `${thread.name} ${thread.latestMessage} ${thread.sourceLabel} ${groupLabel} ${thread.assignedTo || ""} ${thread.tags.join(" ")} ${thread.responseStatus} ${thread.responseStatus === "pending" ? "open inbox" : ""}`.toLowerCase()
         if (!haystack.includes(normalizedQuery)) return false
       }
       if (inboxSourceFilter === "unread") return thread.unread > 0 || thread.responseStatus === "pending"
       if (inboxSourceFilter === "messenger") return thread.sourceType === "messenger"
       if (inboxSourceFilter === "comments") return thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment"
+      if (inboxSourceFilter === "ad_comments") return (thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment") && Boolean(thread.postId)
+      if (inboxSourceFilter === "needs_human") return thread.sentiment === "negative" || thread.tags.some(tag => /support|hidden|spam|complaint|medical/i.test(tag))
+      if (inboxSourceFilter === "orders") return thread.tags.some(tag => /order|cod/i.test(tag))
+      if (inboxSourceFilter === "mentions") return thread.latestMessage.includes("@") || thread.tags.some(tag => tag.toLowerCase() === "mention")
+      if (inboxSourceFilter === "created_by_me") return thread.latestMessage.startsWith("You:") || thread.responseStatus === "replied"
+      if (inboxSourceFilter === "spam") return thread.tags.some(tag => /spam/i.test(tag))
       return true
     })
-  }, [allPageThreads, inboxSearchQuery, inboxSourceFilter])
-
-  const virtualizedPageThreads = useMemo(() => {
-    const rowHeight = 96
-    const viewportHeight = 500
-    const overscan = 5
-    const startIndex = Math.max(0, Math.floor(inboxListScrollTop / rowHeight) - overscan)
-    const visibleCount = Math.ceil(viewportHeight / rowHeight) + overscan * 2
-    const endIndex = Math.min(pageThreads.length, startIndex + visibleCount)
-
-    return {
-      rowHeight,
-      startIndex,
-      visibleThreads: pageThreads.slice(startIndex, endIndex),
-      totalHeight: pageThreads.length * rowHeight,
-      offsetTop: startIndex * rowHeight,
+    if (inboxSortMode === "alphabet") {
+      return [...matched].sort((a, b) => a.name.localeCompare(b.name))
     }
-  }, [inboxListScrollTop, pageThreads])
+    return matched
+  }, [allPageThreads, inboxSearchQuery, inboxSourceFilter, inboxSortMode])
+
+  const togglePinThread = useCallback((threadId: string) => {
+    setInboxPinnedThreads(prev => {
+      const next = { ...prev }
+      if (next[threadId]) delete next[threadId]
+      else next[threadId] = true
+      return next
+    })
+    setPinnedContextMenu(null)
+  }, [])
+
+  const threadGroupId = useCallback((threadId: string): string | null => {
+    for (const [leadId, members] of Object.entries(inboxGroups)) {
+      if (members.includes(threadId)) return leadId
+    }
+    return null
+  }, [inboxGroups])
+
+  // Drag thread B onto thread A → group (iPhone-folder style).
+  const mergeThreadInto = useCallback((draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return
+    setInboxGroups(prev => {
+      const next: Record<string, string[]> = {}
+      for (const [lead, members] of Object.entries(prev)) {
+        const filtered = members.filter(id => id !== draggedId)
+        if (filtered.length >= 2) next[lead] = filtered
+        // else: group dissolves when it drops below 2 members
+      }
+
+      const targetGroupLead = (() => {
+        for (const [lead, members] of Object.entries(next)) {
+          if (members.includes(targetId)) return lead
+        }
+        return null
+      })()
+
+      if (targetGroupLead) {
+        next[targetGroupLead] = Array.from(new Set([...next[targetGroupLead], draggedId]))
+      } else {
+        next[targetId] = Array.from(new Set([targetId, draggedId]))
+      }
+
+      return next
+    })
+  }, [])
+
+  const removeThreadFromGroup = useCallback((threadId: string) => {
+    setInboxGroups(prev => {
+      const next: Record<string, string[]> = {}
+      for (const [lead, members] of Object.entries(prev)) {
+        const filtered = members.filter(id => id !== threadId)
+        if (filtered.length >= 2) {
+          next[filtered.includes(lead) ? lead : filtered[0]] = filtered
+        }
+      }
+      return next
+    })
+  }, [])
+
+  const dismissGroup = useCallback((groupId: string) => {
+    setInboxGroups(prev => {
+      const next = { ...prev }
+      delete next[groupId]
+      return next
+    })
+    setInboxGroupCollapsed(prev => {
+      const next = { ...prev }
+      delete next[groupId]
+      return next
+    })
+  }, [])
+
+  const groupedPageThreads = useMemo(() => {
+    const byId = new Map(pageThreads.map(thread => [thread.id, thread]))
+    const consumed = new Set<string>()
+    const items: Array<
+      | { kind: "thread"; thread: UnifiedInboxThread }
+      | { kind: "group"; groupId: string; lead: UnifiedInboxThread; members: UnifiedInboxThread[] }
+    > = []
+
+    for (const thread of pageThreads) {
+      if (consumed.has(thread.id)) continue
+      const members = (inboxGroups[thread.id] || []).map(id => byId.get(id)).filter(Boolean) as UnifiedInboxThread[]
+      if (members.length >= 2) {
+        members.forEach(member => consumed.add(member.id))
+        items.push({ kind: "group", groupId: thread.id, lead: thread, members })
+        continue
+      }
+      if (threadGroupId(thread.id)) continue
+      items.push({ kind: "thread", thread })
+    }
+
+    return items
+  }, [inboxGroups, pageThreads, threadGroupId])
+
+  const pinnedPageThreads = useMemo(
+    () => pageThreads.filter(thread => inboxPinnedThreads[thread.id]),
+    [inboxPinnedThreads, pageThreads]
+  )
+
+  const renderPinnedAvatar = useCallback((thread: UnifiedInboxThread) => (
+    <button
+      key={`pinned-${thread.id}`}
+      type="button"
+      draggable
+      title={thread.name}
+      onDragStart={event => {
+        setDraggingThreadId(thread.id)
+        event.dataTransfer.setData("text/plain", thread.id)
+        event.dataTransfer.effectAllowed = "move"
+      }}
+      onDragEnd={() => setDraggingThreadId(null)}
+      onClick={() => setSelectedThreadId(thread.id)}
+      onContextMenu={event => {
+        event.preventDefault()
+        setPinnedContextMenu({ threadId: thread.id, x: event.clientX, y: event.clientY })
+      }}
+      className={cn(
+        "rounded-full p-0.5 transition-colors hover:bg-[#E7F3FF]",
+        selectedThreadId === thread.id && "bg-[#E7F3FF] ring-2 ring-[#0084FF]/35"
+      )}
+    >
+      <InboxAvatar
+        name={thread.name}
+        src={thread.customerProfilePic || (thread.id === "thread-1" ? (selectedPage?.picture || (selectedPage?.id ? `/api/facebook/page-picture?page_id=${selectedPage.id}` : "/applogo.webp")) : null)}
+        online={thread.unread > 0 || thread.responseStatus === "pending"}
+      />
+    </button>
+  ), [selectedPage?.id, selectedPage?.picture, selectedThreadId])
+
+  const renderInboxThreadCard = useCallback((thread: UnifiedInboxThread) => {
+    const isActive = selectedThreadId === thread.id
+    const isPinned = Boolean(inboxPinnedThreads[thread.id])
+    const groupId = threadGroupId(thread.id)
+    const isCompact = viewDensity === "compact"
+
+    // SLA Countdown Calculation (15 minutes limit)
+    let slaText = ""
+    let slaColorClass = ""
+    if (thread.responseStatus === "pending" && thread.lastInteractionAt) {
+      const msElapsed = Date.now() - thread.lastInteractionAt
+      const msRemaining = (15 * 60 * 1000) - msElapsed
+      if (msRemaining <= 0) {
+        slaText = "EXPIRED"
+        slaColorClass = "bg-red-500 text-white animate-pulse"
+      } else {
+        const minsRemaining = Math.floor(msRemaining / (60 * 1000))
+        slaText = `${minsRemaining}m SLA`
+        if (minsRemaining <= 5) {
+          slaColorClass = "bg-amber-500 text-white animate-pulse"
+        } else {
+          slaColorClass = "bg-emerald-500 text-white"
+        }
+      }
+    }
+
+    return (
+      <button
+        key={thread.id}
+        draggable
+        onDragStart={event => {
+          setDraggingThreadId(thread.id)
+          event.dataTransfer.setData("text/plain", thread.id)
+          event.dataTransfer.effectAllowed = "move"
+        }}
+        onDragEnd={() => setDraggingThreadId(null)}
+        onDragOver={event => {
+          if (draggingThreadId && draggingThreadId !== thread.id) event.preventDefault()
+        }}
+        onDrop={event => {
+          event.preventDefault()
+          const draggedId = event.dataTransfer.getData("text/plain") || draggingThreadId
+          if (draggedId && draggedId !== thread.id) mergeThreadInto(draggedId, thread.id)
+          setDraggingThreadId(null)
+        }}
+        onClick={() => setSelectedThreadId(thread.id)}
+        onContextMenu={event => {
+          event.preventDefault()
+          setPinnedContextMenu({ threadId: thread.id, x: event.clientX, y: event.clientY })
+        }}
+        className={cn(
+          "grid w-full min-w-0 items-start gap-2.5 rounded-2xl px-3 text-left transition-colors",
+          isCompact ? "min-h-[64px] grid-cols-[36px_minmax(0,1fr)] py-1.5" : "min-h-[92px] grid-cols-[48px_minmax(0,1fr)] py-2",
+          isActive ? "bg-[#E7F3FF] dark:bg-primary/15" : "hover:bg-[#F0F2F5] dark:hover:bg-muted/70",
+          isPinned && "ring-1 ring-[#0084FF]/25"
+        )}
+      >
+        <InboxAvatar
+          name={thread.name}
+          src={thread.customerProfilePic || (thread.id === "thread-1" ? (selectedPage?.picture || (selectedPage?.id ? `/api/facebook/page-picture?page_id=${selectedPage.id}` : "/applogo.webp")) : null)}
+          online={thread.unread > 0 || thread.responseStatus === "pending"}
+          size={isCompact ? "sm" : "default"}
+          sourceType={thread.sourceType as any}
+        />
+
+        <div className="min-w-0 max-w-full">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+            <p className={cn("min-w-0 max-w-full truncate text-sm text-[#050505] dark:text-foreground", thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold" : "font-medium")}>
+              {isPinned ? <IconPin className="mr-1 inline size-3.5 text-[#0084FF]" /> : null}
+              {thread.name}
+            </p>
+            <span className="max-w-[84px] truncate text-xs text-[#65676B]">{thread.latestAt}</span>
+          </div>
+          {!isCompact && (
+            <div className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+              <p className={cn(
+                "min-w-0 max-w-full truncate text-xs leading-5",
+                thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold text-[#050505] dark:text-foreground" : "text-[#65676B]"
+              )}>
+                {thread.latestMessage}
+              </p>
+              {thread.unread > 0 ? <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0084FF] text-xs font-bold text-white">{thread.unread}</span> : null}
+            </div>
+          )}
+          <div className="mt-1 flex max-w-full flex-wrap items-center gap-1">
+            {slaText && (
+              <Badge className={cn("h-5 whitespace-nowrap rounded-full px-2 text-[10px] font-bold border-none", slaColorClass)}>
+                <IconClockPlay className="mr-0.5 size-3" />
+                {slaText}
+              </Badge>
+            )}
+            <Badge
+              variant="outline"
+              className={cn(
+                "h-5 whitespace-nowrap rounded-full px-2 text-xs",
+                thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment"
+                  ? "border-violet-200 bg-violet-50 text-violet-700"
+                  : "border-blue-200 bg-blue-50 text-blue-700"
+              )}
+            >
+              {thread.sourceLabel}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={cn(
+                "h-5 whitespace-nowrap rounded-full px-2 text-xs",
+                thread.responseStatus === "replied" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+                thread.responseStatus === "pending" && "border-amber-200 bg-amber-50 text-amber-700",
+                thread.responseStatus === "hidden" && "border-slate-200 bg-slate-100 text-slate-700",
+                thread.responseStatus === "open" && "border-border/70 bg-muted/40 text-muted-foreground"
+              )}
+            >
+              {thread.responseStatus === "replied" ? "Replied" : thread.responseStatus === "pending" ? "Pending" : thread.responseStatus === "hidden" ? "Hidden" : "Open"}
+            </Badge>
+            {isPinned && !isCompact ? (
+              <Badge variant="outline" className="h-5 whitespace-nowrap rounded-full border-blue-200 bg-blue-50 px-2 text-xs text-blue-700">Pinned</Badge>
+            ) : null}
+            {groupId && !isCompact ? (
+              <Badge variant="outline" className="h-5 whitespace-nowrap rounded-full border-slate-200 bg-slate-50 px-2 text-xs text-slate-700">Grouped</Badge>
+            ) : null}
+          </div>
+          {!isCompact && (
+            <div className="mt-1 flex max-w-full items-center gap-1 text-xs text-[#65676B]">
+              {thread.assignedTo && thread.assignedTo !== "Unassigned" ? <span className="truncate">{thread.assignedTo}</span> : <span>Unassigned</span>}
+            </div>
+          )}
+        </div>
+      </button>
+    )
+  }, [
+    draggingThreadId,
+    inboxPinnedThreads,
+    mergeThreadInto,
+    selectedPage?.id,
+    selectedPage?.picture,
+    selectedThreadId,
+    threadGroupId,
+    viewDensity,
+  ])
 
   const selectedThread = useMemo(
     () => pageThreads.find(t => t.id === selectedThreadId) || pageThreads[0] || {
@@ -2054,7 +2414,9 @@ export default function PageManagerPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.error) throw new Error(data.error || "Unable to run inbox AI auto reply.")
       const result = data as AiReplyResult
-      if (isSelectedThread) setInboxAiResult(result)
+      if (isSelectedThread) {
+        setInboxAiResult(result)
+      }
 
       if (result.action === "send") {
         if (thread.sourceType === "facebook_comment" && thread.commentId) {
@@ -2065,7 +2427,7 @@ export default function PageManagerPage() {
           })
           const replyData = await replyRes.json().catch(() => ({}))
           if (!replyRes.ok || replyData.error) throw new Error(replyData.error || "Unable to send AI comment reply.")
-          try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch {}
+          try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch { }
           setComments(prev => prev.map(comment => (
             comment.id === thread.commentId
               ? { ...comment, is_replied: true, draft_reply: result.draftReply }
@@ -2105,7 +2467,10 @@ export default function PageManagerPage() {
         }
         if (isSelectedThread) setInboxReplyText("")
       } else if (result.action === "draft") {
-        if (isSelectedThread) setInboxReplyText(result.draftReply)
+        if (isSelectedThread) {
+          setInboxReplyText(result.draftReply)
+          setInboxReplyDrafts(prev => ({ ...prev, [thread.id]: result.draftReply }))
+        }
       } else if (result.action === "assign") {
         setInboxAssignments(prev => ({
           ...prev,
@@ -2149,6 +2514,7 @@ export default function PageManagerPage() {
     }
 
     setInboxReplyText(body)
+    setInboxReplyDrafts(prev => ({ ...prev, [selectedThread.id]: body }))
     setTemplatePickerOpen(false)
   }, [pageManagerSettings.quickReplyTemplates.spinSyntaxEnabled, pageManagerSettings.quickReplyTemplates.variablesEnabled, selectedThread])
 
@@ -2174,8 +2540,38 @@ export default function PageManagerPage() {
 
   const handleReplyInboxThread = useCallback(async () => {
     if (!selectedThread || !selectedPage?.id) return
-    const message = inboxReplyText.trim()
+    const base = inboxReplyText.trim()
+    if (!base && !inboxAttachmentNote.trim() && !inboxGifQuery.trim()) return
+
+    const extras = [
+      inboxEmotionStatus !== "neutral" ? `[${inboxEmotionStatus}]` : "",
+      inboxScheduleAt ? `[Scheduled: ${inboxScheduleAt}]` : "",
+      inboxAttachmentNote.trim() ? `[Attachment: ${inboxAttachmentNote.trim()}]` : "",
+      inboxGifQuery.trim() ? `[GIF: ${inboxGifQuery.trim()}]` : "",
+    ].filter(Boolean)
+    const message = [base, ...extras].filter(Boolean).join("\n").trim()
     if (!message) return
+
+    if (inboxScheduleAt) {
+      const when = new Date(inboxScheduleAt)
+      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+        setInboxAiError("Schedule time must be in the future.")
+        return
+      }
+      // ponytail: client-side schedule only until posts/messages schedule worker exists
+      setInboxReplyDrafts(prev => ({
+        ...prev,
+        [selectedThread.id]: `[SCHEDULE ${when.toISOString()}]\n${base}`,
+      }))
+      setInboxAiError("")
+      setInboxReplyText("")
+      setInboxScheduleAt("")
+      setInboxAttachmentNote("")
+      setInboxGifQuery("")
+      setInboxEmotionStatus("neutral")
+      markInboxThreadReplied(selectedThread.id, `Scheduled: ${when.toLocaleString("en-US")}`, "agent")
+      return
+    }
 
     setInboxAiError("")
     let persistedReply = false
@@ -2190,7 +2586,7 @@ export default function PageManagerPage() {
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(data.error || "Unable to reply to comment.")
-        try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch {}
+        try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch { }
         setComments(prev => prev.map(comment => (
           comment.id === selectedThread.commentId
             ? { ...comment, is_replied: true, draft_reply: message }
@@ -2206,7 +2602,7 @@ export default function PageManagerPage() {
       }
     }
 
-    if ((selectedThread.sourceType === "messenger" || selectedThread.sourceType === "facebook_comment") && selectedThread.conversationId) {
+    if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
       setMessengerLoading(true)
       try {
         const res = await fetch("/api/page-manager/messenger/reply", {
@@ -2220,7 +2616,6 @@ export default function PageManagerPage() {
         })
         const data = await res.json().catch(() => ({}))
         if (!res.ok || data.error) throw new Error(data.error || "Unable to send Messenger reply.")
-        setInboxReplyText("")
         await loadMessengerInbox()
         persistedReply = true
       } catch (err: any) {
@@ -2236,7 +2631,26 @@ export default function PageManagerPage() {
       markInboxThreadReplied(selectedThread.id, message, "agent")
     }
     setInboxReplyText("")
-  }, [inboxReplyText, loadMessengerInbox, markInboxThreadReplied, selectedPage?.id, selectedThread])
+    setInboxScheduleAt("")
+    setInboxAttachmentNote("")
+    setInboxGifQuery("")
+    setInboxEmotionStatus("neutral")
+    setInboxReplyDrafts(prev => {
+      const next = { ...prev }
+      delete next[selectedThread.id]
+      return next
+    })
+  }, [
+    inboxAttachmentNote,
+    inboxEmotionStatus,
+    inboxGifQuery,
+    inboxReplyText,
+    inboxScheduleAt,
+    loadMessengerInbox,
+    markInboxThreadReplied,
+    selectedPage?.id,
+    selectedThread,
+  ])
 
   const handleToggleInboxCommentHidden = useCallback(async () => {
     if (!selectedThread?.comment || !selectedThread.commentId || !selectedPage?.id) return
@@ -2253,7 +2667,7 @@ export default function PageManagerPage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || "Unable to update comment visibility.")
-      try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch {}
+      try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch { }
       setComments(prev => prev.map(comment => (
         comment.id === selectedThread.commentId
           ? { ...comment, is_hidden: nextHidden }
@@ -2268,10 +2682,107 @@ export default function PageManagerPage() {
   }, [selectedPage?.id, selectedThread])
 
   useEffect(() => {
-    setInboxReplyText("")
+    if (!selectedThread?.id) return
+    const draft = inboxReplyDrafts[selectedThread.id] || ""
+    setInboxReplyText(draft)
     setInboxAiError("")
     setInboxAiResult(null)
+    setInboxScheduleAt("")
+    setInboxEmotionStatus("neutral")
+    setInboxAttachmentNote("")
+    setInboxGifQuery("")
+    // Only restore when thread changes — not when drafts map updates from typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedThread?.id])
+
+  useEffect(() => {
+    if (!selectedThread?.id) return
+    const timer = window.setTimeout(() => {
+      setInboxReplyDrafts(prev => {
+        if ((prev[selectedThread.id] || "") === inboxReplyText) return prev
+        return { ...prev, [selectedThread.id]: inboxReplyText }
+      })
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [inboxReplyText, selectedThread?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    const key = `page_manager_inbox_drafts:${selectedPage.id}`
+    try {
+      const raw = window.localStorage.getItem(key)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        setInboxReplyDrafts(parsed)
+        if (selectedThread?.id) setInboxReplyText(parsed[selectedThread.id] || "")
+      }
+    } catch { }
+  }, [selectedPage?.id, selectedThread?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    try {
+      window.localStorage.setItem(`page_manager_inbox_drafts:${selectedPage.id}`, JSON.stringify(inboxReplyDrafts))
+    } catch { }
+  }, [inboxReplyDrafts, selectedPage?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    try {
+      const raw = window.localStorage.getItem(`page_manager_inbox_pins:${selectedPage.id}`)
+      setInboxPinnedThreads(raw ? JSON.parse(raw) : {})
+    } catch {
+      setInboxPinnedThreads({})
+    }
+  }, [selectedPage?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    try {
+      window.localStorage.setItem(`page_manager_inbox_pins:${selectedPage.id}`, JSON.stringify(inboxPinnedThreads))
+    } catch { }
+  }, [inboxPinnedThreads, selectedPage?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    try {
+      const raw = window.localStorage.getItem(`page_manager_inbox_groups:${selectedPage.id}`)
+      setInboxGroups(raw ? JSON.parse(raw) : {})
+    } catch {
+      setInboxGroups({})
+    }
+    try {
+      const rawCollapse = window.localStorage.getItem(`page_manager_inbox_group_collapsed:${selectedPage.id}`)
+      setInboxGroupCollapsed(rawCollapse ? JSON.parse(rawCollapse) : {})
+    } catch {
+      setInboxGroupCollapsed({})
+    }
+  }, [selectedPage?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    try {
+      window.localStorage.setItem(`page_manager_inbox_groups:${selectedPage.id}`, JSON.stringify(inboxGroups))
+    } catch { }
+  }, [inboxGroups, selectedPage?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    try {
+      window.localStorage.setItem(`page_manager_inbox_group_collapsed:${selectedPage.id}`, JSON.stringify(inboxGroupCollapsed))
+    } catch { }
+  }, [inboxGroupCollapsed, selectedPage?.id])
+
+  useEffect(() => {
+    if (!pinnedContextMenu) return
+    const close = () => setPinnedContextMenu(null)
+    window.addEventListener("click", close)
+    window.addEventListener("scroll", close, true)
+    return () => {
+      window.removeEventListener("click", close)
+      window.removeEventListener("scroll", close, true)
+    }
+  }, [pinnedContextMenu])
 
   useEffect(() => {
     if (tab !== "inbox") return
@@ -2420,14 +2931,14 @@ export default function PageManagerPage() {
       if (!res.ok) {
         let errorMsg = data.error || "Unable to sync comments."
         if (data.needsReconnect || data.type === "object_unavailable" || data.type === "token") {
-          try { sessionStorage.removeItem("page_manager_pages_cache") } catch {}
-          errorMsg = "Page này không còn truy cập được bằng token hiện tại. Hãy reconnect Facebook, refresh danh sách Page, rồi chọn lại Page."
+          try { sessionStorage.removeItem("page_manager_pages_cache") } catch { }
+          errorMsg = "This Page is no longer accessible with the current token. Reconnect Facebook, refresh the Page list, then select the Page again."
         } else if (data.type === "permission" || errorMsg.includes("pages_read_engagement") || errorMsg.includes("Public Content Access")) {
-          errorMsg = "Lỗi đồng bộ Comments: Facebook App cần quyền 'pages_read_engagement' để đọc bình luận. Với app Live, quyền này cần App Review cho user ngoài role app."
+          errorMsg = "Comment sync failed: the Facebook App needs 'pages_read_engagement' to read comments. In Live mode, this needs App Review for users outside app roles."
         }
         throw new Error(errorMsg)
       }
-      try { sessionStorage.removeItem(`page_manager_comments:${pageId}`) } catch {}
+      try { sessionStorage.removeItem(`page_manager_comments:${pageId}`) } catch { }
       await loadComments(true)
     } catch (err: any) {
       setCommentsError(err?.message || "Unable to sync comments.")
@@ -2455,10 +2966,10 @@ export default function PageManagerPage() {
       if (!res.ok) {
         let errorMsg = data.error || "Unable to sync Messenger."
         if (data.needsReconnect || data.type === "object_unavailable" || data.type === "token") {
-          try { sessionStorage.removeItem("page_manager_pages_cache") } catch {}
-          errorMsg = "Page này không còn truy cập được bằng token hiện tại. Hãy reconnect Facebook, refresh danh sách Page, rồi chọn lại Page."
+          try { sessionStorage.removeItem("page_manager_pages_cache") } catch { }
+          errorMsg = "This Page is no longer accessible with the current token. Reconnect Facebook, refresh the Page list, then select the Page again."
         } else if (data.type === "permission" || data.code === 200 || errorMsg.includes("pages_messaging") || errorMsg.includes("appropriate role")) {
-          errorMsg = "Lỗi đồng bộ Messenger: Facebook App cần quyền 'pages_messaging' để đọc tin nhắn. Với app Live, quyền này cần App Review cho user ngoài role app."
+          errorMsg = "Messenger sync failed: the Facebook App needs 'pages_messaging' to read messages. In Live mode, this needs App Review for users outside app roles."
         }
         throw new Error(errorMsg)
       }
@@ -2491,10 +3002,10 @@ export default function PageManagerPage() {
       if (!res.ok || data.error) {
         let errorMsg = data.error || "Unable to enable Messenger webhooks."
         if (data.needsReconnect || data.type === "object_unavailable" || data.type === "token") {
-          try { sessionStorage.removeItem("page_manager_pages_cache") } catch {}
-          errorMsg = "Page này không còn truy cập được bằng token hiện tại. Hãy reconnect Facebook, refresh danh sách Page, rồi chọn lại Page."
+          try { sessionStorage.removeItem("page_manager_pages_cache") } catch { }
+          errorMsg = "This Page is no longer accessible with the current token. Reconnect Facebook, refresh the Page list, then select the Page again."
         } else if (data.type === "permission" || errorMsg.includes("pages_manage_metadata")) {
-          errorMsg = "Không bật được webhook: Facebook App cần quyền 'pages_manage_metadata' cho Page này."
+          errorMsg = "Could not enable webhooks: the Facebook App needs 'pages_manage_metadata' for this Page."
         }
         throw new Error(errorMsg)
       }
@@ -2531,9 +3042,14 @@ export default function PageManagerPage() {
   const visibleComments = useMemo(() => {
     const search = query.trim().toLowerCase()
 
+    const competitorKeywords = pageManagerSettings.commentModeration.competitorKeywords
+
     const filtered = comments.filter(comment => {
       if (selectedCommentFilter === "unreplied" && comment.is_replied) return false
-      if (selectedCommentFilter !== "all" && selectedCommentFilter !== "unreplied" && comment.sentiment !== selectedCommentFilter) return false
+      if (selectedCommentFilter === "has_phone" && !commentHasPhone(comment)) return false
+      if (selectedCommentFilter === "competitor" && !commentIsCompetitor(comment, competitorKeywords)) return false
+      if (selectedCommentFilter === "ad_comments" && !comment.fb_post_id) return false
+      if (!["all", "unreplied", "has_phone", "competitor", "ad_comments"].includes(selectedCommentFilter) && comment.sentiment !== selectedCommentFilter) return false
 
       if (!search) return true
 
@@ -2569,7 +3085,7 @@ export default function PageManagerPage() {
     }
 
     return sorted
-  }, [comments, commentSort, query, selectedCommentFilter])
+  }, [comments, commentSort, pageManagerSettings.commentModeration.competitorKeywords, query, selectedCommentFilter])
 
   const selectedComment = useMemo(
     () => visibleComments.find(comment => comment.id === selectedCommentId) || visibleComments[0] || null,
@@ -2596,14 +3112,18 @@ export default function PageManagerPage() {
   }, [visibleComments, selectedCommentId])
 
   const commentCounts = useMemo(() => {
+    const competitorKeywords = pageManagerSettings.commentModeration.competitorKeywords
     return {
       all: comments.length,
       unreplied: comments.filter(comment => !comment.is_replied).length,
       positive: comments.filter(comment => comment.sentiment === "positive").length,
       neutral: comments.filter(comment => comment.sentiment === "neutral").length,
       negative: comments.filter(comment => comment.sentiment === "negative").length,
+      has_phone: comments.filter(commentHasPhone).length,
+      competitor: comments.filter(comment => commentIsCompetitor(comment, competitorKeywords)).length,
+      ad_comments: comments.filter(comment => Boolean(comment.fb_post_id)).length,
     }
-  }, [comments])
+  }, [comments, pageManagerSettings.commentModeration.competitorKeywords])
 
   const commentThemes = commentsAnalytics?.themes?.slice(0, 6) || []
 
@@ -2630,7 +3150,7 @@ export default function PageManagerPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || "Unable to send reply.")
       if (selectedPage?.id) {
-        try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch {}
+        try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch { }
       }
       await loadComments(true)
     } catch (err: any) {
@@ -2655,7 +3175,7 @@ export default function PageManagerPage() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || "Unable to update comment visibility.")
       if (selectedPage?.id) {
-        try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch {}
+        try { sessionStorage.removeItem(`page_manager_comments:${selectedPage.id}`) } catch { }
       }
       await loadComments(true)
     } catch (err: any) {
@@ -2740,10 +3260,10 @@ export default function PageManagerPage() {
         : []
       const nextMetaDarkPostsMeta = metaDarkRes && metaDarkRes.ok && !metaDarkData.error
         ? {
-            inspectedAds: Number(metaDarkData.inspectedAds || 0),
-            adsWithStoryId: Number(metaDarkData.adsWithStoryId || 0),
-            paging: metaDarkData.paging || null,
-          }
+          inspectedAds: Number(metaDarkData.inspectedAds || 0),
+          adsWithStoryId: Number(metaDarkData.adsWithStoryId || 0),
+          paging: metaDarkData.paging || null,
+        }
         : null
 
       if (insightsRes.ok && !insightsData.error) {
@@ -2814,7 +3334,7 @@ export default function PageManagerPage() {
     const message = composerMessage.trim()
     const imageUrl = composerImageUrl.trim()
     if (!message && !imageUrl) {
-      setComposerError("Add a caption or a public image URL.")
+      setComposerError("Vui lòng nhập nội dung hoặc link ảnh công khai.")
       return
     }
 
@@ -3274,7 +3794,7 @@ export default function PageManagerPage() {
       try {
         sessionStorage.removeItem(`page_manager_post_comments:${selectedPost.pageId}:${selectedPost.postId}`)
         sessionStorage.removeItem(`page_manager_comments:${selectedPost.pageId}`)
-      } catch {}
+      } catch { }
       if (Array.isArray(data.comments)) {
         setPostComments(data.comments)
       } else {
@@ -3304,7 +3824,7 @@ export default function PageManagerPage() {
       try {
         if (selectedPost.postId) sessionStorage.removeItem(`page_manager_post_comments:${selectedPost.pageId}:${selectedPost.postId}`)
         sessionStorage.removeItem(`page_manager_comments:${selectedPost.pageId}`)
-      } catch {}
+      } catch { }
       await loadSelectedPostComments(true)
     } catch (err: any) {
       setPostCommentsError(err?.message || "Unable to reply to comment.")
@@ -3328,7 +3848,7 @@ export default function PageManagerPage() {
       try {
         if (selectedPost.postId) sessionStorage.removeItem(`page_manager_post_comments:${selectedPost.pageId}:${selectedPost.postId}`)
         sessionStorage.removeItem(`page_manager_comments:${selectedPost.pageId}`)
-      } catch {}
+      } catch { }
       await loadSelectedPostComments(true)
     } catch (err: any) {
       setPostCommentsError(err?.message || "Unable to update comment visibility.")
@@ -3764,9 +4284,29 @@ export default function PageManagerPage() {
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
         <div className="mx-auto max-w-[1600px] px-4 py-4">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="space-y-1">
-              <h1 className="font-heading text-2xl font-semibold tracking-tight">Page Manager</h1>
-              <p className="max-w-3xl text-sm text-muted-foreground">
+            <div className="space-y-2">
+              <div className="min-w-max rounded-xl border border-border/40 bg-transparent p-1">
+                <div className="flex items-center gap-1">
+                  {PAGE_MANAGER_TABS.map(item => {
+                    const active = tab === item.id
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setTab(item.id)}
+                        className={cn(
+                          "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                          active
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                        )}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
                 Each tab maps to a real workflow: inbox first, then posts, then comments.
               </p>
             </div>
@@ -4064,7 +4604,7 @@ export default function PageManagerPage() {
                   setSelectedAdAccountId(value)
                   try {
                     localStorage.setItem("page_manager_selected_ad_account_id", value)
-                  } catch {}
+                  } catch { }
                 }}
               >
                 <SelectTrigger className="w-full rounded-2xl border-border/70 bg-background shadow-sm lg:w-[260px]">
@@ -4099,10 +4639,13 @@ export default function PageManagerPage() {
               <Button
                 variant="outline"
                 className="gap-1.5"
-                onClick={() => {
+                onClick={async () => {
                   if (tab === "posts") void loadPosts(true)
                   if (tab === "comments" || tab === "inbox") void loadComments(true)
-                  if (tab === "inbox") void loadMessengerInbox()
+                  if (tab === "inbox") {
+                    await subscribeMessengerWebhooks()
+                    await Promise.allSettled([syncMessenger(), syncComments(), loadMessengerInbox()])
+                  }
                 }}
                 disabled={pageInsightLoading || launchHistoryLoading || metaDarkPostsLoading || commentsLoading || messengerLoading}
               >
@@ -4112,55 +4655,11 @@ export default function PageManagerPage() {
             </div>
           </div>
 
-          <div className="mt-4 overflow-x-auto md:hidden">
-            <div className="min-w-max rounded-xl border border-border/70 bg-background p-1 shadow-sm">
-              <div className="flex items-center gap-1">
-                {PAGE_MANAGER_TABS.map(item => {
-                  const active = tab === item.id
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setTab(item.id)}
-                      className={cn(
-                        "rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                        active
-                          ? "bg-primary text-primary-foreground shadow-sm"
-                          : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                      )}
-                    >
-                      {item.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
-      <div className="mx-auto flex max-w-[1600px] gap-4 px-4 py-4">
-        <aside className="hidden w-auto shrink-0 flex-col gap-2 md:flex">
-          <nav className="flex w-fit flex-col gap-1 rounded-xl border border-border/70 bg-background p-1 shadow-sm">
-            {PAGE_MANAGER_TABS.map(item => {
-              const active = tab === item.id
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setTab(item.id)}
-                  className={cn(
-                    "rounded-lg px-4 py-2 text-left text-sm font-medium whitespace-nowrap transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                  )}
-                >
-                  {item.label}
-                </button>
-              )
-            })}
-          </nav>
-        </aside>
-        <main className="min-w-0 flex-1 space-y-4">
+      <div className="mx-auto flex max-w-[1600px] gap-2 px-2 py-2">
+        <main className="min-w-0 flex-1 space-y-2">
 
           {tab === "inbox" && (
             <div className="space-y-4">
@@ -4185,63 +4684,151 @@ export default function PageManagerPage() {
                   </CardContent>
                 </Card>
               ) : null}
-              <div className={cn(
-                "grid min-h-[calc(100vh-230px)] overflow-hidden rounded-2xl border border-[#E4E6EB] bg-[#F0F2F5] shadow-sm lg:grid-cols-[360px_minmax(0,1fr)] dark:border-border dark:bg-muted/30",
-                !selectedPage && "hidden"
-              )}>
-                <Card className="overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
-                  <CardHeader className="border-b border-[#E4E6EB] p-3 dark:border-border">
-                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                      {[
-                        { id: "all", label: "All", count: allPageThreads.length },
-                        { id: "unread", label: "Unread", count: allPageThreads.filter(thread => thread.unread > 0 || thread.responseStatus === "pending").length },
-                        { id: "messenger", label: "Messenger", count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
-                        { id: "comments", label: "Comments", count: allPageThreads.filter(thread => thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment").length },
-                      ].map(item => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => setInboxSourceFilter(item.id as typeof inboxSourceFilter)}
-                          className={cn(
-                            "h-9 shrink-0 rounded-full px-3 text-sm font-medium transition-colors",
-                            inboxSourceFilter === item.id
-                              ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
-                              : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
-                          )}
-                        >
-                          {item.label}
-                          <span className="ml-1 text-xs opacity-70">{item.count}</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <div className="mt-2 flex items-center gap-2">
-                      <div className="flex shrink-0 items-center gap-1">
+              <div
+                className={cn(
+                  "flex h-[950px] overflow-hidden rounded-2xl border border-[#E4E6EB] bg-[#F0F2F5] shadow-sm dark:border-border dark:bg-muted/30",
+                  !selectedPage && "hidden"
+                )}
+              >
+                <Card
+                  className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-slate-50/50 shadow-none dark:border-border dark:bg-muted/10 transition-[width] duration-300 ease-in-out"
+                  style={{ width: isSidebarCollapsed ? 64 : sidebarWidth }}
+                >
+                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border">
+                    <div className={cn("flex items-center gap-1", isSidebarCollapsed ? "justify-center" : "justify-between")}>
+                      {!isSidebarCollapsed && <span className="text-sm font-bold text-[#050505] dark:text-foreground">Inbox</span>}
+                      <div className={cn("flex items-center gap-0.5", isSidebarCollapsed && "flex-col gap-2")}>
                         <Button
-                          variant={messengerWebhookStatus === "ready" ? "secondary" : "outline"}
-                          size="sm"
-                          className="h-8 gap-1.5 rounded-full px-3 text-xs"
-                          title="Enable Messenger webhooks for the selected Page"
-                          onClick={() => void subscribeMessengerWebhooks()}
-                          disabled={!selectedPage?.id || messengerSubscribing || /^p-\d+$/.test(selectedPage?.id || "")}
+                          variant="ghost"
+                          size="icon"
+                          className={cn("size-7 rounded-full", inboxSearchOpen && "bg-[#E7F3FF] text-[#0084FF]")}
+                          title="Search"
+                          onClick={() => {
+                            if (isSidebarCollapsed) setIsSidebarCollapsed(false)
+                            setInboxSearchOpen(open => !open)
+                          }}
                         >
-                          {messengerSubscribing ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconCheck className="size-3.5" />}
-                          {messengerWebhookStatus === "ready" ? "Webhooks on" : "Enable webhooks"}
+                          <IconSearch className="size-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="size-8 rounded-full"
-                          title="Sync Inbox"
-                          onClick={async () => {
-                            await subscribeMessengerWebhooks()
-                            await Promise.allSettled([syncMessenger(), syncComments()])
-                          }}
-                          disabled={commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing}
+                          className="size-7 rounded-full"
+                          title="Collapse / Expand"
+                          onClick={() => setIsSidebarCollapsed(v => !v)}
                         >
-                          <IconRefresh className={cn("size-4", (commentsLoading || commentsSyncing || messengerLoading || messengerSyncing || messengerSubscribing) && "animate-spin")} />
+                          <IconLayoutSidebar className="size-3.5" />
                         </Button>
                       </div>
+                    </div>
+                    {inboxSearchOpen && !isSidebarCollapsed && (
+                      <div className="mt-2">
+                        <div className="flex items-center gap-1.5 rounded-lg border border-[#E4E6EB] bg-white px-2 py-1.5 dark:border-border dark:bg-background">
+                          <IconSearch className="size-3.5 shrink-0 text-[#65676B]" />
+                          <input
+                            autoFocus
+                            value={inboxSearchQuery}
+                            onChange={event => setInboxSearchQuery(event.target.value)}
+                            placeholder="Search name, keyword, or group…"
+                            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[#65676B]"
+                          />
+                          {inboxSearchQuery && (
+                            <button type="button" onClick={() => setInboxSearchQuery("")} className="shrink-0 text-[#65676B] hover:text-[#050505]">
+                              <IconX className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="min-h-0 flex-1 overflow-y-auto p-1.5">
+                    {isSidebarCollapsed && (
+                      <div className="flex flex-col items-center gap-1 py-2">
+                        <button type="button" title="Your inbox" className="flex size-8 items-center justify-center rounded-lg text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted">
+                          <IconInbox className="size-4" />
+                        </button>
+                        <button type="button" title="All" onClick={() => setInboxSourceFilter("all")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxSourceFilter === "all" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                          <IconLayoutList className="size-4" />
+                        </button>
+                      </div>
+                    )}
+                    {!isSidebarCollapsed && (
+                      <>
+                        <div className="space-y-0.5">
+                          {[
+                            { id: "all" as const, label: "Your inbox", count: allPageThreads.filter(thread => thread.assignedTo === "Me").length },
+                            { id: "mentions" as const, label: "Mentions", count: allPageThreads.filter(thread => thread.latestMessage.includes("@") || thread.tags.some(tag => tag.toLowerCase() === "mention")).length },
+                            { id: "created_by_me" as const, label: "Created by me", count: allPageThreads.filter(thread => thread.latestMessage.startsWith("You:") || thread.responseStatus === "replied").length },
+                          ].map(item => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setInboxSourceFilter(item.id as typeof inboxSourceFilter)}
+                              className={cn(
+                                "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1 text-left text-sm font-medium transition-colors",
+                                inboxSourceFilter === item.id
+                                  ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                  : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                              )}
+                            >
+                              <span className="truncate mr-1">{item.label}</span>
+                              {item.count > 0 ? <span className="shrink-0 text-xs opacity-70">{item.count}</span> : null}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-2 space-y-0.5">
+                          {[
+                            { id: "all", label: "All", count: allPageThreads.length },
+                            { id: "unread", label: "Needs action", count: allPageThreads.filter(thread => thread.unread > 0 || thread.responseStatus === "pending").length },
+                            { id: "messenger", label: "Messenger", count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
+                            { id: "comments", label: "Comments", count: allPageThreads.filter(thread => thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment").length },
+                            { id: "ad_comments", label: "Ad comments", count: allPageThreads.filter(thread => (thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment") && Boolean(thread.postId)).length },
+                            { id: "needs_human", label: "Needs Human", count: allPageThreads.filter(thread => thread.sentiment === "negative" || thread.tags.some(tag => /support|hidden|spam|complaint|medical/i.test(tag))).length },
+                            { id: "orders", label: "Orders", count: allPageThreads.filter(thread => thread.tags.some(tag => /order|cod/i.test(tag))).length },
+                          ].map(item => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setInboxSourceFilter(item.id as typeof inboxSourceFilter)}
+                              className={cn(
+                                "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1 text-left text-sm font-medium transition-colors",
+                                inboxSourceFilter === item.id
+                                  ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                  : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                              )}
+                            >
+                              <span className="truncate mr-1">{item.label}</span>
+                              <span className="shrink-0 text-xs opacity-70">{item.count}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="mt-2 space-y-0.5 border-t border-[#E4E6EB] pt-2 dark:border-border">
+                          {[
+                            { id: "spam" as const, label: "Spam", count: allPageThreads.filter(thread => thread.tags.some(tag => /spam/i.test(tag))).length },
+                          ].map(item => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => setInboxSourceFilter(item.id as typeof inboxSourceFilter)}
+                              className={cn(
+                                "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1 text-left text-sm font-medium transition-colors",
+                                inboxSourceFilter === item.id
+                                  ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                  : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                              )}
+                            >
+                              <span className="truncate mr-1">{item.label}</span>
+                              {item.count > 0 ? <span className="shrink-0 text-xs opacity-70">{item.count}</span> : null}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                  {!isSidebarCollapsed && (
+                    <div className="mt-auto flex items-center gap-1 border-t border-[#E4E6EB] p-2 dark:border-border">
                       <Button variant="ghost" size="icon" className="size-8 rounded-full" title="More inbox actions">
                         <IconDots className="size-4" />
                       </Button>
@@ -4249,11 +4836,85 @@ export default function PageManagerPage() {
                         <IconCirclePlus className="size-4" />
                       </Button>
                     </div>
+                  )}
+                </Card>
+
+                <div
+                  onMouseDown={handleDragResize("sidebar")}
+                  className="z-10 hidden w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-[#0084FF]/30 lg:block"
+                  title="Drag to resize"
+                />
+
+                <Card
+                  className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background"
+                  style={{ width: queueWidth }}
+                >
+                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <Badge variant="outline" className="h-8 gap-1.5 rounded-full border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-400">
+                        <span className="size-1.5 rounded-full bg-emerald-500" />
+                        {allPageThreads.filter(thread => thread.responseStatus === "pending" || thread.responseStatus === "open").length} Open
+                      </Badge>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Popover open={inboxSortMenuOpen} onOpenChange={setInboxSortMenuOpen}>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="icon" className="size-8 rounded-full" title="Sort / filter">
+                              <IconFilter className="size-3.5" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-56 rounded-2xl p-2">
+                            <p className="px-2 pb-1 pt-1 text-xs font-semibold text-muted-foreground">Sort by</p>
+                            {([
+                              { id: "recent" as const, label: "Last activity" },
+                              { id: "alphabet" as const, label: "Name (A → Z)" },
+                            ]).map(opt => (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => { setInboxSortMode(opt.id); setInboxSortMenuOpen(false) }}
+                                className={cn(
+                                  "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-sm hover:bg-muted",
+                                  inboxSortMode === opt.id && "bg-muted font-medium"
+                                )}
+                              >
+                                {opt.label}
+                                {inboxSortMode === opt.id ? <IconCheck className="size-3.5" /> : null}
+                              </button>
+                            ))}
+                          </PopoverContent>
+                        </Popover>
+                        <div className="flex items-center gap-0.5 rounded-full border border-[#E4E6EB] p-0.5 dark:border-border">
+                          <button
+                            type="button"
+                            title="Comfortable view"
+                            onClick={() => setViewDensity("comfortable")}
+                            className={cn(
+                              "flex size-7 items-center justify-center rounded-full transition-colors",
+                              viewDensity === "comfortable" ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] hover:bg-[#F0F2F5]"
+                            )}
+                          >
+                            <IconLayoutList className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            title="Compact view"
+                            onClick={() => setViewDensity("compact")}
+                            className={cn(
+                              "flex size-7 items-center justify-center rounded-full transition-colors",
+                              viewDensity === "compact" ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] hover:bg-[#F0F2F5]"
+                            )}
+                          >
+                            <IconList className="size-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
                   </CardHeader>
 
-                  <CardContent className="p-0">
+                  <CardContent className="flex min-h-0 flex-1 flex-col p-0">
                     <div
-                      className="h-[calc(100vh-420px)] min-h-[500px] overflow-y-auto overflow-x-hidden"
+                      className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
                       onScroll={event => setInboxListScrollTop(event.currentTarget.scrollTop)}
                     >
                       <div className="max-w-full overflow-x-hidden p-2">
@@ -4294,82 +4955,139 @@ export default function PageManagerPage() {
                           </div>
                         ) : null}
                         {pageThreads.length > 0 ? (
-                          <div className="relative" style={{ height: virtualizedPageThreads.totalHeight }}>
-                            <div className="absolute inset-x-0 top-0 space-y-1" style={{ transform: `translateY(${virtualizedPageThreads.offsetTop}px)` }}>
-                        {virtualizedPageThreads.visibleThreads.map(thread => {
-                          const isActive = selectedThread.id === thread.id
-
-                          return (
-                            <button
-                              key={thread.id}
-                              onClick={() => setSelectedThreadId(thread.id)}
+                          <div className="space-y-2">
+                            <div
                               className={cn(
-                                "grid h-[92px] w-full min-w-0 grid-cols-[48px_minmax(0,1fr)] items-center gap-2.5 overflow-hidden rounded-2xl px-3 py-2 text-left transition-colors",
-                                isActive ? "bg-[#E7F3FF] dark:bg-primary/15" : "hover:bg-[#F0F2F5] dark:hover:bg-muted/70"
+                                "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 transition-colors",
+                                draggingThreadId
+                                  ? "border-dashed border-[#0084FF] bg-[#E7F3FF]"
+                                  : pinnedPageThreads.length
+                                    ? "border-border/70 bg-muted/20"
+                                    : "border-dashed border-border/70 bg-muted/20 text-muted-foreground"
                               )}
+                              onDragOver={event => {
+                                if (draggingThreadId) event.preventDefault()
+                              }}
+                              onDrop={event => {
+                                event.preventDefault()
+                                const draggedId = event.dataTransfer.getData("text/plain") || draggingThreadId
+                                if (!draggedId) return
+                                setInboxPinnedThreads(prev => ({ ...prev, [draggedId]: true }))
+                                setDraggingThreadId(null)
+                              }}
                             >
-                              <InboxAvatar
-                                name={thread.name}
-                                src={thread.customerProfilePic || (thread.id === "thread-1" ? (selectedPage?.picture || (selectedPage?.id ? `/api/facebook/page-picture?page_id=${selectedPage.id}` : "/applogo.webp")) : null)}
-                                online={thread.unread > 0 || thread.responseStatus === "pending"}
-                              />
-
-                              <div className="min-w-0 max-w-full overflow-hidden">
-                                <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                                  <p className={cn("min-w-0 max-w-full truncate text-sm text-[#050505] dark:text-foreground", thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold" : "font-medium")}>{thread.name}</p>
-                                  <span className="max-w-[84px] truncate text-xs text-[#65676B]">{thread.latestAt}</span>
-                                </div>
-                                <div className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                                  <p className={cn(
-                                    "min-w-0 max-w-full truncate text-xs leading-5",
-                                    thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold text-[#050505] dark:text-foreground" : "text-[#65676B]"
-                                  )}>
-                                    {thread.latestMessage}
-                                  </p>
-                                  {thread.unread > 0 ? <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0084FF] text-xs font-bold text-white">{thread.unread}</span> : null}
-                                </div>
-                                <div className="mt-1.5 flex max-w-full flex-wrap items-center gap-1 overflow-hidden">
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "h-5 max-w-[90px] truncate rounded-full px-2 text-xs",
-                                      thread.sourceType === "facebook_comment" || thread.sourceType === "instagram_comment"
-                                        ? "border-violet-200 bg-violet-50 text-violet-700"
-                                        : "border-blue-200 bg-blue-50 text-blue-700"
-                                    )}
-                                  >
-                                    {thread.sourceLabel}
-                                  </Badge>
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "h-5 max-w-[80px] truncate rounded-full px-2 text-xs",
-                                      thread.responseStatus === "replied" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-                                      thread.responseStatus === "pending" && "border-amber-200 bg-amber-50 text-amber-700",
-                                      thread.responseStatus === "hidden" && "border-slate-200 bg-slate-100 text-slate-700",
-                                      thread.responseStatus === "open" && "border-border/70 bg-muted/40 text-muted-foreground"
-                                    )}
-                                  >
-                                    {thread.responseStatus === "replied" ? "Replied" : thread.responseStatus === "pending" ? "Pending" : thread.responseStatus === "hidden" ? "Hidden" : "Open"}
-                                  </Badge>
-                                </div>
-                                <div className="mt-1 flex max-w-full items-center gap-1 overflow-hidden text-xs text-[#65676B]">
-                                  {thread.assignedTo && thread.assignedTo !== "Unassigned" ? <span className="truncate">{thread.assignedTo}</span> : <span>Unassigned</span>}
-                                </div>
-                              </div>
-                            </button>
-                          )
-                        })}
+                              {pinnedPageThreads.map(thread => renderPinnedAvatar(thread))}
                             </div>
+
+                            {groupedPageThreads.map(item => {
+                              if (item.kind === "thread") return renderInboxThreadCard(item.thread)
+
+                              const collapsed = Boolean(inboxGroupCollapsed[item.groupId])
+                              const unread = item.members.reduce((sum, member) => sum + member.unread, 0)
+                              const anyPinned = item.members.some(member => inboxPinnedThreads[member.id])
+
+                              return (
+                                <div
+                                  key={`group-${item.groupId}`}
+                                  className={cn(
+                                    "rounded-2xl border border-[#E4E6EB] bg-white p-2 dark:border-border dark:bg-background",
+                                    anyPinned && "ring-1 ring-[#0084FF]/20"
+                                  )}
+                                  onDragOver={event => {
+                                    if (draggingThreadId) event.preventDefault()
+                                  }}
+                                  onDrop={event => {
+                                    event.preventDefault()
+                                    const draggedId = event.dataTransfer.getData("text/plain") || draggingThreadId
+                                    if (draggedId) mergeThreadInto(draggedId, item.groupId)
+                                    setDraggingThreadId(null)
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2 px-1 py-1">
+                                    <button
+                                      type="button"
+                                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                                      onClick={() => setInboxGroupCollapsed(prev => ({ ...prev, [item.groupId]: !collapsed }))}
+                                    >
+                                      <span className="text-sm font-semibold text-[#050505] dark:text-foreground">
+                                        Group · {item.members.length}
+                                      </span>
+                                      {unread > 0 ? (
+                                        <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-[#0084FF] text-xs font-bold text-white">{unread}</span>
+                                      ) : null}
+                                      <Badge variant="outline" className="h-5 whitespace-nowrap rounded-full px-2 text-xs">
+                                        {collapsed ? "Collapsed" : "Expanded"}
+                                      </Badge>
+                                    </button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 rounded-full px-2 text-xs"
+                                      onClick={() => dismissGroup(item.groupId)}
+                                    >
+                                      Ungroup
+                                    </Button>
+                                  </div>
+                                  {!collapsed ? (
+                                    <div className="mt-1 space-y-1">
+                                      {item.members.map(member => renderInboxThreadCard(member))}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="mt-1 w-full rounded-xl bg-muted/40 px-3 py-2 text-left text-xs text-muted-foreground"
+                                      onClick={() => setSelectedThreadId(item.lead.id)}
+                                    >
+                                      {item.members.map(member => member.name).join(" · ")}
+                                    </button>
+                                  )}
+                                </div>
+                              )
+                            })}
                           </div>
                         ) : null}
                       </div>
                     </div>
+                    {pinnedContextMenu ? (
+                      <div
+                        className="fixed z-50 min-w-[180px] rounded-xl border bg-background p-1 shadow-lg"
+                        style={{ left: pinnedContextMenu.x, top: pinnedContextMenu.y }}
+                        onClick={event => event.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                          onClick={() => togglePinThread(pinnedContextMenu.threadId)}
+                        >
+                          <IconPin className="size-3.5" />
+                          {inboxPinnedThreads[pinnedContextMenu.threadId] ? "Unpin" : "Pin to top"}
+                        </button>
+                        {threadGroupId(pinnedContextMenu.threadId) ? (
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                            onClick={() => {
+                              removeThreadFromGroup(pinnedContextMenu.threadId)
+                              setPinnedContextMenu(null)
+                            }}
+                          >
+                            Remove from group
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </CardContent>
                 </Card>
 
-                <Card className="overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
-                  <CardHeader className="border-b border-[#E4E6EB] px-4 py-3 dark:border-border">
+                <div
+                  onMouseDown={handleDragResize("queue")}
+                  className="z-10 hidden w-1 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-[#0084FF]/30 lg:block"
+                  title="Drag to resize"
+                />
+
+                <Card className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
+                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-3">
                         <InboxAvatar
@@ -4380,98 +5098,104 @@ export default function PageManagerPage() {
                         <div className="min-w-0">
                           <CardTitle className="truncate text-sm font-semibold text-[#050505] dark:text-foreground">{selectedThread.name}</CardTitle>
                           <CardDescription className="truncate text-xs text-[#65676B]">
-                            {selectedThread.sourceLabel}
-                            {selectedThread.assignedTo && selectedThread.assignedTo !== "Unassigned" ? ` - Assigned to ${selectedThread.assignedTo}` : ""}
+                            {selectedThread.sourceType === "facebook_comment"
+                              ? selectedThread.postId ? "Ad comment" : "Comment"
+                              : "Messenger"}
+                            {` · ${selectedThread.updatedAt}`}
                           </CardDescription>
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <Badge
                               variant="outline"
                               className={cn(
-                                "rounded-full text-xs",
-                                selectedThread.sourceType === "facebook_comment" || selectedThread.sourceType === "instagram_comment"
-                                  ? "bg-violet-50 text-violet-700"
-                                  : "bg-blue-50 text-blue-700"
+                                "rounded-full text-xs px-2.5 py-0.5",
+                                selectedThread.sourceType === "facebook_comment"
+                                  ? selectedThread.postId
+                                    ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/20 dark:text-purple-300 dark:border-purple-900"
+                                    : "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/20 dark:text-violet-300 dark:border-violet-900"
+                                  : "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-900"
                               )}
                             >
-                              {selectedThread.sourceLabel}
+                              {selectedThread.sourceType === "facebook_comment"
+                                ? selectedThread.postId ? "Ad Comment" : "Comment"
+                                : "Messenger"}
                             </Badge>
-                            <Badge variant="outline" className="rounded-full text-xs">
-                              {selectedThreadMeta.responseStatus === "replied" ? "Replied" : selectedThreadMeta.responseStatus === "pending" ? "Pending" : selectedThreadMeta.status}
-                            </Badge>
-                            {pageManagerSettings.conversations.showAssignedStaff ? (
-                              <Badge variant="outline" className="rounded-full text-xs">
-                                Assigned: {selectedThreadMeta.assignedTo}
+                            {selectedThread.label && (
+                              <Badge
+                                variant="outline"
+                                className="rounded-full text-xs px-2.5 py-0.5 bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-300 dark:border-blue-900"
+                              >
+                                {selectedThread.label === "Lead" ? "Pricing" : selectedThread.label}
                               </Badge>
-                            ) : null}
+                            )}
+                            <Badge
+                              variant="outline"
+                              className="rounded-full text-xs px-2.5 py-0.5 gap-1 bg-muted/50 text-muted-foreground"
+                            >
+                              <IconUsers className="size-3" />
+                              {selectedThread.assignedTo && selectedThread.assignedTo !== "Unassigned" ? selectedThread.assignedTo : "Unassigned"}
+                            </Badge>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        {pageManagerSettings.conversations.taskManagementEnabled ? (
+                      <div className="flex items-center gap-1.5">
+                        <Select
+                          value={selectedThreadMeta.taskState === "closed" ? "closed" : selectedThreadMeta.status === "replied" ? "replied" : "pending"}
+                          onValueChange={(val: "pending" | "replied" | "closed") => {
+                            setInboxTaskState(prev => ({
+                              ...prev,
+                              [selectedThread.id]: val === "closed" ? "closed" : "open",
+                            }))
+                            if (val === "replied" || val === "closed") {
+                              setInboxHandledThreads(prev => ({ ...prev, [selectedThread.id]: true }))
+                            } else {
+                              setInboxHandledThreads(prev => ({ ...prev, [selectedThread.id]: false }))
+                            }
+                            if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
+                              void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
+                                status: val,
+                                unread_count: val === "closed" ? 0 : selectedThread.unread,
+                              })
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 w-auto px-3 text-xs font-semibold rounded-full border-[#E4E6EB] bg-white dark:border-border dark:bg-background">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="replied">Replied</SelectItem>
+                            <SelectItem value="closed">Closed</SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className={cn("h-8 gap-1.5 rounded-full text-xs", inboxContextOpen && "border-primary bg-primary/5 text-primary")}
+                          onClick={() => setInboxContextOpen(open => !open)}
+                          title={inboxContextOpen ? "Hide context panel" : "Show context panel"}
+                        >
+                          <IconColumns3 className="size-3.5" />
+                          Context
+                        </Button>
+
+                        {selectedThread.sourceType === "facebook_comment" && selectedThread.comment?.fb_post_permalink ? (
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="mr-1 rounded-full"
-                            onClick={() => {
-                              const nextTaskState = selectedThreadMeta.taskState === "closed" ? "open" : "closed"
-                              setInboxTaskState(prev => ({
-                                ...prev,
-                                [selectedThread.id]: nextTaskState,
-                              }))
-                              if (selectedThreadMeta.taskState !== "closed") {
-                                setInboxHandledThreads(prev => ({ ...prev, [selectedThread.id]: true }))
-                              }
-                              if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
-                                void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
-                                  status: nextTaskState === "closed" ? "closed" : "open",
-                                  unread_count: nextTaskState === "closed" ? 0 : selectedThread.unread,
-                                })
-                              }
-                            }}
+                            size="icon"
+                            className="h-8 w-8 rounded-full"
+                            onClick={() => window.open(selectedThread.comment!.fb_post_permalink!, "_blank")}
+                            title="Open on Facebook"
                           >
-                            {selectedThreadMeta.taskState === "closed" ? "Reopen" : "Close task"}
+                            <IconExternalLink className="size-3.5" />
                           </Button>
                         ) : null}
-                        {pageManagerSettings.assignmentRules.selfAssignEnabled ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="mr-1 rounded-full"
-                            onClick={() => {
-                              setInboxAssignments(prev => ({ ...prev, [selectedThread.id]: "Me" }))
-                              if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
-                                void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
-                                  assigned_to: "Me",
-                                })
-                              }
-                            }}
-                          >
-                            Self assign
-                          </Button>
-                        ) : null}
-                        {selectedThread.sourceType === "facebook_comment" && selectedThread.comment ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="mr-1 gap-1.5 rounded-full"
-                            onClick={() => void handleToggleInboxCommentHidden()}
-                            disabled={commentActionLoading}
-                          >
-                            {commentActionLoading ? (
-                              <IconLoader2 className="size-3.5 animate-spin" />
-                            ) : selectedThread.comment.is_hidden ? (
-                              <IconEye className="size-3.5" />
-                            ) : (
-                              <IconEyeOff className="size-3.5" />
-                            )}
-                            {selectedThread.comment.is_hidden ? "Unhide" : "Hide"}
-                          </Button>
-                        ) : null}
+
                         <Button
                           variant="secondary"
                           size="sm"
-                            className="mr-2 h-8 gap-1.5 rounded-full bg-[#F0F2F5] text-xs text-[#050505] hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground"
+                          className="h-8 gap-1.5 rounded-full bg-[#F0F2F5] text-xs text-[#050505] hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground"
                           onClick={() => void runInboxAiAutoReply()}
                           disabled={inboxAiLoading || !selectedThread?.lastMessage || selectedThread.id === "empty-inbox"}
                         >
@@ -4482,9 +5206,16 @@ export default function PageManagerPage() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="flex h-[calc(100vh-230px)] min-h-[620px] flex-col p-0">
+                  {activeAgents[selectedThread.id]?.length > 1 && (
+                    <div className="flex items-center gap-2 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                      <IconAlertTriangle className="size-3.5" />
+                      <span>{activeAgents[selectedThread.id]?.join(", ")} đang xem hội thoại này</span>
+                    </div>
+                  )}
+
+                  <CardContent className="flex min-h-0 flex-1 flex-col p-0">
                     <ScrollArea className="min-h-0 flex-1">
-                      <div className="space-y-3 p-5 pb-6">
+                      <div className="space-y-2 p-3 pb-4">
                         {selectedThread.id !== "empty-inbox" ? (
                           <div className="mb-20 mt-4 flex flex-col items-center text-center">
                             <InboxAvatar
@@ -4570,55 +5301,6 @@ export default function PageManagerPage() {
                           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{inboxAiError}</div>
                         ) : null}
 
-                        {inboxAiResult ? (
-                          <div className="mt-4 border rounded-xl p-3.5 bg-card shadow-sm space-y-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                                Intent: {inboxAiResult.intent}
-                              </span>
-                              <span className={cn(
-                                "text-xs font-semibold px-2 py-0.5 rounded-full",
-                                inboxAiResult.action === "send" && "bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900",
-                                inboxAiResult.action === "draft" && "bg-blue-50 border border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-900",
-                                inboxAiResult.action === "assign" && "bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900",
-                                inboxAiResult.action === "ignore" && "bg-muted border border-border text-muted-foreground"
-                              )}>
-                                Action: {inboxAiResult.action}
-                              </span>
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/5 text-foreground border">
-                                Confidence: {inboxAiResult.confidence}%
-                              </span>
-                              <span className={cn(
-                                "text-xs font-semibold px-2 py-0.5 rounded-full",
-                                inboxAiResult.riskLevel === "high" && "bg-red-50 border border-red-200 text-red-700 dark:bg-red-950/30 dark:border-red-900",
-                                inboxAiResult.riskLevel === "medium" && "bg-amber-50 border border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900",
-                                inboxAiResult.riskLevel === "low" && "bg-emerald-50 border border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-900"
-                              )}>
-                                Risk: {inboxAiResult.riskLevel}
-                              </span>
-                              {inboxAiResult.guardrails?.quietHoursActive ? (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 border text-slate-700">
-                                  Quiet hours
-                                </span>
-                              ) : null}
-                              {inboxAiResult.matchedTemplate ? (
-                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-violet-50 border border-violet-200 text-violet-700">
-                                  Template: {inboxAiResult.matchedTemplate.shortcut}
-                                </span>
-                              ) : null}
-                            </div>
-                            <p className="mt-2 text-xs text-muted-foreground leading-relaxed">
-                              {inboxAiResult.action === "send"
-                                ? "Auto-reply condition passed. This is shown as sent in preview; real Messenger sending requires pages_messaging."
-                                : inboxAiResult.action === "draft"
-                                  ? "AI created a draft because auto-send is disabled or confidence is below the threshold."
-                                  : inboxAiResult.action === "assign"
-                                    ? "AI recommends assigning this conversation to a staff member."
-                                    : "AI recommends ignoring this low-value interaction."}
-                            </p>
-                          </div>
-                        ) : null}
-
                         <div className="mt-6 rounded-2xl border border-dashed bg-background p-3">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <IconAlertTriangle className="size-3.5" />
@@ -4633,106 +5315,495 @@ export default function PageManagerPage() {
                       </div>
                     </ScrollArea>
 
-                    <div className="border-t border-[#E4E6EB] bg-white p-3 dark:border-border dark:bg-background">
-                          <div className="rounded-[20px] border border-[#E4E6EB] bg-white p-3 shadow-sm dark:border-border dark:bg-background">
-                            <Textarea
-                              placeholder="Aa"
-                              value={inboxReplyText}
-                              onChange={event => setInboxReplyText(event.target.value)}
-                              className="min-h-14 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-                            />
-                            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                              <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                                <IconMicrophone className="size-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                                <IconPhoto className="size-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                                <IconGif className="size-4" />
-                              </Button>
-                              <Popover open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
-                                <PopoverTrigger asChild>
-                                  <Button
+                    {inboxAiLoading || inboxAiResult ? (
+                      <div className="shrink-0 border-t border-[#E4E6EB] bg-white px-3 pt-3 dark:border-border dark:bg-background">
+                        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                            <IconSparkles className="size-4" />
+                            Suggested reply from FAQ
+                            {inboxAiLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : null}
+                          </div>
+
+                          {inboxAiLoading && !inboxAiResult ? (
+                            <p className="mt-2 text-sm text-muted-foreground">Generating suggestion…</p>
+                          ) : inboxAiResult ? (
+                            <>
+                              <div className="mt-2 rounded-xl border border-border/60 bg-white p-3 text-sm leading-relaxed whitespace-pre-wrap dark:bg-background">
+                                {inboxAiResult.draftReply || "No draft available."}
+                              </div>
+
+                              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                                <Badge variant="outline" className="rounded-full text-[11px] font-semibold">
+                                  Intent: {inboxAiResult.intent}
+                                </Badge>
+                                <Badge variant="outline" className="rounded-full text-[11px] font-semibold">
+                                  Confidence: {Math.round(inboxAiResult.confidence || 0)}%
+                                </Badge>
+                                {(inboxAiResult.evidence || []).map(item => (
+                                  <Badge
+                                    key={`${item.kind}-${item.id}`}
                                     variant="outline"
-                                    size="sm"
-                                    className="gap-1.5 rounded-full"
-                                    disabled={!pageManagerSettings.quickReplyTemplates.enabled}
+                                    className="rounded-full border-violet-200 bg-violet-50 text-[11px] font-semibold text-violet-700"
                                   >
-                                    <IconPlus className="size-3.5" />
-                                    Template
+                                    {item.kind === "template" ? "FAQ" : "Rule"}: {item.shortcut || item.title}
+                                  </Badge>
+                                ))}
+                                {inboxAiResult.riskLevel === "low" ? (
+                                  <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 text-[11px] font-semibold text-emerald-700">
+                                    Safe
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-[11px] font-semibold text-amber-700">
+                                    Needs human
+                                  </Badge>
+                                )}
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  className="gap-1.5 rounded-full bg-[#0084FF] text-white hover:bg-[#0077E6]"
+                                  disabled={!inboxAiResult.draftReply || inboxAiResult.riskLevel === "high"}
+                                  onClick={() => {
+                                    if (!inboxAiResult?.draftReply || !selectedThread) return
+                                    setInboxReplyText(inboxAiResult.draftReply)
+                                    setInboxReplyDrafts(prev => ({ ...prev, [selectedThread.id]: inboxAiResult.draftReply }))
+                                    void handleReplyInboxThread()
+                                  }}
+                                >
+                                  <IconSend className="size-3.5" />
+                                  {selectedThread.sourceType === "facebook_comment" ? "Private reply" : "Send"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-full"
+                                  disabled={!inboxAiResult.draftReply}
+                                  onClick={() => {
+                                    if (!inboxAiResult?.draftReply || !selectedThread) return
+                                    setInboxReplyText(inboxAiResult.draftReply)
+                                    setInboxReplyDrafts(prev => ({ ...prev, [selectedThread.id]: inboxAiResult.draftReply }))
+                                  }}
+                                >
+                                  Insert
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-full"
+                                  disabled={inboxAiLoading}
+                                  onClick={() => void runInboxAiAutoReply()}
+                                >
+                                  Rewrite
+                                </Button>
+                                {selectedThread.sourceType === "facebook_comment" && selectedThread.comment ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-1.5 rounded-full"
+                                    disabled={commentActionLoading}
+                                    onClick={() => void handleToggleInboxCommentHidden()}
+                                  >
+                                    <IconEyeOff className="size-3.5" />
+                                    {selectedThread.comment.is_hidden ? "Unhide comment" : "Hide comment"}
                                   </Button>
-                                </PopoverTrigger>
-                                <PopoverContent align="start" className="w-80 rounded-2xl p-2">
-                                  <div className="px-2 pb-2 pt-1">
-                                    <p className="text-sm font-semibold">Quick replies</p>
-                                    <p className="text-xs text-muted-foreground">Saved per Page in Settings.</p>
-                                  </div>
-                                  <div className="space-y-1">
-                                    {pageManagerSettings.quickReplyTemplates.templates.length > 0 ? (
-                                      pageManagerSettings.quickReplyTemplates.templates.map(template => (
-                                        <button
-                                          key={template.id}
-                                          type="button"
-                                          onClick={() => applyQuickReplyTemplate(template)}
-                                          className="w-full rounded-xl px-3 py-2 text-left hover:bg-muted"
-                                        >
-                                          <div className="flex items-center justify-between gap-2">
-                                            <span className="text-sm font-medium">{template.name}</span>
-                                            <span className="text-xs text-muted-foreground">{template.shortcut}</span>
-                                          </div>
-                                          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{template.body}</p>
-                                        </button>
-                                      ))
-                                    ) : (
-                                      <div className="rounded-xl bg-muted/50 px-3 py-4 text-sm text-muted-foreground">
-                                        No templates configured.
+                                ) : null}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="ml-auto rounded-full text-muted-foreground"
+                                  onClick={() => setInboxAiResult(null)}
+                                >
+                                  Dismiss
+                                </Button>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="border-t border-[#E4E6EB] bg-white p-3 dark:border-border dark:bg-background">
+                      <div className="rounded-[20px] border border-[#E4E6EB] bg-white p-3 shadow-sm dark:border-border dark:bg-background">
+                        <Textarea
+                          placeholder="Enter to send, Shift+Enter for newline"
+                          value={inboxReplyText}
+                          onChange={event => {
+                            const val = event.target.value
+                            setInboxReplyText(val)
+                            if (val.endsWith("/")) {
+                              setTemplatePickerOpen(true)
+                            }
+                          }}
+                          onKeyDown={event => {
+                            if (event.key === "/") {
+                              setTemplatePickerOpen(true)
+                            }
+                            if (!["Tab", "Enter", " "].includes(event.key)) return
+                            const lastToken = inboxReplyText.split(/\s+/).at(-1)?.trim()
+                            if (!lastToken?.startsWith("/")) return
+                            const template = pageManagerSettings.quickReplyTemplates.templates.find(item => item.shortcut === lastToken)
+                            if (!template) return
+                            event.preventDefault()
+                            applyQuickReplyTemplate(template)
+                          }}
+                          className="min-h-14 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                        />
+
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <button type="button" onClick={() => setInboxReplyText(prev => prev + " Product price is 599k. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/price</button>
+                          <button type="button" onClick={() => setInboxReplyText(prev => prev + " We offer free shipping nationwide. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/ship</button>
+                          <button type="button" onClick={() => setInboxReplyText(prev => prev + " This item is currently in stock in all sizes. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/stock</button>
+                          <button type="button" onClick={() => setInboxReplyText(prev => prev + " 100% refund policy for manufacturer defects. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/refund</button>
+                          <Popover open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+                            <PopoverTrigger asChild>
+                              <button type="button" className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">+ Template</button>
+                            </PopoverTrigger>
+                            <PopoverContent align="start" className="w-80 rounded-2xl p-2">
+                              <div className="px-2 pb-2 pt-1">
+                                <p className="text-sm font-semibold">Quick replies</p>
+                                <p className="text-xs text-muted-foreground">Saved per Page in Settings.</p>
+                              </div>
+                              <div className="space-y-1">
+                                {pageManagerSettings.quickReplyTemplates.templates.length > 0 ? (
+                                  pageManagerSettings.quickReplyTemplates.templates.map(template => (
+                                    <button
+                                      key={template.id}
+                                      type="button"
+                                      onClick={() => applyQuickReplyTemplate(template)}
+                                      className="w-full rounded-xl px-3 py-2 text-left hover:bg-muted"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-medium">{template.name}</span>
+                                        <span className="text-xs text-muted-foreground">{template.shortcut}</span>
                                       </div>
-                                    )}
+                                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{template.body}</p>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <div className="rounded-xl bg-muted/50 px-3 py-4 text-sm text-muted-foreground">
+                                    No templates yet. Add some in Settings.
                                   </div>
-                                </PopoverContent>
-                              </Popover>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-1.5 rounded-full"
-                                onClick={() => {
-                                  const assignee = pageManagerSettings.assignmentRules.defaultTeam || "Sales"
-                                  setInboxAssignments(prev => ({
-                                    ...prev,
-                                    [selectedThread.id]: assignee,
-                                  }))
-                                  if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
-                                    void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
-                                      assigned_to: assignee,
-                                    })
+                                )}
+                              </div>
+                            </PopoverContent>
+                          </Popover>
+
+                          <div className="ml-auto flex flex-wrap items-center gap-1">
+                            <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                              <IconMicrophone className="size-4" />
+                            </Button>
+                            <label
+                              className="inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-[#0084FF] hover:bg-[#E7F3FF]"
+                              title="Attach file / voice note (<100MB)"
+                            >
+                              <IconPaperclip className="size-4" />
+                              <input
+                                type="file"
+                                className="hidden"
+                                onChange={event => {
+                                  const file = event.target.files?.[0]
+                                  if (!file) return
+                                  if (file.size > 100 * 1024 * 1024) {
+                                    setInboxAiError("Attachment must be under 100MB.")
+                                    event.target.value = ""
+                                    return
                                   }
+                                  setInboxAttachmentNote(file.name)
+                                  setInboxAiError("")
                                 }}
-                                disabled={!pageManagerSettings.assignmentRules.enabled}
-                              >
-                                <IconUsers className="size-3.5" />
-                                Assign
-                              </Button>
-                              <Button variant="outline" size="sm" className="gap-1.5 rounded-full">
-                                <IconClock className="size-3.5" />
+                              />
+                            </label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                                  <IconPhoto className="size-4" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent align="start" className="w-72 rounded-2xl p-3">
+                                <p className="px-1 pb-2 text-sm font-semibold">Send photo / attachment</p>
+                                <input
+                                  type="url"
+                                  placeholder="https://..."
+                                  className="mb-2 w-full rounded-lg border px-2 py-1.5 text-sm"
+                                  onChange={event => setInboxAttachmentNote(event.target.value)}
+                                />
+                                <p className="text-xs text-muted-foreground">Ponytail: stores the filename/url as a note. Once real media upload exists, attach sends the file via Graph API.</p>
+                              </PopoverContent>
+                            </Popover>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                                  <IconGif className="size-4" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent align="start" className="w-64 rounded-2xl p-3">
+                                <p className="px-1 pb-2 text-sm font-semibold">Search GIF</p>
+                                <input
+                                  type="text"
+                                  placeholder="e.g. thank you"
+                                  className="w-full rounded-lg border px-2 py-1.5 text-sm"
+                                  value={inboxGifQuery}
+                                  onChange={event => setInboxGifQuery(event.target.value)}
+                                />
+                                <p className="mt-2 text-xs text-muted-foreground">Ponytail: inserts a [GIF: …] tag. Tenor/GIPHY integration comes later.</p>
+                              </PopoverContent>
+                            </Popover>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
+                                  <IconMoodSmile className="size-4" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent align="end" className="w-56 rounded-2xl p-2">
+                                <p className="px-2 pb-1 pt-1 text-sm font-semibold">Emotion status</p>
+                                <div className="space-y-0.5">
+                                  {([
+                                    { id: "neutral", label: "Neutral" },
+                                    { id: "happy", label: "Happy" },
+                                    { id: "concerned", label: "Concerned" },
+                                    { id: "urgent", label: "Urgent" },
+                                  ] as const).map(opt => (
+                                    <button
+                                      key={opt.id}
+                                      type="button"
+                                      onClick={() => setInboxEmotionStatus(opt.id)}
+                                      className={cn(
+                                        "w-full rounded-lg px-3 py-1.5 text-left text-sm hover:bg-muted",
+                                        inboxEmotionStatus === opt.id && "bg-muted font-medium"
+                                      )}
+                                    >
+                                      {opt.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[#E4E6EB] pt-2 dark:border-border">
+                          <div className="flex flex-1 items-center gap-1.5 text-xs text-muted-foreground">
+                            <IconShield className="size-3.5" />
+                            <span>AI must not invent prices, stock, discounts, or refund promises.</span>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1.5 rounded-full bg-[#F8F9FA] text-[#050505] border-[#E4E6EB] hover:bg-[#E4E6EB] dark:bg-muted/50 dark:text-foreground dark:hover:bg-muted"
+                            onClick={() => {
+                              const current = inboxAssignments[selectedThread.id]
+                              const selfLabel = "Me"
+                              const next = current === selfLabel
+                                ? (pageManagerSettings.assignmentRules.defaultTeam || "Sales")
+                                : selfLabel
+                              setInboxAssignments(prev => ({
+                                ...prev,
+                                [selectedThread.id]: next,
+                              }))
+                              if (selectedThread.sourceType === "messenger" && selectedThread.conversationId) {
+                                void patchMessengerConversation(selectedThread.conversationId, selectedThread.pageId, {
+                                  assigned_to: next,
+                                })
+                              }
+                            }}
+                            disabled={!pageManagerSettings.assignmentRules.enabled}
+                            title={pageManagerSettings.assignmentRules.selfAssignEnabled ? "Click to self-assign / reassign" : "Enable assignment in Settings"}
+                          >
+                            <IconUsers className="size-3.5" />
+                            {inboxAssignments[selectedThread.id] === "Me"
+                              ? "Assigned to me"
+                              : inboxAssignments[selectedThread.id] || "Assign"}
+                          </Button>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-full bg-[#F8F9FA] text-[#050505] border-[#E4E6EB] hover:bg-[#E4E6EB] dark:bg-muted/50 dark:text-foreground dark:hover:bg-muted">
+                                <IconCalendarTime className="size-3.5" />
                                 Schedule
                               </Button>
-                              <Button variant="ghost" size="icon" className="ml-auto size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]">
-                                <IconMoodSmile className="size-4" />
-                              </Button>
-                              <Button
-                                className="gap-1.5 rounded-full bg-[#0084FF] text-white hover:bg-[#0077E6]"
-                                disabled={!inboxReplyText.trim() || commentActionLoading || messengerLoading || selectedThread.id === "empty-inbox"}
-                                onClick={() => void handleReplyInboxThread()}
-                              >
-                                {commentActionLoading || messengerLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSend className="size-3.5" />}
-                                Reply
-                              </Button>
-                            </div>
+                            </PopoverTrigger>
+                            <PopoverContent align="start" className="w-64 rounded-2xl p-3">
+                              <p className="px-1 pb-2 text-sm font-semibold">Schedule reply</p>
+                              <input
+                                type="datetime-local"
+                                className="w-full rounded-lg border px-2 py-1.5 text-sm"
+                                value={inboxScheduleAt}
+                                onChange={event => setInboxScheduleAt(event.target.value)}
+                              />
+                              <p className="mt-2 text-xs text-muted-foreground">Ponytail: stores a local scheduled draft. Real timed send needs a scheduled_messages worker later.</p>
+                            </PopoverContent>
+                          </Popover>
+                          <Button
+                            variant="outline"
+                            className="h-8 rounded-full px-4 text-xs"
+                            onClick={() => alert("Mock: Local draft saved")}
+                          >
+                            Save draft
+                          </Button>
+                          <Button
+                            className="h-8 gap-1.5 rounded-full bg-[#2548D8] px-4 text-xs text-white hover:bg-[#1C36A3]"
+                            disabled={(!inboxReplyText.trim() && !inboxAttachmentNote.trim() && !inboxGifQuery.trim()) || commentActionLoading || messengerLoading || selectedThread.id === "empty-inbox"}
+                            onClick={() => void handleReplyInboxThread()}
+                          >
+                            {commentActionLoading || messengerLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSend className="size-3.5" />}
+                            Send
+                          </Button>
+                        </div>
+                        {(inboxAttachmentNote || inboxGifQuery || inboxScheduleAt || inboxEmotionStatus !== "neutral") && (
+                          <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-muted-foreground">
+                            {inboxEmotionStatus !== "neutral" ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">Emotion: {inboxEmotionStatus}</span> : null}
+                            {inboxScheduleAt ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">Scheduled: {new Date(inboxScheduleAt).toLocaleString("en-US")}</span> : null}
+                            {inboxAttachmentNote ? <span className="rounded-full bg-muted px-2 py-0.5">Attachment: {inboxAttachmentNote}</span> : null}
+                            {inboxGifQuery ? <span className="rounded-full bg-muted px-2 py-0.5">GIF: {inboxGifQuery}</span> : null}
                           </div>
+                        )}
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
+
+                {inboxContextOpen ? (
+                  <Card className="flex h-full min-h-0 flex-col overflow-hidden rounded-none border-0 border-l border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
+                    <CardHeader className="shrink-0 border-b border-[#E4E6EB] p-3 dark:border-border">
+                      <CardTitle className="text-sm font-semibold">Context</CardTitle>
+                      <CardDescription className="text-xs">Thread details beside chat</CardDescription>
+                    </CardHeader>
+                    <CardContent className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3 text-sm">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-muted-foreground">Source</span>
+                          <Badge variant="outline" className="rounded-full text-xs">{selectedThread.sourceLabel}</Badge>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-muted-foreground">Status</span>
+                          <span className="font-medium capitalize">{selectedThreadMeta.taskState || selectedThread.responseStatus}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-muted-foreground">Assignee</span>
+                          <span className="font-medium">{selectedThread.assignedTo || "Unassigned"}</span>
+                        </div>
+                        {selectedThread.sentiment ? (
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Sentiment</span>
+                            <span className="font-medium capitalize">{selectedThread.sentiment}</span>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {inboxAiResult ? (
+                        <div className="rounded-xl border border-border/70 bg-muted/30 p-3 space-y-2">
+                          <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
+                            <IconSparkles className="size-3.5" />
+                            AI suggestion
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge variant="outline" className="rounded-full text-[11px]">Intent: {inboxAiResult.intent}</Badge>
+                            <Badge variant="outline" className="rounded-full text-[11px]">Confidence: {Math.round(inboxAiResult.confidence || 0)}%</Badge>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "rounded-full text-[11px]",
+                                inboxAiResult.riskLevel === "high" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              )}
+                            >
+                              Risk: {inboxAiResult.riskLevel}
+                            </Badge>
+                          </div>
+                          {inboxAiResult.draftReply ? (
+                            <p className="text-xs leading-relaxed text-muted-foreground line-clamp-6">{inboxAiResult.draftReply}</p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 p-3 text-xs text-muted-foreground">
+                          Run AI Auto Reply to populate intent, confidence, and draft here.
+                        </div>
+                      )}
+
+                      {selectedThread.sourceType === "facebook_comment" || selectedThread.sourceType === "instagram_comment" ? (
+                        <div className="rounded-xl border border-border/70 p-3 space-y-2">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Post context</div>
+                          <p className="text-sm font-medium line-clamp-3">
+                            {selectedThread.comment?.fb_post_message || selectedThread.lastMessage || "Comment on Page post"}
+                          </p>
+                          {selectedThread.comment?.fb_post_permalink ? (
+                            <a
+                              href={selectedThread.comment.fb_post_permalink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                            >
+                              <IconExternalLink className="size-3.5" />
+                              Open on Facebook
+                            </a>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {selectedThread.tags?.length ? (
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {selectedThread.tags.map(tag => (
+                              <Badge key={tag} variant="outline" className="rounded-full text-[11px]">{tag}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* Mock Stripe Widget */}
+                      <div className="rounded-xl border border-border/70 p-3 space-y-3 bg-slate-50/50 dark:bg-muted/10">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Stripe Billing</div>
+                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 rounded-full text-[10px]">Active</Badge>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Last payment</span>
+                            <span className="font-medium">$120.00</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">Card</span>
+                            <span>Visa ending in •••• 4242</span>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs h-8 border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-400 dark:hover:bg-indigo-950"
+                          onClick={() => alert("Mock Action: Refund flow would start here.")}
+                        >
+                          Issue Refund
+                        </Button>
+                      </div>
+
+                      {/* Mock Shopify Widget */}
+                      <div className="rounded-xl border border-border/70 p-3 space-y-3 bg-emerald-50/50 dark:bg-emerald-950/10">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Shopify Orders</div>
+                          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 rounded-full text-[10px]">2 Orders</Badge>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Order #10294</span>
+                            <span className="font-medium">In Transit</span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">Updated</span>
+                            <span>2 hours ago</span>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs h-8 border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-400 dark:hover:bg-emerald-950"
+                          onClick={() => window.open("https://shopify.com", "_blank")}
+                        >
+                          Track Package
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : null}
               </div>
             </div>
           )}
@@ -5030,91 +6101,92 @@ export default function PageManagerPage() {
                                 const spend = insight?.spend ?? item.spend ?? null
                                 const impressions = insight?.impressions ?? item.impressions ?? null
                                 return (
-                                <div
-                                  key={`${item.source}-${item.batchId}-${item.adId || item.creativeId || item.postId || item.fileName}`}
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={() => setSelectedPostKey(itemKey)}
-                                  onKeyDown={event => {
-                                    if (event.key === "Enter" || event.key === " ") setSelectedPostKey(itemKey)
-                                  }}
-                                  className={cn(
-                                    "p-4 text-left transition-colors hover:bg-muted/30",
-                                    selectedPostKey === itemKey && "bg-primary/5"
-                                  )}
-                                >
-                                <div className="flex gap-3">
-                                  <div className="size-16 shrink-0 overflow-hidden rounded-xl border bg-muted">
-                                    {item.thumbnailUrl ? (
-                                      <img src={item.thumbnailUrl} alt={item.fileName || item.adName || "Dark post"} className="size-full object-cover" />
-                                    ) : (
-                                      <div className="flex size-full items-center justify-center text-muted-foreground">
-                                        {item.mediaType === "video" ? <IconVideo className="size-5" /> : <IconPhoto className="size-5" />}
-                                      </div>
+                                  <div
+                                    key={`${item.source}-${item.batchId}-${item.adId || item.creativeId || item.postId || item.fileName}`}
+                                    role="button"
+                                    tabIndex={0}
+                                    onClick={() => setSelectedPostKey(itemKey)}
+                                    onKeyDown={event => {
+                                      if (event.key === "Enter" || event.key === " ") setSelectedPostKey(itemKey)
+                                    }}
+                                    className={cn(
+                                      "p-4 text-left transition-colors hover:bg-muted/30",
+                                      selectedPostKey === itemKey && "bg-primary/5"
                                     )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-sm font-medium">
-                                          {item.headline || item.fileName || item.adName || item.adSetName || item.adId || "Dark post"}
-                                        </p>
-                                        <p className="mt-1 text-xs text-muted-foreground truncate">
-                                          {item.campaignName ? `Campaign: ${item.campaignName}` : item.adSetName ? `Ad set: ${item.adSetName}` : "Campaign unavailable"}
-                                          {item.adAccountName ? ` - ${item.adAccountName}` : ""}
-                                        </p>
-                                      </div>
-                                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                                        <Badge variant="outline" className={cn("h-6", item.source === "meta" ? "bg-violet-50 text-violet-700 border-violet-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
-                                          {item.source === "meta" ? "Meta" : "Launch history"}
-                                        </Badge>
-                                        {item.status && (
-                                          <Badge variant="outline" className="h-6 bg-emerald-50 text-emerald-700 border-emerald-200">
-                                            {item.status}
-                                          </Badge>
+                                  >
+                                    <div className="flex gap-3">
+                                      <div className="size-16 shrink-0 overflow-hidden rounded-xl border bg-muted">
+                                        {item.thumbnailUrl ? (
+                                          <img src={item.thumbnailUrl} alt={item.fileName || item.adName || "Dark post"} className="size-full object-cover" />
+                                        ) : (
+                                          <div className="flex size-full items-center justify-center text-muted-foreground">
+                                            {item.mediaType === "video" ? <IconVideo className="size-5" /> : <IconPhoto className="size-5" />}
+                                          </div>
                                         )}
                                       </div>
-                                    </div>
-                                    {item.primaryText ? (
-                                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                                        {item.primaryText}
-                                      </p>
-                                    ) : null}
-                                    <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-                                      <div className="rounded-lg border bg-muted/20 p-2">
-                                        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Linked ad</p>
-                                        <p className="mt-1 truncate text-foreground">{item.adId || "—"}</p>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <p className="truncate text-sm font-medium">
+                                              {item.headline || item.fileName || item.adName || item.adSetName || item.adId || "Dark post"}
+                                            </p>
+                                            <p className="mt-1 text-xs text-muted-foreground truncate">
+                                              {item.campaignName ? `Campaign: ${item.campaignName}` : item.adSetName ? `Ad set: ${item.adSetName}` : "Campaign unavailable"}
+                                              {item.adAccountName ? ` - ${item.adAccountName}` : ""}
+                                            </p>
+                                          </div>
+                                          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                                            <Badge variant="outline" className={cn("h-6", item.source === "meta" ? "bg-violet-50 text-violet-700 border-violet-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
+                                              {item.source === "meta" ? "Meta" : "Launch history"}
+                                            </Badge>
+                                            {item.status && (
+                                              <Badge variant="outline" className="h-6 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                {item.status}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
+                                        {item.primaryText ? (
+                                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                            {item.primaryText}
+                                          </p>
+                                        ) : null}
+                                        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+                                          <div className="rounded-lg border bg-muted/20 p-2">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Linked ad</p>
+                                            <p className="mt-1 truncate text-foreground">{item.adId || "—"}</p>
+                                          </div>
+                                          <div className="rounded-lg border bg-muted/20 p-2">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Launched by</p>
+                                            <p className="mt-1 truncate text-foreground">{item.userName || "Unknown"}</p>
+                                          </div>
+                                          <div className="rounded-lg border bg-muted/20 p-2">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Spend</p>
+                                            <p className="mt-1 truncate text-foreground">{money(spend)}</p>
+                                          </div>
+                                          <div className="rounded-lg border bg-muted/20 p-2">
+                                            <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Impressions</p>
+                                            <p className="mt-1 truncate text-foreground">{fullNumber(impressions)}</p>
+                                          </div>
+                                        </div>
+                                        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                          {item.launchedAt ? (
+                                            <span>{new Date(item.launchedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                                          ) : null}
+                                          {item.postUrl ? (
+                                            <a href={item.postUrl} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} className="font-medium text-primary hover:underline">
+                                              Open post
+                                            </a>
+                                          ) : null}
+                                          {item.postId ? <span>Post ID: {item.postId}</span> : null}
+                                          {item.storyIdSource ? <span>Story source: {item.storyIdSource}</span> : null}
+                                          {item.adId ? <span>Ad ID: {item.adId}</span> : null}
+                                        </div>
                                       </div>
-                                      <div className="rounded-lg border bg-muted/20 p-2">
-                                        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Launched by</p>
-                                        <p className="mt-1 truncate text-foreground">{item.userName || "Unknown"}</p>
-                                      </div>
-                                      <div className="rounded-lg border bg-muted/20 p-2">
-                                        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Spend</p>
-                                        <p className="mt-1 truncate text-foreground">{money(spend)}</p>
-                                      </div>
-                                      <div className="rounded-lg border bg-muted/20 p-2">
-                                        <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Impressions</p>
-                                        <p className="mt-1 truncate text-foreground">{fullNumber(impressions)}</p>
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                      {item.launchedAt ? (
-                                        <span>{new Date(item.launchedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                                      ) : null}
-                                      {item.postUrl ? (
-                                        <a href={item.postUrl} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} className="font-medium text-primary hover:underline">
-                                          Open post
-                                        </a>
-                                      ) : null}
-                                      {item.postId ? <span>Post ID: {item.postId}</span> : null}
-                                      {item.storyIdSource ? <span>Story source: {item.storyIdSource}</span> : null}
-                                      {item.adId ? <span>Ad ID: {item.adId}</span> : null}
                                     </div>
                                   </div>
-                                </div>
-                                </div>
-                              )})}
+                                )
+                              })}
                             </div>
                             {metaDarkPostsMeta?.paging?.after ? (
                               <div className="border-t p-3 text-center">
@@ -5461,7 +6533,7 @@ export default function PageManagerPage() {
             </div>
           )}
 
-                    {tab === "comments" && (
+          {tab === "comments" && (
             <div className="space-y-4">
               <div className="flex flex-col gap-3 rounded-2xl border bg-card px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="min-w-0">
@@ -5509,9 +6581,10 @@ export default function PageManagerPage() {
                     {[
                       { id: "all", label: "All comments", count: commentCounts.all },
                       { id: "unreplied", label: "Unreplied", count: commentCounts.unreplied },
-                      { id: "positive", label: "Positive", count: commentCounts.positive },
-                      { id: "neutral", label: "Neutral", count: commentCounts.neutral },
                       { id: "negative", label: "Negative", count: commentCounts.negative },
+                      { id: "has_phone", label: "Has phone", count: commentCounts.has_phone },
+                      { id: "competitor", label: "Competitor / spam", count: commentCounts.competitor },
+                      { id: "ad_comments", label: "Ad comments", count: commentCounts.ad_comments },
                     ].map(item => (
                       <button
                         key={item.id}
@@ -5575,11 +6648,11 @@ export default function PageManagerPage() {
                             const isActive = selectedComment?.id === comment.id
                             const timeLabel = comment.fb_created_time
                               ? new Date(comment.fb_created_time).toLocaleString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  hour: "numeric",
-                                  minute: "2-digit",
-                                })
+                                month: "short",
+                                day: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                              })
                               : "Unknown time"
 
                             return (
@@ -5707,11 +6780,11 @@ export default function PageManagerPage() {
                                 <p className="text-xs text-muted-foreground">
                                   {selectedComment.fb_created_time
                                     ? new Date(selectedComment.fb_created_time).toLocaleString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "numeric",
-                                        minute: "2-digit",
-                                      })
+                                      month: "short",
+                                      day: "numeric",
+                                      hour: "numeric",
+                                      minute: "2-digit",
+                                    })
                                     : "Unknown time"}
                                 </p>
                               </div>
@@ -5857,7 +6930,7 @@ export default function PageManagerPage() {
               </div>
             </div>
           )}
-{tab === "statistics" && (
+          {tab === "statistics" && (
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
               <Card className="border-border/70 shadow-none">
                 <CardHeader className="border-b pb-4">

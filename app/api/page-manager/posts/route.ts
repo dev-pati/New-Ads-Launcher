@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
     if (!page_id) return NextResponse.json({ error: "page_id required" }, { status: 400 })
     if (!caption && !imageUrl) {
-      return NextResponse.json({ error: "message or image_url required" }, { status: 400 })
+      return NextResponse.json({ error: "Vui lòng nhập nội dung hoặc link ảnh công khai." }, { status: 400 })
     }
 
     const supabase = createAdminClient()

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getMessengerUserPicture, getMessengerUserProfile } from "@/lib/facebook"
 import { insertMessengerMessage, messengerMessageExists } from "@/lib/messenger-storage"
+import { storeCommentEvent } from "@/lib/page-manager-comment-webhook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createHmac, timingSafeEqual } from "crypto"
 
@@ -190,6 +191,19 @@ export async function POST(request: NextRequest) {
       for (const event of entry.messaging || []) {
         for (const page of pages) {
           jobs.push(storeMessengerEvent(page, event))
+        }
+      }
+
+      for (const change of entry.changes || []) {
+        if (change?.field !== "feed") continue
+        const value = change.value
+        if (value?.item !== "comment" || !value?.comment_id) continue
+        for (const page of pages) {
+          jobs.push(
+            storeCommentEvent(supabase, page, value).then(() => undefined).catch(err => {
+              console.error("[messenger/webhook] comment ingest failed", err)
+            })
+          )
         }
       }
     }

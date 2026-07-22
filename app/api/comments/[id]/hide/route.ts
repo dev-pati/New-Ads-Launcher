@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { resolveOrgPageAccessToken } from "@/lib/facebook-page-token"
 import { normalizeMetaError } from "@/lib/meta-error"
+import { logPageManageActivity } from "@/lib/page-manage-activity"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
@@ -41,6 +42,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     await supabase.from("comments").update({ is_hidden }).eq("id", id)
+
+    await logPageManageActivity(supabase, {
+      actorId: ctx.user.id,
+      orgId: ctx.orgId,
+      pageId: String(page_id),
+      module: "comment",
+      action: is_hidden ? "hide" : "unhide",
+      targetRef: comment.fb_comment_id,
+    })
 
     return NextResponse.json({ success: true })
   } catch (err: any) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { logPageManageActivity } from "@/lib/page-manage-activity"
 
 export const dynamic = "force-dynamic"
 
@@ -179,6 +180,27 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     if (!data) return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+
+    if (typeof body.assigned_to === "string") {
+      void logPageManageActivity(supabase, {
+        actorId: ctx.user.id,
+        orgId: ctx.orgId,
+        pageId,
+        module: "inbox",
+        action: "assign",
+        targetRef: conversationId,
+      })
+    }
+    if (typeof body.status === "string" && ["closed", "archived"].includes(body.status)) {
+      void logPageManageActivity(supabase, {
+        actorId: ctx.user.id,
+        orgId: ctx.orgId,
+        pageId,
+        module: "inbox",
+        action: "close",
+        targetRef: conversationId,
+      })
+    }
 
     return NextResponse.json({ conversation: data })
   } catch (err) {

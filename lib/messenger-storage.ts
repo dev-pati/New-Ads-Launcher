@@ -8,8 +8,9 @@ export type MessengerMessageInsert = {
   page_id: string
   customer_psid: string
   fb_message_id?: string | null
+  fb_comment_id?: string | null
   direction: "inbound" | "outbound"
-  message_type: "text" | "postback" | "attachment" | "unknown"
+  message_type: "text" | "postback" | "attachment" | "unknown" | "comment"
   message?: string | null
   attachments?: unknown[]
   raw_event?: unknown

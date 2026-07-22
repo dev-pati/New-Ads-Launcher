@@ -331,6 +331,10 @@ export async function POST(request: NextRequest) {
       action,
       draftReply,
       reason,
+      evidence: [
+        ...(template ? [{ id: template.id, title: template.name, kind: "template", shortcut: template.shortcut }] : []),
+        ...(guardrails.matchedRules.length ? guardrails.matchedRules.slice(0, 3).map(rule => ({ id: rule, title: rule.replaceAll("_", " "), kind: "rule" })) : []),
+      ],
       matchedRules: guardrails.matchedRules,
       matchedTemplate: template ? { id: template.id, name: template.name, shortcut: template.shortcut } : null,
       customerLanguage: guardrails.customerLanguage,

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Page token not found. Reconnect Facebook and select this Page again." }, { status: 400 })
     }
 
-    const fields = "messages,messaging_postbacks,message_echoes"
+    const fields = "messages,messaging_postbacks,message_echoes,feed"
     const params = new URLSearchParams({
       subscribed_fields: fields,
       access_token: pageToken.token,
