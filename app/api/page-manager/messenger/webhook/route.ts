@@ -1,4 +1,4 @@
-import { after, NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { getMessengerUserPicture, getMessengerUserProfile } from "@/lib/facebook"
 import { insertMessengerMessage, messengerMessageExists } from "@/lib/messenger-storage"
 import { storeCommentEvent } from "@/lib/page-manager-comment-webhook"
@@ -37,8 +37,9 @@ function isValidSignature(request: NextRequest, rawBody: string) {
   const signature = request.headers.get("x-hub-signature-256")
   const secret = appSecret()
 
-  // Keep dev usable when app secret is not configured locally.
-  if (!secret) return process.env.NODE_ENV !== "production"
+  // Keep dev usable when app secret is not configured or left as default template.
+  const isSecretUnset = !secret || secret === "replace_with_meta_app_secret"
+  if (isSecretUnset) return process.env.NODE_ENV !== "production"
   if (!signature || !signature.startsWith("sha256=")) return false
 
   const expected = `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`
@@ -99,36 +100,42 @@ async function storeMessengerEvent(page: any, event: MessengerEvent) {
     .eq("org_id", page.org_id)
     .eq("page_id", pageId)
     .eq("customer_psid", customerPsid)
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(1)
     .maybeSingle()
 
-  const nextUnreadCount = direction === "inbound"
-    ? (existingConversation?.unread_count || 0) + 1
-    : 0
+  const conversationPatch = {
+    page_name: page.name,
+    customer_name: customerName,
+    customer_profile_pic: customerProfilePic || undefined,
+    status: direction === "inbound" ? "pending" : "replied",
+    unread_count: direction === "inbound" ? (existingConversation?.unread_count || 0) + 1 : 0,
+    last_message: text,
+    last_message_at: timestamp,
+    last_inbound_at: direction === "inbound" ? timestamp : undefined,
+    last_outbound_at: direction === "outbound" ? timestamp : undefined,
+  }
 
-  const { data: conversation, error: conversationError } = await supabase
-    .from("page_conversations")
-    .upsert(
-      {
-        org_id: page.org_id,
-        page_id: pageId,
-        page_name: page.name,
-        customer_psid: customerPsid,
-        customer_name: customerName,
-        customer_profile_pic: customerProfilePic || undefined,
-        status: direction === "inbound" ? "pending" : "replied",
-        unread_count: nextUnreadCount,
-        last_message: text,
-        last_message_at: timestamp,
-        last_inbound_at: direction === "inbound" ? timestamp : undefined,
-        last_outbound_at: direction === "outbound" ? timestamp : undefined,
-      },
-      { onConflict: "org_id,page_id,customer_psid" }
-    )
-    .select("id, unread_count")
-    .single()
+  const { data: conversation, error: conversationError } = existingConversation
+    ? await supabase
+        .from("page_conversations")
+        .update(conversationPatch)
+        .eq("id", existingConversation.id)
+        .select("id, unread_count")
+        .single()
+    : await supabase
+        .from("page_conversations")
+        .insert({
+          org_id: page.org_id,
+          page_id: pageId,
+          customer_psid: customerPsid,
+          ...conversationPatch,
+        })
+        .select("id, unread_count")
+        .single()
 
   if (conversationError || !conversation) {
-    console.error("[messenger/webhook] conversation upsert failed", conversationError)
+    console.error("[messenger/webhook] conversation write failed", conversationError)
     return
   }
 
@@ -177,7 +184,9 @@ export async function POST(request: NextRequest) {
     // ponytail: Meta requires 200 OK within ~3s. Defer all DB/AI work to after()
     // so we never block the response. Upgrade path: swap `after()` for a durable
     // queue (QStash/Inngest) if `after()` is dropped from serverless billing.
-    after(() => processWebhookBody(body))
+    // BUGFIX: after() requires experimental config in Next.js 15, or it silently drops execution in some modes.
+    // Since Meta requires 200 OK fast, but we're debugging a regression, let's await it directly.
+    await processWebhookBody(body)
 
     return NextResponse.json({ received: true }, { status: 200 })
   } catch (err) {
