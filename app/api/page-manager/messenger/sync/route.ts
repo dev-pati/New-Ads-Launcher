@@ -125,32 +125,48 @@ export async function POST(request: NextRequest) {
       const lastMsgIsFromPage = lastMsg.from?.id === page_id
       const status = lastMsgIsFromPage ? "replied" : "pending"
 
-      // Upsert conversation
-      const { data: conversation, error: convError } = await supabase
+      // Find-or-create conversation without relying on a UNIQUE constraint.
+      const { data: existingConv } = await supabase
         .from("page_conversations")
-        .upsert(
-          {
-            org_id: ctx.orgId,
-            page_id,
-            page_name: pageToken.pageName || page_id,
-            customer_psid: customerPsid,
-            customer_name: customerName,
-            customer_profile_pic: customerProfilePic || null,
-            status,
-            unread_count: thread.unread_count || 0,
-            last_message: lastText.slice(0, 500),
-            last_message_at: lastTime,
-            last_inbound_at: lastInboundAt,
-            last_outbound_at: lastOutboundAt,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "org_id,page_id,customer_psid" }
-        )
         .select("id")
+        .eq("org_id", ctx.orgId)
+        .eq("page_id", page_id)
+        .eq("customer_psid", customerPsid)
+        .order("last_message_at", { ascending: false, nullsFirst: false })
+        .limit(1)
         .maybeSingle()
 
+      const conversationPatch = {
+        page_name: pageToken.pageName || page_id,
+        customer_name: customerName,
+        customer_profile_pic: customerProfilePic || null,
+        status,
+        unread_count: thread.unread_count || 0,
+        last_message: lastText.slice(0, 500),
+        last_message_at: lastTime,
+        last_inbound_at: lastInboundAt,
+        last_outbound_at: lastOutboundAt,
+        updated_at: new Date().toISOString(),
+      }
+
+      const conversationResult = existingConv
+        ? await supabase
+            .from("page_conversations")
+            .update(conversationPatch)
+            .eq("id", existingConv.id)
+            .select("id")
+            .maybeSingle()
+        : await supabase
+            .from("page_conversations")
+            .insert({ org_id: ctx.orgId, page_id, customer_psid: customerPsid, ...conversationPatch })
+            .select("id")
+            .maybeSingle()
+
+      const conversation = conversationResult.data
+      const convError = conversationResult.error
+
       if (convError || !conversation) {
-        console.error("[messenger/sync] failed to upsert conversation:", convError)
+        console.error("[messenger/sync] failed to write conversation:", convError)
         continue
       }
 
