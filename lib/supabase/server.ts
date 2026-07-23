@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { assertSupabaseBoundary, resolveSchema } from './boundary'
 
 function buildServerHeaders(token?: string): Record<string, string> {
   const headers: Record<string, string> = {}
@@ -15,11 +16,17 @@ export async function createClient() {
   const cookieStore = await cookies()
   const token = cookieStore.get("adlauncher_client_token")?.value
 
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  const schema = resolveSchema()
+
+  assertSupabaseBoundary(url, schema)
+
   return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    url,
+    key,
     {
-      db: { schema: process.env.NEXT_PUBLIC_SUPABASE_DB_SCHEMA || "ads_launcher" },
+      db: { schema },
       global: { headers: buildServerHeaders(token) },
       auth: {
         autoRefreshToken: false,

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { assertSupabaseBoundary, resolveSchema } from './boundary'
 
 /**
  * Admin Supabase client using service_role key.
@@ -7,10 +8,13 @@ import { createClient } from '@supabase/supabase-js'
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+  const schema = resolveSchema()
 
   if (!serviceRoleKey) {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set')
   }
+
+  assertSupabaseBoundary(url, schema)
 
   const cfHeaders: Record<string, string> = {}
   const cfId = process.env.CF_ACCESS_CLIENT_ID
@@ -20,7 +24,7 @@ export function createAdminClient() {
 
   return createClient(url, serviceRoleKey, {
     auth: { persistSession: false },
-    db: { schema: process.env.NEXT_PUBLIC_SUPABASE_DB_SCHEMA || "ads_launcher" },
+    db: { schema },
     global: Object.keys(cfHeaders).length ? { headers: cfHeaders } : undefined,
   })
 }

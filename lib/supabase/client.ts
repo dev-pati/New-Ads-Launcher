@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
+import { assertSupabaseBoundary, resolveSchema } from './boundary'
 
 function getClientToken() {
   if (typeof document === "undefined") return undefined
@@ -34,11 +35,17 @@ function buildHeaders(token?: string): Record<string, string> {
 
 export function createClient() {
   const token = getClientToken()
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  const schema = resolveSchema()
+
+  assertSupabaseBoundary(url, schema)
+
   return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    url,
+    key,
     {
-      db: { schema: process.env.NEXT_PUBLIC_SUPABASE_DB_SCHEMA || "ads_launcher" },
+      db: { schema },
       global: { headers: buildHeaders(token) },
       auth: {
         autoRefreshToken: false,
