@@ -1,0 +1,33 @@
+# Cài trên Mac mini:
+#   brew install caddy
+#   cp scripts/Caddyfile.example /opt/homebrew/etc/Caddyfile
+#   brew services start caddy
+#
+# Sửa "ads.tencongty.com" thành domain thật, trỏ DNS A record -> IP public Mac mini,
+# mở port 80+443 trên router. Caddy auto-cấp SSL Let's Encrypt.
+
+ads.tencongty.com {
+  reverse_proxy localhost:3000 {
+    # Giữ connection lâu cho video upload
+    flush_interval -1
+  }
+
+  # Cho phép body 1GB (match next.config.mjs proxyClientMaxBodySize)
+  request_body {
+    max_size 1GB
+  }
+
+  # Timeout dài cho upload video + server actions
+  transport http {
+    read_timeout 10m
+    write_timeout 10m
+  }
+
+  encode gzip zstd
+  log {
+    output file /tmp/caddy-adlauncher.log {
+      roll_size 50mb
+      roll_keep 3
+    }
+  }
+}

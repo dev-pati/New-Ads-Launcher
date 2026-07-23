@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
   transpilePackages: ["xlsx"],
   // TEMPORARILY disabled: prevents useEffect double-firing in dev mode
   // → halves Meta API calls during development. Re-enable for production.

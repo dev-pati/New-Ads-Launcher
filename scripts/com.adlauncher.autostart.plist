@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.adlauncher.autostart</string>
+
+  <!-- Chạy lệnh deploy tự động mỗi 2 phút: pull + rebuild nếu có code mới -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>PATH=/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH; ~/Developer/AdLauncher/New-Ads-Launcher/scripts/auto-deploy.sh</string>
+  </array>
+
+  <!-- Chạy khi Mac mini boot -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- Lặp lại mỗi 120 giây -->
+  <key>StartInterval</key>
+  <integer>120</integer>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/adlauncher-autostart.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/adlauncher-autostart.err</string>
+
+  <!-- Nếu job lỗi, thử lại sau 10 giây -->
+  <key>KeepAlive</key>
+  <false/>
+</dict>
+</plist>
