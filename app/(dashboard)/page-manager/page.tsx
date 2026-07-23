@@ -793,12 +793,6 @@ function pageStatusMeta(status: PageOption["status"]) {
   return { label: "Permission needed", dot: "bg-amber-500", text: "text-amber-700" }
 }
 
-function datePresetToDays(value: string) {
-  if (value === "last_7d") return 7
-  if (value === "last_90d") return 90
-  return 30
-}
-
 function normalizeMetaAccountId(id?: string | null) {
   return (id || "").replace(/^act_/, "")
 }
@@ -3215,7 +3209,7 @@ export default function PageManagerPage() {
           try { sessionStorage.removeItem("page_manager_pages_cache") } catch { }
           errorMsg = "This Page is no longer accessible with the current token. Reconnect Facebook, refresh the Page list, then select the Page again."
         } else if (data.type === "permission" || errorMsg.includes("pages_read_engagement") || errorMsg.includes("Public Content Access")) {
-          errorMsg = "Comment sync failed: the Facebook App needs 'pages_read_engagement' to read comments. In Live mode, this needs App Review for users outside app roles."
+          errorMsg = "Couldn't load comments. This Page may need extra Facebook access before comments can be synced."
         }
         throw new Error(errorMsg)
       }
@@ -3250,7 +3244,7 @@ export default function PageManagerPage() {
           try { sessionStorage.removeItem("page_manager_pages_cache") } catch { }
           errorMsg = "This Page is no longer accessible with the current token. Reconnect Facebook, refresh the Page list, then select the Page again."
         } else if (data.type === "permission" || data.code === 200 || errorMsg.includes("pages_messaging") || errorMsg.includes("appropriate role")) {
-          errorMsg = "Messenger sync failed: the Facebook App needs 'pages_messaging' to read messages. In Live mode, this needs App Review for users outside app roles."
+          errorMsg = "Couldn't load Messenger. This Page may need extra Facebook messaging access before inbox can sync."
         }
         throw new Error(errorMsg)
       }
@@ -3479,7 +3473,7 @@ export default function PageManagerPage() {
     setMetaDarkPostsError("")
 
     try {
-      const cacheKey = `page_manager_posts:v3:${pageId}:${selectedAdAccountId || "no-ad-account"}:${datePreset}:${darkPostPageScope}`
+      const cacheKey = `page_manager_posts:v4:${pageId}:${selectedAdAccountId || "no-ad-account"}:${datePreset}:${darkPostPageScope}`
       if (!forceRefresh) {
         const cached = readCachedValue<{
           pageInsightPosts: PageInsightPost[]
@@ -3502,52 +3496,68 @@ export default function PageManagerPage() {
         }
       }
 
-      const days = datePresetToDays(datePreset)
-      const darkPostParams = new URLSearchParams({
-        ad_account_id: selectedAdAccountId,
+      const allPostsParams = new URLSearchParams({
+        page_id: pageId,
         date_preset: datePreset,
         limit: "100",
       })
-      if (darkPostPageScope === "selected_page") {
-        darkPostParams.set("page_id", pageId)
+      if (selectedAdAccountId) {
+        allPostsParams.set("ad_account_id", selectedAdAccountId)
       }
+      allPostsParams.set("scope", darkPostPageScope)
 
-      const [insightsRes, historyRes, metaDarkRes] = await Promise.all([
-        fetch(`/api/insights/page-insights?pageId=${encodeURIComponent(pageId)}&days=${days}`),
+      const [allPostsRes, historyRes] = await Promise.all([
+        fetch(`/api/page-manager/all-posts?${allPostsParams.toString()}`),
         fetch("/api/launch-history?limit=50"),
-        selectedAdAccountId
-          ? fetch(`/api/facebook/dark-posts?${darkPostParams.toString()}`)
-          : Promise.resolve(null),
       ])
 
-      const [insightsData, historyData, metaDarkData] = await Promise.all([
-        insightsRes.json().catch(() => ({})),
+      const [allPostsData, historyData] = await Promise.all([
+        allPostsRes.json().catch(() => ({})),
         historyRes.json().catch(() => ({})),
-        metaDarkRes ? metaDarkRes.json().catch(() => ({})) : Promise.resolve({}),
       ])
 
-      const nextPageInsightPosts = insightsRes.ok && !insightsData.error && Array.isArray(insightsData.recentPosts)
-        ? sortByNewest(insightsData.recentPosts as PageInsightPost[])
-        : []
-      const nextPageInsightTotals = insightsRes.ok && !insightsData.error ? (insightsData.totals || null) : null
-      const nextPageInsightPermissionRequired = Boolean(insightsData.recentPostsPermissionRequired)
-      const nextPageInsightError = insightsData.recentPostsError || ""
-      const nextLaunchBatches = historyRes.ok && !historyData.error && Array.isArray(historyData.batches)
-        ? historyData.batches
-        : []
+      const nextPosts = Array.isArray(allPostsData.posts) ? allPostsData.posts : []
+      const nextPageInsightPosts = nextPosts
+        .filter((p: any) => p.source === "public")
+        .map((p: any) => ({
+          id: p.id,
+          message: p.message,
+          created_time: p.created_time,
+          permalink_url: p.permalink_url,
+          full_picture: p.full_picture,
+          status_type: p.status_type,
+          reactions: p.reactions,
+          comments: p.comments,
+          shares: p.shares,
+          engagement: p.engagement,
+          reach: p.reach,
+          impressions: p.impressions,
+          video_views: p.video_views,
+        }))
+
+      const nextPageInsightTotals = allPostsData.pageInsightTotals || null
+      const nextPageInsightPermissionRequired = Boolean(allPostsData.publicPermissionRequired)
+      const nextPageInsightError = allPostsData.publicError || ""
+
       const selectedAdAccountName = adAccounts.find(account => account.id === selectedAdAccountId)?.name || selectedAdAccountId || null
-      const nextMetaDarkPosts = metaDarkRes && metaDarkRes.ok && !metaDarkData.error && Array.isArray(metaDarkData.darkPosts)
-        ? metaDarkData.darkPosts.map((item: any) => mapMetaDarkPost(item, pageId, selectedPage?.name, selectedAdAccountName))
-        : []
-      const nextMetaDarkPostsMeta = metaDarkRes && metaDarkRes.ok && !metaDarkData.error
+
+      const nextMetaDarkPosts = nextPosts
+        .filter((p: any) => p.source === "dark")
+        .map((p: any) => mapMetaDarkPost(p, pageId, selectedPage?.name, selectedAdAccountName))
+
+      const nextMetaDarkPostsMeta = allPostsData.darkPaging || allPostsData.inspectedAds
         ? {
-          inspectedAds: Number(metaDarkData.inspectedAds || 0),
-          adsWithStoryId: Number(metaDarkData.adsWithStoryId || 0),
-          paging: metaDarkData.paging || null,
+          inspectedAds: Number(allPostsData.inspectedAds || 0),
+          adsWithStoryId: Number(allPostsData.adsWithStoryId || 0),
+          paging: allPostsData.darkPaging || null,
         }
         : null
 
-      if (insightsRes.ok && !insightsData.error) {
+      const nextLaunchBatches = historyRes.ok && !historyData.error && Array.isArray(historyData.batches)
+        ? historyData.batches
+        : []
+
+      if (allPostsRes.ok && !allPostsData.error) {
         setPageInsightPosts(nextPageInsightPosts)
         setPageInsightTotals(nextPageInsightTotals)
         setPageInsightError(nextPageInsightError)
@@ -3556,7 +3566,7 @@ export default function PageManagerPage() {
         setPageInsightPosts([])
         setPageInsightTotals(null)
         setPageInsightPermissionRequired(false)
-        setPageInsightError(insightsData.error || "Unable to load public posts.")
+        setPageInsightError(allPostsData.error || "Unable to load public posts.")
       }
 
       if (historyRes.ok && !historyData.error) {
@@ -3570,13 +3580,16 @@ export default function PageManagerPage() {
         setMetaDarkPosts([])
         setMetaDarkPostsMeta(null)
         setMetaDarkPostsError("Select an ad account to load Meta dark posts.")
-      } else if (metaDarkRes && metaDarkRes.ok && !metaDarkData.error) {
+      } else if (allPostsRes.ok && !allPostsData.error) {
         setMetaDarkPosts(nextMetaDarkPosts)
         setMetaDarkPostsMeta(nextMetaDarkPostsMeta)
+        if (allPostsData.darkError) {
+          setMetaDarkPostsError(allPostsData.darkError)
+        }
       } else {
         setMetaDarkPosts([])
         setMetaDarkPostsMeta(null)
-        setMetaDarkPostsError(metaDarkData.error || "Unable to load Meta dark posts.")
+        setMetaDarkPostsError(allPostsData.error || "Unable to load Meta dark posts.")
       }
 
       writeCachedValue(cacheKey, {
@@ -3827,9 +3840,16 @@ export default function PageManagerPage() {
     })
   }, [darkPostInsights, darkPosts, selectedPage?.id])
   const postDetailItems = useMemo(() => {
-    if (postScope === "public") return publicPostDetailItems
-    if (postScope === "dark") return darkPostDetailItems
-    return [...publicPostDetailItems, ...darkPostDetailItems]
+    let items = []
+    if (postScope === "public") items = publicPostDetailItems
+    else if (postScope === "dark") items = darkPostDetailItems
+    else items = [...publicPostDetailItems, ...darkPostDetailItems]
+
+    return items.sort((a, b) => {
+      const ta = new Date(a.time || 0).getTime()
+      const tb = new Date(b.time || 0).getTime()
+      return (Number.isFinite(tb) ? tb : 0) - (Number.isFinite(ta) ? ta : 0)
+    })
   }, [darkPostDetailItems, postScope, publicPostDetailItems])
   const selectedThreadPostPreview = useMemo(
     () => {
@@ -4939,7 +4959,7 @@ export default function PageManagerPage() {
         </div>
       </div>
 
-      <div className="mx-auto flex max-w-[1600px] gap-2 px-2 py-2">
+      <div className="mx-auto flex w-full gap-2 px-2 py-2">
         <main className="min-w-0 flex-1 space-y-2">
 
           {tab === "inbox" && (
@@ -4967,7 +4987,7 @@ export default function PageManagerPage() {
               ) : null}
               <div
                 className={cn(
-                  "flex h-[950px] overflow-hidden rounded-2xl border border-[#E4E6EB] dark:border-border bg-[#F0F2F5] dark:bg-muted/50 shadow-sm dark:border-border dark:bg-muted/30",
+                  "flex h-[calc(100vh-180px)] min-h-[700px] overflow-hidden rounded-2xl border border-[#E4E6EB] dark:border-border bg-[#F0F2F5] dark:bg-muted/50 shadow-sm dark:border-border dark:bg-muted/30",
                   !selectedPage && "hidden"
                 )}
               >
@@ -5191,35 +5211,36 @@ export default function PageManagerPage() {
                   style={{ width: queueWidth }}
                 >
                   <CardHeader className="shrink-0 border-b border-[#E4E6EB] dark:border-border px-3 py-2 dark:border-border space-y-2">
-                    {/* Row 1: Channel Tabs (Meta style) */}
-                    <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none border-b border-muted">
-                      {[
-                        { id: "all" as const, label: "All messages", count: allPageThreads.length },
-                        { id: "messenger" as const, label: "Messenger", count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
-                        { id: "instagram" as const, label: "Instagram", count: allPageThreads.filter(thread => thread.sourceType.includes("instagram")).length },
-                        { id: "fb_comments" as const, label: "Facebook comments", count: allPageThreads.filter(thread => thread.sourceType === "facebook_comment").length },
-                        { id: "ig_comments" as const, label: "Instagram comments", count: allPageThreads.filter(thread => thread.sourceType === "instagram_comment").length },
-                      ].map(item => {
-                        const active = inboxChannel === item.id
-                        return (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => setInboxChannel(item.id)}
-                            className={cn(
-                              "relative px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors rounded-lg",
-                              active ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary" : "text-[#65676B] dark:text-muted-foreground hover:bg-[#F0F2F5] dark:hover:bg-muted"
-                            )}
-                          >
-                            {item.label}
-                            {item.count > 0 ? (
-                              <span className="ml-1.5 rounded-full bg-red-500 px-1 py-0.5 text-[10px] font-bold text-white leading-none">
-                                {item.count > 9 ? "9+" : item.count}
-                              </span>
-                            ) : null}
-                          </button>
-                        )
-                      })}
+                    {/* Row 1: Channel Tabs (Meta style) -> Dropdown */}
+                    <div className="border-b border-muted pb-2">
+                      <Select
+                        value={inboxChannel}
+                        onValueChange={(val) => setInboxChannel(val as any)}
+                      >
+                        <SelectTrigger className="h-8.5 w-full rounded-lg border-border bg-background text-xs font-semibold text-foreground focus:ring-1 focus:ring-primary/20 shadow-none">
+                          <SelectValue placeholder="Filter by channel" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-lg">
+                          {[
+                            { id: "all" as const, label: "All messages", count: allPageThreads.length },
+                            { id: "messenger" as const, label: "Messenger", count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
+                            { id: "instagram" as const, label: "Instagram", count: allPageThreads.filter(thread => thread.sourceType.includes("instagram_dm") || thread.sourceType.includes("instagram_comment")).length },
+                            { id: "fb_comments" as const, label: "Facebook comments", count: allPageThreads.filter(thread => thread.sourceType === "facebook_comment").length },
+                            { id: "ig_comments" as const, label: "Instagram comments", count: allPageThreads.filter(thread => thread.sourceType === "instagram_comment").length },
+                          ].map(item => (
+                            <SelectItem key={item.id} value={item.id} className="text-xs">
+                              <div className="flex w-full items-center justify-between gap-12 pr-2">
+                                <span>{item.label}</span>
+                                {item.count > 0 ? (
+                                  <span className="rounded-full bg-red-500 px-1.5 py-0.5 text-[9px] font-bold text-white leading-none">
+                                    {item.count > 9 ? "9+" : item.count}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
 
                     {/* Row 2: Open badge + Density */}
@@ -5265,7 +5286,7 @@ export default function PageManagerPage() {
                           <div className="rounded-2xl border border-dashed bg-muted/20 px-4 py-8 text-center">
                             <p className="text-sm font-medium">No inbox items for this Page</p>
                             <p className="mt-1 text-xs text-muted-foreground">
-                              Messenger requires `pages_messaging`. Ad comments will appear here after comment sync returns data for the selected Page.
+                              Messenger needs extra Facebook access. Ad comments appear here after comments finish loading for this Page.
                             </p>
                             {messengerError ? (
                               <p className="mt-2 text-xs text-amber-700">{messengerError}</p>
@@ -5709,7 +5730,7 @@ export default function PageManagerPage() {
                               ? "Comment replies and hide/unhide use Page comment APIs when the Page has the required permissions."
                               : selectedThread.conversation
                                 ? "Messenger messages are loaded from webhook storage. Replies are sent with the selected Page token."
-                                : "Messenger sync requires `pages_messaging`, Page webhook subscription, and the messenger tables migration."}
+                                : "Messenger may need extra Facebook access or inbox setup before messages can load."}
                           </div>
                         </div>
 
@@ -6120,10 +6141,6 @@ export default function PageManagerPage() {
                           <p className="text-sm font-semibold">{selectedThread.name}</p>
                           <p className="text-xs text-muted-foreground capitalize">{selectedThread.sourceLabel}</p>
                         </div>
-                        <span className="text-xs font-medium text-[#0084FF] dark:text-primary opacity-50 cursor-not-allowed inline-flex items-center gap-1">
-                          <IconExternalLink className="size-3" />
-                          View Facebook profile
-                        </span>
                       </div>
 
                       {/* Contact details */}
@@ -6140,23 +6157,6 @@ export default function PageManagerPage() {
                         <div className="flex items-center justify-between gap-2 text-xs">
                           <span className="text-muted-foreground">First seen</span>
                           <span className="font-medium">{selectedThread.latestAt || "—"}</span>
-                        </div>
-                      </div>
-
-                      {/* Facebook profile */}
-                      <div className="space-y-1.5 border-t border-[#E4E6EB] dark:border-border pt-3 dark:border-border">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Facebook profile</p>
-                        <div className="flex items-center justify-between gap-2 text-xs">
-                          <span className="text-muted-foreground">Local time</span>
-                          <span className="font-medium">GMT+7</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-xs">
-                          <span className="text-muted-foreground">Lives in</span>
-                          <span className="font-medium">Ho Chi Minh City</span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 text-xs">
-                          <span className="text-muted-foreground">From</span>
-                          <span className="font-medium">Vietnam</span>
                         </div>
                       </div>
 
@@ -6308,14 +6308,14 @@ export default function PageManagerPage() {
               <div className="grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)_320px]">
                 <Card className="border-border/70 shadow-none">
                   <CardHeader className="border-b pb-4">
-                    <CardTitle className="text-sm">Post scope</CardTitle>
-                    <CardDescription>Public and dark posts default to the selected Page. Use ad account scope only for audits.</CardDescription>
+                    <CardTitle className="text-sm">View</CardTitle>
+                    <CardDescription>Browse published Page posts and unpublished ad posts in one place.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {[
                       { id: "all", label: "All posts", count: totalPostCount },
-                      { id: "public", label: "Public posts", count: publicPostCount },
-                      { id: "dark", label: "Dark posts", count: darkPostCount },
+                      { id: "public", label: "Published posts", count: publicPostCount },
+                      { id: "dark", label: "Unpublished ad posts", count: darkPostCount },
                     ].map(item => (
                       <button
                         key={item.id}
@@ -6330,11 +6330,13 @@ export default function PageManagerPage() {
                       </button>
                     ))}
                     <div className="mt-4 rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
-                      <p className="font-medium text-foreground">Active sources</p>
-                      <p className="mt-1">Public posts: `/api/insights/page-insights`</p>
-                      <p className="mt-1">Dark posts: ads → creative → story id</p>
+                      <p className="font-medium text-foreground">Currently showing</p>
+                      <p className="mt-1">Published posts from this Page</p>
+                      <p className="mt-1">Unpublished posts from ads</p>
                       <p className="mt-1">Ad account: {selectedAdAccount?.name || "Not selected"}</p>
-                      <p className="mt-1">Scope: {darkPostPageScope === "ad_account" ? "All ad account Pages" : selectedPage?.name || "Selected Page"}</p>
+                      <p className="mt-1">
+                        Filter: {darkPostPageScope === "ad_account" ? "All Pages in ad account" : selectedPage?.name || "This Page"}
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
@@ -6342,8 +6344,8 @@ export default function PageManagerPage() {
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-2">
                     <Button variant={postScope === "all" ? "default" : "outline"} size="sm" onClick={() => setPostScope("all")}>All</Button>
-                    <Button variant={postScope === "public" ? "default" : "outline"} size="sm" onClick={() => setPostScope("public")}>Public</Button>
-                    <Button variant={postScope === "dark" ? "default" : "outline"} size="sm" onClick={() => setPostScope("dark")}>Dark</Button>
+                    <Button variant={postScope === "public" ? "default" : "outline"} size="sm" onClick={() => setPostScope("public")}>Published</Button>
+                    <Button variant={postScope === "dark" ? "default" : "outline"} size="sm" onClick={() => setPostScope("dark")}>Unpublished</Button>
                     {postScope !== "public" && (
                       <div className="flex items-center gap-1 rounded-full border bg-background p-1">
                         <Button
@@ -6360,7 +6362,7 @@ export default function PageManagerPage() {
                           className="h-7 rounded-full px-3 text-xs"
                           onClick={() => setDarkPostPageScope("ad_account")}
                         >
-                          All ad account
+                          All Pages
                         </Button>
                       </div>
                     )}
@@ -6373,7 +6375,7 @@ export default function PageManagerPage() {
                         disabled={pageInsightLoading || launchHistoryLoading || metaDarkPostsLoading}
                       >
                         <IconRefresh className={cn("size-3.5", (pageInsightLoading || launchHistoryLoading || metaDarkPostsLoading) && "animate-spin")} />
-                        Sync
+                        Refresh
                       </Button>
                       <Button size="sm" className="gap-1.5" onClick={() => setComposerOpen(true)} disabled={!selectedPage?.id || /^p-\d+$/.test(selectedPage?.id || "")} title="Publish a post to this Page">
                         <IconPlus className="size-3.5" />
@@ -6382,335 +6384,125 @@ export default function PageManagerPage() {
                     </div>
                   </div>
 
-                  {(postScope !== "dark") && (
-                    <Card className="border-border/70 shadow-none overflow-hidden">
-                      <CardHeader className="border-b pb-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <CardTitle className="text-sm">Recent Page Posts</CardTitle>
-                            <CardDescription>Synced from `page-insights` for the selected Page.</CardDescription>
-                          </div>
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              "h-6",
-                              pageInsightPermissionRequired
-                                ? "border-amber-200 bg-amber-50 text-amber-700"
-                                : "border-blue-200 bg-blue-50 text-blue-700"
-                            )}
-                          >
-                            {pageInsightPermissionRequired ? "permission required" : `${publicPostCount} posts`}
-                          </Badge>
+                  <Card className="border-border/70 shadow-none overflow-hidden">
+                    <CardHeader className="border-b pb-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <CardTitle className="text-sm">
+                            {postScope === "public" ? "Published posts" : postScope === "dark" ? "Unpublished ad posts" : "All posts"}
+                          </CardTitle>
+                          <CardDescription>
+                            {postScope === "public"
+                              ? "Recent posts published on this Page."
+                              : postScope === "dark"
+                                ? "Unpublished posts created for ads."
+                                : "Published Page posts and unpublished ad posts together."}
+                          </CardDescription>
                         </div>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        {pageInsightLoading ? (
-                          <div className="flex items-center justify-center py-16">
-                            <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
-                          </div>
-                        ) : pageInsightError ? (
-                          <div className="p-4">
-                            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-                              {pageInsightPermissionRequired ? (
-                                <div className="space-y-1">
-                                  <p className="font-medium">Public Page posts are blocked by Meta permissions.</p>
-                                  <p>
-                                    This Page needs `pages_read_engagement` or Page Public Content Access before
-                                    `/PAGE_ID/posts` can return public posts. Dark posts can still load from ad
-                                    account ads and creatives.
-                                  </p>
-                                </div>
-                              ) : (
-                                pageInsightError
-                              )}
-                            </div>
-                          </div>
-                        ) : visiblePublicPosts.length > 0 ? (
-                          <div className="grid lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-                            <div className="p-4 border-b lg:border-b-0 lg:border-r">
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => featuredPublicPost?.id && setSelectedPostKey(`public:${featuredPublicPost.id}`)}
-                                onKeyDown={event => {
-                                  if ((event.key === "Enter" || event.key === " ") && featuredPublicPost?.id) {
-                                    setSelectedPostKey(`public:${featuredPublicPost.id}`)
-                                  }
-                                }}
-                                className={cn(
-                                  "w-full cursor-pointer overflow-hidden rounded-lg border bg-muted/20 text-left transition-colors hover:bg-muted/40",
-                                  featuredPublicPost?.id && selectedPostKey === `public:${featuredPublicPost.id}` && "border-primary ring-1 ring-primary/30"
-                                )}
-                              >
-                                <div className="aspect-[16/9] bg-muted flex items-center justify-center overflow-hidden">
-                                  {featuredPublicPost?.full_picture ? (
-                                    <img src={featuredPublicPost.full_picture} alt="" className="size-full object-cover" />
-                                  ) : (
-                                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                      <IconPhoto className="size-8" />
-                                      <span className="text-xs">No image returned</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="p-4">
-                                  <p className="text-sm font-medium leading-5 line-clamp-3">
-                                    {featuredPublicPost?.message || featuredPublicPost?.story || "Post without text"}
-                                  </p>
-                                  <div className="mt-3 flex items-center justify-between gap-3">
-                                    <p className="text-xs text-muted-foreground">
-                                      {featuredPublicPost?.created_time ? new Date(featuredPublicPost.created_time).toLocaleString("en-US", {
-                                        month: "short",
-                                        day: "numeric",
-                                        hour: "2-digit",
-                                        minute: "2-digit",
-                                      }) : "No timestamp"}
-                                    </p>
-                                    {featuredPublicPost?.permalink_url && (
-                                      <a
-                                        href={featuredPublicPost.permalink_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={event => event.stopPropagation()}
-                                        className="text-xs font-medium text-primary hover:underline shrink-0"
-                                      >
-                                        View post
-                                      </a>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="divide-y">
-                              {secondaryPublicPosts.length > 0 ? secondaryPublicPosts.map((post) => (
+                        <Badge variant="outline" className="h-6 border-blue-200 bg-blue-50 text-blue-700 shrink-0">
+                          {postDetailItems.length} items
+                        </Badge>
+                      </div>
+                      {pageInsightPermissionRequired && (
+                        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+                          <span className="font-semibold">Can&apos;t load published posts:</span> This Page needs extra Facebook access. Unpublished ad posts still appear below.
+                        </div>
+                      )}
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {(pageInsightLoading || launchHistoryLoading || metaDarkPostsLoading) ? (
+                        <div className="flex items-center justify-center py-16">
+                          <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+                        </div>
+                      ) : postDetailItems.length > 0 ? (
+                        <>
+                          <div className="divide-y">
+                            {postDetailItems.map(item => {
+                              return (
                                 <div
-                                  key={post.id}
+                                  key={item.key}
                                   role="button"
                                   tabIndex={0}
-                                  onClick={() => setSelectedPostKey(`public:${post.id}`)}
+                                  onClick={() => setSelectedPostKey(item.key)}
                                   onKeyDown={event => {
-                                    if (event.key === "Enter" || event.key === " ") setSelectedPostKey(`public:${post.id}`)
+                                    if (event.key === "Enter" || event.key === " ") setSelectedPostKey(item.key)
                                   }}
                                   className={cn(
-                                    "flex w-full cursor-pointer gap-3 p-3 text-left transition-colors hover:bg-muted/40",
-                                    selectedPostKey === `public:${post.id}` && "bg-primary/5"
+                                    "p-4 text-left transition-colors hover:bg-muted/30 flex gap-3",
+                                    selectedPostKey === item.key && "bg-primary/5"
                                   )}
                                 >
-                                  <div className="size-16 rounded-lg border bg-muted shrink-0 overflow-hidden flex items-center justify-center">
-                                    {post.full_picture ? (
-                                      <img src={post.full_picture} alt="" className="size-full object-cover" />
+                                  <div className="size-16 shrink-0 overflow-hidden rounded-xl border bg-muted flex items-center justify-center">
+                                    {item.imageUrl ? (
+                                      <img src={item.imageUrl} alt={item.title || "Post thumbnail"} className="size-full object-cover" />
                                     ) : (
-                                      <IconPhoto className="size-5 text-muted-foreground" />
+                                      <div className="text-muted-foreground">
+                                        {item.mediaType === "video" ? <IconVideo className="size-5" /> : <IconPhoto className="size-5" />}
+                                      </div>
                                     )}
                                   </div>
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-sm leading-5 line-clamp-2">
-                                      {post.message || post.story || "Post without text"}
-                                    </p>
-                                    <div className="mt-1.5 flex items-center justify-between gap-2">
-                                      <p className="text-xs text-muted-foreground truncate">
-                                        {post.created_time ? new Date(post.created_time).toLocaleString("en-US", {
-                                          month: "short",
-                                          day: "numeric",
-                                          hour: "2-digit",
-                                          minute: "2-digit",
-                                        }) : "No timestamp"}
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <p className="truncate text-sm font-medium">
+                                          {item.title}
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground truncate">
+                                          {item.time ? new Date(item.time).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "No timestamp"}
+                                          {item.campaignName ? ` · Campaign: ${item.campaignName}` : item.adSetName ? ` · Ad set: ${item.adSetName}` : ""}
+                                          {item.adAccountName ? ` (${item.adAccountName})` : ""}
+                                        </p>
+                                      </div>
+                                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                                        <Badge variant="outline" className={cn("h-6", item.scope === "dark" ? "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:border-violet-900 dark:text-violet-400" : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900 dark:text-emerald-400")}>
+                                          {item.scope === "dark" ? (item.source === "meta" ? "From ads" : "From launch") : "Published"}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                    {item.message ? (
+                                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                        {item.message}
                                       </p>
-                                      {post.permalink_url && (
-                                        <a
-                                          href={post.permalink_url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          onClick={event => event.stopPropagation()}
-                                          className="text-xs text-primary hover:underline shrink-0"
-                                        >
-                                          View
+                                    ) : null}
+                                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                      {item.permalink ? (
+                                        <a href={item.permalink} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} className="font-medium text-primary hover:underline">
+                                          Open post
                                         </a>
-                                      )}
+                                      ) : null}
+                                      {item.postId ? <span className="font-mono text-[11px] opacity-70">Post ID: {item.postId}</span> : null}
+                                      {item.adId ? <span className="font-mono text-[11px] opacity-70">Ad ID: {item.adId}</span> : null}
                                     </div>
                                   </div>
                                 </div>
-                              )) : (
-                                <div className="p-4 text-sm text-muted-foreground">Only one recent post was returned by Meta.</div>
-                              )}
+                              )
+                            })}
+                          </div>
+                          {metaDarkPostsMeta?.paging?.after && postScope !== "public" ? (
+                            <div className="border-t p-3 text-center">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1.5"
+                                onClick={() => void loadMoreDarkPosts()}
+                                disabled={metaDarkPostsLoading}
+                              >
+                                <IconRefresh className={cn("size-3.5", metaDarkPostsLoading && "animate-spin")} />
+                                Load more posts
+                              </Button>
                             </div>
-                          </div>
-                        ) : (
-                          <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-                            No recent Page posts returned for this Page.
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {(postScope !== "public") && (
-                    <Card className="border-border/70 shadow-none overflow-hidden">
-                      <CardHeader className="border-b pb-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <CardTitle className="text-sm">Dark Posts</CardTitle>
-                            <CardDescription>
-                              Ad account → ads → creative → `object_story_id` / `effective_object_story_id`.
-                            </CardDescription>
-                          </div>
-                          <Badge variant="outline" className="h-6 bg-slate-50 text-slate-700 border-slate-200">
-                            {darkPostCount} items
-                          </Badge>
+                          ) : null}
+                        </>
+                      ) : (
+                        <div className="px-4 py-10 text-center">
+                          <p className="text-sm font-medium text-foreground">No posts found</p>
+                          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                            Try refreshing, or switch the view filters above.
+                          </p>
                         </div>
-                        <div className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-4">
-                          <div className="rounded-xl border bg-muted/20 p-2">
-                            <p className="text-xs uppercase text-muted-foreground/70">Ads inspected</p>
-                            <p className="mt-1 font-medium text-foreground">{metaDarkPostsMeta?.inspectedAds ?? 0}</p>
-                          </div>
-                          <div className="rounded-xl border bg-muted/20 p-2">
-                            <p className="text-xs uppercase text-muted-foreground/70">Story IDs</p>
-                            <p className="mt-1 font-medium text-foreground">{metaDarkPostsMeta?.adsWithStoryId ?? 0}</p>
-                          </div>
-                          <div className="rounded-xl border bg-muted/20 p-2">
-                            <p className="text-xs uppercase text-muted-foreground/70">From Meta</p>
-                            <p className="mt-1 font-medium text-foreground">{metaDarkPostCount}</p>
-                          </div>
-                          <div className="rounded-xl border bg-muted/20 p-2">
-                            <p className="text-xs uppercase text-muted-foreground/70">Launch history</p>
-                            <p className="mt-1 font-medium text-foreground">{launchHistoryDarkPostCount}</p>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="p-0">
-                        {darkPostsLoading ? (
-                          <div className="flex items-center justify-center py-16">
-                            <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
-                          </div>
-                        ) : darkPostsError && darkPosts.length === 0 ? (
-                          <div className="p-4">
-                            <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-                              {darkPostsError}
-                            </div>
-                          </div>
-                        ) : darkPosts.length > 0 ? (
-                          <>
-                            <div className="divide-y">
-                              {darkPosts.map(item => {
-                                const itemKey = `dark:${item.source}:${item.postId || item.adId || item.batchId}`
-                                const insight = item.adId ? darkPostInsights[item.adId] : undefined
-                                const spend = insight?.spend ?? item.spend ?? null
-                                const impressions = insight?.impressions ?? item.impressions ?? null
-                                return (
-                                  <div
-                                    key={`${item.source}-${item.batchId}-${item.adId || item.creativeId || item.postId || item.fileName}`}
-                                    role="button"
-                                    tabIndex={0}
-                                    onClick={() => setSelectedPostKey(itemKey)}
-                                    onKeyDown={event => {
-                                      if (event.key === "Enter" || event.key === " ") setSelectedPostKey(itemKey)
-                                    }}
-                                    className={cn(
-                                      "p-4 text-left transition-colors hover:bg-muted/30",
-                                      selectedPostKey === itemKey && "bg-primary/5"
-                                    )}
-                                  >
-                                    <div className="flex gap-3">
-                                      <div className="size-16 shrink-0 overflow-hidden rounded-xl border bg-muted">
-                                        {item.thumbnailUrl ? (
-                                          <img src={item.thumbnailUrl} alt={item.fileName || item.adName || "Dark post"} className="size-full object-cover" />
-                                        ) : (
-                                          <div className="flex size-full items-center justify-center text-muted-foreground">
-                                            {item.mediaType === "video" ? <IconVideo className="size-5" /> : <IconPhoto className="size-5" />}
-                                          </div>
-                                        )}
-                                      </div>
-                                      <div className="min-w-0 flex-1">
-                                        <div className="flex items-start justify-between gap-3">
-                                          <div className="min-w-0">
-                                            <p className="truncate text-sm font-medium">
-                                              {item.headline || item.fileName || item.adName || item.adSetName || item.adId || "Dark post"}
-                                            </p>
-                                            <p className="mt-1 text-xs text-muted-foreground truncate">
-                                              {item.campaignName ? `Campaign: ${item.campaignName}` : item.adSetName ? `Ad set: ${item.adSetName}` : "Campaign unavailable"}
-                                              {item.adAccountName ? ` - ${item.adAccountName}` : ""}
-                                            </p>
-                                          </div>
-                                          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                                            <Badge variant="outline" className={cn("h-6", item.source === "meta" ? "bg-violet-50 text-violet-700 border-violet-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
-                                              {item.source === "meta" ? "Meta" : "Launch history"}
-                                            </Badge>
-                                            {item.status && (
-                                              <Badge variant="outline" className="h-6 bg-emerald-50 text-emerald-700 border-emerald-200">
-                                                {item.status}
-                                              </Badge>
-                                            )}
-                                          </div>
-                                        </div>
-                                        {item.primaryText ? (
-                                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">
-                                            {item.primaryText}
-                                          </p>
-                                        ) : null}
-                                        <div className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-                                          <div className="rounded-lg border bg-muted/20 p-2">
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Linked ad</p>
-                                            <p className="mt-1 truncate text-foreground">{item.adId || "—"}</p>
-                                          </div>
-                                          <div className="rounded-lg border bg-muted/20 p-2">
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Launched by</p>
-                                            <p className="mt-1 truncate text-foreground">{item.userName || "Unknown"}</p>
-                                          </div>
-                                          <div className="rounded-lg border bg-muted/20 p-2">
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Spend</p>
-                                            <p className="mt-1 truncate text-foreground">{money(spend)}</p>
-                                          </div>
-                                          <div className="rounded-lg border bg-muted/20 p-2">
-                                            <p className="text-xs uppercase tracking-wide text-muted-foreground/70">Impressions</p>
-                                            <p className="mt-1 truncate text-foreground">{fullNumber(impressions)}</p>
-                                          </div>
-                                        </div>
-                                        <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                          {item.launchedAt ? (
-                                            <span>{new Date(item.launchedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                                          ) : null}
-                                          {item.postUrl ? (
-                                            <a href={item.postUrl} target="_blank" rel="noopener noreferrer" onClick={event => event.stopPropagation()} className="font-medium text-primary hover:underline">
-                                              Open post
-                                            </a>
-                                          ) : null}
-                                          {item.postId ? <span>Post ID: {item.postId}</span> : null}
-                                          {item.storyIdSource ? <span>Story source: {item.storyIdSource}</span> : null}
-                                          {item.adId ? <span>Ad ID: {item.adId}</span> : null}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                            {metaDarkPostsMeta?.paging?.after ? (
-                              <div className="border-t p-3 text-center">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-1.5"
-                                  onClick={() => void loadMoreDarkPosts()}
-                                  disabled={metaDarkPostsLoading}
-                                >
-                                  <IconRefresh className={cn("size-3.5", metaDarkPostsLoading && "animate-spin")} />
-                                  Load more Meta ads
-                                </Button>
-                              </div>
-                            ) : null}
-                          </>
-                        ) : (
-                          <div className="px-4 py-10 text-center">
-                            <p className="text-sm font-medium text-foreground">No dark posts found</p>
-                            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                              {darkPostPageScope === "selected_page"
-                                ? `No dark post matched ${selectedPage?.name || "the selected Page"} in this ad account. Switch to All ad account to inspect dark posts across every Page in this ad account.`
-                                : "No ad creative with object_story_id or effective_object_story_id was returned for this ad account/page scope."}
-                            </p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  )}
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
 
                 <div className="space-y-4">
@@ -6722,14 +6514,14 @@ export default function PageManagerPage() {
                           <CardDescription>
                             {selectedPost
                               ? selectedPost.scope === "dark"
-                                ? "Dark post linked to campaign, ad set, and ad."
-                                : "Public Page post with organic metrics."
+                                ? "Unpublished ad post linked to campaign, ad set, and ad."
+                                : "Published Page post with organic metrics."
                               : "Select a post to inspect it."}
                           </CardDescription>
                         </div>
                         {selectedPost ? (
                           <Badge variant="outline" className={cn("h-6", selectedPost.scope === "dark" ? "bg-violet-50 text-violet-700 border-violet-200" : "bg-blue-50 text-blue-700 border-blue-200")}>
-                            {selectedPost.scope === "dark" ? "Dark" : "Public"}
+                            {selectedPost.scope === "dark" ? "Unpublished" : "Published"}
                           </Badge>
                         ) : null}
                       </div>
@@ -6958,32 +6750,28 @@ export default function PageManagerPage() {
                         <span className="font-medium">{pageInsightTotals?.impressions != null ? pageInsightTotals.impressions.toLocaleString() : "—"}</span>
                       </div>
                       <div className="rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
-                        Public posts are read from `page-insights`. Dark posts are resolved from Meta ads/creatives and merged with stored launch history.
+                        Published posts come from the Page. Unpublished posts come from ads and past launches.
                       </div>
                     </CardContent>
                   </Card>
 
                   <Card className="border-border/70 shadow-none">
                     <CardHeader className="border-b pb-4">
-                      <CardTitle className="text-sm">Available APIs</CardTitle>
-                      <CardDescription>What the app can already use in this screen.</CardDescription>
+                      <CardTitle className="text-sm">Post coverage</CardTitle>
+                      <CardDescription>What this view can include for the selected Page.</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
                       <div className="rounded-xl border bg-muted/20 p-3">
-                        <p className="font-medium">`/api/insights/page-insights`</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Public posts, post engagement totals, reach, impressions.</p>
+                        <p className="font-medium">Published posts</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Posts visible on the Page timeline.</p>
                       </div>
                       <div className="rounded-xl border bg-muted/20 p-3">
-                        <p className="font-medium">`/api/launch-history`</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Launch batches and stored created ads for dark post history.</p>
+                        <p className="font-medium">Unpublished ad posts</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Posts created for ads that may not appear on the Page timeline.</p>
                       </div>
                       <div className="rounded-xl border bg-muted/20 p-3">
-                        <p className="font-medium">`/api/facebook/dark-posts`</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Reads ads/creatives from the selected ad account and resolves `object_story_id` / `effective_object_story_id`.</p>
-                      </div>
-                      <div className="rounded-xl border bg-muted/20 p-3">
-                        <p className="font-medium">`launch_batches.created_ads`</p>
-                        <p className="mt-1 text-xs text-muted-foreground">Ad / ad set / creative linkage already stored in Supabase.</p>
+                        <p className="font-medium">Past launches</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Ads launched from this workspace, when available.</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -7004,7 +6792,7 @@ export default function PageManagerPage() {
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Review Page comments, reply, hide, and run moderation rules from one queue.
+                    Review, reply, hide, and moderate Page comments from one queue.
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -7020,7 +6808,7 @@ export default function PageManagerPage() {
                     className="gap-1.5"
                   >
                     {commentsSyncing ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconRefresh className="size-3.5" />}
-                    Sync comments
+                    Refresh comments
                   </Button>
                 </div>
               </div>
@@ -7060,7 +6848,7 @@ export default function PageManagerPage() {
                     ))}
 
                     <div className="rounded-xl border bg-muted/20 p-3 text-xs text-muted-foreground">
-                      Live comment sync still depends on `pages_read_engagement` or Page Public Content Access. Once approved, this queue can auto-sync.
+                      If comments fail to load, this Page may need extra Facebook access. You can still reply using the selected Page.
                     </div>
                   </CardContent>
                 </Card>
@@ -7195,9 +6983,9 @@ export default function PageManagerPage() {
                       ) : (
                         <div className="flex h-[320px] flex-col items-center justify-center gap-2 px-4 text-center text-sm text-muted-foreground">
                           <IconMessage className="size-5" />
-                          <p>No comments found for this page and filter.</p>
+                          <p>No comments match this filter.</p>
                           <Button variant="outline" size="sm" onClick={() => void syncComments()} disabled={!selectedPage?.id || commentsSyncing}>
-                            {commentsSyncing ? "Syncing..." : "Sync comments"}
+                            {commentsSyncing ? "Refreshing..." : "Refresh comments"}
                           </Button>
                         </div>
                       )}
@@ -7279,7 +7067,7 @@ export default function PageManagerPage() {
                             />
                             <div className="flex items-center justify-between gap-2">
                               <div className="text-xs text-muted-foreground">
-                                Reply uses the selected Page access token.
+                                Replies send as the selected Page.
                               </div>
                               <Button onClick={() => void handleReplySelectedComment()} disabled={replyLoading || commentActionLoading || !replyText.trim()}>
                                 {replyLoading ? <IconLoader2 className="mr-2 size-3.5 animate-spin" /> : <IconSend className="mr-2 size-3.5" />}

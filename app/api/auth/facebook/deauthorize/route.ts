@@ -8,9 +8,9 @@ function decodeSignedRequest(signedRequest: string): any {
     const sig = Buffer.from(encodedSig.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('hex')
     const data = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
     
-    const appSecret = process.env.META_APP_SECRET
+    const appSecret = process.env.FACEBOOK_APP_SECRET
     if (!appSecret) {
-      console.error("META_APP_SECRET is not set")
+      console.error("FACEBOOK_APP_SECRET is not set")
       return null
     }
     

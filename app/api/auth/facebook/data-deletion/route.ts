@@ -9,9 +9,9 @@ function decodeSignedRequest(signedRequest: string): any {
     const data = JSON.parse(Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'))
     
     // Validate signature
-    const appSecret = process.env.META_APP_SECRET
+    const appSecret = process.env.FACEBOOK_APP_SECRET
     if (!appSecret) {
-      console.error("META_APP_SECRET is not set for data deletion callback")
+      console.error("FACEBOOK_APP_SECRET is not set for data deletion callback")
       return null
     }
     

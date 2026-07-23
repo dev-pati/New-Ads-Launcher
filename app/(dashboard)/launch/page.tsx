@@ -15880,7 +15880,7 @@ export default function LaunchPage() {
           <div className="flex flex-col">
             <div className="flex flex-col lg:grid lg:grid-cols-[4fr_6fr]" style={{ minHeight: 'calc(100vh - 80px)' }}>
             {/* Left panel — Ad Sets + Ad Setup */}
-            <div className="flex flex-col gap-3 p-4 overflow-y-auto border-b lg:border-b-0 lg:border-r w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+            <div className="flex flex-col gap-5 p-4 overflow-y-auto border-b lg:border-b-0 lg:border-r w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
               <AdSetsPanel
                 adAccountId={selectedAccountId}
                 selectedAdSets={selectedAdSets}
@@ -15888,23 +15888,25 @@ export default function LaunchPage() {
                 onRemove={id => setSelectedAdSets(prev => prev.filter(a => a.id !== id))}
                 invalid={validationErrors.adsets}
               />
-              <AdSetupPanel
-                primaryTexts={primaryTexts} setPrimaryTexts={setPrimaryTexts}
-                headlines={headlines} setHeadlines={setHeadlines}
-                descriptions={descriptions} setDescriptions={setDescriptions}
-                cta={cta} setCta={setCta}
-                webLink={webLink} setWebLink={setWebLink}
-                launchAsActive={launchAsActive} setLaunchAsActive={setLaunchAsActive}
-                utmParams={utmParams} setUtmParams={setUtmParams}
-                displayLink={displayLink} setDisplayLink={setDisplayLink}
-                adAccountId={selectedAccountId}
-                adAccountName={selectedAccount?.name || selectedAccountId}
-                orgName="tuanquang269"
-                selectedCreatives={selectedCreatives}
-                adSourceMode={adSourceMode} setAdSourceMode={setAdSourceMode}
-                adSourceIds={adSourceIds} setAdSourceIds={setAdSourceIds}
-                validationErrors={validationErrors}
-              />
+              <div className="mt-5 border-t border-border/60 pt-5">
+                <AdSetupPanel
+                  primaryTexts={primaryTexts} setPrimaryTexts={setPrimaryTexts}
+                  headlines={headlines} setHeadlines={setHeadlines}
+                  descriptions={descriptions} setDescriptions={setDescriptions}
+                  cta={cta} setCta={setCta}
+                  webLink={webLink} setWebLink={setWebLink}
+                  launchAsActive={launchAsActive} setLaunchAsActive={setLaunchAsActive}
+                  utmParams={utmParams} setUtmParams={setUtmParams}
+                  displayLink={displayLink} setDisplayLink={setDisplayLink}
+                  adAccountId={selectedAccountId}
+                  adAccountName={selectedAccount?.name || selectedAccountId}
+                  orgName="tuanquang269"
+                  selectedCreatives={selectedCreatives}
+                  adSourceMode={adSourceMode} setAdSourceMode={setAdSourceMode}
+                  adSourceIds={adSourceIds} setAdSourceIds={setAdSourceIds}
+                  validationErrors={validationErrors}
+                />
+              </div>
             </div>
 
             {/* Right panel — Ads Gallery */}
