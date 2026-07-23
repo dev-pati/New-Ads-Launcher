@@ -8,7 +8,7 @@ import {
   IconCheck,
   IconAlertTriangle,
   IconX,
-  IconClipboard,
+  IconPhoto,
 } from "@tabler/icons-react"
 
 import {
@@ -295,8 +295,29 @@ export function FeedbackBubble() {
               />
             </Field>
 
-            <Field label="Screenshot (PNG/JPG/WebP) — Ctrl/Cmd+V">
-              <div className="flex items-center gap-2">
+            <Field label="Screenshot">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const files = e.dataTransfer.files;
+                  if (files?.length) {
+                    const f = files[0];
+                    if (ACCEPTED_IMAGE.includes(f.type)) {
+                      setScreenshot(f);
+                      setPasteError(null);
+                    } else {
+                      setPasteError("Image must be PNG, JPG, or WebP");
+                    }
+                  }
+                }}
+                className={cn(
+                  "border-2 border-dashed border-muted-foreground/30 hover:border-primary/50 bg-muted/20 hover:bg-muted/40 cursor-pointer rounded-xl p-3 text-center transition-colors flex flex-col items-center justify-center gap-1 min-h-[90px] relative overflow-hidden",
+                  screenshot && "border-solid border-border bg-muted/10 p-2",
+                  pasteError && "border-destructive/50 bg-destructive/5"
+                )}
+              >
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -306,44 +327,54 @@ export function FeedbackBubble() {
                     setScreenshot(f ?? null)
                     setPasteError(null)
                   }}
-                  className="text-xs file:mr-2 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:font-medium"
+                  className="hidden"
                 />
-                {screenshot && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => {
-                      setScreenshot(null)
-                      if (fileInputRef.current) fileInputRef.current.value = ""
-                    }}
-                    aria-label="Remove screenshot"
-                  >
-                    <IconX />
-                  </Button>
+
+                {screenshot ? (
+                  <div className="flex flex-col gap-2 w-full">
+                    <div className="relative w-full flex justify-center bg-black/5 rounded-md overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={URL.createObjectURL(screenshot)}
+                        alt="Screenshot preview"
+                        className="h-24 object-contain"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 text-xs font-medium text-foreground w-full justify-between px-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <IconPhoto className="size-4 shrink-0 text-primary" />
+                        <span className="truncate max-w-[140px]">{screenshot.name}</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">({(screenshot.size / 1024 / 1024).toFixed(2)} MB)</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setScreenshot(null);
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }}
+                        className="size-6 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-full"
+                        aria-label="Remove screenshot"
+                      >
+                        <IconX className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <IconPhoto className="size-6 text-muted-foreground mb-1" />
+                    <p className="text-xs font-medium">Click, drag, or paste screenshot here</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">PNG, JPG, WebP up to 10MB (Ctrl/Cmd+V)</p>
+                  </>
                 )}
               </div>
               {pasteError && (
-                <p className="text-xs text-destructive flex items-center gap-1 mt-1">
+                <p className="text-xs text-destructive flex items-center gap-1 mt-1.5">
                   <IconAlertTriangle className="size-3" /> {pasteError}
                 </p>
               )}
-              {screenshot && (
-                <div className="mt-1.5 relative inline-block p-1 border border-border bg-muted/40 rounded-md">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={URL.createObjectURL(screenshot)}
-                    alt="Screenshot preview"
-                    className="h-20 rounded-sm object-cover"
-                  />
-                  <span className="absolute -top-1 -right-1 text-[10px] bg-background border border-border text-foreground px-1.5 py-0.5 rounded-full max-w-[160px] truncate shadow-xs">
-                    {screenshot.name}
-                  </span>
-                </div>
-              )}
-              <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-1">
-                <IconClipboard className="size-3" /> Tip: paste directly with Ctrl/Cmd+V
-              </p>
             </Field>
 
             <div className="grid grid-cols-2 gap-2">

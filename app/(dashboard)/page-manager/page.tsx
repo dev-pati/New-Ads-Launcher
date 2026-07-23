@@ -1094,7 +1094,7 @@ function InboxAvatar({
     <div className="relative inline-block">
       <Avatar size={size} className={cn(size === "lg" && "size-14", size === "default" && "size-10", size === "sm" && "size-8")}>
         {src ? <AvatarImage src={src} alt={name} /> : null}
-        <AvatarFallback className="bg-[#E4E6EB] text-[#050505]">{initial}</AvatarFallback>
+        <AvatarFallback className="bg-[#E4E6EB] dark:bg-muted text-[#050505] dark:text-foreground">{initial}</AvatarFallback>
         {online ? <span className="absolute bottom-0 right-0 size-3 rounded-full border-2 border-white bg-emerald-500" /> : null}
       </Avatar>
       {sourceType && (
@@ -1128,13 +1128,13 @@ function PreviewImage({ src, alt, mediaType }: { src: string; alt: string; media
 
 function FacebookPostPreviewCard({ preview }: { preview: FacebookPostPreview }) {
   return (
-    <div className="rounded-[22px] border border-[#E4E6EB] bg-white shadow-sm dark:bg-background">
+    <div className="rounded-[22px] border border-[#E4E6EB] dark:border-border bg-white shadow-sm dark:bg-background">
       <div className="flex items-start justify-between gap-3 p-3">
         <div className="flex min-w-0 items-start gap-2.5">
           <InboxAvatar name={preview.pageName} src={preview.pagePicture} size="sm" online />
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-[#050505] dark:text-foreground">{preview.pageName}</p>
-            <p className="text-xs text-[#65676B]">
+            <p className="text-xs text-[#65676B] dark:text-muted-foreground">
               {preview.createdAt ? postDate(preview.createdAt) : "Facebook post"} · Sponsored
             </p>
           </div>
@@ -1144,7 +1144,7 @@ function FacebookPostPreviewCard({ preview }: { preview: FacebookPostPreview }) 
             href={preview.permalink}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#E4E6EB] px-2.5 py-1.5 text-xs font-medium text-[#0084FF] hover:bg-[#F0F2F5]"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#E4E6EB] dark:border-border px-2.5 py-1.5 text-xs font-medium text-[#0084FF] dark:text-primary hover:bg-[#F0F2F5] dark:bg-muted/50"
           >
             Open
             <IconExternalLink className="size-3.5" />
@@ -1157,7 +1157,7 @@ function FacebookPostPreviewCard({ preview }: { preview: FacebookPostPreview }) 
       </div>
 
       {preview.mediaUrl ? (
-        <div className="border-y border-[#E4E6EB] bg-black">
+        <div className="border-y border-[#E4E6EB] dark:border-border bg-black">
           <div className="relative mx-auto max-h-[420px] overflow-hidden bg-black">
             <img src={preview.mediaUrl} alt="" className="max-h-[420px] w-full object-contain" loading="lazy" />
             {preview.mediaType === "video" ? (
@@ -1171,7 +1171,7 @@ function FacebookPostPreviewCard({ preview }: { preview: FacebookPostPreview }) 
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-[#65676B]">
+      <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs text-[#65676B] dark:text-muted-foreground">
         <div className="flex items-center gap-1.5">
           <span className="flex size-5 items-center justify-center rounded-full bg-[#1877F2] text-white">
             <IconThumbUp className="size-3" />
@@ -1191,7 +1191,7 @@ function FacebookPostPreviewCard({ preview }: { preview: FacebookPostPreview }) 
       </div>
 
       {preview.commentId ? (
-        <div className="border-t border-[#E4E6EB] px-3 py-2 text-xs text-[#65676B]">
+        <div className="border-t border-[#E4E6EB] dark:border-border px-3 py-2 text-xs text-[#65676B] dark:text-muted-foreground">
           Comment ID: {preview.commentId}
         </div>
       ) : null}
@@ -2281,8 +2281,8 @@ export default function PageManagerPage() {
         setPinnedContextMenu({ threadId: thread.id, x: event.clientX, y: event.clientY })
       }}
       className={cn(
-        "rounded-full p-0.5 transition-colors hover:bg-[#E7F3FF]",
-        selectedThreadId === thread.id && "bg-[#E7F3FF] ring-2 ring-[#0084FF]/35"
+        "rounded-full p-0.5 transition-colors hover:bg-[#E7F3FF] dark:bg-primary/15",
+        selectedThreadId === thread.id && "bg-[#E7F3FF] dark:bg-primary/15 ring-2 ring-[#0084FF]/35"
       )}
     >
       <InboxAvatar
@@ -2369,17 +2369,17 @@ export default function PageManagerPage() {
         <div className="min-w-0 max-w-full relative">
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
             <p className={cn("min-w-0 max-w-full truncate text-sm text-[#050505] dark:text-foreground", thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold" : "font-medium")}>
-              {isPinned ? <IconPin className="mr-1 inline size-3.5 text-[#0084FF]" /> : null}
+              {isPinned ? <IconPin className="mr-1 inline size-3.5 text-[#0084FF] dark:text-primary" /> : null}
               {thread.name}
             </p>
             <div className="flex items-center gap-1 group-hover:opacity-0 transition-opacity">
-              <span className="max-w-[84px] truncate text-xs text-[#65676B]">{thread.latestAt}</span>
+              <span className="max-w-[84px] truncate text-xs text-[#65676B] dark:text-muted-foreground">{thread.latestAt}</span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     onClick={event => event.stopPropagation()}
-                    className="flex size-6 items-center justify-center rounded-full text-[#65676B] opacity-0 transition-opacity hover:bg-[#E4E6EB] group-hover:opacity-100 dark:text-muted-foreground dark:hover:bg-muted"
+                    className="flex size-6 items-center justify-center rounded-full text-[#65676B] dark:text-muted-foreground opacity-0 transition-opacity hover:bg-[#E4E6EB] dark:bg-muted group-hover:opacity-100 dark:text-muted-foreground dark:hover:bg-muted"
                     title="More actions"
                   >
                     <IconDots className="size-3.5" />
@@ -2420,7 +2420,7 @@ export default function PageManagerPage() {
             <div className="mt-0.5 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
               <p className={cn(
                 "min-w-0 max-w-full truncate text-xs leading-5",
-                thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold text-[#050505] dark:text-foreground" : "text-[#65676B]"
+                thread.responseStatus === "pending" || thread.unread > 0 ? "font-semibold text-[#050505] dark:text-foreground" : "text-[#65676B] dark:text-muted-foreground"
               )}>
                 {thread.latestMessage}
               </p>
@@ -4967,15 +4967,15 @@ export default function PageManagerPage() {
               ) : null}
               <div
                 className={cn(
-                  "flex h-[950px] overflow-hidden rounded-2xl border border-[#E4E6EB] bg-[#F0F2F5] shadow-sm dark:border-border dark:bg-muted/30",
+                  "flex h-[950px] overflow-hidden rounded-2xl border border-[#E4E6EB] dark:border-border bg-[#F0F2F5] dark:bg-muted/50 shadow-sm dark:border-border dark:bg-muted/30",
                   !selectedPage && "hidden"
                 )}
               >
                 <Card
-                  className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-slate-50/50 shadow-none dark:border-border dark:bg-muted/10 transition-[width] duration-300 ease-in-out"
+                  className="relative flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] dark:border-border bg-slate-50/50 shadow-none dark:border-border dark:bg-muted/10 transition-[width] duration-300 ease-in-out"
                   style={{ width: isSidebarCollapsed ? 64 : sidebarWidth }}
                 >
-                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border">
+                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] dark:border-border px-3 py-2 dark:border-border">
                     <div className={cn("flex items-center gap-1", isSidebarCollapsed ? "justify-center" : "justify-between")}>
                       {!isSidebarCollapsed && <span className="text-sm font-bold text-[#050505] dark:text-foreground">Inbox</span>}
                       <div className={cn("flex items-center gap-0.5", isSidebarCollapsed && "flex-col gap-2")}>
@@ -4984,7 +4984,7 @@ export default function PageManagerPage() {
                           size="icon"
                           className={cn(
                             "size-7 rounded-full",
-                            (inboxStatuses.length > 0 || inboxFolders.length > 0 || Object.values(filterSelections).some(arr => arr.length > 0)) && "bg-[#E7F3FF] text-[#0084FF]"
+                            (inboxStatuses.length > 0 || inboxFolders.length > 0 || Object.values(filterSelections).some(arr => arr.length > 0)) && "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary"
                           )}
                           title="Filters"
                           onClick={() => {
@@ -4997,7 +4997,7 @@ export default function PageManagerPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className={cn("size-7 rounded-full", inboxSearchOpen && "bg-[#E7F3FF] text-[#0084FF]")}
+                          className={cn("size-7 rounded-full", inboxSearchOpen && "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary")}
                           title="Search"
                           onClick={() => {
                             if (isSidebarCollapsed) setIsSidebarCollapsed(false)
@@ -5019,17 +5019,17 @@ export default function PageManagerPage() {
                     </div>
                     {inboxSearchOpen && !isSidebarCollapsed && (
                       <div className="mt-2">
-                        <div className="flex items-center gap-1.5 rounded-lg border border-[#E4E6EB] bg-white px-2 py-1.5 dark:border-border dark:bg-background">
-                          <IconSearch className="size-3.5 shrink-0 text-[#65676B]" />
+                        <div className="flex items-center gap-1.5 rounded-lg border border-[#E4E6EB] dark:border-border bg-white px-2 py-1.5 dark:border-border dark:bg-background">
+                          <IconSearch className="size-3.5 shrink-0 text-[#65676B] dark:text-muted-foreground" />
                           <input
                             autoFocus
                             value={inboxSearchQuery}
                             onChange={event => setInboxSearchQuery(event.target.value)}
                             placeholder="Search name, keyword, or group…"
-                            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[#65676B]"
+                            className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-[#65676B] dark:text-muted-foreground"
                           />
                           {inboxSearchQuery && (
-                            <button type="button" onClick={() => setInboxSearchQuery("")} className="shrink-0 text-[#65676B] hover:text-[#050505]">
+                            <button type="button" onClick={() => setInboxSearchQuery("")} className="shrink-0 text-[#65676B] dark:text-muted-foreground hover:text-[#050505] dark:text-foreground">
                               <IconX className="size-3.5" />
                             </button>
                           )}
@@ -5040,22 +5040,22 @@ export default function PageManagerPage() {
                   <CardContent className="min-h-0 flex-1 overflow-y-auto p-1.5">
                     {isSidebarCollapsed && (
                       <div className="flex flex-col items-center gap-1 py-2">
-                        <button type="button" title="All messages" onClick={() => setInboxChannel("all")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "all" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                        <button type="button" title="All messages" onClick={() => setInboxChannel("all")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "all" ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary" : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
                           <IconInbox className="size-4" />
                         </button>
-                        <button type="button" title="Messenger" onClick={() => setInboxChannel("messenger")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "messenger" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                        <button type="button" title="Messenger" onClick={() => setInboxChannel("messenger")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "messenger" ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary" : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
                           <IconBrandMessenger className="size-4" />
                         </button>
-                        <button type="button" title="Instagram" onClick={() => setInboxChannel("instagram")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "instagram" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                        <button type="button" title="Instagram" onClick={() => setInboxChannel("instagram")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "instagram" ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary" : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
                           <IconBrandInstagram className="size-4" />
                         </button>
-                        <button type="button" title="Comments" onClick={() => setInboxChannel("comments")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "comments" ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                        <button type="button" title="Comments" onClick={() => setInboxChannel("comments")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxChannel === "comments" ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary" : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
                           <IconMessage className="size-4" />
                         </button>
-                        <button type="button" title="Follow up" onClick={() => toggleStatus("follow_up")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxStatuses.includes("follow_up") ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                        <button type="button" title="Follow up" onClick={() => toggleStatus("follow_up")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxStatuses.includes("follow_up") ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary" : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
                           <IconStar className="size-4" />
                         </button>
-                        <button type="button" title="Done" onClick={() => toggleFolder("done")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxFolders.includes("done") ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
+                        <button type="button" title="Done" onClick={() => toggleFolder("done")} className={cn("flex size-8 items-center justify-center rounded-lg", inboxFolders.includes("done") ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary" : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted")}>
                           <IconCheck className="size-4" />
                         </button>
                       </div>
@@ -5063,7 +5063,7 @@ export default function PageManagerPage() {
                     {!isSidebarCollapsed && (
                       <>
                         <div className="space-y-0.5">
-                          <p className="px-2.5 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-[#65676B]">Messages</p>
+                          <p className="px-2.5 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Messages</p>
                           {[
                             { id: "all" as const, label: "All messages", icon: IconInbox, count: allPageThreads.length },
                             { id: "messenger" as const, label: "Messenger", icon: IconBrandMessenger, count: allPageThreads.filter(thread => thread.sourceType === "messenger").length },
@@ -5079,8 +5079,8 @@ export default function PageManagerPage() {
                                 className={cn(
                                   "flex w-full min-w-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
                                   active
-                                    ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
-                                    : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                                    ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                    : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
                                 )}
                               >
                                 <item.icon className="size-4 shrink-0" />
@@ -5091,8 +5091,8 @@ export default function PageManagerPage() {
                           })}
                         </div>
 
-                        <div className="mt-2 space-y-0.5 border-t border-[#E4E6EB] pt-2 dark:border-border">
-                          <p className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-[#65676B]">Status</p>
+                        <div className="mt-2 space-y-0.5 border-t border-[#E4E6EB] dark:border-border pt-2 dark:border-border">
+                          <p className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Status</p>
                           {[
                             { id: "unread", label: "Unread", count: allPageThreads.filter(thread => thread.unread > 0 || thread.responseStatus === "pending").length },
                             { id: "priority", label: "Priority", count: allPageThreads.filter(thread => thread.sentiment === "negative").length },
@@ -5108,8 +5108,8 @@ export default function PageManagerPage() {
                                 className={cn(
                                   "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
                                   active
-                                    ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
-                                    : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                                    ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                    : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
                                 )}
                               >
                                 <span className="truncate mr-1">{item.label}</span>
@@ -5119,8 +5119,8 @@ export default function PageManagerPage() {
                           })}
                         </div>
 
-                        <div className="mt-2 space-y-0.5 border-t border-[#E4E6EB] pt-2 dark:border-border">
-                          <p className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-[#65676B]">Folders</p>
+                        <div className="mt-2 space-y-0.5 border-t border-[#E4E6EB] dark:border-border pt-2 dark:border-border">
+                          <p className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Folders</p>
                           {[
                             { id: "done", label: "Done / Closed", count: allPageThreads.filter(thread => thread.responseStatus === "closed").length },
                           ].map(item => {
@@ -5133,8 +5133,8 @@ export default function PageManagerPage() {
                                 className={cn(
                                   "flex w-full min-w-0 items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-sm font-medium transition-colors",
                                   active
-                                    ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary"
-                                    : "text-[#050505] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
+                                    ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:bg-primary/15 dark:text-primary"
+                                    : "text-[#050505] dark:text-foreground hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted"
                                 )}
                               >
                                 <span className="truncate mr-1">{item.label}</span>
@@ -5147,7 +5147,7 @@ export default function PageManagerPage() {
                     )}
                   </CardContent>
                   {!isSidebarCollapsed && (
-                    <div className="mt-auto flex items-center gap-1 border-t border-[#E4E6EB] p-2 dark:border-border">
+                    <div className="mt-auto flex items-center gap-1 border-t border-[#E4E6EB] dark:border-border p-2 dark:border-border">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="size-8 rounded-full" title="More inbox actions">
@@ -5187,10 +5187,10 @@ export default function PageManagerPage() {
                 />
 
                 <Card
-                  className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background"
+                  className="flex h-full min-h-0 shrink-0 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] dark:border-border bg-white shadow-none dark:border-border dark:bg-background"
                   style={{ width: queueWidth }}
                 >
-                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border space-y-2">
+                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] dark:border-border px-3 py-2 dark:border-border space-y-2">
                     {/* Row 1: Channel Tabs (Meta style) */}
                     <div className="flex items-center gap-1 overflow-x-auto pb-1 scrollbar-none border-b border-muted">
                       {[
@@ -5208,7 +5208,7 @@ export default function PageManagerPage() {
                             onClick={() => setInboxChannel(item.id)}
                             className={cn(
                               "relative px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors rounded-lg",
-                              active ? "bg-[#E7F3FF] text-[#0084FF]" : "text-[#65676B] hover:bg-[#F0F2F5] dark:hover:bg-muted"
+                              active ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary" : "text-[#65676B] dark:text-muted-foreground hover:bg-[#F0F2F5] dark:hover:bg-muted"
                             )}
                           >
                             {item.label}
@@ -5228,14 +5228,14 @@ export default function PageManagerPage() {
                         <span className="size-1.5 rounded-full bg-emerald-500" />
                         {allPageThreads.filter(thread => thread.responseStatus === "pending" || thread.responseStatus === "open").length} Open
                       </Badge>
-                      <div className="flex items-center gap-0.5 rounded-full border border-[#E4E6EB] p-0.5 dark:border-border">
+                      <div className="flex items-center gap-0.5 rounded-full border border-[#E4E6EB] dark:border-border p-0.5 dark:border-border">
                         <button
                           type="button"
                           title="Comfortable view"
                           onClick={() => setViewDensity("comfortable")}
                           className={cn(
                             "flex size-6 items-center justify-center rounded-full transition-colors",
-                            viewDensity === "comfortable" ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] hover:bg-[#F0F2F5]"
+                            viewDensity === "comfortable" ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] dark:text-muted-foreground hover:bg-[#F0F2F5] dark:bg-muted/50"
                           )}
                         >
                           <IconLayoutList className="size-3.5" />
@@ -5246,7 +5246,7 @@ export default function PageManagerPage() {
                           onClick={() => setViewDensity("compact")}
                           className={cn(
                             "flex size-6 items-center justify-center rounded-full transition-colors",
-                            viewDensity === "compact" ? "bg-[#E7F3FF] text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] hover:bg-[#F0F2F5]"
+                            viewDensity === "compact" ? "bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:bg-primary/15 dark:text-primary" : "text-[#65676B] dark:text-muted-foreground hover:bg-[#F0F2F5] dark:bg-muted/50"
                           )}
                         >
                           <IconList className="size-3.5" />
@@ -5304,7 +5304,7 @@ export default function PageManagerPage() {
                                 className={cn(
                                   "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 transition-colors",
                                   draggingThreadId
-                                    ? "border-dashed border-[#0084FF] bg-[#E7F3FF]"
+                                    ? "border-dashed border-[#0084FF] bg-[#E7F3FF] dark:bg-primary/15"
                                     : "border-border/70 bg-muted/20"
                                 )}
                                 onDragOver={event => {
@@ -5333,7 +5333,7 @@ export default function PageManagerPage() {
                                 <div
                                   key={`group-${item.groupId}`}
                                   className={cn(
-                                    "rounded-2xl border border-[#E4E6EB] bg-white p-2 dark:border-border dark:bg-background",
+                                    "rounded-2xl border border-[#E4E6EB] dark:border-border bg-white p-2 dark:border-border dark:bg-background",
                                     anyPinned && "ring-1 ring-[#0084FF]/20"
                                   )}
                                   onDragOver={event => {
@@ -5422,7 +5422,7 @@ export default function PageManagerPage() {
                     ) : null}
                   </CardContent>
                   {inboxStatuses.length > 0 || inboxFolders.length > 0 || Object.values(filterSelections).some(arr => arr.length > 0) ? (
-                    <CardFooter className="shrink-0 border-t border-[#E4E6EB] p-2 dark:border-border flex items-center justify-center">
+                    <CardFooter className="shrink-0 border-t border-[#E4E6EB] dark:border-border p-2 dark:border-border flex items-center justify-center">
                       <Button
                         variant="ghost"
                         size="sm"
@@ -5445,8 +5445,8 @@ export default function PageManagerPage() {
                   title="Drag to resize"
                 />
 
-                <Card className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
-                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] px-3 py-2 dark:border-border">
+                <Card className="flex h-full min-w-0 flex-1 flex-col overflow-hidden rounded-none border-0 border-r border-[#E4E6EB] dark:border-border bg-white shadow-none dark:border-border dark:bg-background">
+                  <CardHeader className="shrink-0 border-b border-[#E4E6EB] dark:border-border px-3 py-2 dark:border-border">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex min-w-0 items-center gap-3">
                         <InboxAvatar
@@ -5456,7 +5456,7 @@ export default function PageManagerPage() {
                         />
                         <div className="min-w-0">
                           <CardTitle className="truncate text-sm font-semibold text-[#050505] dark:text-foreground">{selectedThread.name}</CardTitle>
-                          <CardDescription className="truncate text-xs text-[#65676B]">
+                          <CardDescription className="truncate text-xs text-[#65676B] dark:text-muted-foreground">
                             {selectedThread.sourceType === "facebook_comment"
                               ? selectedThread.postId ? "Ad comment" : "Comment"
                               : "Messenger"}
@@ -5488,7 +5488,7 @@ export default function PageManagerPage() {
                             )}
                             <Popover open={assignPopoverOpen} onOpenChange={setAssignPopoverOpen}>
                               <PopoverTrigger asChild>
-                                <button type="button" className="flex items-center gap-1 rounded-full border border-[#E4E6EB] px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted dark:border-border dark:hover:bg-muted/50 transition-colors" title="Assign conversation">
+                                <button type="button" className="flex items-center gap-1 rounded-full border border-[#E4E6EB] dark:border-border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted dark:border-border dark:hover:bg-muted/50 transition-colors" title="Assign conversation">
                                   <IconUserPlus className="size-3" />
                                   {inboxAssignments[selectedThread.id] && inboxAssignments[selectedThread.id] !== "Unassigned" ? inboxAssignments[selectedThread.id] : "Support"}
                                 </button>
@@ -5519,7 +5519,7 @@ export default function PageManagerPage() {
                                         inboxAssignments[selectedThread.id] === staff && "bg-muted font-medium"
                                       )}
                                     >
-                                      <span className="flex size-6 items-center justify-center rounded-full bg-[#E7F3FF] text-[10px] font-semibold text-[#0084FF]">
+                                      <span className="flex size-6 items-center justify-center rounded-full bg-[#E7F3FF] dark:bg-primary/15 text-[10px] font-semibold text-[#0084FF] dark:text-primary">
                                         {staff.charAt(0)}
                                       </span>
                                       {staff}
@@ -5531,7 +5531,7 @@ export default function PageManagerPage() {
 
                             <Popover>
                               <PopoverTrigger asChild>
-                                <button type="button" className={cn("flex items-center gap-1 rounded-full border border-[#E4E6EB] px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted dark:border-border dark:hover:bg-muted/50 transition-colors", inboxScheduleAt && "border-primary text-primary")} title="Schedule reply">
+                                <button type="button" className={cn("flex items-center gap-1 rounded-full border border-[#E4E6EB] dark:border-border px-2.5 py-0.5 text-xs text-muted-foreground hover:bg-muted dark:border-border dark:hover:bg-muted/50 transition-colors", inboxScheduleAt && "border-primary text-primary")} title="Schedule reply">
                                   <IconCalendarTime className="size-3" />
                                   {inboxScheduleAt ? new Date(inboxScheduleAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "Schedule"}
                                 </button>
@@ -5571,7 +5571,7 @@ export default function PageManagerPage() {
                             }
                           }}
                         >
-                          <SelectTrigger className="h-8 w-auto px-3 text-xs font-semibold rounded-full border-[#E4E6EB] bg-white dark:border-border dark:bg-background">
+                          <SelectTrigger className="h-8 w-auto px-3 text-xs font-semibold rounded-full border-[#E4E6EB] dark:border-border bg-white dark:border-border dark:bg-background">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -5625,7 +5625,7 @@ export default function PageManagerPage() {
                               size="lg"
                             />
                             <p className="mt-3 text-base font-semibold text-[#050505] dark:text-foreground">{selectedThread.name}</p>
-                            <p className="text-xs text-[#65676B]">{selectedThread.sourceLabel}</p>
+                            <p className="text-xs text-[#65676B] dark:text-muted-foreground">{selectedThread.sourceLabel}</p>
                           </div>
                         ) : null}
                         <div className="space-y-3">
@@ -5655,22 +5655,22 @@ export default function PageManagerPage() {
                                   "max-w-[78%] rounded-[18px] px-3.5 py-2 text-sm leading-5 shadow-sm",
                                   message.direction === "outbound"
                                     ? "ml-auto bg-[#0084FF] text-white"
-                                    : "bg-[#F0F2F5] text-[#050505] dark:bg-muted dark:text-foreground"
+                                    : "bg-[#F0F2F5] dark:bg-muted/50 text-[#050505] dark:bg-muted dark:text-foreground"
                                 )}
                               >
                                 <MessengerAttachmentContent message={message} />
                                 <p className={cn(
                                   "mt-1 text-xs",
-                                  message.direction === "outbound" ? "text-white/75" : "text-[#65676B]"
+                                  message.direction === "outbound" ? "text-white/75" : "text-[#65676B] dark:text-muted-foreground"
                                 )}>
                                   {message.fb_created_time ? postDate(message.fb_created_time) : postDate(message.created_at)}
                                 </p>
                               </div>
                             ))
                           ) : (
-                            <div className="max-w-[78%] rounded-[18px] bg-[#F0F2F5] px-3.5 py-2 text-[#050505] dark:bg-muted dark:text-foreground">
+                            <div className="max-w-[78%] rounded-[18px] bg-[#F0F2F5] dark:bg-muted/50 px-3.5 py-2 text-[#050505] dark:bg-muted dark:text-foreground">
                               <p className="text-sm leading-5">{selectedThread.lastMessage}</p>
-                              <p className="mt-1 text-xs text-[#65676B]">{selectedThread.updatedAt}</p>
+                              <p className="mt-1 text-xs text-[#65676B] dark:text-muted-foreground">{selectedThread.updatedAt}</p>
                             </div>
                           )}
 
@@ -5691,9 +5691,9 @@ export default function PageManagerPage() {
                           ) : null}
 
                           {selectedThread.sourceType === "messenger" && !selectedThread.conversation ? (
-                            <div className="max-w-[78%] rounded-[18px] bg-[#F0F2F5] px-3.5 py-2 text-[#050505] dark:bg-muted dark:text-foreground">
+                            <div className="max-w-[78%] rounded-[18px] bg-[#F0F2F5] dark:bg-muted/50 px-3.5 py-2 text-[#050505] dark:bg-muted dark:text-foreground">
                               <p className="text-sm leading-5">Let me know if you want a quick bundle recommendation too.</p>
-                              <p className="mt-1 text-xs text-[#65676B]">Suggested follow-up</p>
+                              <p className="mt-1 text-xs text-[#65676B] dark:text-muted-foreground">Suggested follow-up</p>
                             </div>
                           ) : null}
                         </div>
@@ -5717,7 +5717,7 @@ export default function PageManagerPage() {
                     </ScrollArea>
 
                     {inboxAiLoading || inboxAiResult ? (
-                      <div className="shrink-0 border-t border-[#E4E6EB] bg-white px-3 pt-3 dark:border-border dark:bg-background">
+                      <div className="shrink-0 border-t border-[#E4E6EB] dark:border-border bg-white px-3 pt-3 dark:border-border dark:bg-background">
                         <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3">
                           <div className="flex items-center gap-2 text-sm font-semibold text-primary">
                             <IconSparkles className="size-4" />
@@ -5824,8 +5824,8 @@ export default function PageManagerPage() {
                       </div>
                     ) : null}
 
-                    <div className="border-t border-[#E4E6EB] bg-white p-3 dark:border-border dark:bg-background">
-                      <div className="rounded-[20px] border border-[#E4E6EB] bg-white p-3 shadow-sm dark:border-border dark:bg-background flex flex-col gap-2">
+                    <div className="border-t border-[#E4E6EB] dark:border-border bg-white p-3 dark:border-border dark:bg-background">
+                      <div className="rounded-[20px] border border-[#E4E6EB] dark:border-border bg-white p-3 shadow-sm dark:border-border dark:bg-background flex flex-col gap-2">
                         <div className="flex items-start gap-2">
                           <Textarea
                             placeholder="Enter to send, Ctrl+Enter or Shift+Enter for newline"
@@ -5884,7 +5884,7 @@ export default function PageManagerPage() {
                           </Button>
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between border-t border-[#E4E6EB] pt-2 dark:border-border">
+                        <div className="flex flex-wrap items-center justify-between border-t border-[#E4E6EB] dark:border-border pt-2 dark:border-border">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <button type="button" onClick={() => setInboxReplyText(prev => prev + " Product price is 599k. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/price</button>
                             <button type="button" onClick={() => setInboxReplyText(prev => prev + " We offer free shipping nationwide. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/ship</button>
@@ -5935,8 +5935,8 @@ export default function PageManagerPage() {
                               variant="ghost"
                               size="icon"
                               className={cn(
-                                "size-8 rounded-full hover:bg-[#E7F3FF]",
-                                inboxIsRecording ? "bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700" : "text-[#0084FF] hover:text-[#0084FF]"
+                                "size-8 rounded-full hover:bg-[#E7F3FF] dark:bg-primary/15",
+                                inboxIsRecording ? "bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700" : "text-[#0084FF] dark:text-primary hover:text-[#0084FF] dark:text-primary"
                               )}
                               title={inboxIsRecording ? "Stop and save recording" : "Record voice note"}
                               onClick={toggleInboxRecording}
@@ -5944,7 +5944,7 @@ export default function PageManagerPage() {
                               <IconMicrophone className="size-4" />
                             </Button>
                             <label
-                              className="inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-[#0084FF] hover:bg-[#E7F3FF]"
+                              className="inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-[#0084FF] dark:text-primary hover:bg-[#E7F3FF] dark:bg-primary/15"
                               title="Đính kèm file hoặc ảnh (<100MB)"
                             >
                               <IconPaperclip className="size-4" />
@@ -5968,7 +5968,7 @@ export default function PageManagerPage() {
 
                             <Popover open={gifPickerOpen} onOpenChange={setGifPickerOpen}>
                               <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]" title="Post a GIF">
+                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] dark:text-primary hover:bg-[#E7F3FF] dark:bg-primary/15 hover:text-[#0084FF] dark:text-primary" title="Post a GIF">
                                   <IconGif className="size-4" />
                                 </Button>
                               </PopoverTrigger>
@@ -6000,7 +6000,7 @@ export default function PageManagerPage() {
 
                             <Popover open={stickerPickerOpen} onOpenChange={setStickerPickerOpen}>
                               <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]" title="Post a sticker">
+                                <Button variant="ghost" size="icon" className="size-8 rounded-full text-[#0084FF] dark:text-primary hover:bg-[#E7F3FF] dark:bg-primary/15 hover:text-[#0084FF] dark:text-primary" title="Post a sticker">
                                   <IconMoodHeart className="size-4" />
                                 </Button>
                               </PopoverTrigger>
@@ -6041,7 +6041,7 @@ export default function PageManagerPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="size-8 rounded-full text-[#0084FF] hover:bg-[#E7F3FF] hover:text-[#0084FF]"
+                              className="size-8 rounded-full text-[#0084FF] dark:text-primary hover:bg-[#E7F3FF] dark:bg-primary/15 hover:text-[#0084FF] dark:text-primary"
                               title="Send a like"
                               onClick={() => sendLike(selectedThread.id)}
                             >
@@ -6050,7 +6050,7 @@ export default function PageManagerPage() {
                           </div>
                         </div>
 
-                        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[#E4E6EB] pt-2 dark:border-border">
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-[#E4E6EB] dark:border-border pt-2 dark:border-border">
                           <div className="flex flex-1 items-center gap-1.5 text-xs text-muted-foreground">
                             <IconShield className="size-3.5" />
                             <span>AI must not invent prices, stock, discounts, or refund promises.</span>
@@ -6059,7 +6059,7 @@ export default function PageManagerPage() {
                           <Button
                             variant="secondary"
                             size="sm"
-                            className="h-8 gap-1.5 rounded-full bg-[#F0F2F5] text-xs text-[#050505] hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground"
+                            className="h-8 gap-1.5 rounded-full bg-[#F0F2F5] dark:bg-muted/50 text-xs text-[#050505] dark:text-foreground hover:bg-[#E4E6EB] dark:bg-muted dark:text-foreground"
                             onClick={() => void runInboxAiAutoReply()}
                             disabled={inboxAiLoading || !selectedThread?.lastMessage || selectedThread.id === "empty-inbox"}
                           >
@@ -6081,8 +6081,8 @@ export default function PageManagerPage() {
                 </Card>
 
                 {inboxContextOpen ? (
-                  <Card className="w-[250px] shrink-0 h-full min-h-0 flex flex-col overflow-hidden rounded-none border-0 border-l border-[#E4E6EB] bg-white shadow-none dark:border-border dark:bg-background">
-                    <CardHeader className="shrink-0 border-b border-[#E4E6EB] p-2 dark:border-border">
+                  <Card className="w-[250px] shrink-0 h-full min-h-0 flex flex-col overflow-hidden rounded-none border-0 border-l border-[#E4E6EB] dark:border-border bg-white shadow-none dark:border-border dark:bg-background">
+                    <CardHeader className="shrink-0 border-b border-[#E4E6EB] dark:border-border p-2 dark:border-border">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1">
                           <Button
@@ -6120,7 +6120,7 @@ export default function PageManagerPage() {
                           <p className="text-sm font-semibold">{selectedThread.name}</p>
                           <p className="text-xs text-muted-foreground capitalize">{selectedThread.sourceLabel}</p>
                         </div>
-                        <span className="text-xs font-medium text-[#0084FF] opacity-50 cursor-not-allowed inline-flex items-center gap-1">
+                        <span className="text-xs font-medium text-[#0084FF] dark:text-primary opacity-50 cursor-not-allowed inline-flex items-center gap-1">
                           <IconExternalLink className="size-3" />
                           View Facebook profile
                         </span>
@@ -6128,7 +6128,7 @@ export default function PageManagerPage() {
 
                       {/* Contact details */}
                       <div className="space-y-1.5">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Contact details</p>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Contact details</p>
                         <div className="flex items-center justify-between gap-2 text-xs">
                           <span className="text-muted-foreground">Phone</span>
                           <span className="font-medium">{(selectedThread.latestMessage.match(/\d{8,}/) || ["—"])[0]}</span>
@@ -6144,8 +6144,8 @@ export default function PageManagerPage() {
                       </div>
 
                       {/* Facebook profile */}
-                      <div className="space-y-1.5 border-t border-[#E4E6EB] pt-3 dark:border-border">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Facebook profile</p>
+                      <div className="space-y-1.5 border-t border-[#E4E6EB] dark:border-border pt-3 dark:border-border">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Facebook profile</p>
                         <div className="flex items-center justify-between gap-2 text-xs">
                           <span className="text-muted-foreground">Local time</span>
                           <span className="font-medium">GMT+7</span>
@@ -6161,10 +6161,10 @@ export default function PageManagerPage() {
                       </div>
 
                       {/* Activity (Recommended) */}
-                      <div className="space-y-2 border-t border-[#E4E6EB] pt-3 dark:border-border">
+                      <div className="space-y-2 border-t border-[#E4E6EB] dark:border-border pt-3 dark:border-border">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Activity</p>
-                          <Badge variant="outline" className="border-[#E4E6EB] text-[10px] text-[#65676B] rounded-full">Recommended</Badge>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Activity</p>
+                          <Badge variant="outline" className="border-[#E4E6EB] dark:border-border text-[10px] text-[#65676B] dark:text-muted-foreground rounded-full">Recommended</Badge>
                         </div>
 
                         {inboxAiResult ? (
@@ -6180,13 +6180,13 @@ export default function PageManagerPage() {
                         ) : null}
 
                         {/* Order status */}
-                        <div className="rounded-lg border border-[#E4E6EB] px-2.5 py-2 dark:border-border">
+                        <div className="rounded-lg border border-[#E4E6EB] dark:border-border px-2.5 py-2 dark:border-border">
                           <div className="flex items-center justify-between">
                             <p className="text-xs font-semibold">Order status</p>
                             <Button
                               variant="outline"
                               size="sm"
-                              className="h-7 text-xs border-[#0084FF]/30 text-[#0084FF] hover:bg-[#E7F3FF]"
+                              className="h-7 text-xs border-[#0084FF]/30 text-[#0084FF] dark:text-primary hover:bg-[#E7F3FF] dark:bg-primary/15"
                               onClick={() => setCreateOrderOpen(true)}
                             >
                               + Create order
@@ -6195,9 +6195,9 @@ export default function PageManagerPage() {
                           {(inboxOrders[selectedThread.id]?.length ?? 0) > 0 ? (
                             <div className="mt-1.5 space-y-1">
                               {inboxOrders[selectedThread.id].map((o, i) => (
-                                <div key={i} className="rounded-md bg-[#E7F3FF]/60 px-2 py-1 text-[11px]">
+                                <div key={i} className="rounded-md bg-[#E7F3FF] dark:bg-primary/15/60 px-2 py-1 text-[11px]">
                                   <p className="font-medium text-[#050505] dark:text-foreground">{o.productName}</p>
-                                  <p className="text-[#65676B]">{Number(o.amount).toLocaleString()} {o.currency}{o.description ? ` · ${o.description}` : ""}</p>
+                                  <p className="text-[#65676B] dark:text-muted-foreground">{Number(o.amount).toLocaleString()} {o.currency}{o.description ? ` · ${o.description}` : ""}</p>
                                 </div>
                               ))}
                             </div>
@@ -6207,7 +6207,7 @@ export default function PageManagerPage() {
                         </div>
 
                         {/* Lead stage */}
-                        <div className="flex items-center justify-between rounded-lg border border-[#E4E6EB] px-2.5 py-2 dark:border-border">
+                        <div className="flex items-center justify-between rounded-lg border border-[#E4E6EB] dark:border-border px-2.5 py-2 dark:border-border">
                           <div>
                             <p className="text-xs font-semibold">Lead stage</p>
                             <p className="text-[11px] text-muted-foreground capitalize">{inboxLeadStages[selectedThread.id] || "Not a lead"}</p>
@@ -6230,20 +6230,20 @@ export default function PageManagerPage() {
                       </div>
 
                       {/* Labels */}
-                      <div className="space-y-2 border-t border-[#E4E6EB] pt-3 dark:border-border">
+                      <div className="space-y-2 border-t border-[#E4E6EB] dark:border-border pt-3 dark:border-border">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Labels</p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Labels</p>
                           <button
                             type="button"
                             onClick={() => { setTab("settings"); setSettingsTab("tags") }}
-                            className="text-[11px] font-semibold text-[#0084FF] hover:underline"
+                            className="text-[11px] font-semibold text-[#0084FF] dark:text-primary hover:underline"
                           >
                             Manage labels
                           </button>
                         </div>
                         <div className="flex flex-wrap gap-1.5">
                           {(selectedThread.tags || []).map(tag => (
-                            <Badge key={tag} variant="outline" className="rounded-full text-[11px] border-[#0084FF]/30 bg-[#E7F3FF] text-[#0084FF]">
+                            <Badge key={tag} variant="outline" className="rounded-full text-[11px] border-[#0084FF]/30 bg-[#E7F3FF] dark:bg-primary/15 text-[#0084FF] dark:text-primary">
                               {tag}
                             </Badge>
                           ))}
@@ -6251,7 +6251,7 @@ export default function PageManagerPage() {
                             <span className="text-[11px] text-muted-foreground">No labels yet</span>
                           )}
                         </div>
-                        <p className="text-[11px] font-semibold text-[#65676B] pt-1">Suggested labels</p>
+                        <p className="text-[11px] font-semibold text-[#65676B] dark:text-muted-foreground pt-1">Suggested labels</p>
                         <div className="flex flex-wrap gap-1.5">
                           {pageManagerSettings.tags.availableTags
                             .filter(t => !(selectedThread.tags || []).includes(t))
@@ -6260,7 +6260,7 @@ export default function PageManagerPage() {
                               <button
                                 key={tag}
                                 type="button"
-                                className="rounded-full border border-dashed border-[#E4E6EB] px-2 py-0.5 text-[11px] text-[#65676B] hover:bg-[#F0F2F5]"
+                                className="rounded-full border border-dashed border-[#E4E6EB] dark:border-border px-2 py-0.5 text-[11px] text-[#65676B] dark:text-muted-foreground hover:bg-[#F0F2F5] dark:bg-muted/50"
                               >
                                 + {tag}
                               </button>
@@ -6269,21 +6269,21 @@ export default function PageManagerPage() {
                       </div>
 
                       {/* Notes */}
-                      <div className="space-y-2 border-t border-[#E4E6EB] pt-3 dark:border-border">
+                      <div className="space-y-2 border-t border-[#E4E6EB] dark:border-border pt-3 dark:border-border">
                         <div className="flex items-center justify-between">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B]">Notes</p>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Notes</p>
                           {inboxNotes[selectedThread.id] ? (
                             <button
                               type="button"
                               onClick={() => setInboxNotes(prev => ({ ...prev, [selectedThread.id]: "" }))}
-                              className="text-[11px] font-semibold text-[#0084FF] hover:underline"
+                              className="text-[11px] font-semibold text-[#0084FF] dark:text-primary hover:underline"
                             >
                               Clear
                             </button>
                           ) : null}
                         </div>
                         {inboxNotes[selectedThread.id] ? (
-                          <div className="rounded-lg border border-[#E4E6EB] bg-slate-50 p-2.5 text-xs whitespace-pre-wrap dark:bg-muted/10 dark:border-border">
+                          <div className="rounded-lg border border-[#E4E6EB] dark:border-border bg-slate-50 p-2.5 text-xs whitespace-pre-wrap dark:bg-muted/10 dark:border-border">
                             {inboxNotes[selectedThread.id]}
                           </div>
                         ) : (
@@ -6990,377 +6990,6 @@ export default function PageManagerPage() {
                 </div>
               </div>
 
-              <Dialog open={newConversationOpen} onOpenChange={setNewConversationOpen}>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>New conversation</DialogTitle>
-                    <DialogDescription>
-                      Send a message to an existing customer on {selectedPage?.name || "the selected Page"}.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs font-semibold text-muted-foreground">Select customer</label>
-                      <Input
-                        placeholder="Search existing customer by name..."
-                        value={newConversationSearch}
-                        onChange={e => setNewConversationSearch(e.target.value)}
-                        className="mt-1"
-                      />
-                      {newConversationSearch && (
-                        <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-background p-1 space-y-1">
-                          {allPageThreads
-                            .filter(t => t.name.toLowerCase().includes(newConversationSearch.toLowerCase()))
-                            .slice(0, 5)
-                            .map(thread => (
-                              <button
-                                key={thread.id}
-                                type="button"
-                                onClick={() => {
-                                  setNewConversationPsid(thread.customerPsid || "")
-                                  setNewConversationSearch(thread.name)
-                                }}
-                                className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-muted"
-                              >
-                                <span className="font-medium">{thread.name}</span>
-                                <span className="text-xs text-muted-foreground">({thread.sourceLabel})</span>
-                              </button>
-                            ))}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-muted-foreground">Customer PSID</label>
-                      <Input
-                        placeholder="PSID (Facebook user ID for Page)"
-                        value={newConversationPsid}
-                        onChange={e => setNewConversationPsid(e.target.value)}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-muted-foreground">First message</label>
-                      <Textarea
-                        placeholder="Type first message..."
-                        value={newConversationText}
-                        onChange={e => setNewConversationText(e.target.value)}
-                        className="mt-1 min-h-20"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setNewConversationOpen(false)}>Cancel</Button>
-                    <Button
-                      className="bg-[#2548D8] text-white hover:bg-[#1C36A3]"
-                      disabled={!newConversationPsid.trim() || !newConversationText.trim() || newConversationSending}
-                      onClick={handleSendNewConversation}
-                    >
-                      {newConversationSending ? "Sending..." : "Send message"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
-              <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
-                <DialogContent className="sm:max-w-lg">
-                  <DialogHeader>
-                    <DialogTitle>New post</DialogTitle>
-                    <DialogDescription>
-                      Publish directly to {selectedPage?.name || "the selected Page"}. Text and/or one photo.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-3">
-                    <Textarea
-                      placeholder="Write your post…"
-                      value={composerMessage}
-                      onChange={e => setComposerMessage(e.target.value)}
-                      rows={5}
-                    />
-                    <div className="space-y-1">
-                      <label className="text-xs font-medium text-muted-foreground">Image URL (optional, must be public)</label>
-                      <Input
-                        placeholder="https://…"
-                        value={composerImageUrl}
-                        onChange={e => setComposerImageUrl(e.target.value)}
-                      />
-                    </div>
-                    {composerError ? <p className="text-sm text-red-600">{composerError}</p> : null}
-                    {composerSuccess ? <p className="text-sm text-green-600">{composerSuccess}</p> : null}
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setComposerOpen(false)} disabled={composerLoading}>Cancel</Button>
-                    <Button onClick={() => void publishPost()} disabled={composerLoading}>
-                      {composerLoading ? <IconLoader2 className="mr-2 size-4 animate-spin" /> : null}
-                      Publish
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
-              {/* Meta-style Filter Modal */}
-              <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
-                <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col p-0">
-                  <DialogHeader className="p-4 border-b">
-                    <DialogTitle className="text-base font-semibold flex items-center justify-between">
-                      Filters
-                    </DialogTitle>
-                  </DialogHeader>
-
-                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* Frequently used */}
-                    <div className="space-y-3">
-                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Frequently used</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[
-                          { id: "unread", label: "Unread" },
-                          { id: "needs_action", label: "Needs action" },
-                          { id: "follow_up", label: "Follow up" }
-                        ].map(item => (
-                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={filterSelections.frequentlyUsed.includes(item.id)}
-                              onChange={() => toggleFilter("frequentlyUsed", item.id)}
-                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
-                            />
-                            {item.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Ads */}
-                    <div className="space-y-3 border-t pt-4">
-                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Ads</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[
-                          { id: "ad_comments", label: "Ad comments" },
-                          { id: "ad_replies", label: "Ad replies" }
-                        ].map(item => (
-                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={filterSelections.ads.includes(item.id)}
-                              onChange={() => toggleFilter("ads", item.id)}
-                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
-                            />
-                            {item.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Labels */}
-                    <div className="space-y-3 border-t pt-4">
-                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Labels</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {pageManagerSettings.tags.availableTags.map(tag => (
-                          <label key={tag} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={filterSelections.labels.includes(tag)}
-                              onChange={() => toggleFilter("labels", tag)}
-                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
-                            />
-                            {tag}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Assigned admin */}
-                    <div className="space-y-3 border-t pt-4">
-                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Assigned admin</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {STAFF_LIST.map(staff => (
-                          <label key={staff} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={filterSelections.assignedAdmin.includes(staff)}
-                              onChange={() => toggleFilter("assignedAdmin", staff)}
-                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
-                            />
-                            {staff}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Status */}
-                    <div className="space-y-3 border-t pt-4">
-                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Status</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[
-                          { id: "open", label: "Open" },
-                          { id: "pending", label: "Pending" },
-                          { id: "replied", label: "Replied" },
-                          { id: "closed", label: "Closed" }
-                        ].map(item => (
-                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={filterSelections.status.includes(item.id)}
-                              onChange={() => toggleFilter("status", item.id)}
-                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
-                            />
-                            {item.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Folder */}
-                    <div className="space-y-3 border-t pt-4">
-                      <h3 className="text-xs font-semibold text-[#65676B] uppercase tracking-wider">Folder</h3>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[
-                          { id: "inbox", label: "Done" },
-                          { id: "spam", label: "Spam" }
-                        ].map(item => (
-                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={filterSelections.folder.includes(item.id)}
-                              onChange={() => toggleFilter("folder", item.id)}
-                              className="rounded border-[#E4E6EB] text-[#0084FF] focus:ring-[#0084FF] size-4"
-                            />
-                            {item.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <DialogFooter className="p-4 border-t flex items-center justify-between sm:justify-between bg-slate-50 dark:bg-muted/10">
-                    <Button
-                      variant="ghost"
-                      onClick={() => setFilterSelections({ frequentlyUsed: [], ads: [], labels: [], assignedAdmin: [], status: [], folder: [] })}
-                      className="text-[#65676B]"
-                    >
-                      Clear all
-                    </Button>
-                    <Button onClick={() => setFilterModalOpen(false)} className="bg-[#0084FF] text-white hover:bg-[#0073DF]">
-                      Apply
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-
-              {/* Meta-style Create Order Modal */}
-              <Dialog open={createOrderOpen} onOpenChange={setCreateOrderOpen}>
-                <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle className="text-base font-semibold">Create order</DialogTitle>
-                    <DialogDescription className="text-xs">
-                      Send {selectedThread?.name || "customer"} details about their order and your preferred payment methods.
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  <div className="space-y-4 py-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Search catalog</Label>
-                      <Input
-                        placeholder="Search products"
-                        value={orderForm.productQuery}
-                        onChange={e => setOrderForm(p => ({ ...p, productQuery: e.target.value }))}
-                        className="text-sm h-9"
-                      />
-                      <button type="button" className="text-xs font-semibold text-[#0084FF] hover:underline">
-                        Or enter details manually
-                      </button>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Product name · Optional</Label>
-                      <Input
-                        placeholder="Add a product name"
-                        value={orderForm.productName}
-                        onChange={e => setOrderForm(p => ({ ...p, productName: e.target.value }))}
-                        className="text-sm h-9"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-[1fr_120px] gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Amount</Label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#65676B] font-medium">$</span>
-                          <Input
-                            type="number"
-                            placeholder="0.00"
-                            value={orderForm.amount}
-                            onChange={e => setOrderForm(p => ({ ...p, amount: e.target.value }))}
-                            className="pl-7 text-sm h-9"
-                          />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Currency</Label>
-                        <Select
-                          value={orderForm.currency}
-                          onValueChange={val => setOrderForm(p => ({ ...p, currency: val }))}
-                        >
-                          <SelectTrigger className="h-9 text-sm">
-                            <SelectValue placeholder="VND" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="VND">VND</SelectItem>
-                            <SelectItem value="USD">USD</SelectItem>
-                            <SelectItem value="SGD">SGD</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Description · Optional</Label>
-                      <Textarea
-                        placeholder="Add description"
-                        value={orderForm.description}
-                        onChange={e => setOrderForm(p => ({ ...p, description: e.target.value }))}
-                        rows={3}
-                        className="text-sm"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Attach payment instructions · Optional</Label>
-                      <div className="border border-dashed rounded-xl p-6 text-center hover:bg-slate-50 dark:hover:bg-muted/10 cursor-pointer transition-colors relative">
-                        <input
-                          type="file"
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                          onChange={e => {
-                            const name = e.target.files?.[0]?.name || ""
-                            setOrderForm(p => ({ ...p, attachmentName: name }))
-                          }}
-                        />
-                        <p className="text-sm font-semibold text-[#050505] dark:text-foreground">
-                          {orderForm.attachmentName || "Drag and drop files"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          Or <span className="text-[#0084FF]">choose files on your device</span>
-                        </p>
-                        <p className="text-[10px] text-muted-foreground mt-2">
-                          Three attachments maximum. Accepted file formats: .png, .jpg
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <DialogFooter className="border-t pt-4 flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setCreateOrderOpen(false)} className="text-sm h-9 px-4">
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={createOrder}
-                      disabled={!orderForm.productName.trim() || !orderForm.amount.trim()}
-                      className="bg-[#0084FF] text-white hover:bg-[#0073DF] text-sm h-9 px-4"
-                    >
-                      Create order
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
             </div>
           )}
 
@@ -7950,9 +7579,381 @@ export default function PageManagerPage() {
               </div>
             </div>
           )}
+
+          {/* GLOBAL MODALS MOVED HERE TO AVOID RENDER BUGS */}
+              <Dialog open={newConversationOpen} onOpenChange={setNewConversationOpen}>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>New conversation</DialogTitle>
+                    <DialogDescription>
+                      Send a message to an existing customer on {selectedPage?.name || "the selected Page"}.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Select customer</label>
+                      <Input
+                        placeholder="Search existing customer by name..."
+                        value={newConversationSearch}
+                        onChange={e => setNewConversationSearch(e.target.value)}
+                        className="mt-1"
+                      />
+                      {newConversationSearch && (
+                        <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border border-border bg-background p-1 space-y-1">
+                          {allPageThreads
+                            .filter(t => t.name.toLowerCase().includes(newConversationSearch.toLowerCase()))
+                            .slice(0, 5)
+                            .map(thread => (
+                              <button
+                                key={thread.id}
+                                type="button"
+                                onClick={() => {
+                                  setNewConversationPsid(thread.customerPsid || "")
+                                  setNewConversationSearch(thread.name)
+                                }}
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-muted"
+                              >
+                                <span className="font-medium">{thread.name}</span>
+                                <span className="text-xs text-muted-foreground">({thread.sourceLabel})</span>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">Customer PSID</label>
+                      <Input
+                        placeholder="PSID (Facebook user ID for Page)"
+                        value={newConversationPsid}
+                        onChange={e => setNewConversationPsid(e.target.value)}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-muted-foreground">First message</label>
+                      <Textarea
+                        placeholder="Type first message..."
+                        value={newConversationText}
+                        onChange={e => setNewConversationText(e.target.value)}
+                        className="mt-1 min-h-20"
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setNewConversationOpen(false)}>Cancel</Button>
+                    <Button
+                      className="bg-[#2548D8] text-white hover:bg-[#1C36A3]"
+                      disabled={!newConversationPsid.trim() || !newConversationText.trim() || newConversationSending}
+                      onClick={handleSendNewConversation}
+                    >
+                      {newConversationSending ? "Sending..." : "Send message"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={composerOpen} onOpenChange={setComposerOpen}>
+                <DialogContent className="sm:max-w-lg">
+                  <DialogHeader>
+                    <DialogTitle>New post</DialogTitle>
+                    <DialogDescription>
+                      Publish directly to {selectedPage?.name || "the selected Page"}. Text and/or one photo.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-3">
+                    <Textarea
+                      placeholder="Write your post…"
+                      value={composerMessage}
+                      onChange={e => setComposerMessage(e.target.value)}
+                      rows={5}
+                    />
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Image URL (optional, must be public)</label>
+                      <Input
+                        placeholder="https://…"
+                        value={composerImageUrl}
+                        onChange={e => setComposerImageUrl(e.target.value)}
+                      />
+                    </div>
+                    {composerError ? <p className="text-sm text-red-600">{composerError}</p> : null}
+                    {composerSuccess ? <p className="text-sm text-green-600">{composerSuccess}</p> : null}
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setComposerOpen(false)} disabled={composerLoading}>Cancel</Button>
+                    <Button onClick={() => void publishPost()} disabled={composerLoading}>
+                      {composerLoading ? <IconLoader2 className="mr-2 size-4 animate-spin" /> : null}
+                      Publish
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Meta-style Filter Modal */}
+              <Dialog open={filterModalOpen} onOpenChange={setFilterModalOpen}>
+                <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col p-0">
+                  <DialogHeader className="p-4 border-b">
+                    <DialogTitle className="text-base font-semibold flex items-center justify-between">
+                      Filters
+                    </DialogTitle>
+                  </DialogHeader>
+
+                  <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {/* Frequently used */}
+                    <div className="space-y-3">
+                      <h3 className="text-xs font-semibold text-[#65676B] dark:text-muted-foreground uppercase tracking-wider">Frequently used</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { id: "unread", label: "Unread" },
+                          { id: "needs_action", label: "Needs action" },
+                          { id: "follow_up", label: "Follow up" }
+                        ].map(item => (
+                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.frequentlyUsed.includes(item.id)}
+                              onChange={() => toggleFilter("frequentlyUsed", item.id)}
+                              className="rounded border-[#E4E6EB] dark:border-border text-[#0084FF] dark:text-primary focus:ring-[#0084FF] size-4"
+                            />
+                            {item.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Ads */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] dark:text-muted-foreground uppercase tracking-wider">Ads</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { id: "ad_comments", label: "Ad comments" },
+                          { id: "ad_replies", label: "Ad replies" }
+                        ].map(item => (
+                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.ads.includes(item.id)}
+                              onChange={() => toggleFilter("ads", item.id)}
+                              className="rounded border-[#E4E6EB] dark:border-border text-[#0084FF] dark:text-primary focus:ring-[#0084FF] size-4"
+                            />
+                            {item.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Labels */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] dark:text-muted-foreground uppercase tracking-wider">Labels</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {pageManagerSettings.tags.availableTags.map(tag => (
+                          <label key={tag} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.labels.includes(tag)}
+                              onChange={() => toggleFilter("labels", tag)}
+                              className="rounded border-[#E4E6EB] dark:border-border text-[#0084FF] dark:text-primary focus:ring-[#0084FF] size-4"
+                            />
+                            {tag}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Assigned admin */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] dark:text-muted-foreground uppercase tracking-wider">Assigned admin</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {STAFF_LIST.map(staff => (
+                          <label key={staff} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.assignedAdmin.includes(staff)}
+                              onChange={() => toggleFilter("assignedAdmin", staff)}
+                              className="rounded border-[#E4E6EB] dark:border-border text-[#0084FF] dark:text-primary focus:ring-[#0084FF] size-4"
+                            />
+                            {staff}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] dark:text-muted-foreground uppercase tracking-wider">Status</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { id: "open", label: "Open" },
+                          { id: "pending", label: "Pending" },
+                          { id: "replied", label: "Replied" },
+                          { id: "closed", label: "Closed" }
+                        ].map(item => (
+                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.status.includes(item.id)}
+                              onChange={() => toggleFilter("status", item.id)}
+                              className="rounded border-[#E4E6EB] dark:border-border text-[#0084FF] dark:text-primary focus:ring-[#0084FF] size-4"
+                            />
+                            {item.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Folder */}
+                    <div className="space-y-3 border-t pt-4">
+                      <h3 className="text-xs font-semibold text-[#65676B] dark:text-muted-foreground uppercase tracking-wider">Folder</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { id: "inbox", label: "Done" },
+                          { id: "spam", label: "Spam" }
+                        ].map(item => (
+                          <label key={item.id} className="flex items-center gap-2.5 text-sm font-medium cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={filterSelections.folder.includes(item.id)}
+                              onChange={() => toggleFilter("folder", item.id)}
+                              className="rounded border-[#E4E6EB] dark:border-border text-[#0084FF] dark:text-primary focus:ring-[#0084FF] size-4"
+                            />
+                            {item.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="p-4 border-t flex items-center justify-between sm:justify-between bg-slate-50 dark:bg-muted/10">
+                    <Button
+                      variant="ghost"
+                      onClick={() => setFilterSelections({ frequentlyUsed: [], ads: [], labels: [], assignedAdmin: [], status: [], folder: [] })}
+                      className="text-[#65676B] dark:text-muted-foreground"
+                    >
+                      Clear all
+                    </Button>
+                    <Button onClick={() => setFilterModalOpen(false)} className="bg-[#0084FF] text-white hover:bg-[#0073DF]">
+                      Apply
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Meta-style Create Order Modal */}
+              <Dialog open={createOrderOpen} onOpenChange={setCreateOrderOpen}>
+                <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="text-base font-semibold">Create order</DialogTitle>
+                    <DialogDescription className="text-xs">
+                      Send {selectedThread?.name || "customer"} details about their order and your preferred payment methods.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Search catalog</Label>
+                      <Input
+                        placeholder="Search products"
+                        value={orderForm.productQuery}
+                        onChange={e => setOrderForm(p => ({ ...p, productQuery: e.target.value }))}
+                        className="text-sm h-9"
+                      />
+                      <button type="button" className="text-xs font-semibold text-[#0084FF] dark:text-primary hover:underline">
+                        Or enter details manually
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Product name · Optional</Label>
+                      <Input
+                        placeholder="Add a product name"
+                        value={orderForm.productName}
+                        onChange={e => setOrderForm(p => ({ ...p, productName: e.target.value }))}
+                        className="text-sm h-9"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-[1fr_120px] gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Amount</Label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[#65676B] dark:text-muted-foreground font-medium">$</span>
+                          <Input
+                            type="number"
+                            placeholder="0.00"
+                            value={orderForm.amount}
+                            onChange={e => setOrderForm(p => ({ ...p, amount: e.target.value }))}
+                            className="pl-7 text-sm h-9"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Currency</Label>
+                        <Select
+                          value={orderForm.currency}
+                          onValueChange={val => setOrderForm(p => ({ ...p, currency: val }))}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="VND" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="VND">VND</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="SGD">SGD</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Description · Optional</Label>
+                      <Textarea
+                        placeholder="Add description"
+                        value={orderForm.description}
+                        onChange={e => setOrderForm(p => ({ ...p, description: e.target.value }))}
+                        rows={3}
+                        className="text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold text-[#050505] dark:text-foreground">Attach payment instructions · Optional</Label>
+                      <div className="border border-dashed rounded-xl p-6 text-center hover:bg-slate-50 dark:hover:bg-muted/10 cursor-pointer transition-colors relative">
+                        <input
+                          type="file"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={e => {
+                            const name = e.target.files?.[0]?.name || ""
+                            setOrderForm(p => ({ ...p, attachmentName: name }))
+                          }}
+                        />
+                        <p className="text-sm font-semibold text-[#050505] dark:text-foreground">
+                          {orderForm.attachmentName || "Drag and drop files"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Or <span className="text-[#0084FF] dark:text-primary">choose files on your device</span>
+                        </p>
+                        <p className="text-[10px] text-muted-foreground mt-2">
+                          Three attachments maximum. Accepted file formats: .png, .jpg
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <DialogFooter className="border-t pt-4 flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setCreateOrderOpen(false)} className="text-sm h-9 px-4">
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={createOrder}
+                      disabled={!orderForm.productName.trim() || !orderForm.amount.trim()}
+                      className="bg-[#0084FF] text-white hover:bg-[#0073DF] text-sm h-9 px-4"
+                    >
+                      Create order
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
         </main>
       </div>
     </div>
   )
 }
-
