@@ -7,10 +7,10 @@ export const metadata = {
 }
 
 export default function PrivacyPolicyPage() {
-  const lastUpdated = "June 1, 2026"
+  const lastUpdated = "July 23, 2026"
   const appName    = "AdLauncher"
   const company    = "PATI Group"
-  const contactEmail = "vanthuan@patigroup.com"
+  const contactEmail = "thanhtin@patigroup.com"
   const websiteUrl   = "https://ads.patigroup.com"
 
   return (
@@ -118,12 +118,16 @@ export default function PrivacyPolicyPage() {
             <p>We access Facebook data solely to provide our advertising management services. Here is how each permission is used:</p>
             <div className="mt-4 space-y-3">
               {[
-                { perm: "ads_management", desc: "To create, edit, duplicate, pause, and manage your Meta ad campaigns, ad sets, and individual ads on your behalf." },
+                                { perm: "ads_management", desc: "To create, edit, duplicate, pause, and manage your Meta ad campaigns, ad sets, and individual ads on your behalf." },
                 { perm: "ads_read", desc: "To retrieve campaign performance metrics (spend, impressions, clicks, ROAS, CPA) and display analytics within the platform." },
                 { perm: "business_management", desc: "To access your Business Manager, retrieve connected ad accounts and business assets, and manage campaigns across your business portfolio." },
                 { perm: "pages_show_list", desc: "To display your connected Facebook Pages so you can select which page to advertise from when launching campaigns." },
-                { perm: "pages_read_engagement", desc: "To read page-level engagement data and enable the Best Performing Organic Post automation trigger." },
+                { perm: "pages_read_engagement", desc: "To read page-level engagement data and enable the Best Performing Organic Post automation trigger. Also used to sync historical comments for moderation." },
                 { perm: "catalog_management", desc: "To access and manage your Meta product catalogs for dynamic product ads and catalog-based campaigns." },
+                { perm: "pages_manage_engagement", desc: "To reply to and hide/unhide comments on Facebook Pages you manage, for customer support and moderation inside Page Manager." },
+                { perm: "pages_messaging", desc: "To receive and send Facebook Messenger messages on Pages you manage through the AdLauncher unified inbox." },
+                { perm: "pages_manage_metadata", desc: "To subscribe your Facebook Pages to webhook notifications so AdLauncher can deliver realtime Messenger and comment events." },
+                { perm: "pages_manage_posts", desc: "To publish organic posts to Facebook Pages you manage from AdLauncher Posts Ops." },
               ].map(({ perm, desc }) => (
                 <div key={perm} className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
                   <p className="text-xs font-mono font-semibold text-primary">{perm}</p>

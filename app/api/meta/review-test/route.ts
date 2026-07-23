@@ -87,7 +87,10 @@ export async function POST(request: NextRequest) {
 
     const page = Array.isArray((pagesCall.data as any)?.data) ? (pagesCall.data as any).data[0] : null
     if (page?.id) {
-      calls.push(await runGet("pages_read_engagement", `/${page.id}?fields=id,name,fan_count,posts.limit(1){id,message}`, page.access_token || connection.access_token, `page_id=${page.id}`))
+      const pToken = page.access_token || connection.access_token
+      calls.push(await runGet("pages_read_engagement", `/${page.id}?fields=id,name,fan_count,posts.limit(1){id,message,comments.limit(1)}`, pToken, `page_id=${page.id}`))
+      calls.push(await runGet("pages_messaging", `/${page.id}/conversations?limit=1`, pToken, `page_id=${page.id}`))
+      calls.push(await runGet("pages_manage_metadata", `/${page.id}/subscribed_apps`, pToken, `page_id=${page.id}`))
     } else {
       calls.push({ permission: "pages_read_engagement", method: "GET", endpoint: "/{page_id}", ok: false, status: 404, error: "No page found in /me/accounts" })
     }
