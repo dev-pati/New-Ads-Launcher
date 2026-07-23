@@ -1,0 +1,14 @@
+project_id = "vrnstjkxumaaduqswkji"
+
+# Shared Supabase project (see share/SHARED_SUPABASE_BOUNDARY.md).
+# AdLauncher owns schema `ads_launcher` only. Creative Portal owns
+# `creative_portal` in the same project. `public` is legacy/platform-shared.
+#
+# Migrations are intentionally disabled: this repo's local migration
+# history is not reconciled against the shared project's single global
+# `supabase_migrations.schema_migrations` ledger. Do not flip this to
+# true, run `supabase db push`, `migration repair`, or any bootstrap/
+# restore from this repo until the reconciliation steps in
+# share/SHARED_SUPABASE_BOUNDARY.md are complete.
+[db.migrations]
+enabled = false
