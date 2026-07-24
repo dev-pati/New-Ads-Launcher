@@ -33,7 +33,7 @@ export async function completeR2Upload(assetId: string, orgId: string, actorId: 
   const token = process.env.ADS_MEDIA_API_TOKEN
   if (!token) throw new Error("Missing ADS_MEDIA_API_TOKEN")
 
-  const body: any = { orgId, actorId, assetId }
+  const body: Record<string, unknown> = { orgId, actorId, assetId }
   if (parts) body.parts = parts
 
   const res = await fetch(`${portalApiBase}/api/integrations/ads/v1/media/uploads/complete`, {

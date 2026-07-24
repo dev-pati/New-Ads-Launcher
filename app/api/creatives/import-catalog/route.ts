@@ -14,7 +14,17 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient()
-    const inserts = body.descriptors.map((desc: any) => {
+    const inserts = body.descriptors.map((desc: {
+      fileUrl: string;
+      storagePath: string;
+      fileName?: string;
+      mediaType?: string;
+      mimeType?: string;
+      sizeBytes?: number;
+      approvalStatus?: string;
+      brandId?: string;
+      productId?: string;
+    }) => {
       // "The resulting descriptor contains brandId, productId, fileUrl, storagePath,
       // approvalStatus='approved', and briefId=null, ready for a later AdManage catalog import."
       // No byte copy or fake workflow rows (no dummy assignments/submissions).

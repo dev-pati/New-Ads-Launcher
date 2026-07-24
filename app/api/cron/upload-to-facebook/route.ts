@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadVideoUrlToMeta, uploadImageToMeta, getVideoReadyData } from "@/lib/facebook"
-import { parseRateLimit } from "@/lib/facebook"
 import { getConnectionForAdAccount, MissingViaError, isManual } from "@/lib/auth"
 
 export const runtime = "nodejs"
@@ -120,9 +119,9 @@ export async function GET(request: NextRequest) {
           }
 
           uploaded.push(row.id)
-        } catch (err: any) {
-          const msg: string = err?.message ?? "Unknown error"
-          if (err?.name === "MetaRateLimitError") {
+        } catch (err) {
+          const msg: string = err instanceof Error ? err.message : "Unknown error"
+          if (err instanceof Error && err.name === "MetaRateLimitError") {
             for (let j = i; j < limit; j++) skipped.push(rows[j].id)
             break
           }
@@ -172,15 +171,15 @@ export async function GET(request: NextRequest) {
             await db.from("creatives").update({ status: "error" }).eq("id", row.id)
             errors.push({ id: row.id, error: videoData.errorMsg || "Video processing failed" })
           } else if (videoData.ready) {
-            const update: Record<string, any> = { status: "ready" }
+            const update: Record<string, unknown> = { status: "ready" }
             if (videoData.thumbnailUrl) update.fb_thumbnail_url = videoData.thumbnailUrl
             // videoData.sourceUrl is a temporary Meta CDN URL — never overwrite the
             // stable file_url (creative.patigroup.com resolver) or storage_path.
             await db.from("creatives").update(update).eq("id", row.id)
             processed.push(row.id)
           }
-        } catch (err: any) {
-          console.error(`[cron/upload-to-facebook] failed to poll video ${row.fb_video_id}:`, err.message)
+        } catch (err) {
+          console.error(`[cron/upload-to-facebook] failed to poll video ${row.fb_video_id}:`, err instanceof Error ? err.message : String(err))
         }
       }
     }
