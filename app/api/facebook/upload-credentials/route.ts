@@ -5,7 +5,13 @@ import { createAdminClient } from "@/lib/supabase/admin"
 // Trả token cho browser upload video TRỰC TIẾP lên Meta (tránh proxy file lớn qua server).
 // Via MECE: upload media = WRITE → resolve theo slot launch của đúng ad account (VIA-MASTER.md).
 // Token trả về giới hạn: đúng connection WRITE của account được yêu cầu, không phải token org tùy ý.
-export async function GET(request: NextRequest) {
+//
+// ponytail: phải là POST (không GET) — token là FB Write-level long-lived. GET dễ bị browser
+// prefetch/cache lịch sử lưu lại. Khi có server-side upload (/api/creatives/finalize + cron),
+// bỏ hẳn token khỏi client; raise ceiling ở đây = đổi sang upload-binary/finalize.
+export const dynamic = "force-dynamic"
+
+export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -40,10 +46,13 @@ export async function GET(request: NextRequest) {
     }
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
 
-    return NextResponse.json({
-      accessToken: connection.access_token,
-      adAccountId: adAccountIdToUse,
-    })
+    return NextResponse.json(
+      {
+        accessToken: connection.access_token,
+        adAccountId: adAccountIdToUse,
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    )
   } catch {
     return NextResponse.json({ error: "Failed to get credentials" }, { status: 500 })
   }

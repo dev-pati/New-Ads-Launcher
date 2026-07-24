@@ -22,7 +22,11 @@ export async function GET(request: NextRequest) {
     const expired = !conn.expiry_at || new Date(conn.expiry_at).getTime() < Date.now() + 60_000
 
     if (!expired) {
-      return NextResponse.json({ connected: true, token: conn.access_token, email: conn.email })
+      // no-store: access token must never land in browser HTTP cache / CDN.
+      return NextResponse.json(
+        { connected: true, token: conn.access_token, email: conn.email },
+        { headers: { "Cache-Control": "no-store" } }
+      )
     }
 
     // Refresh the access token
@@ -53,7 +57,10 @@ export async function GET(request: NextRequest) {
       .update({ access_token: refreshed.access_token, expiry_at: newExpiry, updated_at: new Date().toISOString() })
       .eq("org_id", ctx.orgId)
 
-    return NextResponse.json({ connected: true, token: refreshed.access_token, email: conn.email })
+    return NextResponse.json(
+      { connected: true, token: refreshed.access_token, email: conn.email },
+      { headers: { "Cache-Control": "no-store" } }
+    )
   } catch (err: any) {
     console.error("[google/token] error:", err)
     return NextResponse.json({ error: err.message }, { status: 500 })

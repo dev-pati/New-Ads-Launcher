@@ -43,7 +43,6 @@ export default function LandingPage() {
           <nav className="hidden items-center gap-8 md:flex">
             <a href="#features" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Features</a>
             <a href="#how-it-works" className="text-sm text-muted-foreground transition-colors hover:text-foreground">How it works</a>
-            <a href="#pricing" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Pricing</a>
             <Link href="/privacy-policy" className="text-sm text-muted-foreground transition-colors hover:text-foreground">Privacy Policy</Link>
           </nav>
           <div>
@@ -238,7 +237,7 @@ export default function LandingPage() {
       </section>
 
       {/* CTA */}
-      <section id="pricing" className="mx-auto max-w-6xl px-6 py-24">
+      <section id="cta" className="mx-auto max-w-6xl px-6 py-24">
         <div className="relative overflow-hidden rounded-2xl bg-primary px-8 py-16 text-center text-primary-foreground md:px-16">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,255,255,0.1),transparent_60%)]" />
           <div className="relative">

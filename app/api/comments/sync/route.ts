@@ -15,7 +15,7 @@ export const maxDuration = 60
 const GRAPH = "https://graph.facebook.com/v25.0"
 const GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 const MAX_POSTS_TO_SCAN = 25
-const MAX_COMMENTS_PER_POST = 100
+const MAX_COMMENTS_PER_POST = 50
 const MAX_ADS_TO_SCAN = 100
 
 async function fetchMetaJson(url: string, fallback: string, context: { pageId: string; permission: string }) {
@@ -235,13 +235,8 @@ export async function POST(request: NextRequest) {
           adPostsFound++
         }
       } catch (err: any) {
-        return NextResponse.json(
-          normalizeMetaError(err, "Unable to resolve ad post IDs from the selected ad account.", {
-            pageId: page_id,
-            permission: "ads_read",
-          }),
-          { status: 400 }
-        )
+        // Non-fatal: page posts still sync if dark-ad lookup fails.
+        console.warn("[comments/sync] dark ads skipped", err?.message || err)
       }
     }
 
@@ -249,6 +244,8 @@ export async function POST(request: NextRequest) {
 
     // Collect all raw comments
     const rawComments: any[] = []
+    let postsFailed = 0
+    const lastPostErrors: any[] = []
     for (const post of posts) {
       const postMessage = (post.message || post.story || "").slice(0, 100)
       const postReactions = post.reactions?.summary?.total_count ?? 0
@@ -257,20 +254,20 @@ export async function POST(request: NextRequest) {
       let commentsForPost: any[] = []
 
       try {
-        const commentsUrl = `${GRAPH}/${post.id}/comments?fields=${encodeURIComponent(commentFields)}&filter=stream&limit=${MAX_COMMENTS_PER_POST}&access_token=${encodeURIComponent(accessToken)}`
+        // ponytail: filter=stream was removed — it flattens replies into one large
+        // payload and trips Meta's "reduce the amount of data" rejection on heavy posts.
+        // Default toplevel ordering; expand replies on demand in the UI instead.
+        const commentsUrl = `${GRAPH}/${post.id}/comments?fields=${encodeURIComponent(commentFields)}&limit=${MAX_COMMENTS_PER_POST}&access_token=${encodeURIComponent(accessToken)}`
         const commentsData = await fetchMetaJson(commentsUrl, "Unable to load Page post comments.", {
           pageId: page_id,
           permission: "pages_read_engagement",
         })
         commentsForPost = Array.isArray(commentsData.data) ? commentsData.data : []
       } catch (err: any) {
-        return NextResponse.json(err?.error ? {
-          ...err,
-          postId: post.id,
-        } : normalizeMetaError(err, "Unable to load Page post comments.", {
-          pageId: page_id,
-          permission: "pages_read_engagement",
-        }), { status: 400 })
+        // One bad post must not abort the whole sync and wipe the page's comments.
+        postsFailed++
+        lastPostErrors.push({ postId: post.id, ...(err?.error ? err : normalizeMetaError(err, "Unable to load Page post comments.", { pageId: page_id, permission: "pages_read_engagement" })) })
+        continue
       }
 
       for (const c of commentsForPost) {
@@ -312,6 +309,8 @@ export async function POST(request: NextRequest) {
         new_count: 0,
         total_fetched: rawComments.length,
         posts_scanned: posts.length,
+        posts_failed: postsFailed,
+        post_errors: lastPostErrors.slice(-3),
         ads_scanned: adsScanned,
         ad_posts_found: adPostsFound,
       })
@@ -346,6 +345,8 @@ export async function POST(request: NextRequest) {
       new_count: inserted?.length || 0,
       total_fetched: rawComments.length,
       posts_scanned: posts.length,
+      posts_failed: postsFailed,
+      post_errors: lastPostErrors.slice(-3),
       ads_scanned: adsScanned,
       ad_posts_found: adPostsFound,
     })

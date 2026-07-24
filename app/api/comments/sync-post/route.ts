@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const commentFields = "id,message,from,created_time,can_hide,is_hidden,like_count,comment_count"
-    const commentsRes = await fetch(`${GRAPH}/${post_id}/comments?fields=${encodeURIComponent(commentFields)}&filter=stream&limit=100&access_token=${encodeURIComponent(pageToken.token)}`)
+    const commentsRes = await fetch(`${GRAPH}/${post_id}/comments?fields=${encodeURIComponent(commentFields)}&limit=50&access_token=${encodeURIComponent(pageToken.token)}`)
     const commentsData = await commentsRes.json()
     if (!commentsRes.ok || commentsData.error) {
       return NextResponse.json(

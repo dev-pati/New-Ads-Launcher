@@ -17,6 +17,9 @@ import {
   IconExternalLink,
   IconPhoto,
   IconLock,
+  IconCopy,
+  IconCheck,
+  
 } from "@tabler/icons-react"
 import {
   FEEDBACK_FEATURES,
@@ -60,7 +63,14 @@ const STATUS_STYLE: Record<string, string> = {
   open: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30",
   doing: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
   done: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
-  rejected: "bg-zinc-500/15 text-zinc-600 dark:text-zinc-300 border-zinc-500/30",
+  rejected: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
+}
+
+const STATUS_DOT: Record<string, string> = {
+  open: "bg-blue-500",
+  doing: "bg-amber-500",
+  done: "bg-emerald-500",
+  rejected: "bg-red-500",
 }
 
 function areaLabel(area: string) {
@@ -126,6 +136,43 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
+function suspectedFiles(r: FeedbackRow): string {
+  const area = FEEDBACK_FEATURES.find(a => a.area === r.feature_area)
+  const fn = area?.functions.find(f => f.value === r.feature_function)
+  const routes = fn?.routes ?? []
+  if (!routes.length) return "- Unknown route. Search the codebase for the feature label."
+  return routes.map(rt => `- \`app/(dashboard)${rt === "/" ? "" : rt}/page.tsx\``).join("\n")
+}
+
+function buildPrompt(r: FeedbackRow): string {
+  return `You are a senior engineer agent. A user reported a feedback item. Investigate the codebase, identify root cause, and fix it.
+
+# Feedback Context
+- **DB row id:** ${r.id}
+- **Feature area:** ${areaLabel(r.feature_area)} (${r.feature_area})
+- **Function:** ${functionLabel(r.feature_area, r.feature_function)} (${r.feature_function})
+- **Type:** ${typeLabel(r.feedback_type)} | **Severity:** ${severityLabel(r.severity)}
+- **Status:** ${r.status}
+- **Reported by:** ${r.user_email || "—"} (Org: ${r.org_name || r.org_id})
+- **Created:** ${fmtDate(r.created_at)}
+
+# Issue
+- **Observed:** ${r.observed_evidence}
+- **Expected:** ${r.expected_result}
+- **Extra note:** ${r.extra_note || "—"}
+- **Reference URL:** ${r.reference_url || "—"}
+- **Screenshot:** ${r.screenshot_url || "none"}
+
+# Likely location (investigate first)
+${suspectedFiles(r)}
+
+# Instructions
+1. Read the suspected files above and trace the feature flow.
+2. If a screenshot URL is provided, examine it to understand the UI state. If missing, infer from the Observed/Expected fields.
+3. Identify the root cause, then implement a minimal fix.
+4. Leave a one-line summary of what you changed and why.`
+}
+
 export default function PmFeedbackDashboardPage() {
   const router = useRouter()
   const [rows, setRows] = useState<FeedbackRow[]>([])
@@ -135,6 +182,12 @@ export default function PmFeedbackDashboardPage() {
   const [unauthorized, setUnauthorized] = useState(false)
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState(false)
+  const [copiedPromptId, setCopiedPromptId] = useState("")
+  const [rejectReason, setRejectReason] = useState("")
+  const [rejectEvidence, setRejectEvidence] = useState("")
+  const [rejecting, setRejecting] = useState(false)
+  const [rejectMsg, setRejectMsg] = useState<string | null>(null)
 
   const [fStatus, setFStatus] = useState("")
   const [fSeverity, setFSeverity] = useState("")
@@ -232,6 +285,65 @@ export default function PmFeedbackDashboardPage() {
     [rows, selectedId]
   )
 
+  const { activeRows, doneRows, rejectedRows } = useMemo(() => {
+    return {
+      activeRows: rows.filter((r) => !["done", "rejected"].includes(r.status)),
+      doneRows: rows.filter((r) => r.status === "done"),
+      rejectedRows: rows.filter((r) => r.status === "rejected"),
+    }
+  }, [rows])
+
+  async function copyId(id: string) {
+    try {
+      await navigator.clipboard.writeText(id)
+      setCopiedId(true)
+      setTimeout(() => setCopiedId(false), 1500)
+    } catch {}
+  }
+
+  async function copyPrompt(r: FeedbackRow) {
+    const md = buildPrompt(r)
+    const blob = new Blob([md], { type: "text/markdown" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `feedback-${r.id.slice(0, 8)}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function sendReject(id: string) {
+    if (!rejectReason.trim()) {
+      setRejectMsg("Please enter a reason.")
+      return
+    }
+    setRejecting(true)
+    setRejectMsg(null)
+    try {
+      const res = await fetch(`/api/pm-feedback/${id}/reject-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: rejectReason.trim(), evidence: rejectEvidence.trim() }),
+      })
+      const t = await res.text()
+      if (!res.ok) {
+        const j = JSON.parse(t)
+        setRejectMsg(`Failed: ${j.error ?? res.status}`)
+      } else {
+        setRejectMsg("Email sent & status set to rejected.")
+        setRejectReason("")
+        setRejectEvidence("")
+        load()
+      }
+    } catch {
+      setRejectMsg("Network error.")
+    } finally {
+      setRejecting(false)
+    }
+  }
+
   if (unauthorized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-6">
@@ -258,6 +370,86 @@ export default function PmFeedbackDashboardPage() {
           </p>
         </div>
       </div>
+    )
+  }
+
+  const renderRow = (r: FeedbackRow, dim: boolean) => {
+    const active = r.id === selectedId
+    return (
+      <tr
+        key={r.id}
+        onClick={() => setSelectedId(r.id)}
+        className={cn(
+          "border-t border-border cursor-pointer hover:bg-muted/40 transition-colors",
+          active && "bg-primary/5",
+          dim && "opacity-60 grayscale-[50%]"
+        )}
+      >
+        <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
+          {fmtDate(r.created_at)}
+        </td>
+        <td className="px-3 py-2 min-w-[140px]">
+          <div className="font-medium truncate max-w-[180px]">{r.user_email || "—"}</div>
+          <div className="text-xs text-muted-foreground truncate max-w-[180px]">
+            {r.org_name || r.org_id.slice(0, 8)}
+          </div>
+        </td>
+        <td className="px-3 py-2 min-w-[140px]">
+          <div className="truncate max-w-[180px]">{areaLabel(r.feature_area)}</div>
+          <div className="text-xs text-muted-foreground truncate max-w-[180px]">
+            {functionLabel(r.feature_area, r.feature_function)}
+          </div>
+        </td>
+        <td className="px-3 py-2 space-y-1">
+          <div>
+            <Chip className="border-border bg-muted/40">{typeLabel(r.feedback_type)}</Chip>
+          </div>
+          <div>
+            <Chip className={SEVERITY_STYLE[r.severity] || "border-border"}>
+              {severityLabel(r.severity)}
+            </Chip>
+          </div>
+        </td>
+        <td className="px-3 py-2 max-w-[260px]">
+          <div className="line-clamp-2 text-foreground/90">{r.observed_evidence}</div>
+        </td>
+        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+          <Select
+            value={r.status}
+            onValueChange={(v) => updateStatus(r.id, v)}
+            disabled={updatingId === r.id}
+          >
+            <SelectTrigger size="sm" className={cn("w-[110px]", STATUS_STYLE[r.status] || "capitalize")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              {FEEDBACK_STATUSES.map((s) => (
+                <SelectItem key={s} value={s} className="capitalize">
+                  <span className="flex items-center gap-2">
+                    <span className={`size-2 rounded-full ${STATUS_DOT[s]}`} />
+                    {s}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </td>
+        <td className="px-3 py-2">
+          {r.screenshot_url ? (
+            <a
+              href={r.screenshot_url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <IconPhoto className="size-3.5" /> View
+            </a>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          )}
+        </td>
+      </tr>
     )
   }
 
@@ -292,7 +484,10 @@ export default function PmFeedbackDashboardPage() {
               <SelectItem value="all">All statuses</SelectItem>
               {FEEDBACK_STATUSES.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {s}
+                  <span className="flex items-center gap-2 capitalize">
+                    <span className={`size-2 rounded-full ${STATUS_DOT[s]}`} />
+                    {s}
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -384,91 +579,35 @@ export default function PmFeedbackDashboardPage() {
                       <th className="px-3 py-2 font-medium">Proof</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {rows.map((r) => {
-                      const active = r.id === selectedId
-                      return (
-                        <tr
-                          key={r.id}
-                          onClick={() => setSelectedId(r.id)}
-                          className={cn(
-                            "border-t border-border cursor-pointer hover:bg-muted/40 transition-colors",
-                            active && "bg-primary/5"
-                          )}
-                        >
-                          <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
-                            {fmtDate(r.created_at)}
-                          </td>
-                          <td className="px-3 py-2 min-w-[140px]">
-                            <div className="font-medium truncate max-w-[180px]">
-                              {r.user_email || "—"}
-                            </div>
-                            <div className="text-xs text-muted-foreground truncate max-w-[180px]">
-                              {r.org_name || r.org_id.slice(0, 8)}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 min-w-[140px]">
-                            <div className="truncate max-w-[180px]">
-                              {areaLabel(r.feature_area)}
-                            </div>
-                            <div className="text-xs text-muted-foreground truncate max-w-[180px]">
-                              {functionLabel(r.feature_area, r.feature_function)}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 space-y-1">
-                            <div>
-                              <Chip className="border-border bg-muted/40">
-                                {typeLabel(r.feedback_type)}
-                              </Chip>
-                            </div>
-                            <div>
-                              <Chip className={SEVERITY_STYLE[r.severity] || "border-border"}>
-                                {severityLabel(r.severity)}
-                              </Chip>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 max-w-[260px]">
-                            <div className="line-clamp-2 text-foreground/90">
-                              {r.observed_evidence}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                            <Select
-                              value={r.status}
-                              onValueChange={(v) => updateStatus(r.id, v)}
-                              disabled={updatingId === r.id}
-                            >
-                              <SelectTrigger size="sm" className="w-[110px] capitalize">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent position="popper">
-                                {FEEDBACK_STATUSES.map((s) => (
-                                  <SelectItem key={s} value={s} className="capitalize">
-                                    {s}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="px-3 py-2">
-                            {r.screenshot_url ? (
-                              <a
-                                href={r.screenshot_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                              >
-                                <IconPhoto className="size-3.5" /> View
-                              </a>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            )}
+                  {activeRows.length > 0 && (
+                    <tbody>
+                      {activeRows.map((r) => renderRow(r, false))}
+                    </tbody>
+                  )}
+                  {doneRows.length > 0 && (
+                    <tbody>
+                      {(activeRows.length > 0 || rejectedRows.length > 0) && (
+                        <tr>
+                          <td colSpan={7} className="bg-muted/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground border-y border-border">
+                            Done ({doneRows.length})
                           </td>
                         </tr>
-                      )
-                    })}
-                  </tbody>
+                      )}
+                      {doneRows.map((r) => renderRow(r, true))}
+                    </tbody>
+                  )}
+                  {rejectedRows.length > 0 && (
+                    <tbody>
+                      {(activeRows.length > 0 || doneRows.length > 0) && (
+                        <tr>
+                          <td colSpan={7} className="bg-muted/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground border-y border-border">
+                            Rejected ({rejectedRows.length})
+                          </td>
+                        </tr>
+                      )}
+                      {rejectedRows.map((r) => renderRow(r, true))}
+                    </tbody>
+                  )}
                 </table>
               </div>
             </div>
@@ -482,7 +621,20 @@ export default function PmFeedbackDashboardPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <div className="text-xs text-muted-foreground">Feedback ID</div>
-                      <div className="font-mono text-xs break-all">{selected.id}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-xs break-all">{selected.id}</span>
+                        <button
+                          onClick={() => copyId(selected.id)}
+                          className="text-muted-foreground hover:text-foreground shrink-0"
+                          title="Copy ID"
+                        >
+                          {copiedId ? (
+                            <IconCheck className="size-3.5 text-emerald-500" />
+                          ) : (
+                            <IconCopy className="size-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                     <Chip className={STATUS_STYLE[selected.status] || "border-border"}>
                       {selected.status}
@@ -585,6 +737,53 @@ export default function PmFeedbackDashboardPage() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {selected.status !== "rejected" && (
+                    <div className="pt-2">
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2 text-muted-foreground hover:text-foreground"
+                        onClick={() => copyPrompt(selected)}
+                      >
+                        {copiedPromptId === selected.id ? <IconCheck className="size-4 text-emerald-500" /> : <IconCopy className="size-4" />}
+                        {copiedPromptId === selected.id ? "Copied Prompt!" : "Copy fix prompt (.md)"}
+                      </Button>
+                    </div>
+                  )}
+
+                  {selected.status === "rejected" && (
+                    <div className="pt-4 border-t border-border space-y-3">
+                      <div className="text-[11px] uppercase tracking-wide text-destructive mb-1.5 font-semibold">
+                        Reject Email (User will be notified)
+                      </div>
+                      <Input
+                        value={rejectReason}
+                        onChange={(e) => setRejectReason(e.target.value)}
+                        placeholder="Reason (e.g. out of scope)"
+                        className="h-8 text-xs"
+                      />
+                      <Input
+                        value={rejectEvidence}
+                        onChange={(e) => setRejectEvidence(e.target.value)}
+                        placeholder="Evidence (e.g. meta rate limit doc)"
+                        className="h-8 text-xs"
+                      />
+                      <Button
+                        variant="destructive"
+                        className="w-full h-8 text-xs"
+                        onClick={() => sendReject(selected.id)}
+                        disabled={rejecting}
+                      >
+                        {rejecting ? <IconLoader2 className="size-3.5 animate-spin mr-1" /> : null}
+                        Send Rejection Email
+                      </Button>
+                      {rejectMsg && (
+                        <div className="text-xs text-muted-foreground text-center">
+                          {rejectMsg}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </aside>

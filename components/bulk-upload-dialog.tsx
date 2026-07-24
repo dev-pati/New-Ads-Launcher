@@ -301,7 +301,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
     try {
       const selectedId = localStorage.getItem("selected_ad_account_id") || ""
       const url = selectedId ? `/api/facebook/upload-credentials?adAccountId=${selectedId}` : "/api/facebook/upload-credentials"
-      credRes = await fetch(url)
+      credRes = await fetch(url, { method: "POST" })
       if (!credRes.ok) {
         const errData = await credRes.json().catch(() => ({}))
         throw new Error(errData.error || `Lỗi ${credRes.status}: Không lấy được credentials`)

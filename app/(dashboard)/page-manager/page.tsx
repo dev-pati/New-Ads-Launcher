@@ -1435,7 +1435,7 @@ export default function PageManagerPage() {
     const startX = e.clientX
     const startWidth = type === "sidebar" ? sidebarWidth : queueWidth
     const frameMax = Math.round(window.innerWidth * 0.3)
-    const min = type === "sidebar" ? 180 : 280
+    const min = type === "sidebar" ? 64 : 80
     const max = Math.min(frameMax, type === "sidebar" ? 480 : 720)
     const onMouseMove = (moveEvent: MouseEvent) => {
       const delta = moveEvent.clientX - startX
@@ -3142,7 +3142,8 @@ export default function PageManagerPage() {
         throw new Error(commentsData.error || "Unable to load comments.")
       }
 
-      setComments(Array.isArray(commentsData.comments) ? commentsData.comments : [])
+      const fetchedComments = Array.isArray(commentsData.comments) ? commentsData.comments : []
+      setComments(fetchedComments)
 
       if (analyticsRes.ok && !analyticsData.error) {
         setCommentsAnalytics(analyticsData as CommentAnalytics)
@@ -3150,10 +3151,12 @@ export default function PageManagerPage() {
         setCommentsAnalytics(null)
       }
 
-      writeCachedValue(cacheKey, {
-        comments: Array.isArray(commentsData.comments) ? commentsData.comments : [],
-        analytics: analyticsRes.ok && !analyticsData.error ? (analyticsData as CommentAnalytics) : null,
-      })
+      if (fetchedComments.length || !forceRefresh) {
+        writeCachedValue(cacheKey, {
+          comments: fetchedComments,
+          analytics: analyticsRes.ok && !analyticsData.error ? (analyticsData as CommentAnalytics) : null,
+        })
+      }
     } catch (err: any) {
       setComments([])
       setCommentsAnalytics(null)
@@ -5845,11 +5848,11 @@ export default function PageManagerPage() {
                       </div>
                     ) : null}
 
-                    <div className="border-t border-[#E4E6EB] dark:border-border bg-white p-3 dark:border-border dark:bg-background">
-                      <div className="rounded-[20px] border border-[#E4E6EB] dark:border-border bg-white p-3 shadow-sm dark:border-border dark:bg-background flex flex-col gap-2">
-                        <div className="flex items-start gap-2">
+                    <div className="border-t border-[#E4E6EB] dark:border-border bg-white p-2 pb-3 dark:border-border dark:bg-background">
+                      <div className="rounded-3xl border border-[#E4E6EB] dark:border-border bg-muted/30 p-2 shadow-sm dark:border-border dark:bg-background flex flex-col transition-colors focus-within:bg-white dark:focus-within:bg-background">
+                        <div className="flex items-start">
                           <Textarea
-                            placeholder="Enter to send, Ctrl+Enter or Shift+Enter for newline"
+                            placeholder="Enter to send, Ctrl+Enter or Shift+Enter for newline (type / for templates)"
                             value={inboxReplyText}
                             onChange={event => {
                               const val = event.target.value
@@ -5893,24 +5896,12 @@ export default function PageManagerPage() {
                               event.preventDefault()
                               applyQuickReplyTemplate(template)
                             }}
-                            className="min-h-14 flex-1 resize-none border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                            className="min-h-9 flex-1 resize-none border-0 bg-transparent px-1 py-1 text-sm shadow-none focus-visible:ring-0"
                           />
-                          <Button
-                            className="mt-auto h-8 w-8 shrink-0 rounded-full bg-[#2548D8] p-0 text-white hover:bg-[#1C36A3]"
-                            disabled={(!inboxReplyText.trim() && !inboxAttachmentNote.trim() && !inboxGifQuery.trim()) || commentActionLoading || messengerLoading || selectedThread.id === "empty-inbox"}
-                            onClick={() => void handleReplyInboxThread()}
-                            title="Send message"
-                          >
-                            {commentActionLoading || messengerLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSend className="size-3.5" />}
-                          </Button>
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between border-t border-[#E4E6EB] dark:border-border pt-2 dark:border-border">
+                        <div className="flex flex-wrap items-center justify-between pt-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <button type="button" onClick={() => setInboxReplyText(prev => prev + " Product price is 599k. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/price</button>
-                            <button type="button" onClick={() => setInboxReplyText(prev => prev + " We offer free shipping nationwide. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/ship</button>
-                            <button type="button" onClick={() => setInboxReplyText(prev => prev + " This item is currently in stock in all sizes. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/stock</button>
-                            <button type="button" onClick={() => setInboxReplyText(prev => prev + " 100% refund policy for manufacturer defects. ")} className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">/refund</button>
                             <Popover open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
                               <PopoverTrigger asChild>
                                 <button type="button" className="rounded-md border border-blue-200 bg-blue-50/50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-400">+ Template</button>
@@ -5986,6 +5977,14 @@ export default function PageManagerPage() {
                                 }}
                               />
                             </label>
+                            <Button
+                              className="ml-1 h-8 w-8 shrink-0 rounded-full bg-[#2548D8] p-0 text-white hover:bg-[#1C36A3] transition-transform active:scale-95"
+                              disabled={(!inboxReplyText.trim() && !inboxAttachmentNote.trim() && !inboxGifQuery.trim()) || commentActionLoading || messengerLoading || selectedThread.id === "empty-inbox"}
+                              onClick={() => void handleReplyInboxThread()}
+                              title="Send message"
+                            >
+                              {commentActionLoading || messengerLoading ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconSend className="size-3.5" />}
+                            </Button>
 
                             <Popover open={gifPickerOpen} onOpenChange={setGifPickerOpen}>
                               <PopoverTrigger asChild>

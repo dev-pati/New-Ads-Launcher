@@ -1,8 +1,0 @@
-{
-  "functions": {
-    "app/api/google/import-drive/route.ts": {
-      "memory": 2048,
-      "maxDuration": 120
-    }
-  }
-}

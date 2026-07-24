@@ -5482,7 +5482,7 @@ function LoadMediaModal({
           } catch {}
 
           // Browser upload credentials — WRITE via resolved for this ad account
-          const credRes = await fetch(`/api/facebook/upload-credentials?adAccountId=${encodeURIComponent(adAccountId)}`)
+          const credRes = await fetch(`/api/facebook/upload-credentials?adAccountId=${encodeURIComponent(adAccountId)}`, { method: "POST" })
           if (!credRes.ok) {
             const e = await credRes.json().catch(() => ({}))
             throw new Error(e.error || "Failed to get upload credentials")
@@ -14235,7 +14235,7 @@ export default function LaunchPage() {
 
       let accessToken: string, adAccountId: string
       try {
-        const credRes = await fetch(credUrl)
+        const credRes = await fetch(credUrl, { method: "POST" })
         if (!credRes.ok) {
           const e = await credRes.json().catch(() => ({}))
           throw new Error((e as any).error || "Failed to get upload credentials")
@@ -15888,7 +15888,7 @@ export default function LaunchPage() {
                 onRemove={id => setSelectedAdSets(prev => prev.filter(a => a.id !== id))}
                 invalid={validationErrors.adsets}
               />
-              <div className="mt-5 border-t border-border/60 pt-5">
+              <div className="border-t border-border/60 pt-5">
                 <AdSetupPanel
                   primaryTexts={primaryTexts} setPrimaryTexts={setPrimaryTexts}
                   headlines={headlines} setHeadlines={setHeadlines}

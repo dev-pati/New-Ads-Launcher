@@ -8,9 +8,10 @@ interface SendEmailOptions {
   subject: string
   text: string
   html?: string
+  replyTo?: string
 }
 
-export async function sendEmail({ to, subject, text, html }: SendEmailOptions): Promise<{ ok: boolean; error?: string }> {
+export async function sendEmail({ to, subject, text, html, replyTo }: SendEmailOptions): Promise<{ ok: boolean; error?: string }> {
   const resendKey = process.env.RESEND_API_KEY
   if (!resendKey) return { ok: false, error: "RESEND_API_KEY not configured" }
 
@@ -25,6 +26,7 @@ export async function sendEmail({ to, subject, text, html }: SendEmailOptions): 
       subject,
       text,
       html: html ?? text.replace(/\n/g, "<br>"),
+      reply_to: replyTo,
     }),
   })
 
