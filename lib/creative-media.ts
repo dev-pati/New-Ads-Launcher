@@ -1,4 +1,26 @@
 export type CreativeMediaVariant = "image" | "thumbnail" | "source"
+export type MediaProvider = "creative_media_r2" | "legacy_supabase_ad_media"
+
+export interface ParsedLocator {
+  provider: MediaProvider
+  bucket?: string
+  key: string
+}
+
+export function parseStoragePath(storagePath: string): ParsedLocator {
+  if (storagePath.startsWith("r2://")) {
+    const parts = storagePath.slice(5).split("/")
+    return {
+      provider: "creative_media_r2",
+      bucket: parts[0],
+      key: parts.slice(1).join("/")
+    }
+  }
+  return {
+    provider: "legacy_supabase_ad_media",
+    key: storagePath
+  }
+}
 
 export interface ClientCreativeMedia {
   id: string

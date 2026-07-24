@@ -78,7 +78,8 @@ export async function POST(
     // 4. Update DB if we got new info
     const update: CreativeUpdate = {}
     if (thumbnailUrl && !hasThumb) update.fb_thumbnail_url = thumbnailUrl
-    if (sourceUrl && !hasPlayableSource) update.file_url = sourceUrl
+    // videoData.sourceUrl is a temporary Meta CDN URL — never persist it as file_url.
+    // Stable file_url (creative.patigroup.com resolver) must be preserved.
     if (currentStatus === "ready" && creative.status !== "ready") update.status = "ready"
 
     if (Object.keys(update).length > 0) {
@@ -88,6 +89,9 @@ export async function POST(
         .eq("id", id)
     }
 
+    // Legacy-only: back up video bytes to Supabase ad-media when no storage_path exists.
+    // R2-backed creatives (r2://) already have immutable storage and must not be
+    // re-copied or have file_url/storage_path overwritten.
     if (sourceUrl && !creative.storage_path) {
       const orgId = ctx.orgId
       const fileName = creative.file_name || `video-${id}.mp4`

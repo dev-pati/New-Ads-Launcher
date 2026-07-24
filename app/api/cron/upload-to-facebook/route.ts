@@ -174,8 +174,8 @@ export async function GET(request: NextRequest) {
           } else if (videoData.ready) {
             const update: Record<string, any> = { status: "ready" }
             if (videoData.thumbnailUrl) update.fb_thumbnail_url = videoData.thumbnailUrl
-            if (videoData.sourceUrl) update.file_url = videoData.sourceUrl
-
+            // videoData.sourceUrl is a temporary Meta CDN URL — never overwrite the
+            // stable file_url (creative.patigroup.com resolver) or storage_path.
             await db.from("creatives").update(update).eq("id", row.id)
             processed.push(row.id)
           }
