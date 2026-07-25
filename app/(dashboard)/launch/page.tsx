@@ -1,4 +1,5 @@
 "use client"
+import { LaunchProgressDialog, LaunchPhase } from "@/components/launch/launch-progress-dialog"
 
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react"
 import { useAdAccount } from "@/lib/ad-account-context"
@@ -236,6 +237,7 @@ interface LaunchBatch {
   created_at: string
   errors: any[]
   created_ads?: CreatedAd[]
+  deleted_at?: string | null
 }
 
 // Facebook ads-supported languages (Meta locale codes)
@@ -650,7 +652,7 @@ function AdProfilesModal({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
                       <span className="text-sm font-semibold truncate">{page.name}</span>
-                      <IconCircleCheck className="size-3.5 text-blue-500 shrink-0" />
+                      <IconCircleCheck className="size-3.5 text-primary shrink-0" />
                       <IconExternalLink className="size-3 text-muted-foreground/50 shrink-0" />
                     </div>
                     <p className="text-xs text-muted-foreground">{page.id}</p>
@@ -1865,8 +1867,8 @@ function CollectionAdsModal({
                         </div>
                       </div>
                     </div>
-                    <div className="border-2 border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-3 flex items-start gap-2">
-                      <IconInfoCircle className="size-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <div className="border-2 border-primary/20 dark:border-blue-900 bg-primary/10/50 dark:bg-blue-950/20 rounded-xl p-3 flex items-start gap-2">
+                      <IconInfoCircle className="size-4 text-primary dark:text-primary shrink-0 mt-0.5" />
                       <div>
                         <p className="text-sm font-semibold">Cover media</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
@@ -1984,7 +1986,7 @@ function ChipPicker({ selected, options, onAdd, onRemove }: {
   return (
     <div className="border rounded-lg px-2 py-1.5 bg-background min-h-[36px] flex flex-wrap gap-1 items-center" ref={ref}>
       {selected.map(k => (
-        <span key={k} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-xs border border-blue-200 dark:border-blue-800">
+        <span key={k} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 rounded-md bg-primary/10 dark:bg-blue-950/40 text-primary/90 dark:text-blue-300 text-xs border border-primary/20 dark:border-blue-800">
           {labelOf(k)}
           <button onClick={() => onRemove(k)} className="hover:text-destructive">
             <IconX className="size-3" />
@@ -3687,7 +3689,7 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
             <span className="text-sm font-bold hover:underline cursor-pointer">{page?.name || "Your Page"}</span>
-            <IconCircleCheck className="size-3.5 text-blue-500 shrink-0" />
+            <IconCircleCheck className="size-3.5 text-primary shrink-0" />
           </div>
           <div className="flex items-center gap-1 mt-0.5">
             <p className="text-xs text-[#65676B] font-medium">Sponsored</p>
@@ -3985,7 +3987,7 @@ function LinkedInMockup({ page, creative, thumb, isVideo, primaryText, headline,
           <p className="text-xs text-muted-foreground">Followers</p>
           <p className="text-xs text-muted-foreground">Promoted · <IconWorld className="size-3 inline" /></p>
         </div>
-        <button className="text-[#0A66C2] text-xs font-semibold flex items-center gap-1 hover:bg-blue-50 px-2 py-1 rounded">
+        <button className="text-[#0A66C2] text-xs font-semibold flex items-center gap-1 hover:bg-primary/10 px-2 py-1 rounded">
           <IconPlusFollow className="size-3.5" />Follow
         </button>
       </div>
@@ -4005,7 +4007,7 @@ function LinkedInMockup({ page, creative, thumb, isVideo, primaryText, headline,
           <p className="text-xs text-muted-foreground uppercase truncate font-medium">{(() => { try { return new URL(webLink).hostname } catch { return webLink || "your-link.com" } })()}</p>
           {headline && <p className="text-sm font-semibold truncate leading-tight mt-0.5">{headline}</p>}
         </div>
-        <Button size="sm" variant="outline" className="h-8 text-xs font-semibold rounded-full ml-3 shrink-0 border-[#0A66C2] text-[#0A66C2] hover:bg-blue-50">{ctaLabel}</Button>
+        <Button size="sm" variant="outline" className="h-8 text-xs font-semibold rounded-full ml-3 shrink-0 border-[#0A66C2] text-[#0A66C2] hover:bg-primary/10">{ctaLabel}</Button>
       </div>
     </div>
   )
@@ -4240,12 +4242,12 @@ function PreviewModal({
                 <div className="text-sm font-medium mb-2">Ad Details</div>
                 <div className="border rounded-lg overflow-hidden">
                   {/* Destination URL */}
-                  <div className="px-4 py-3 border-b bg-blue-50/70 dark:bg-blue-950/30 border-blue-100 dark:border-blue-900/50 transition-colors">
-                    <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">Destination URL:</p>
+                  <div className="px-4 py-3 border-b bg-primary/10/70 dark:bg-primary/20 border-blue-100 dark:border-blue-900/50 transition-colors">
+                    <p className="text-xs font-bold text-primary dark:text-primary uppercase tracking-wider mb-1">Destination URL:</p>
                     <a href={effectiveWebLink} target="_blank" rel="noopener noreferrer" className="text-xs font-bold text-primary hover:underline break-all block">
                       {effectiveWebLink || "—"}
                     </a>
-                    <div className="mt-2.5 pt-2 border-t border-blue-200/50">
+                    <div className="mt-2.5 pt-2 border-t border-primary/20/50">
                       <p className="text-xs font-bold text-muted-foreground/70 uppercase tracking-wider mb-0.5">UTM Parameters:</p>
                       <p className="text-xs text-muted-foreground font-medium italic">
                         {(() => {
@@ -4368,7 +4370,7 @@ function PreviewModal({
                         onKeyDown={e => { if (e.key === "Enter" || e.key === " ") setActiveIdx(i) }}
                         className={cn(
                           "w-full flex items-center gap-3 px-3 py-2.5 border-b last:border-b-0 hover:bg-muted/30 transition-all text-left relative cursor-pointer",
-                          activeIdx === i ? "bg-blue-50/50 dark:bg-blue-900/10 ring-2 ring-primary ring-inset" : ""
+                          activeIdx === i ? "bg-primary/10/50 dark:bg-blue-900/10 ring-2 ring-primary ring-inset" : ""
                         )}
                       >
                         <div className="size-10 rounded overflow-hidden bg-muted shrink-0 relative">
@@ -5726,7 +5728,7 @@ function LoadMediaModal({
                 )}
               >
                 <Icon className="size-4" />{t.label}
-                {t.beta && <span className="text-xs px-1 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold">Beta</span>}
+                {t.beta && <span className="text-xs px-1 py-0.5 rounded-full bg-blue-100 text-primary/90 font-bold">Beta</span>}
               </button>
             )
           })}
@@ -5892,7 +5894,7 @@ function LoadMediaModal({
                     : statusRaw.includes("disapprove") || statusRaw.includes("reject")
                     ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
                     : statusRaw.includes("process") || statusRaw.includes("pending")
-                    ? "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
+                    ? "bg-primary/10 text-primary/90 dark:bg-primary/20 dark:text-primary"
                     : "bg-muted/60 text-muted-foreground"
                   return (
                     <div key={m.id} onClick={() => toggle(m.id)}
@@ -6173,7 +6175,7 @@ function LoadMediaModal({
                                   {isVideo ? <IconVideo className="size-3.5 text-muted-foreground/40" /> : <IconPhoto className="size-3.5 text-muted-foreground/40" />}
                                 </div>}
                               {ad.effective_status === "DELETED" && (
-                                <div className="absolute -top-1 -right-1 size-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">D</div>
+                                <div className="absolute -top-1 -right-1 size-4 rounded-full bg-primary/100 text-white flex items-center justify-center text-xs font-bold">D</div>
                               )}
                               {isVideo && (
                                 <div className="absolute bottom-0.5 left-0.5 size-3.5 rounded-full bg-black/60 flex items-center justify-center">
@@ -7131,16 +7133,16 @@ function DuplicateAdSetModal({
 
                       {/* CBO info banner (if campaign has budget) */}
                       {detail?.campaign?.is_cbo && (
-                        <div className="border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/20 rounded-xl p-3">
+                        <div className="border border-primary/20 dark:border-blue-900 bg-primary/10 dark:bg-blue-950/20 rounded-xl p-3">
                           <div className="flex items-center gap-1.5 mb-0.5">
-                            <IconInfoCircle className="size-3.5 text-blue-600 dark:text-blue-400" />
-                            <span className="text-sm font-bold text-blue-700 dark:text-blue-300">Campaign Budget (CBO)</span>
+                            <IconInfoCircle className="size-3.5 text-primary dark:text-primary" />
+                            <span className="text-sm font-bold text-primary/90 dark:text-blue-300">Campaign Budget (CBO)</span>
                           </div>
                           <p className="text-xs mb-1">
                             <span className="font-bold">Daily Budget:</span>{" "}
                             <span className="font-semibold">${detail.campaign.daily_budget ? (parseInt(detail.campaign.daily_budget) / 100).toFixed(2) : "—"}</span>
                           </p>
-                          <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
+                          <p className="text-xs text-primary/90/80 dark:text-blue-300/80">
                             Consider this campaign budget when setting your ad set spending limits below.
                           </p>
                         </div>
@@ -7213,24 +7215,24 @@ function DuplicateAdSetModal({
                         <p className="text-xs text-muted-foreground mb-2.5">Override start and end dates for the duplicated ad set.</p>
 
                         {/* Timezone info banner */}
-                        <div className="border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/20 rounded-lg p-2.5 mb-3">
+                        <div className="border border-primary/20 dark:border-blue-900 bg-primary/10 dark:bg-blue-950/20 rounded-lg p-2.5 mb-3">
                           <div className="flex items-start gap-1.5 mb-2">
-                            <IconInfoCircle className="size-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                            <IconInfoCircle className="size-3.5 text-primary dark:text-primary shrink-0 mt-0.5" />
                             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs flex-1">
                               <div>
-                                <p className="font-bold text-blue-700 dark:text-blue-300">Your Local Timezone:</p>
+                                <p className="font-bold text-primary/90 dark:text-blue-300">Your Local Timezone:</p>
                                 <p className="font-mono">{Intl.DateTimeFormat().resolvedOptions().timeZone}</p>
                               </div>
                               <div>
-                                <p className="font-bold text-blue-700 dark:text-blue-300">Ad Account Timezone:</p>
+                                <p className="font-bold text-primary/90 dark:text-blue-300">Ad Account Timezone:</p>
                                 <p className="font-mono">America/Los_Angeles (UTC-7)</p>
                               </div>
                               <div>
-                                <p className="font-bold text-blue-700 dark:text-blue-300">Ad Account Time:</p>
+                                <p className="font-bold text-primary/90 dark:text-blue-300">Ad Account Time:</p>
                                 <p className="font-mono">{new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</p>
                               </div>
                               <div>
-                                <p className="font-bold text-blue-700 dark:text-blue-300">Local Time:</p>
+                                <p className="font-bold text-primary/90 dark:text-blue-300">Local Time:</p>
                                 <p className="font-mono">{new Date().toLocaleString("en-US", { month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</p>
                               </div>
                             </div>
@@ -8216,9 +8218,9 @@ function DuplicateCampaignModal({
               </div>
             )}
 
-            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg px-3 py-2 text-xs flex items-center justify-between">
-              <span><span className="font-bold text-blue-700 dark:text-blue-300">Ad Account Timezone:</span> America/Los_Angeles (UTC-07:00)</span>
-              <span><span className="font-bold text-blue-700 dark:text-blue-300">Time:</span> {new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</span>
+            <div className="bg-primary/10 dark:bg-blue-950/20 border border-primary/20 dark:border-blue-900 rounded-lg px-3 py-2 text-xs flex items-center justify-between">
+              <span><span className="font-bold text-primary/90 dark:text-blue-300">Ad Account Timezone:</span> America/Los_Angeles (UTC-07:00)</span>
+              <span><span className="font-bold text-primary/90 dark:text-blue-300">Time:</span> {new Date().toLocaleString("en-US", { timeZone: "America/Los_Angeles", month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</span>
             </div>
 
             <div className="flex items-center justify-between flex-wrap gap-2">
@@ -8380,7 +8382,7 @@ function DuplicateCampaignModal({
                         </button>
                       </div>
 
-                      <div className="flex items-start justify-between gap-2 bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900 rounded-lg p-2">
+                      <div className="flex items-start justify-between gap-2 bg-primary/10/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900 rounded-lg p-2">
                         <div>
                           <p className="text-sm font-medium flex items-center gap-1">
                             Duplicate ads from original ad set
@@ -8546,7 +8548,7 @@ function DuplicateCampaignModal({
                       {/* Duplicate ads from original ad set */}
                       <div className="border-t pt-2">
                         <div className={cn("flex items-start justify-between gap-2 rounded-lg p-2",
-                          cfg.deepCopy ? "bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900" : "bg-blue-50/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900")}>
+                          cfg.deepCopy ? "bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900" : "bg-primary/10/50 dark:bg-blue-950/10 border border-blue-100 dark:border-blue-900")}>
                           <div className="flex-1">
                             <p className="text-sm font-medium flex items-center gap-1">
                               Duplicate ads from original ad set
@@ -8668,11 +8670,11 @@ function DuplicateCampaignModal({
                 Successfully created {results.length} campaign{results.length !== 1 ? "s" : ""} with {results.reduce((sum, c) => sum + (c.adSets?.length || 0), 0)} ad set{results.reduce((sum, c) => sum + (c.adSets?.length || 0), 0) !== 1 ? "s" : ""}
               </p>
             </div>
-            <div className="border rounded-lg overflow-hidden text-left bg-blue-50/50 dark:bg-blue-950/10">
+            <div className="border rounded-lg overflow-hidden text-left bg-primary/10/50 dark:bg-blue-950/10">
               {results.map((c, i) => (
                 <div key={c.id}>
                   <div className="px-3 py-2.5 flex items-center gap-2 border-b">
-                    <span className="size-7 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                    <span className="size-7 rounded-full bg-primary/100 text-white text-xs font-bold flex items-center justify-center">{i + 1}</span>
                     <IconBrandMeta className="size-4 text-[#0064E0]" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold truncate">{c.name}</p>
@@ -9399,7 +9401,7 @@ function SettingsModal({
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 border rounded-xl">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-bold">Meta <span className="text-blue-600">Creative Enhancements</span></span>
+                    <span className="text-sm font-bold">Meta <span className="text-primary">Creative Enhancements</span></span>
                     <IconInfoCircle className="size-3.5 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground italic">Toggle all enhancements on/off</span>
                   </div>
@@ -9973,7 +9975,7 @@ function AdCopyTemplateModal({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold">Default Settings</span>
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 font-medium">Default</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-primary/90 dark:bg-blue-950/40 dark:text-primary font-medium">Default</span>
                   </div>
                   <p className="text-xs text-muted-foreground truncate mt-0.5">
                     {[defaultCopy?.headline, defaultCopy?.cta, defaultLinks?.webLink ? new URL(defaultLinks.webLink.startsWith("http") ? defaultLinks.webLink : `https://${defaultLinks.webLink}`).hostname : null].filter(Boolean).join(" · ") || "No defaults configured"}
@@ -11142,7 +11144,7 @@ function UploadDock({ uploads, onCancel, onClear, onClose }: {
                       isDone ? "bg-green-500" :
                       isError ? "bg-red-500" :
                       isCancelled ? "bg-gray-400" :
-                      "bg-blue-500 animate-pulse"
+                      "bg-primary/100 animate-pulse"
                     )} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium truncate" title={u.filename}>{u.filename}</p>
@@ -11161,7 +11163,7 @@ function UploadDock({ uploads, onCancel, onClear, onClose }: {
                       </p>
                       {!isDone && !isCancelled && !isError && (
                         <div className="mt-1 h-1 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full bg-blue-500 transition-all" style={{ width: `${pct}%` }} />
+                          <div className="h-full bg-primary/100 transition-all" style={{ width: `${pct}%` }} />
                         </div>
                       )}
                     </div>
@@ -11460,7 +11462,7 @@ function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
           <div className="flex items-center gap-1">
             <span className="font-mono text-xs text-muted-foreground">{ad.adId.slice(0, 15)}…</span>
             <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(ad.adId) }} className="text-muted-foreground hover:text-foreground"><IconCopy className="size-3" /></button>
-            <a href={metaUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-500 hover:text-blue-600"><IconExternalLink className="size-3" /></a>
+            <a href={metaUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary"><IconExternalLink className="size-3" /></a>
           </div>
         </td>
         <td className="px-2 py-1.5 text-xs text-muted-foreground truncate max-w-[120px]" title={ad.adSetName}>{ad.adSetName}</td>
@@ -11644,7 +11646,7 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                 </div>
               )}
               {result.scheduled && (
-                <div className="mt-3 text-xs text-blue-600 bg-blue-50 dark:bg-blue-900/20 rounded px-3 py-2 flex items-center gap-2">
+                <div className="mt-3 text-xs text-primary bg-primary/10 dark:bg-primary/20 rounded px-3 py-2 flex items-center gap-2">
                   <IconClock className="size-3.5 shrink-0" />
                   Activates: {new Date(result.scheduled.at).toLocaleString()}
                   {result.scheduled.end && ` · Ends: ${new Date(result.scheduled.end).toLocaleString()}`}
@@ -11814,7 +11816,7 @@ function ThumbStack({ thumbs, count }: { thumbs: string[]; count: number }) {
 
 function UserAvatar({ name }: { name: string }) {
   const initials = name ? name.slice(0, 1).toUpperCase() : "?"
-  const colors = ["bg-teal-500", "bg-blue-500", "bg-purple-500", "bg-orange-500", "bg-pink-500"]
+  const colors = ["bg-teal-500", "bg-primary/100", "bg-purple-500", "bg-orange-500", "bg-pink-500"]
   const color = colors[name.charCodeAt(0) % colors.length]
 
   return (
@@ -11933,7 +11935,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
                     href={`${amsBase}/adsets?act=${accountNumId}&selected_adset_ids=${batch.adset_ids?.[i] || ""}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-xs px-2.5 py-1 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 rounded-md hover:bg-blue-100 border border-blue-200 dark:border-blue-800/50 transition-colors"
+                    className="flex items-center gap-1 text-xs px-2.5 py-1 bg-primary/10 dark:bg-primary/20 text-primary/90 dark:text-primary rounded-md hover:bg-blue-100 border border-primary/20 dark:border-primary/20 transition-colors"
                   >
                     {name}<IconExternalLink className="size-3" />
                   </a>
@@ -11991,10 +11993,12 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
   reloadTrigger: number
   onRelaunch: (b: LaunchBatch) => void
   onLoadDraft?: (draftId: string) => void
-  tabOverride?: "launches" | "drafts" | "scheduled" | null
+  tabOverride?: "launches" | "drafts" | "scheduled" | "deleted" | null
   pages?: any[]
 }) {
-  const [tab, setTab] = useState<"launches" | "drafts" | "scheduled">("launches")
+  const [tab, setTab] = useState<"launches" | "drafts" | "scheduled" | "deleted">("launches")
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [actionLoading, setActionLoading] = useState(false)
   const [batches, setBatches] = useState<LaunchBatch[]>([])
   const [drafts, setDrafts] = useState<DraftRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -12008,17 +12012,19 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
   const [displayCount, setDisplayCount] = useState(10)
 
   useEffect(() => { if (tabOverride) setTab(tabOverride) }, [tabOverride])
+  useEffect(() => { setSelectedIds(new Set()) }, [tab])
 
   const load = useCallback(() => {
     setLoading(true)
     const params = new URLSearchParams()
     if (statusFilter !== "all") params.set("status", statusFilter)
+    if (tab === "deleted") params.set("trash", "1")
     fetch(`/api/launch-history?${params}`)
       .then(r => r.json())
       .then(d => setBatches(d.batches || []))
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [statusFilter])
+  }, [statusFilter, tab])
 
   const loadDrafts = useCallback(() => {
     setDraftsLoading(true)
@@ -12036,13 +12042,37 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
     setDeletingDraftId(null)
   }
 
+  const handleBulkAction = async (action: "trash" | "restore" | "permanent") => {
+    if (selectedIds.size === 0) return
+    if (action === "permanent" && !confirm("Permanently delete " + selectedIds.size + " records?")) return
+    
+    setActionLoading(true)
+    try {
+      const ids = Array.from(selectedIds)
+      const method = action === "permanent" ? "DELETE" : "PATCH"
+      const body = action === "permanent" ? { ids } : { ids, action }
+      
+      const res = await fetch("/api/launch-history", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      })
+      
+      if (res.ok) {
+        setSelectedIds(new Set())
+        load()
+      }
+    } catch {}
+    setActionLoading(false)
+  }
+
   const doLoadDraft = async (id: string) => {
     setLoadingDraftId(id)
     await onLoadDraft?.(id)
     setLoadingDraftId(null)
   }
 
-  useEffect(() => { load() }, [load, reloadTrigger])
+  useEffect(() => { load() }, [load, reloadTrigger, tab])
   useEffect(() => { if (tab === "drafts") loadDrafts() }, [tab, loadDrafts, reloadTrigger])
   useEffect(() => { setDisplayCount(10) }, [search, statusFilter])
 
@@ -12060,6 +12090,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
     { key: "launches" as const, label: "Ad Launches", Icon: IconClock },
     { key: "drafts" as const, label: "Launch Drafts", Icon: IconPencil },
     { key: "scheduled" as const, label: "Scheduled Ads", Icon: IconCalendar },
+    { key: "deleted" as const, label: "Trash", Icon: IconTrash },
   ]
 
   const openDetails = (b: LaunchBatch) => {
@@ -12108,6 +12139,21 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
             <Icon className="size-3.5" />{label}
           </button>
         ))}
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2 mr-2 bg-muted/30 px-3 py-1 rounded-full border border-border">
+            <span className="text-xs font-medium">{selectedIds.size} selected</span>
+            {tab === "deleted" ? (
+              <>
+                <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => handleBulkAction("restore")} disabled={actionLoading}>Restore</Button>
+                <Button variant="destructive" size="sm" className="h-6 text-xs gap-1 px-2" onClick={() => handleBulkAction("permanent")} disabled={actionLoading}>Delete Forever</Button>
+              </>
+            ) : (
+              <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 text-destructive hover:bg-destructive/10" onClick={() => handleBulkAction("trash")} disabled={actionLoading}>
+                <IconTrash className="size-3.5" /> Move to Trash
+              </Button>
+            )}
+          </div>
+        )}
         <div className="ml-auto flex items-center gap-2 py-2">
           <div className="relative">
             <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-muted-foreground/50" />
@@ -12208,7 +12254,13 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
       {tab !== "drafts" && <>
       {/* Table header */}
       <div className="grid text-xs font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
-        style={{ gridTemplateColumns: "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+        style={{ gridTemplateColumns: "30px 140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+        <input type="checkbox" className="rounded border-muted-foreground/30 text-primary focus:ring-primary w-3.5 h-3.5"
+          checked={filtered.length > 0 && selectedIds.size === filtered.length}
+          onChange={e => {
+            if (e.target.checked) setSelectedIds(new Set(filtered.map(f => f.id)))
+            else setSelectedIds(new Set())
+          }} />
         <span>CREATIVES</span>
         <span>ADSETS</span>
         <span>ACCOUNT</span>
@@ -12222,7 +12274,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
       </div>
 
       <div>
-        {tab !== "launches" ? (
+        {tab !== "launches" && tab !== "deleted" ? (
           <div className="flex items-center justify-center py-10 text-xs text-muted-foreground/50">
             No scheduled ads
           </div>
@@ -12238,7 +12290,16 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
           {filtered.slice(0, displayCount).map(b => (
             <div key={b.id}
               className="grid items-center px-4 py-2 border-b text-sm hover:bg-muted/20 transition-colors"
-              style={{ gridTemplateColumns: "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+              style={{ gridTemplateColumns: "30px 140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+              
+              <input type="checkbox" className="rounded border-muted-foreground/30 text-primary focus:ring-primary w-3.5 h-3.5"
+                checked={selectedIds.has(b.id)}
+                onChange={e => {
+                  const s = new Set(selectedIds)
+                  if (e.target.checked) s.add(b.id)
+                  else s.delete(b.id)
+                  setSelectedIds(s)
+                }} />
 
               {/* Creatives */}
               <ThumbStack thumbs={b.creative_thumbs || []} count={b.creative_ids?.length || 0} />
@@ -12662,7 +12723,7 @@ function LaunchStatusToggle({ row, launchAsActive, onUpdateRow }: {
         onClick={() => onUpdateRow(row.id, "launchAsActive", row.launchAsActive === false ? true : row.launchAsActive === true ? false : !launchAsActive)}
         className={cn(
           "relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0",
-          active ? "bg-blue-500" : "bg-muted-foreground/30"
+          active ? "bg-primary/100" : "bg-muted-foreground/30"
         )}
         title={active ? "Active" : "Paused"}
       >
@@ -12714,9 +12775,9 @@ function ListRowItem(props: CoreRowViewProps) {
   return (
     <div className={cn(
       "flex items-start gap-3 px-3 py-2.5 border-b group transition-colors",
-      isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "hover:bg-muted/20"
+      isSelected ? "bg-primary/10/60 dark:bg-blue-950/20" : "hover:bg-muted/20"
     )}>
-      <input type="checkbox" className="rounded size-3.5 accent-blue-600 shrink-0 mt-2" checked={isSelected} onChange={onToggleSelect} />
+      <input type="checkbox" className="rounded size-3.5 accent-primary shrink-0 mt-2" checked={isSelected} onChange={onToggleSelect} />
       <span className="text-xs text-muted-foreground w-4 shrink-0 mt-2">{index + 1}</span>
       <CreativeThumb row={row} size={36} uploadingRowId={uploadingRowId} onUploadFiles={onRowUpload} onPickClick={onCreativeClick} onRemove={() => onUpdateRow(row.id, "creative", null)} idPrefix="list" />
       <input
@@ -12743,10 +12804,10 @@ function ListRowItem(props: CoreRowViewProps) {
 function RecordCard(props: CoreRowViewProps) {
   const { row, index, isSelected, onToggleSelect, onUpdateRow, onDeleteRow, onDuplicateRow, onCreativeClick, onRowUpload, uploadingRowId, adSets, launchAsActive } = props
   return (
-    <div className={cn("p-4 group transition-colors", isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "")}>
+    <div className={cn("p-4 group transition-colors", isSelected ? "bg-primary/10/60 dark:bg-blue-950/20" : "")}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={isSelected} onChange={onToggleSelect} />
+          <input type="checkbox" className="rounded size-3.5 accent-primary" checked={isSelected} onChange={onToggleSelect} />
           <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">SINGLE</span>
           <span className="text-xs text-muted-foreground">#{index + 1} {row.adName || <span className="opacity-50">Untitled ad</span>}</span>
         </div>
@@ -12806,11 +12867,11 @@ function GridCard(props: CoreRowViewProps) {
   return (
     <div className={cn(
       "rounded-lg border overflow-hidden flex flex-col group transition-colors",
-      isSelected ? "border-primary/40 bg-blue-50/40 dark:bg-blue-950/20" : "border-border bg-muted/10"
+      isSelected ? "border-primary/40 bg-primary/10/40 dark:bg-blue-950/20" : "border-border bg-muted/10"
     )}>
       <div className="relative">
         <CreativeThumb row={row} size={220} uploadingRowId={uploadingRowId} onUploadFiles={onRowUpload} onPickClick={onCreativeClick} onRemove={() => onUpdateRow(row.id, "creative", null)} idPrefix="grid" />
-        <input type="checkbox" className="absolute top-2 left-2 rounded size-3.5 accent-blue-600" checked={isSelected} onChange={onToggleSelect} />
+        <input type="checkbox" className="absolute top-2 left-2 rounded size-3.5 accent-primary" checked={isSelected} onChange={onToggleSelect} />
         <span className="absolute top-2 right-2 text-xs bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">SINGLE</span>
       </div>
       <div className="p-2.5 flex flex-col gap-1.5 flex-1">
@@ -13013,7 +13074,7 @@ function TableMode({
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b">
               <th className="w-10 px-3 py-2.5 text-left">
-                <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
+                <input type="checkbox" className="rounded size-3.5 accent-primary" checked={allSelected} onChange={toggleAll} />
               </th>
               <th className="w-7 px-1 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">#</th>
               <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
@@ -13077,12 +13138,12 @@ function TableMode({
                   key={row.id}
                   className={cn(
                     "border-b group transition-colors align-top",
-                    isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "hover:bg-muted/20"
+                    isSelected ? "bg-primary/10/60 dark:bg-blue-950/20" : "hover:bg-muted/20"
                   )}
                 >
                   {/* Checkbox */}
                   <td className="px-3 pt-3 pb-2">
-                    <input type="checkbox" className="rounded size-3.5 accent-blue-600" checked={isSelected} onChange={() => toggleRow(row.id)} />
+                    <input type="checkbox" className="rounded size-3.5 accent-primary" checked={isSelected} onChange={() => toggleRow(row.id)} />
                   </td>
 
                   {/* # */}
@@ -13212,7 +13273,7 @@ function TableMode({
                           onUpdateRow(row.id, "primaryTextVariations", [...ptVars, ""])
                           setExpanded(row.id, { primary: true })
                         }}
-                        className="text-xs text-blue-600 hover:text-blue-700 text-left font-medium"
+                        className="text-xs text-primary hover:text-primary/90 text-left font-medium"
                       >
                         Primary Text Variations {ptVars.length > 0 ? `${ptVars.length + 1} ` : ""}+
                       </button>
@@ -13258,7 +13319,7 @@ function TableMode({
                           onUpdateRow(row.id, "headlineVariations", [...hlVars, ""])
                           setExpanded(row.id, { headline: true })
                         }}
-                        className="text-xs text-blue-600 hover:text-blue-700 text-left font-medium"
+                        className="text-xs text-primary hover:text-primary/90 text-left font-medium"
                       >
                         Headline Variations {hlVars.length > 0 ? `${hlVars.length + 1} ` : ""}+
                       </button>
@@ -13304,7 +13365,7 @@ function TableMode({
                           onUpdateRow(row.id, "descriptionVariations", [...descVars, ""])
                           setExpanded(row.id, { description: true })
                         }}
-                        className="text-xs text-blue-600 hover:text-blue-700 text-left font-medium"
+                        className="text-xs text-primary hover:text-primary/90 text-left font-medium"
                       >
                         Description Variations {descVars.length > 0 ? `${descVars.length + 1} ` : ""}+
                       </button>
@@ -13350,7 +13411,7 @@ function TableMode({
                               <div className="size-5 rounded-full overflow-hidden bg-blue-100 shrink-0 ring-1 ring-border/60 group-hover/profile:ring-primary transition-all">
                                 {rowPage?.picture?.data?.url
                                   ? <img src={rowPage.picture.data.url} className="w-full h-full object-cover" alt={rowPage.name} />
-                                  : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-3 text-blue-600" /></div>}
+                                  : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-3 text-primary" /></div>}
                               </div>
                               <span className="text-xs truncate max-w-[100px] text-foreground/80">
                                 {rowPage ? rowPage.name : <span className="text-muted-foreground/40">No page</span>}
@@ -13395,7 +13456,7 @@ function TableMode({
                                   <div className="size-6 rounded-full overflow-hidden bg-blue-100 shrink-0">
                                     {p.picture?.data?.url
                                       ? <img src={p.picture.data.url} className="w-full h-full object-cover" alt={p.name} />
-                                      : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-3 text-blue-600" /></div>}
+                                      : <div className="w-full h-full flex items-center justify-center"><IconBrandFacebook className="size-3 text-primary" /></div>}
                                   </div>
                                   <span className="truncate">{p.name}</span>
                                   {(row.pageId === p.id || (!row.pageId && selectedPage?.id === p.id)) && (
@@ -13492,7 +13553,7 @@ function TableMode({
                     {row.sitelinks && row.sitelinks.length > 0
                       ? <button
                           onClick={() => setRowModal({ type: "sitelinks", rowId: row.id })}
-                          className="flex items-center gap-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800 whitespace-nowrap"
+                          className="flex items-center gap-1 text-xs text-primary/90 bg-primary/10 border border-primary/20 rounded px-2 py-1 hover:bg-blue-100 dark:bg-primary/20 dark:text-primary dark:border-blue-800 whitespace-nowrap"
                         >
                           <IconExternalLink className="size-3 shrink-0" />
                           {row.sitelinks.length} link{row.sitelinks.length > 1 ? "s" : ""}
@@ -13530,7 +13591,7 @@ function TableMode({
                     {row.multilanguage?.enabled && row.multilanguage.translations.length > 0
                       ? <button
                           onClick={() => setRowModal({ type: "multilanguage", rowId: row.id })}
-                          className="flex items-center gap-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-800"
+                          className="flex items-center gap-1 text-xs text-primary/90 bg-primary/10 border border-primary/20 rounded px-2 py-1 hover:bg-blue-100 dark:bg-primary/20 dark:text-primary dark:border-blue-800"
                         >
                           <IconLanguage className="size-3" />
                           {row.multilanguage.translations.length} lang{row.multilanguage.translations.length > 1 ? "s" : ""}
@@ -13568,7 +13629,7 @@ function TableMode({
                     {row.schedule?.start
                       ? <button
                           onClick={() => setRowModal({ type: "schedule", rowId: row.id })}
-                          className="text-left text-xs text-blue-600 hover:text-blue-700 leading-snug"
+                          className="text-left text-xs text-primary hover:text-primary/90 leading-snug"
                         >
                           <span className="block">{new Date(row.schedule.start).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
                           {row.schedule.end && <span className="block opacity-70">→ {new Date(row.schedule.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>}
@@ -13600,7 +13661,7 @@ function TableMode({
                         onClick={() => onUpdateRow(row.id, "launchAsActive", row.launchAsActive === false ? true : row.launchAsActive === true ? false : !launchAsActive)}
                         className={cn(
                           "relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0",
-                          (row.launchAsActive ?? launchAsActive) ? "bg-blue-500" : "bg-muted-foreground/30"
+                          (row.launchAsActive ?? launchAsActive) ? "bg-primary/100" : "bg-muted-foreground/30"
                         )}
                         title={(row.launchAsActive ?? launchAsActive) ? "Active" : "Paused"}
                       >
@@ -13723,13 +13784,13 @@ function TableMode({
 
       {/* Bulk selection bar */}
       {selectedCount > 0 && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 dark:bg-blue-950/20 border-t border-blue-200 dark:border-blue-800/50 shrink-0">
-          <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-primary/10 dark:bg-blue-950/20 border-t border-primary/20 dark:border-primary/20 shrink-0">
+          <span className="text-xs text-primary/90 dark:text-primary font-medium">
             {selectedCount} of {filteredRows.length} row{filteredRows.length !== 1 ? "s" : ""} selected
           </span>
           <button
             onClick={() => { Array.from(selectedIds).forEach(id => onDuplicateRow(id)); setSelectedIds(new Set()) }}
-            className="text-xs text-blue-600 hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+            className="text-xs text-primary hover:text-blue-800 font-medium px-2 py-1 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
           >
             Duplicate {selectedCount} Row{selectedCount !== 1 ? "s" : ""}
           </button>
@@ -14137,6 +14198,12 @@ export default function LaunchPage() {
 
   const [launching, setLaunching] = useState(false)
   const [launchResult, setLaunchResult] = useState<LaunchResult | null>(null)
+  const [launchPhase, setLaunchPhase] = useState<LaunchPhase>("idle")
+  const [launchProgressOpen, setLaunchProgressOpen] = useState(false)
+  const [launchError, setLaunchError] = useState<string | null>(null)
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(550)
+  const [isResizing, setIsResizing] = useState(false)
+  const videoMissingThumbCount = selectedCreatives.filter(c => c.media_type === "video" && !c.fb_thumbnail_url).length
   const [historyReload, setHistoryReload] = useState(0)
   const [error, setError] = useState("")
   const [validationErrors, setValidationErrors] = useState<Record<string, boolean>>({})
@@ -15044,6 +15111,8 @@ export default function LaunchPage() {
     if (!validate()) return
     setLaunching(true)
     setLaunchResult(null)
+    setLaunchPhase("launching")
+    setLaunchProgressOpen(true)
     try {
       const primaryTextList = primaryTexts.filter(t => t.trim())
       const headlineList = headlines.filter(h => h.trim())
@@ -15064,6 +15133,7 @@ export default function LaunchPage() {
         }
       } catch {}
 
+      setLaunchPhase("launching")
       const res = await fetch("/api/facebook/launch-direct", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -15155,7 +15225,12 @@ export default function LaunchPage() {
       })
       const data = await res.json()
 
-      if (!res.ok) { setError(data.error || "Launch failed"); return }
+      if (!res.ok) {
+        setLaunchPhase("error")
+        setLaunchError(data.error || "Launch failed")
+        setError(data.error || "Launch failed")
+        return
+      }
 
       const result: LaunchResult = {
         created: data.created?.length ?? 0,
@@ -15178,6 +15253,7 @@ export default function LaunchPage() {
         },
       }
       setLaunchResult(result)
+      setLaunchPhase("success")
       setHistoryReload(n => n + 1)
 
       if (result.failed === 0) {
@@ -15185,11 +15261,33 @@ export default function LaunchPage() {
         setSelectedCreatives([])
       }
     } catch {
+      setLaunchPhase("error")
+      setLaunchError("Network error. Please try again.")
       setError("Network error. Please try again.")
     } finally {
       setLaunching(false)
     }
   }
+
+  const startResizing = useCallback(() => setIsResizing(true), [])
+  const stopResizing = useCallback(() => setIsResizing(false), [])
+  const resize = useCallback((e: MouseEvent) => {
+    if (isResizing) {
+      const newWidth = Math.max(420, Math.min(e.clientX, window.innerWidth - 400))
+      setLeftPanelWidth(newWidth)
+    }
+  }, [isResizing])
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener("mousemove", resize)
+      window.addEventListener("mouseup", stopResizing)
+    }
+    return () => {
+      window.removeEventListener("mousemove", resize)
+      window.removeEventListener("mouseup", stopResizing)
+    }
+  }, [isResizing, resize, stopResizing])
 
   const [tableSearchQuery, setTableSearchQuery] = useState("")
   const [tableAutoSync, setTableAutoSync] = useState(false)
@@ -15318,10 +15416,14 @@ export default function LaunchPage() {
 
   // Table mode: launch each row individually using per-row settings
   const doTableLaunch = useCallback(async (scheduledTime?: string, scheduleEndTime?: string) => {
+    setLaunchPhase("launching")
+    setLaunchProgressOpen(true)
+    setLaunchError(null)
     if (!validateTableRows()) return
 
     setLaunching(true)
     setLaunchResult(null)
+    setLaunchPhase("launching")
     setError("")
 
     let savedEnhancements: DefaultAdSettings["enhancements"] | undefined
@@ -15432,6 +15534,8 @@ export default function LaunchPage() {
     }
     setLaunchResult(result)
     setHistoryReload(n => n + 1)
+    setLaunchPhase(totalFailed > 0 && totalCreated === 0 ? "error" : "success")
+    if (totalFailed > 0 && totalCreated === 0) setLaunchError("Launch failed")
     setLaunching(false)
   }, [tableRows, selectedAccountId, selectedAccount, selectedPageId, primaryTexts, headlines, cta, webLink, utmParams, launchAsActive, allAdSets, pages])
 
@@ -15607,6 +15711,13 @@ export default function LaunchPage() {
         }} />
       <ScheduleModal open={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)}
         onConfirm={(start, end) => mode === "table" ? doTableLaunch(start, end) : doLaunch(start, end)} />
+      <LaunchProgressDialog
+        phase={launchPhase}
+        open={launchProgressOpen}
+        onOpenChange={setLaunchProgressOpen}
+        error={launchError}
+        result={launchResult ? { success: launchResult.created, errors: launchResult.failed, total: launchResult.created + launchResult.failed } : null}
+      />
       {mode === "table" && launchResult && (
         <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} />
       )}
@@ -15878,9 +15989,9 @@ export default function LaunchPage() {
         {/* ── Main area ─────────────────────────────────────────── */}
         {mode === "gallery" ? (
           <div className="flex flex-col">
-            <div className="flex flex-col lg:grid lg:grid-cols-[4fr_6fr]" style={{ minHeight: 'calc(100vh - 80px)' }}>
+            <div className="flex flex-col lg:flex-row w-full" style={{ minHeight: 'calc(100vh - 80px)' }}>
             {/* Left panel — Ad Sets + Ad Setup */}
-            <div className="flex flex-col gap-5 p-4 overflow-y-auto border-b lg:border-b-0 lg:border-r w-full" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+            <div className="flex flex-col gap-5 p-4 overflow-y-auto border-b lg:border-b-0 w-full lg:w-auto shrink-0" style={{ maxHeight: 'calc(100vh - 80px)', width: typeof window !== 'undefined' && window.innerWidth >= 1024 ? leftPanelWidth : '100%' }}>
               <AdSetsPanel
                 adAccountId={selectedAccountId}
                 selectedAdSets={selectedAdSets}
@@ -15909,8 +16020,13 @@ export default function LaunchPage() {
               </div>
             </div>
 
+            {/* Drag handle (Desktop only) */}
+            <div 
+              className="hidden lg:flex w-2 cursor-col-resize hover:bg-primary/20 active:bg-primary/30 shrink-0 border-x transition-colors z-10"
+              onMouseDown={startResizing}
+            />
             {/* Right panel — Ads Gallery */}
-            <div className="flex-1 flex flex-col min-w-0 lg:border-l overflow-hidden" style={{ maxHeight: 'calc(100vh - 80px)' }}>
+            <div className="flex-1 flex flex-col min-w-[400px] lg:border-l overflow-hidden" style={{ maxHeight: 'calc(100vh - 80px)' }}>
               <div className={cn("flex items-center gap-2 px-4 py-2 border-b shrink-0", validationErrors.creatives && "border-b-destructive")}>
                 <span className="text-sm font-semibold">Ads {selectedCreatives.length > 0 && <span className="text-muted-foreground font-normal">({selectedCreatives.length})</span>}</span>
                 {selectedCreatives.length > 0 && (
@@ -16014,7 +16130,10 @@ export default function LaunchPage() {
               </div>
 
               {launchResult && (
-                <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} />
+                <LaunchResultModal result={launchResult} onClose={() => {
+                  setLaunchResult(null)
+                  setLaunchPhase("idle")
+                }} />
               )}
 
               <GalleryMediaPanel
@@ -16052,17 +16171,27 @@ export default function LaunchPage() {
                     <IconCalendar className="size-3.5" />Schedule
                   </Button>
                 </Tip>
-                <Tip text={skipPreviewGate ? "Create the ads in Meta with the current setup." : "Preview the ads, then confirm to launch."} className="flex-1">
-                  <Button className="w-full gap-2 font-medium" onClick={() => requestLaunch(() => doLaunch())} disabled={launching}>
-                    {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
-                    {launching ? "Launching..." : "Launch Ads"}
-                  </Button>
-                </Tip>
+                {videoMissingThumbCount > 0 ? (
+                  <div className="flex-1 flex flex-col items-center">
+                    <Button variant="outline" className="w-full gap-2 font-medium border-amber-200 bg-amber-50/50 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-400" disabled>
+                      <IconAlertTriangle className="size-4" />
+                      Missing Thumbnails
+                    </Button>
+                    <span className="text-[10px] text-amber-600 dark:text-amber-500 mt-1">{videoMissingThumbCount} video{videoMissingThumbCount !== 1 ? 's' : ''} missing thumbnail</span>
+                  </div>
+                ) : (
+                  <Tip text={skipPreviewGate ? "Create the ads in Meta with the current setup." : "Preview the ads, then confirm to launch."} className="flex-1">
+                    <Button className="w-full gap-2 font-medium" onClick={() => requestLaunch(() => doLaunch())} disabled={launching || selectedCreatives.length === 0}>
+                      {launching ? <IconLoader2 className="size-4 animate-spin" /> : <IconRocket className="size-4" />}
+                      {launching ? "Launching..." : "Launch Ads"}
+                    </Button>
+                  </Tip>
+                )}
               </div>
             </div>
             </div>
             {relaunchBanner && (
-              <div className="mx-4 mb-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-lg text-xs text-blue-700 dark:text-blue-400 flex items-center gap-2">
+              <div className="mx-4 mb-2 px-3 py-2 bg-primary/10 dark:bg-primary/20 border border-primary/20 dark:border-primary/20 rounded-lg text-xs text-primary/90 dark:text-primary flex items-center gap-2">
                 <IconCircleCheck className="size-3.5 shrink-0" />
                 {relaunchBanner}
               </div>

@@ -638,7 +638,7 @@ const THREADS: ThreadItem[] = [
   },
 ]
 
-export const POSTS: PostItem[] = [
+const POSTS: PostItem[] = [
   {
     id: "post-1",
     scope: "public",
