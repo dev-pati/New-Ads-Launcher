@@ -113,7 +113,7 @@ export async function DELETE(
                  "Authorization": `Bearer ${portalToken}`,
                  "Content-Type": "application/json"
                },
-               body: JSON.stringify({ orgId: ctx.orgId, actorId: ctx.actorId })
+               body: JSON.stringify({ orgId: ctx.orgId, actorId: ctx.user.id })
              })
              if (!res.ok) {
                console.error("Portal API delete failed:", res.status)
