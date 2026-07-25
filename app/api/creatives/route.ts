@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
 import { uploadImageToMeta, uploadVideoToMeta, pollVideoReady } from "@/lib/facebook"
 import { notifyOrgMembers } from "@/lib/notify-org"
+import { deleteMediaObject } from "@/lib/media-delete"
 
 // Large media uploads (videos can be 100MB+) — use Node runtime + extended timeout
 export const runtime = "nodejs"
@@ -316,12 +317,12 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Some selected assets were not found" }, { status: 404 })
     }
 
-    const storagePaths = (creatives || [])
-      .map((creative) => creative.storage_path)
-      .filter((path): path is string => typeof path === "string" && path.length > 0)
-
-    if (storagePaths.length > 0) {
-      await supabase.storage.from("ad-media").remove(storagePaths)
+    for (const creative of creatives || []) {
+      if (!creative.storage_path) continue
+      const deleted = await deleteMediaObject(creative.storage_path, ctx.orgId, ctx.user.id, supabase)
+      if (!deleted.ok) {
+        return NextResponse.json({ error: deleted.reason || "Failed to delete media object" }, { status: 502 })
+      }
     }
 
     const { error: deleteError } = await supabase

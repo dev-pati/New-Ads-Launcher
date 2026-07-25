@@ -279,14 +279,20 @@ export async function GET(
           fallbackName: creative.file_name,
         })
 
+        const updatePayload: Record<string, string> = {
+          fb_image_url: cached.publicUrl,
+          fb_thumbnail_url: cached.publicUrl,
+        }
+        // Only update file_url/storage_path if they belong to legacy ad-media.
+        // Never overwrite R2 identities.
+        if (!creative.storage_path || parseStoragePath(creative.storage_path).provider !== "creative_media_r2") {
+          updatePayload.file_url = cached.publicUrl
+          updatePayload.storage_path = cached.storagePath
+        }
+
         await admin
           .from("creatives")
-          .update({
-            file_url: cached.publicUrl,
-            storage_path: cached.storagePath,
-            fb_image_url: cached.publicUrl,
-            fb_thumbnail_url: cached.publicUrl,
-          })
+          .update(updatePayload)
           .eq("id", creative.id)
           .eq("org_id", ctx.orgId)
 
@@ -313,12 +319,14 @@ export async function GET(
       // Falls back to Meta API only if FFmpeg is unavailable or fails.
       if (creative.storage_path) {
         const locator = parseStoragePath(creative.storage_path)
-        if (locator.provider === "creative_media_r2") {
-           // R2 videos don't have FFmpeg extraction in Ads Launcher, thumbnail should be fetched using file_url
-           const stableResolverUrl = stablePublicUrl(creative.file_url)
-           if (stableResolverUrl) return noStoreRedirect(stableResolverUrl)
-        } else {
-          const videoPublicUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ad-media/${creative.storage_path}`
+        // For both R2 and legacy, FFmpeg-extract a thumbnail frame from a publicly
+        // fetchable video URL. R2 uses the stable resolver URL; legacy uses the
+        // Supabase ad-media public URL. This works before any Meta video ID exists.
+        const videoPublicUrl =
+          locator.provider === "creative_media_r2"
+            ? stablePublicUrl(creative.file_url)
+            : `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/ad-media/${creative.storage_path}`
+        if (videoPublicUrl) {
           const thumbBuffer = await extractThumbnailFromUrl(videoPublicUrl)
           if (thumbBuffer) {
             const storagePath = `thumbnails/${ctx.orgId}/${creative.id}.jpg`
@@ -397,11 +405,13 @@ export async function GET(
       return NextResponse.json({ error: "Video source is unavailable" }, { status: 404 })
     }
 
-    await admin
-      .from("creatives")
-      .update({ file_url: sourceUrl })
-      .eq("id", creative.id)
-      .eq("org_id", ctx.orgId)
+    if (!creative.storage_path || parseStoragePath(creative.storage_path).provider !== "creative_media_r2") {
+      await admin
+        .from("creatives")
+        .update({ file_url: sourceUrl })
+        .eq("id", creative.id)
+        .eq("org_id", ctx.orgId)
+    }
 
     return noStoreRedirect(sourceUrl)
   } catch (error) {
