@@ -37,6 +37,7 @@ interface Org {
   id: string
   name: string
   slug: string
+  logo_url?: string | null
   role: string
   created_at: string
   member_count?: number
@@ -238,8 +239,12 @@ export default function HomePage() {
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between">
-                      <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10">
-                        <IconBuilding className="size-5 text-primary" />
+                      <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 overflow-hidden">
+                        {org.logo_url ? (
+                          <Image src={org.logo_url} alt="" width={40} height={40} className="size-full object-cover" />
+                        ) : (
+                          <IconBuilding className="size-5 text-primary" />
+                        )}
                       </div>
                       <div className="flex items-center gap-1">
                         {org.role === "admin" && (

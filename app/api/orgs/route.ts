@@ -8,11 +8,13 @@ type OrgMemberWithOrg = {
     id: string
     name: string
     slug: string
+    logo_url: string | null
     created_at: string
   } | Array<{
     id: string
     name: string
     slug: string
+    logo_url: string | null
     created_at: string
   }> | null
 }
@@ -24,10 +26,14 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const supabase = createAdminClient()
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("org_members")
-      .select("role, org:organizations(id, name, slug, created_at)")
+      .select("role, org:organizations(id, name, slug, logo_url, created_at)")
       .eq("user_id", user.id)
+
+    if (error) {
+      console.error("Supabase API Error:", error)
+    }
 
     const orgs = ((data || []) as OrgMemberWithOrg[])
       .map((m) => {

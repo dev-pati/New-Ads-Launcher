@@ -12,7 +12,7 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id: orgId } = await params
-    const { name } = await request.json()
+    const { name, logo_url } = await request.json()
     const trimmedName = typeof name === "string" ? name.trim() : ""
 
     if (!trimmedName) {
@@ -31,11 +31,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Only admins can update organizations" }, { status: 403 })
     }
 
+    const updates: { name: string; logo_url?: string | null } = { name: trimmedName }
+    if (logo_url !== undefined) updates.logo_url = logo_url
+
     const { data: org, error } = await supabase
       .from("organizations")
-      .update({ name: trimmedName })
+      .update(updates)
       .eq("id", orgId)
-      .select("id, name, slug, created_at")
+      .select("id, name, slug, logo_url, created_at")
       .single()
 
     if (error) {

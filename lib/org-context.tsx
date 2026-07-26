@@ -6,6 +6,7 @@ interface Org {
   id: string
   name: string
   slug: string
+  logo_url: string | null
   role: string
 }
 
@@ -51,6 +52,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
         id: o.id,
         name: o.name,
         slug: o.slug,
+        logo_url: o.logo_url ?? null,
         role: o.role,
       }))
       setOrgs(orgList)

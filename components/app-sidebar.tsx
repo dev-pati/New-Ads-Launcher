@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useOrg } from "@/lib/org-context"
 import { useTheme } from "next-themes"
@@ -200,8 +201,14 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
       {/* Header */}
       <div className="flex items-center justify-between px-3 h-12 border-b border-sidebar-border shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="size-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs shrink-0">
-            {orgInitials}
+          <div className="size-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden bg-primary/10">
+            {activeOrg?.logo_url ? (
+              <Image src={activeOrg.logo_url} alt="" width={32} height={32} className="size-full object-cover" />
+            ) : (
+              <div className="size-full bg-primary text-primary-foreground flex items-center justify-center">
+                {orgInitials}
+              </div>
+            )}
           </div>
           {!collapsed && (
             <span className="font-heading text-sm font-semibold text-sidebar-foreground truncate">
