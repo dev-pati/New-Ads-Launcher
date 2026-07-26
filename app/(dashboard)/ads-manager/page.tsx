@@ -902,7 +902,11 @@ export default function AdsManagerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, newStatus }),
       })
-      if (!r.ok) return
+      const data = await r.json().catch(() => ({}))
+      if (!r.ok) {
+        setError(data.error || "Failed to update status")
+        return
+      }
       // Optimistic update
       if (tab === "campaigns") setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: newStatus, effective_status: newStatus } : c))
       else if (tab === "adsets") setAdSets(prev => prev.map(a => a.id === id ? { ...a, status: newStatus, effective_status: newStatus } : a))
@@ -946,9 +950,10 @@ export default function AdsManagerPage() {
     setIsDuplicating(true)
     try {
       const ids = Array.from(selectedIds)
+      const failures: string[] = []
       for (const id of ids) {
         let node: any = campaigns.find(x => x.id === id) || adSets.find(x => x.id === id) || ads.find(x => x.id === id)
-        await fetch("/api/facebook/duplicate", {
+        const res = await fetch("/api/facebook/duplicate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -959,7 +964,12 @@ export default function AdsManagerPage() {
             copies: duplicateCount
           })
         })
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}))
+          failures.push(d.error || `Failed to duplicate ${node?.name || id}`)
+        }
       }
+      if (failures.length) setError(failures.join("; "))
       setDuplicateDialogOpen(false)
       setSelectedIds(new Set())
       await fetchMainData()
@@ -986,8 +996,10 @@ export default function AdsManagerPage() {
           id: updatedNode.id,
           name: updatedNode.name,
           status: updatedNode.status,
-          daily_budget: updatedNode.daily_budget ? parseInt(updatedNode.daily_budget) / 100 : undefined,
-          lifetime_budget: updatedNode.lifetime_budget ? parseInt(updatedNode.lifetime_budget) / 100 : undefined,
+          // ponytail: daily_budget/lifetime_budget are already in cents (minor units);
+          // Meta Graph API expects minor units, so forward raw integer.
+          daily_budget: updatedNode.daily_budget ? parseInt(updatedNode.daily_budget) : undefined,
+          lifetime_budget: updatedNode.lifetime_budget ? parseInt(updatedNode.lifetime_budget) : undefined,
           start_time: updatedNode.start_time || undefined,
           end_time: updatedNode.end_time || undefined,
         })
@@ -1176,13 +1188,17 @@ export default function AdsManagerPage() {
       </>
     )
     const avg = (n: number, d: number, fmt: (x: number) => string) => d > 0 ? fmt(n / d) : "—"
-    const acctSpend = parseFloat(accountSummary?.spend || "0") || agg.spend
-    const acctImpressions = parseFloat(accountSummary?.impressions || "0") || agg.impressions
-    const acctClicks = parseFloat(accountSummary?.clicks || "0") || agg.clicks
-    const acctReach = parseFloat(accountSummary?.reach || "0") || agg.reach
-    const acctUniqueClicks = parseFloat(accountSummary?.unique_clicks || "0") || agg.uniqueClicks
-    const acctUniqueLinkClicks = parseFloat(accountSummary?.unique_inline_link_clicks || "0") || agg.uniqueLinkClicks
-    const acctFrequency = parseFloat(accountSummary?.frequency || "0") || (acctReach > 0 ? acctImpressions / acctReach : 0)
+    const summaryNumber = (raw: unknown, fallback: number) => {
+      const n = parseFloat(String(raw ?? ""))
+      return Number.isNaN(n) ? fallback : n
+    }
+    const acctSpend = summaryNumber(accountSummary?.spend, agg.spend)
+    const acctImpressions = summaryNumber(accountSummary?.impressions, agg.impressions)
+    const acctClicks = summaryNumber(accountSummary?.clicks, agg.clicks)
+    const acctReach = summaryNumber(accountSummary?.reach, agg.reach)
+    const acctUniqueClicks = summaryNumber(accountSummary?.unique_clicks, agg.uniqueClicks)
+    const acctUniqueLinkClicks = summaryNumber(accountSummary?.unique_inline_link_clicks, agg.uniqueLinkClicks)
+    const acctFrequency = summaryNumber(accountSummary?.frequency, acctReach > 0 ? acctImpressions / acctReach : 0)
     switch (colId) {
       case "spend":              return cell(money(agg.spend), "Total spent")
       case "results":            return cell(totalResultsCount > 0 ? totalResultsCount.toLocaleString() : "—", "Total")

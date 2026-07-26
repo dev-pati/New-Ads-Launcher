@@ -909,7 +909,7 @@ export async function createCampaign(
   adAccountId: string,
   accessToken: string,
   params: { name: string; objective: string; special_ad_categories?: string[]; status?: string; daily_budget?: number; bid_strategy?: string; promoted_object?: Record<string, any> },
-  opts?: { isManual?: boolean }
+  opts?: { isManual?: boolean; idempotencyKey?: string }
 ): Promise<{ id: string }> {
   const body = new URLSearchParams({
     name: params.name,
@@ -918,6 +918,7 @@ export async function createCampaign(
     status: params.status || "PAUSED",
     access_token: accessToken,
   })
+  if (opts?.idempotencyKey) body.set("idempotency_key", opts.idempotencyKey)
   if (params.daily_budget) {
     // CBO mode: budget at campaign level
     body.set("daily_budget", String(Math.round(params.daily_budget * 100)))
@@ -957,7 +958,7 @@ export async function createAdSet(
     promoted_object?: Record<string, any>
     attribution_spec?: any[]
   },
-  opts?: { isManual?: boolean }
+  opts?: { isManual?: boolean; idempotencyKey?: string }
 ): Promise<{ id: string }> {
   const body: Record<string, string> = {
     name: params.name,
@@ -968,6 +969,7 @@ export async function createAdSet(
     status: params.status || "PAUSED",
     access_token: accessToken,
   }
+  if (opts?.idempotencyKey) body.idempotency_key = opts.idempotencyKey
   if (params.bid_amount) body.bid_amount = params.bid_amount
   if (params.bid_strategy) body.bid_strategy = params.bid_strategy
   if (params.daily_budget) body.daily_budget = params.daily_budget
@@ -1303,7 +1305,7 @@ export async function createAd(
     object_story_id?: string   // Post ID mode: reuse existing dark post (carries social proof)
     reuse_creative_id?: string // Creative ID mode: reuse existing Meta creative_id
   },
-  opts?: { isManual?: boolean } // via token (app khác phát hành) → skip appsecret_proof
+  opts?: { isManual?: boolean; idempotencyKey?: string } // via token (app khác phát hành) → skip appsecret_proof
 ): Promise<{ id: string }> {
   // ── Post ID mode ─────────────────────────────────────────────────────────────
   // Reuse an existing Facebook dark post by its object_story_id.
@@ -1317,6 +1319,7 @@ export async function createAd(
       status: params.status || "PAUSED",
       access_token: accessToken,
     })
+    if (opts?.idempotencyKey) b.set("idempotency_key", opts.idempotencyKey)
     const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
     const r = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b }, { skipProof: opts?.isManual })
     const rText = await r.text()
@@ -1342,6 +1345,7 @@ export async function createAd(
       status: params.status || "PAUSED",
       access_token: accessToken,
     })
+    if (opts?.idempotencyKey) b.set("idempotency_key", opts.idempotencyKey)
     const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
     const r = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body: b }, { skipProof: opts?.isManual })
     const rText = await r.text()
@@ -1639,6 +1643,7 @@ export async function createAd(
     status: params.status || "PAUSED",
     access_token: accessToken,
   })
+  if (opts?.idempotencyKey) body.set("idempotency_key", opts.idempotencyKey)
   const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   console.log(`[createAd] POST /${normId}/ads with creative spec:`, JSON.stringify(creativeJson, null, 2))
   const res = await secureMetaFetch(`${GRAPH_API_BASE}/${normId}/ads`, { method: "POST", body }, { skipProof: opts?.isManual })

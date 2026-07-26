@@ -1547,6 +1547,7 @@ export default function PageManagerPage() {
     setInboxFolders(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
   }, [])
   const [inboxTaskState, setInboxTaskState] = useState<Record<string, "open" | "closed">>({})
+  const [inboxDoneThreads, setInboxDoneThreads] = useState<Record<string, boolean>>({})
   const [inboxPinnedThreads, setInboxPinnedThreads] = useState<Record<string, boolean>>({})
   const [inboxGroups, setInboxGroups] = useState<Record<string, string[]>>({})
   const [inboxGroupCollapsed, setInboxGroupCollapsed] = useState<Record<string, boolean>>({})
@@ -2129,9 +2130,11 @@ export default function PageManagerPage() {
       }
       const fs = filterSelections
       if (inboxFolders.includes("done")) {
-        if (thread.responseStatus !== "closed") return false
+        if (!inboxDoneThreads[thread.id]) return false
+      } else if (inboxFolders.includes("closed")) {
+        if (thread.responseStatus !== "closed" || inboxDoneThreads[thread.id]) return false
       } else {
-        if (thread.responseStatus === "closed") return false
+        if (inboxDoneThreads[thread.id] || thread.responseStatus === "closed") return false
       }
 
       if (inboxChannel === "messenger" && thread.sourceType !== "messenger") return false
@@ -2156,7 +2159,7 @@ export default function PageManagerPage() {
       return [...matched].sort((a, b) => a.name.localeCompare(b.name))
     }
     return matched
-  }, [allPageThreads, inboxSearchQuery, inboxChannel, inboxStatuses, inboxFolders, filterSelections, inboxFollowUps, inboxSortMode, inboxHandledThreads, inboxTaskState, inboxUnreadOverrides])
+  }, [allPageThreads, inboxSearchQuery, inboxChannel, inboxStatuses, inboxFolders, filterSelections, inboxFollowUps, inboxSortMode, inboxHandledThreads, inboxTaskState, inboxUnreadOverrides, inboxDoneThreads])
 
   const togglePinThread = useCallback((threadId: string) => {
     setInboxPinnedThreads(prev => {
@@ -2436,12 +2439,9 @@ export default function PageManagerPage() {
               title="Done"
               onClick={(e) => {
                 e.stopPropagation()
-                if (thread.sourceType === "messenger" && thread.conversationId) {
-                  void patchMessengerConversation(thread.conversationId, thread.pageId, { status: "closed" })
-                }
-                setInboxHandledThreads(p => ({ ...p, [thread.id]: true }))
+                setInboxDoneThreads(p => ({ ...p, [thread.id]: !p[thread.id] }))
               }}
-              className="p-1.5 rounded-full hover:bg-muted text-emerald-600"
+              className={cn("p-1.5 rounded-full hover:bg-muted text-emerald-600", inboxDoneThreads[thread.id] && "bg-emerald-100 dark:bg-emerald-900/30")}
             >
               <IconCheck className="size-4" />
             </button>
@@ -2452,6 +2452,7 @@ export default function PageManagerPage() {
   }, [
     draggingThreadId,
     inboxPinnedThreads,
+    inboxDoneThreads,
     mergeThreadInto,
     selectedPage?.id,
     selectedPage?.picture,
@@ -2604,9 +2605,6 @@ export default function PageManagerPage() {
         if (pageManagerSettings.conversations.autoMarkRead) {
           setInboxHandledThreads(prev => ({ ...prev, [thread.id]: true }))
         }
-        if (pageManagerSettings.conversations.taskManagementEnabled) {
-          setInboxTaskState(prev => ({ ...prev, [thread.id]: "closed" }))
-        }
         if (isSelectedThread) setInboxReplyText("")
       } else if (result.action === "draft") {
         if (isSelectedThread) {
@@ -2675,10 +2673,7 @@ export default function PageManagerPage() {
     if (pageManagerSettings.conversations.autoMarkRead) {
       setInboxHandledThreads(prev => ({ ...prev, [threadId]: true }))
     }
-    if (pageManagerSettings.conversations.taskManagementEnabled) {
-      setInboxTaskState(prev => ({ ...prev, [threadId]: "closed" }))
-    }
-  }, [pageManagerSettings.conversations.autoMarkRead, pageManagerSettings.conversations.taskManagementEnabled])
+  }, [pageManagerSettings.conversations.autoMarkRead])
 
   const sendLike = useCallback((threadId: string) => {
     const thread = allPageThreads.find(t => t.id === threadId)
@@ -3000,6 +2995,23 @@ export default function PageManagerPage() {
       window.localStorage.setItem(`page_manager_inbox_drafts:${selectedPage.id}`, JSON.stringify(inboxReplyDrafts))
     } catch { }
   }, [inboxReplyDrafts, selectedPage?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    try {
+      const raw = window.localStorage.getItem(`page_manager_inbox_done:${selectedPage.id}`)
+      setInboxDoneThreads(raw ? JSON.parse(raw) : {})
+    } catch {
+      setInboxDoneThreads({})
+    }
+  }, [selectedPage?.id])
+
+  useEffect(() => {
+    if (!selectedPage?.id) return
+    try {
+      window.localStorage.setItem(`page_manager_inbox_done:${selectedPage.id}`, JSON.stringify(inboxDoneThreads))
+    } catch { }
+  }, [inboxDoneThreads, selectedPage?.id])
 
   useEffect(() => {
     if (!selectedPage?.id) return
@@ -3415,6 +3427,7 @@ export default function PageManagerPage() {
     if (!selectedComment || !selectedPage?.id) return
     const message = replyText.trim()
     if (!message) return
+    if (replyLoading || commentActionLoading) return
 
     setReplyLoading(true)
     setCommentActionLoading(true)
@@ -5145,7 +5158,8 @@ export default function PageManagerPage() {
                         <div className="mt-2 space-y-0.5 border-t border-[#E4E6EB] dark:border-border pt-2 dark:border-border">
                           <p className="px-2.5 pb-1 text-xs font-semibold uppercase tracking-wide text-[#65676B] dark:text-muted-foreground">Folders</p>
                           {[
-                            { id: "done", label: "Done / Closed", count: allPageThreads.filter(thread => thread.responseStatus === "closed").length },
+                            { id: "done", label: "Done", count: allPageThreads.filter(thread => inboxDoneThreads[thread.id]).length },
+                            { id: "closed", label: "Closed", count: allPageThreads.filter(thread => thread.responseStatus === "closed" && !inboxDoneThreads[thread.id]).length },
                           ].map(item => {
                             const active = inboxFolders.includes(item.id)
                             return (
@@ -5430,6 +5444,23 @@ export default function PageManagerPage() {
                           <IconPin className="size-3.5" />
                           {inboxPinnedThreads[pinnedContextMenu.threadId] ? "Unpin" : "Pin to top"}
                         </button>
+                        {inboxDoneThreads[pinnedContextMenu.threadId] ? (
+                          <button
+                            type="button"
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                            onClick={() => {
+                              setInboxDoneThreads(prev => {
+                                const next = { ...prev }
+                                delete next[pinnedContextMenu.threadId]
+                                return next
+                              })
+                              setPinnedContextMenu(null)
+                            }}
+                          >
+                            <IconEyeOff className="size-3.5" />
+                            Unhide
+                          </button>
+                        ) : null}
                         {threadGroupId(pinnedContextMenu.threadId) ? (
                           <button
                             type="button"
