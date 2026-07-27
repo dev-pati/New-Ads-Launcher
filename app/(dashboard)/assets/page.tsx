@@ -2,21 +2,20 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import { CreativeCardMedia } from "@/components/creative-card-media"
 import { Button } from "@/components/ui/button"
+import { DismissibleBanner } from "@/components/ui/dismissible-banner"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   IconSearch, IconUpload, IconFolder, IconFolderPlus, IconRefresh,
-  IconLoader2, IconPhoto, IconVideo, IconLayoutGrid, IconList,
+  IconLoader2, IconPhoto, IconLayoutGrid, IconList,
   IconChevronDown, IconPlus, IconCheck, IconDotsVertical,
   IconPlayerPlay, IconX, IconTrash, IconArrowLeft,
-  IconClipboardList, IconUser, IconAlertCircle, IconCircleCheck,
-  IconClock, IconCloudUpload,
+  IconClipboardList, IconUser, IconAlertCircle,
 } from "@tabler/icons-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -58,14 +57,6 @@ interface CreativeRequest {
   created_at: string
 }
 
-interface UploadItem {
-  id: string
-  file: File
-  status: "pending" | "uploading" | "done" | "error"
-  progress?: number
-  error?: string
-}
-
 interface DeleteConfirmState {
   type: "creative" | "board" | "request" | "bulk_creative"
   id?: string
@@ -73,7 +64,7 @@ interface DeleteConfirmState {
   name: string
 }
 
-type Section = "all" | "boards" | "requests" | "upload" | "my-uploads" | `board_${string}`
+type Section = "all" | "boards" | "requests" | "my-uploads" | `board_${string}`
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -117,10 +108,6 @@ export default function AssetsPage() {
   const [loadingMoreCreatives, setLoadingMoreCreatives] = useState(false)
   const CREATIVES_PAGE = 20
 
-  // Upload state
-  const [uploadItems, setUploadItems]   = useState<UploadItem[]>([])
-  const [isDragging, setIsDragging]     = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const pollingVideosRef = useRef<Set<string>>(new Set())
   const pollingQueueRef  = useRef<string[]>([])
   const pendingPollIdsRef = useRef<Set<string>>(new Set())
@@ -561,133 +548,6 @@ export default function AssetsPage() {
     }
   }
 
-  // ── Upload ────────────────────────────────────────────────────────────────
-
-  const ACCEPTED = "image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm"
-  const processFiles = (files: FileList | File[]) => {
-    const arr = Array.from(files).filter(f => ACCEPTED.split(",").some(t => f.type === t || f.type.startsWith(t.split("/")[0] + "/")))
-    const items: UploadItem[] = arr.map(f => ({ id: crypto.randomUUID(), file: f, status: "pending" }))
-    setUploadItems(prev => [...prev, ...items])
-
-    const images = items.filter(i => !i.file.type.startsWith("video/"))
-    const videos = items.filter(i => i.file.type.startsWith("video/"))
-
-    // Images: up to 3 in parallel
-    if (images.length > 0) {
-      let idx = 0
-      const worker = async () => {
-        while (idx < images.length) {
-          const item = images[idx++]
-          await uploadFile(item)
-        }
-      }
-      Promise.all(Array.from({ length: Math.min(3, images.length) }, worker))
-    }
-
-    // Videos: up to 3 in parallel — Meta upload is now decoupled via background cron,
-    // so there is no rate-limit reason to serialize video uploads to Supabase Storage.
-    if (videos.length > 0) {
-      let vidIdx = 0
-      const videoWorker = async () => {
-        while (vidIdx < videos.length) {
-          const item = videos[vidIdx++]
-          await uploadFile(item)
-        }
-      }
-      Promise.all(Array.from({ length: Math.min(3, videos.length) }, videoWorker))
-    }
-  }
-
-  // 500 MB matches the Supabase ad-media bucket limit
-  const MAX_UPLOAD_BYTES = 500 * 1024 * 1024
-
-  const uploadFile = async (item: UploadItem): Promise<number> => {
-    if (!selectedAccountId) {
-      setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: "No ad account selected" } : i))
-      return 0
-    }
-
-    if (item.file.size > MAX_UPLOAD_BYTES) {
-      setUploadItems(prev => prev.map(i => i.id === item.id ? {
-        ...i, status: "error",
-        error: `File quá lớn (${(item.file.size / 1024 / 1024).toFixed(0)} MB). Tối đa 500 MB.`,
-      } : i))
-      return 0
-    }
-
-    setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "uploading", progress: 0 } : i))
-
-    try {
-      // Step 1: Get a Supabase signed upload URL (tiny JSON, no body size issue)
-      const signRes = await fetch(
-        `/api/creatives/upload-sign?filename=${encodeURIComponent(item.file.name)}`
-      )
-      if (!signRes.ok) {
-        const err = await signRes.json().catch(() => ({}))
-        throw new Error((err as any).error || `Failed to get upload URL (${signRes.status})`)
-      }
-      const { signedUrl, storagePath, publicUrl } = await signRes.json()
-
-      // Step 2: Upload file DIRECTLY to Supabase Storage via XHR for progress tracking.
-      // File never passes through Next.js/Vercel — no Payload Too Large risk.
-      await new Promise<void>((resolve, reject) => {
-        const xhr = new XMLHttpRequest()
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 88)
-            setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, progress: pct } : i))
-          }
-        }
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve()
-          } else {
-            reject(new Error(`Storage upload failed (${xhr.status}): ${xhr.responseText}`))
-          }
-        }
-        xhr.onerror = () => reject(new Error("Network error during file upload"))
-        xhr.open("PUT", `/api/creatives/upload-proxy?url=${encodeURIComponent(signedUrl)}`, true)
-        xhr.setRequestHeader("Content-Type", item.file.type)
-        xhr.send(item.file)
-      })
-
-      setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, progress: 92 } : i))
-
-      // Step 3: Finalize — server calls Meta API with the Supabase public URL, then saves to DB.
-      // Only a tiny JSON body goes through Next.js here.
-      const finalRes = await fetch("/api/creatives/finalize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          storagePath,
-          publicUrl,
-          filename: item.file.name,
-          fileType: item.file.type,
-          fileSize: item.file.size,
-          adAccountId: selectedAccountId,
-        }),
-      })
-      const d = await finalRes.json()
-      if (!finalRes.ok || !d.creative) {
-        throw new Error((d as any).error || "Upload finalization failed")
-      }
-
-      setCreatives(prev => [d.creative, ...prev])
-      // Only poll for thumbnail if FB video ID is already set (images always have it;
-      // videos now start as pending with null fb_video_id — thumbnail polling happens
-      // automatically once the cron worker sets fb_video_id).
-      if (d.creative.media_type === "video" && d.creative.fb_video_id) {
-        refreshVideoPreview(d.creative.id, 0, 20000)
-      }
-      setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "done", progress: 100 } : i))
-      return (d.rateLimitPct as number) || 0
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Upload failed"
-      setUploadItems(prev => prev.map(i => i.id === item.id ? { ...i, status: "error", error: message } : i))
-      return 0
-    }
-  }
-
   // ── Saved searches ────────────────────────────────────────────────────────
 
   const saveSearch = () => {
@@ -718,7 +578,6 @@ export default function AssetsPage() {
             { id: "all",        icon: IconLayoutGrid,    label: "All Assets",   count: creatives.length },
             { id: "boards",     icon: IconFolder,        label: "Boards",       count: boards.length },
             { id: "requests",   icon: IconClipboardList, label: "Requests",     count: requests.filter(r => r.status === "open").length || undefined },
-            { id: "upload",     icon: IconUpload,        label: "Upload" },
             { id: "my-uploads", icon: IconUser,          label: "My Uploads" },
           ] as { id: Section; icon: typeof IconLayoutGrid; label: string; count?: number }[]).map(item => (
             <button
@@ -795,108 +654,16 @@ export default function AssetsPage() {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {actionError && (
-          <div className="mx-4 mt-4 flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive shrink-0">
-            <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
-            <span>{actionError}</span>
+          <div className="mx-4 mt-4 shrink-0">
+            <DismissibleBanner onDismiss={() => setActionError("")}>
+              <span className="flex items-start gap-2">
+                <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
+                <span>{actionError}</span>
+              </span>
+            </DismissibleBanner>
           </div>
         )}
 
-        {/* ── Upload Section ─────────────────────────────────────────────── */}
-        {section === "upload" && (
-          <div className="flex-1 overflow-auto p-8">
-            <div className="max-w-2xl mx-auto">
-              <h1 className="text-3xl font-bold text-center mb-2">Upload Your Videos or Images</h1>
-              <p className="text-sm text-muted-foreground text-center mb-8">
-                Uploading to <span className="text-foreground font-medium">{adAccountName}</span>
-              </p>
-
-              {!selectedAccountId && (
-                <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
-                  <IconAlertCircle className="size-4 shrink-0" />
-                  Select an ad account in the sidebar before uploading.
-                </div>
-              )}
-
-              {/* Drop zone */}
-              <div
-                onDragOver={e => { e.preventDefault(); setIsDragging(true) }}
-                onDragLeave={() => setIsDragging(false)}
-                onDrop={e => {
-                  e.preventDefault(); setIsDragging(false)
-                  if (e.dataTransfer.files.length) processFiles(e.dataTransfer.files)
-                }}
-                onClick={() => fileInputRef.current?.click()}
-                className={cn(
-                  "border-2 border-dashed rounded-xl p-16 text-center cursor-pointer transition-colors",
-                  isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/20"
-                )}
-              >
-                <IconCloudUpload className="size-10 mx-auto text-muted-foreground/30 mb-4" />
-                <p className="text-sm text-muted-foreground">
-                  Drag & drop or{" "}
-                  <span className="text-primary font-medium underline underline-offset-2">upload files</span>
-                </p>
-                <input ref={fileInputRef} type="file" accept={ACCEPTED} multiple className="hidden"
-                  onChange={e => { if (e.target.files) processFiles(e.target.files) }} />
-              </div>
-
-              <p className="text-xs text-muted-foreground text-center mt-3">
-                <span className="font-medium">Supported:</span> jpg, jpeg, png, gif, webp, mp4, mov, avi, webm
-              </p>
-
-              {/* Upload queue */}
-              {uploadItems.length > 0 && (
-                <div className="mt-6 space-y-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm font-medium">{uploadItems.length} file{uploadItems.length > 1 ? "s" : ""}</p>
-                    <button onClick={() => setUploadItems([])} className="text-xs text-muted-foreground hover:text-foreground">Clear all</button>
-                  </div>
-                  {uploadItems.map(item => (
-                    <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20">
-                      <div className="size-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
-                        {item.file.type.startsWith("video/") ? <IconVideo className="size-4 text-muted-foreground/50" /> : <IconPhoto className="size-4 text-muted-foreground/50" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{item.file.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {(item.file.size / 1024 / 1024).toFixed(1)} MB
-                        </p>
-                      </div>
-                      <div className="shrink-0 flex flex-col items-end gap-1 min-w-[80px]">
-                        {item.status === "pending"   && <IconClock className="size-4 text-muted-foreground/40" />}
-                        {item.status === "uploading" && (
-                          <>
-                            <IconLoader2 className="size-4 animate-spin text-primary" />
-                            {(item.progress ?? 0) > 0 && (
-                              <div className="w-full">
-                                <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
-                                  <div className="h-full bg-primary transition-all" style={{ width: `${item.progress}%` }} />
-                                </div>
-                                <span className="text-xs text-primary">{item.progress}%</span>
-                              </div>
-                            )}
-                          </>
-                        )}
-                        {item.status === "done"      && <IconCircleCheck className="size-4 text-emerald-500" />}
-                        {item.status === "error"     && (
-                          <div className="flex items-start gap-1 max-w-[200px]">
-                            <IconAlertCircle className="size-4 text-destructive shrink-0 mt-0.5" />
-                            <span className="text-xs text-destructive break-words">{item.error}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {uploadItems.every(i => i.status === "done" || i.status === "error") && (
-                    <Button size="sm" className="w-full mt-2" onClick={() => { setSection("all"); setUploadItems([]) }}>
-                      View All Assets
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* ── Boards Section ─────────────────────────────────────────────── */}
         {section === "boards" && (
@@ -1197,7 +964,7 @@ export default function AssetsPage() {
                     <p className="text-xs text-muted-foreground mt-1">
                       {search || filterType || filterStatus
                         ? "Clear the active filters to see all assets in this view."
-                        : "Upload your first creative to get started."}
+                        : "Media assets sync from Creative Portal — see Media Control to check sync status."}
                     </p>
                   </div>
                   {(search || filterType || filterStatus) ? (
@@ -1205,8 +972,8 @@ export default function AssetsPage() {
                       Clear filters
                     </Button>
                   ) : (
-                    <Button size="sm" onClick={() => setSection("upload")}>
-                      <IconUpload className="size-3.5" /> Upload Media
+                    <Button size="sm" asChild>
+                      <a href="/media-sync"><IconUpload className="size-3.5" /> Media Control</a>
                     </Button>
                   )}
                 </div>
@@ -1475,10 +1242,12 @@ export default function AssetsPage() {
               <Input id="board-desc" value={boardDesc} onChange={e => setBoardDesc(e.target.value)} placeholder="What's this board for?" />
             </div>
             {boardDialogError && (
-              <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
-                <span>{boardDialogError}</span>
-              </div>
+              <DismissibleBanner onDismiss={() => setBoardDialogError("")}>
+                <span className="flex items-start gap-2">
+                  <IconAlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <span>{boardDialogError}</span>
+                </span>
+              </DismissibleBanner>
             )}
           </div>
           <DialogFooter>

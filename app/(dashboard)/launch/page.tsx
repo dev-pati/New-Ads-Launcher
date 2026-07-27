@@ -11226,12 +11226,7 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
 
   if (selectedCreatives.length === 0) {
     return (
-      <div
-        className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-10"
-        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-      >
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-10">
         <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFileChange} />
         <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFileChange} {...({ webkitdirectory: "", directory: "" } as any)} />
 
@@ -11256,30 +11251,9 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
               <IconUpload className="size-4" />Load Media
               <span className="ml-0.5 text-primary-foreground/70">+</span>
             </Button>
-            <div className="flex items-center gap-3 w-full max-w-[260px]">
-              <div className="flex-1 border-t border-dashed border-muted-foreground/20" />
-              <span className="text-xs text-muted-foreground/50">or</span>
-              <div className="flex-1 border-t border-dashed border-muted-foreground/20" />
-            </div>
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                "w-full max-w-[260px] border border-dashed rounded-2xl py-5 text-sm cursor-pointer transition-colors",
-                dragOver
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "text-muted-foreground/60 hover:bg-muted/40 hover:text-muted-foreground"
-              )}
-            >
-              {dragOver ? "Drop files here" : "Drag and drop to upload"}
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-full" onClick={() => fileInputRef.current?.click()}>
-                <IconUpload className="size-3.5" />Upload New
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs rounded-full" onClick={() => folderInputRef.current?.click()}>
-                <IconFolder className="size-3.5" />Upload Folder
-              </Button>
-            </div>
+            <p className="text-xs text-muted-foreground/60 max-w-[260px]">
+              Select media from Media Library to add to ads.
+            </p>
           </>
         )}
       </div>
@@ -11287,21 +11261,9 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
   }
 
   return (
-    <div
-      className={cn("flex-1 overflow-y-auto p-3 relative", dragOver && "ring-2 ring-primary ring-inset")}
-      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-      onDragLeave={() => setDragOver(false)}
-      onDrop={handleDrop}
-    >
+    <div className="flex-1 overflow-y-auto p-3 relative">
       <input ref={fileInputRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={handleFileChange} />
       <input ref={folderInputRef} type="file" multiple className="hidden" onChange={handleFileChange} {...({ webkitdirectory: "", directory: "" } as any)} />
-      {dragOver && (
-        <div className="absolute inset-0 z-10 bg-primary/10 flex items-center justify-center pointer-events-none">
-          <div className="bg-background border-2 border-dashed border-primary rounded-2xl px-6 py-4 text-sm font-semibold text-primary">
-            Drop to upload
-          </div>
-        </div>
-      )}
       {uploading && (
         <div className="mb-2 px-3 py-2 bg-primary/10 border border-primary/30 rounded-lg flex items-center gap-2 text-xs">
           <IconLoader2 className="size-3.5 animate-spin text-primary" />
@@ -11312,9 +11274,6 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
       <div className="flex items-center justify-between mb-3 px-1">
         <span className="text-xs text-muted-foreground font-medium">{selectedCreatives.length} ad{selectedCreatives.length !== 1 ? "s" : ""}</span>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={() => fileInputRef.current?.click()}>
-            <IconUpload className="size-3" />Upload
-          </Button>
           <Button variant="ghost" size="sm" className="h-6 text-xs gap-1" onClick={onOpenModal}>
             <IconPlus className="size-3" />Add More
           </Button>
