@@ -73,7 +73,6 @@ export async function GET(request: NextRequest) {
 
   const items = new Map((itemRows || []).map(row => [row.object_key, row]))
   let newlyTracked = 0
-  let importedThisRun = 0
   const errors: { id: string; error: string }[] = []
 
   for (const asset of (portalAssets || []) as PortalAsset[]) {
@@ -98,47 +97,12 @@ export async function GET(request: NextRequest) {
       else newlyTracked++
       continue
     }
-
-    // Already tracked. Import into creatives only if a human has mapped it and it is not imported yet.
-    if (existing.status === "mapped" && !existing.creative_id && existing.org_id && existing.ad_account_id && existing.mapped_by) {
-      const storagePath = `r2://pati-videos/${asset.object_key}`
-      const { data: creative, error: insErr } = await adsDb.from("creatives").insert({
-        org_id: existing.org_id,
-        user_id: existing.mapped_by,
-        file_name: asset.original_file_name || asset.object_key.split("/").pop() || asset.id,
-        file_url: `https://creative.patigroup.com/api/media/${asset.id}`,
-        storage_path: storagePath,
-        media_type: mediaTypeFromMime(asset.mime_type),
-        file_size: asset.actual_size_bytes,
-        ad_account_id: existing.ad_account_id,
-        status: "ready",
-        created_at: asset.created_at || new Date().toISOString(),
-      }).select("id").single()
-
-      if (insErr) {
-        errors.push({ id: asset.id, error: insErr.message })
-        continue
-      }
-
-      const { error: updErr } = await adsDb
-        .from("portal_media_items")
-        .update({ status: "imported", creative_id: creative.id, updated_at: new Date().toISOString() })
-        .eq("id", existing.id)
-      if (updErr) errors.push({ id: asset.id, error: updErr.message })
-      else importedThisRun++
-    }
   }
 
   const { count: pendingCount } = await adsDb
     .from("portal_media_items")
     .select("id", { count: "exact", head: true })
     .eq("status", "pending")
-
-  const { count: mappedNotYetImported } = await adsDb
-    .from("portal_media_items")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "mapped")
-    .is("creative_id", null)
 
   if (errors.length > 0) {
     console.error("[sync-portal-media] sync errors", errors.slice(0, 10))
@@ -166,9 +130,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     portalApproved: portalAssets?.length || 0,
     newlyTracked,
-    importedThisRun,
     pendingCount,
-    mappedNotYetImported,
     errors: errors.length,
     thumbnailsWarmed,
     thumbnailErrors: thumbnailErrors.length,

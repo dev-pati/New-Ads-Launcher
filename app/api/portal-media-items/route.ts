@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { claimPortalItem } from "@/lib/portal-media/claim"
 
 const PORTAL_MEDIA_ORIGIN = process.env.CREATIVE_MEDIA_API_ORIGIN || "https://creative.patigroup.com"
 
@@ -73,19 +74,28 @@ export async function PUT(request: NextRequest) {
   const allowedIds = (ownedRows || []).map(row => row.id)
   if (!allowedIds.length) return NextResponse.json({ error: "No mappable media found" }, { status: 400 })
 
-  const { error } = await supabase
-    .from("portal_media_items")
-    .update({
-      org_id: ctx.orgId,
-      ad_account_id: adAccountId,
-      mapped_by: ctx.user.id,
-      status: "mapped",
-      updated_at: new Date().toISOString(),
-    })
-    .in("id", allowedIds)
+  const creativeIds: string[] = []
+  const claimErrors: { id: string; error: string }[] = []
+  for (const id of allowedIds) {
+    try {
+      const result = await claimPortalItem({
+        itemId: id,
+        orgId: ctx.orgId,
+        adAccountId,
+        userId: ctx.user.id,
+      })
+      if (result?.creativeId) creativeIds.push(result.creativeId)
+    } catch (err) {
+      claimErrors.push({ id, error: err instanceof Error ? err.message : String(err) })
+    }
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, mapped: allowedIds.length })
+  return NextResponse.json({
+    ok: true,
+    claimed: creativeIds.length,
+    creativeIds,
+    errors: claimErrors,
+  })
 }
 
 export async function DELETE(request: NextRequest) {
