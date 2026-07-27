@@ -36,7 +36,7 @@ function RegisterForm() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password, fullName, inviteToken }),
+      body: JSON.stringify({ email, fullName, password: password || undefined, inviteToken }),
     })
 
     if (!res.ok) {
@@ -56,35 +56,6 @@ function RegisterForm() {
 
     router.push("/projects")
     router.refresh()
-  }
-
-  if (success) {
-    return (
-      <div className="flex min-h-svh items-center justify-center bg-background px-4">
-        <div className="w-full max-w-sm space-y-6">
-          <div className="flex items-center justify-center gap-2">
-            <IconRocket className="size-6 text-primary" />
-            <h1 className="font-heading text-xl font-semibold">AdLauncher</h1>
-          </div>
-          <Card>
-            <CardHeader>
-              <CardTitle>Check your email</CardTitle>
-              <CardDescription>
-                Your account has been created.
-                {inviteToken && " After confirming, you'll be added to the organization."}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href="/auth/login">
-                <Button variant="outline" className="w-full">
-                  Back to Login
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -134,14 +105,16 @@ function RegisterForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">Password (Optional)</Label>
+                  <span className="text-xs text-muted-foreground">For Meta App Review</span>
+                </div>
                 <Input
                   id="password"
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
                   minLength={6}
                 />
               </div>

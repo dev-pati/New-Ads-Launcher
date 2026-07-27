@@ -12,8 +12,8 @@ function slugify(value: string) {
 
 export async function POST(request: Request) {
   try {
-    const { email, password, fullName } = await request.json()
-    if (!email || !password || !fullName) {
+    const { email, fullName, password } = await request.json()
+    if (!email || !fullName) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
@@ -30,11 +30,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Email is already registered" }, { status: 409 })
     }
 
+    const encrypted_password = password ? await hashPassword(password) : null
+
     const { data: account, error: accountError } = await db
       .from("accounts")
       .insert({
         email: normalizedEmail,
-        encrypted_password: await hashPassword(password),
+        encrypted_password,
         full_name: fullName,
         raw_user_meta_data: { full_name: fullName },
         email_confirmed_at: new Date().toISOString(),

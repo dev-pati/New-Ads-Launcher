@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { SignJWT, jwtVerify } from "jose"
 import bcrypt from "bcryptjs"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { sendOtpEmail } from "@/lib/smtp-email"
 
 export type AuthAccount = {
   id: string
@@ -88,7 +89,7 @@ export async function getSessionAccount(): Promise<AuthAccount | null> {
   }
 }
 
-export async function verifyPassword(email: string, password: string) {
+export async function verifyPassword(email: string, password: string): Promise<AuthAccount | null> {
   const db = createAdminClient()
   const { data: account, error } = await db
     .from("accounts")
@@ -120,4 +121,80 @@ export async function verifyPassword(email: string, password: string) {
 
 export async function hashPassword(password: string) {
   return bcrypt.hash(password, 10)
+}
+
+export async function generateAndSendOtp(email: string): Promise<{ ok: boolean; error?: string; status?: number }> {
+  const db = createAdminClient()
+  const { data: account, error } = await db
+    .from("accounts")
+    .select("id, email")
+    .ilike("email", email.trim())
+    .maybeSingle()
+
+  if (error) {
+    return { ok: false, error: "Database error", status: 500 }
+  }
+  if (!account) {
+    return { ok: false, error: "Email not registered", status: 404 }
+  }
+
+  // Generate 6-digit OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString()
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes from now
+
+  const { error: updateError } = await db
+    .from("accounts")
+    .update({ otp_code: otp, otp_expires_at: expiresAt })
+    .eq("id", account.id)
+
+  if (updateError) {
+    return { ok: false, error: "Failed to store verification code", status: 500 }
+  }
+
+  const { ok, error: mailError } = await sendOtpEmail(account.email, otp)
+  if (!ok) {
+    return { ok: false, error: mailError || "Failed to send email", status: 500 }
+  }
+
+  return { ok: true }
+}
+
+export async function verifyOtp(email: string, otp: string): Promise<AuthAccount | null> {
+  const db = createAdminClient()
+  const { data: account, error } = await db
+    .from("accounts")
+    .select("id, email, full_name, avatar_url, otp_code, otp_expires_at")
+    .ilike("email", email.trim())
+    .maybeSingle()
+
+  if (error || !account) return null
+  if (!account.otp_code || !account.otp_expires_at) return null
+
+  // Verify expiration
+  const expired = new Date(account.otp_expires_at).getTime() < Date.now()
+  if (expired) return null
+
+  // Verify code
+  if (account.otp_code !== otp.trim()) return null
+
+  // Clear OTP code and update sign in time
+  await db
+    .from("accounts")
+    .update({
+      otp_code: null,
+      otp_expires_at: null,
+      last_sign_in_at: new Date().toISOString(),
+    })
+    .eq("id", account.id)
+
+  return {
+    id: account.id,
+    email: account.email,
+    full_name: account.full_name,
+    avatar_url: account.avatar_url,
+    user_metadata: {
+      full_name: account.full_name,
+      avatar_url: account.avatar_url,
+    },
+  } satisfies AuthAccount
 }

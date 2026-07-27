@@ -79,6 +79,8 @@ CREATE TABLE accounts (
   full_name TEXT,
   avatar_url TEXT,
   raw_user_meta_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+  otp_code TEXT,
+  otp_expires_at TIMESTAMPTZ,
   email_confirmed_at TIMESTAMPTZ,
   last_sign_in_at TIMESTAMPTZ,
   disabled_at TIMESTAMPTZ,
