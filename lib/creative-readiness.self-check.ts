@@ -8,6 +8,7 @@ import {
   assertCanMarkUploaded,
   CREATIVE_STATUS,
 } from "./creative-readiness"
+import type { LaunchableCreative } from "./creative-readiness"
 
 let pass = 0
 const ok = (name: string, fn: () => void) => {
