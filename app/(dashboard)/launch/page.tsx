@@ -12010,18 +12010,23 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
       const ids = Array.from(selectedIds)
       const method = action === "permanent" ? "DELETE" : "PATCH"
       const body = action === "permanent" ? { ids } : { ids, action }
-      
+
       const res = await fetch("/api/launch-history", {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       })
-      
+
       if (res.ok) {
         setSelectedIds(new Set())
         load()
+      } else {
+        const errorData = await res.json().catch(() => ({}))
+        alert(`Failed to ${action} records: ${errorData.error || res.statusText}`)
       }
-    } catch {}
+    } catch (e: any) {
+      alert(`Error: ${e.message}`)
+    }
     setActionLoading(false)
   }
 
@@ -12213,13 +12218,15 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
       {tab !== "drafts" && <>
       {/* Table header */}
       <div className="grid text-xs font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
-        style={{ gridTemplateColumns: "30px 140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
-        <input type="checkbox" className="rounded border-muted-foreground/30 text-primary focus:ring-primary w-3.5 h-3.5"
-          checked={filtered.length > 0 && selectedIds.size === filtered.length}
-          onChange={e => {
-            if (e.target.checked) setSelectedIds(new Set(filtered.map(f => f.id)))
-            else setSelectedIds(new Set())
-          }} />
+        style={{ gridTemplateColumns: selectedIds.size > 0 ? "30px 140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" : "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+        {selectedIds.size > 0 && (
+          <input type="checkbox" className="rounded border-muted-foreground/30 text-primary focus:ring-primary w-3.5 h-3.5"
+            checked={filtered.length > 0 && selectedIds.size === filtered.length}
+            onChange={e => {
+              if (e.target.checked) setSelectedIds(new Set(filtered.map(f => f.id)))
+              else setSelectedIds(new Set())
+            }} />
+        )}
         <span>CREATIVES</span>
         <span>ADSETS</span>
         <span>ACCOUNT</span>
@@ -12248,17 +12255,30 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
         ) : <>
           {filtered.slice(0, displayCount).map(b => (
             <div key={b.id}
-              className="grid items-center px-4 py-2 border-b text-sm hover:bg-muted/20 transition-colors"
-              style={{ gridTemplateColumns: "30px 140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
-              
-              <input type="checkbox" className="rounded border-muted-foreground/30 text-primary focus:ring-primary w-3.5 h-3.5"
-                checked={selectedIds.has(b.id)}
-                onChange={e => {
-                  const s = new Set(selectedIds)
-                  if (e.target.checked) s.add(b.id)
-                  else s.delete(b.id)
-                  setSelectedIds(s)
-                }} />
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('input[type="checkbox"]')) {
+                  return;
+                }
+                const s = new Set(selectedIds)
+                if (s.has(b.id)) s.delete(b.id)
+                else s.add(b.id)
+                setSelectedIds(s)
+              }}
+              className={cn("grid items-center px-4 py-2 border-b text-sm cursor-pointer transition-colors",
+                selectedIds.has(b.id) ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/20"
+              )}
+              style={{ gridTemplateColumns: selectedIds.size > 0 ? "30px 140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" : "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+
+              {selectedIds.size > 0 && (
+                <input type="checkbox" className="rounded border-muted-foreground/30 text-primary focus:ring-primary w-3.5 h-3.5"
+                  checked={selectedIds.has(b.id)}
+                  onChange={e => {
+                    const s = new Set(selectedIds)
+                    if (e.target.checked) s.add(b.id)
+                    else s.delete(b.id)
+                    setSelectedIds(s)
+                  }} />
+              )}
 
               {/* Creatives */}
               <ThumbStack thumbs={b.creative_thumbs || []} count={b.creative_ids?.length || 0} />

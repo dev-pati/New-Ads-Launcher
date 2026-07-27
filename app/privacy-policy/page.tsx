@@ -19,7 +19,7 @@ export default function PrivacyPolicyPage() {
       <header className="sticky top-0 z-10 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-4xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/applogo.webp" alt={appName} width={26} height={26} className="rounded-md" />
+            <Image src="/icon.png" alt={appName} width={26} height={26} className="rounded-md" />
             <span className="text-sm font-bold tracking-tight">{appName}</span>
           </Link>
           <Link
@@ -241,7 +241,7 @@ export default function PrivacyPolicyPage() {
       <footer className="border-t border-border/60 mt-16">
         <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-3 px-6 py-6 sm:flex-row">
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/applogo.webp" alt="Logo" width={18} height={18} className="rounded" />
+            <Image src="/icon.png" alt="Logo" width={18} height={18} className="rounded" />
             <span className="text-xs font-semibold">{appName}</span>
           </Link>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">

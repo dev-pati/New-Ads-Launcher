@@ -62,7 +62,7 @@ function RegisterForm() {
     <div className="flex min-h-svh items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex items-center justify-center gap-2">
-          <Image src="/applogo.webp" alt="Auto Launch Ads" width={32} height={32} className="bg-white" />
+          <Image src="/icon.png" alt="Auto Launch Ads" width={32} height={32} className="bg-white" />
           <h1 className="font-heading text-xl font-semibold">AdLauncher</h1>
         </div>
 

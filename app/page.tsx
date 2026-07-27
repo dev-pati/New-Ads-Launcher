@@ -37,7 +37,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-50 border-b bg-background/80 backdrop-blur-lg">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <Image src="/applogo.webp" alt="AdLauncher" width={32} height={32} className="bg-white" />
+            <Image src="/icon.png" alt="AdLauncher" width={32} height={32} className="bg-white" />
             <span className="font-heading text-lg font-bold">AdLauncher</span>
           </Link>
           <nav className="hidden items-center gap-8 md:flex">
@@ -271,7 +271,7 @@ export default function LandingPage() {
       <footer className="border-t">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-8">
           <div className="flex items-center gap-2">
-            <Image src="/applogo.webp" alt="Logo" width={24} height={24} />
+            <Image src="/icon.png" alt="Logo" width={24} height={24} />
             <span className="font-heading text-sm font-semibold">AdLauncher</span>
           </div>
           <p className="text-xs text-muted-foreground">
