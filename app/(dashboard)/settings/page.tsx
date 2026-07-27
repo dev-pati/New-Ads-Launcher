@@ -54,7 +54,6 @@ import {
   IconUserPlus,
   IconBuilding,
   IconPencil,
-  IconFolderOpen,
 } from "@tabler/icons-react"
 
 function MemberAvatar({ name, avatarUrl }: { name?: string | null; avatarUrl?: string | null }) {
@@ -143,22 +142,6 @@ interface SettingsOrg {
   created_at?: string
 }
 
-interface AdAccountOption {
-  id: string
-  account_id: string
-  name: string
-}
-
-interface PortalBrandMapping {
-  brand_slug: string
-  org_id: string | null
-  ad_account_id: string | null
-  status: "pending" | "mapped"
-  sample_asset_id?: string | null
-  sample_object_key?: string | null
-  last_seen_at?: string | null
-}
-
 function SettingsContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -209,89 +192,6 @@ function SettingsContent() {
   const [editingOrg, setEditingOrg] = useState<SettingsOrg | null>(null)
   const [editOrgName, setEditOrgName] = useState("")
   const [savingOrg, setSavingOrg] = useState(false)
-
-  // Portal Media mappings
-  const [portalPending, setPortalPending] = useState<PortalBrandMapping[]>([])
-  const [portalMapped, setPortalMapped] = useState<PortalBrandMapping[]>([])
-  const [adAccounts, setAdAccounts] = useState<AdAccountOption[]>([])
-  const [portalLoading, setPortalLoading] = useState(true)
-  const [portalSavingSlug, setPortalSavingSlug] = useState<string | null>(null)
-  const [portalMessage, setPortalMessage] = useState("")
-  const [portalMessageType, setPortalMessageType] = useState<"success" | "error">("success")
-  const [portalSelections, setPortalSelections] = useState<Record<string, string>>({})
-  const [removeTarget, setRemoveTarget] = useState<PortalBrandMapping | null>(null)
-  const [removingMapping, setRemovingMapping] = useState(false)
-
-  // Fetch Portal Media mappings
-  const fetchPortalMappings = useCallback(async () => {
-    if (!activeOrgId || !isAdmin) return
-    setPortalLoading(true)
-    try {
-      const [mapsRes, actsRes] = await Promise.all([
-        fetch("/api/settings/portal-brand-mappings"),
-        fetch("/api/facebook/ad-accounts")
-      ])
-      const mData = await mapsRes.json()
-      const aData = await actsRes.json()
-      if (mData.pending) setPortalPending(mData.pending)
-      if (mData.mapped) setPortalMapped(mData.mapped)
-      if (aData.adAccounts) setAdAccounts(aData.adAccounts)
-    } catch { /* ignore */ } finally {
-      setPortalLoading(false)
-    }
-  }, [activeOrgId, isAdmin])
-
-  useEffect(() => {
-    if (isAdmin) fetchPortalMappings()
-  }, [isAdmin, fetchPortalMappings])
-
-  const handleMapBrand = async (brandSlug: string) => {
-    const actId = portalSelections[brandSlug]
-    if (!actId) {
-      setPortalMessage("Select an ad account first")
-      setPortalMessageType("error")
-      return
-    }
-    setPortalSavingSlug(brandSlug)
-    setPortalMessage("")
-    try {
-      const res = await fetch("/api/settings/portal-brand-mappings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ brand_slug: brandSlug, ad_account_id: actId })
-      })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d.error || "Failed to map brand")
-      setPortalMessage(`Brand ${brandSlug} mapped successfully`)
-      setPortalMessageType("success")
-      await fetchPortalMappings()
-    } catch (err) {
-      setPortalMessage(err instanceof Error ? err.message : "Failed to map brand")
-      setPortalMessageType("error")
-    } finally {
-      setPortalSavingSlug(null)
-    }
-  }
-
-  const handleRemoveMapping = async () => {
-    if (!removeTarget) return
-    setRemovingMapping(true)
-    setPortalMessage("")
-    try {
-      const res = await fetch(`/api/settings/portal-brand-mappings?brand_slug=${removeTarget.brand_slug}`, { method: "DELETE" })
-      const d = await res.json()
-      if (!res.ok) throw new Error(d.error || "Failed to remove mapping")
-      setPortalMessage(`Mapping for ${removeTarget.brand_slug} removed`)
-      setPortalMessageType("success")
-      setRemoveTarget(null)
-      await fetchPortalMappings()
-    } catch (err) {
-      setPortalMessage(err instanceof Error ? err.message : "Failed to remove mapping")
-      setPortalMessageType("error")
-    } finally {
-      setRemovingMapping(false)
-    }
-  }
 
   // Fetch Facebook connection
   useEffect(() => {
@@ -632,12 +532,6 @@ function SettingsContent() {
             <IconKey className="mr-1.5 size-4" />
             AI Keys
           </TabsTrigger>
-          {isAdmin && (
-            <TabsTrigger value="portal-media">
-              <IconFolderOpen className="mr-1.5 size-4" />
-              Portal Media
-            </TabsTrigger>
-          )}
         </TabsList>
 
         {/* Team Tab */}
@@ -1146,112 +1040,6 @@ function SettingsContent() {
           </Card>
         </TabsContent>
 
-        {/* Portal Media Tab */}
-        <TabsContent value="portal-media" className="mt-6 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <IconFolderOpen className="size-5" />
-                Creative Portal brand mappings
-              </CardTitle>
-              <CardDescription>
-                Brands are detected from <code>creative-portal/approved/&lt;brand&gt;/...</code> folders.
-                Choose the Meta ad account before AdLauncher imports the media.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {portalLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <IconLoader2 className="size-4 animate-spin" />Loading...
-                </div>
-              ) : (
-                <>
-                  {/* Pending detection */}
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-semibold">Pending detection</h3>
-                    {portalPending.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No unmapped brands detected.</p>
-                    ) : (
-                      <div className="rounded-lg border divide-y">
-                        {portalPending.map(p => (
-                          <div key={p.brand_slug} className="flex flex-wrap items-center gap-3 p-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium text-sm truncate">{p.brand_slug}</p>
-                              <p className="text-xs text-muted-foreground truncate">{p.sample_object_key || "—"}</p>
-                            </div>
-                            <Select
-                              value={portalSelections[p.brand_slug] || ""}
-                              onValueChange={v => setPortalSelections(prev => ({ ...prev, [p.brand_slug]: v }))}
-                            >
-                              <SelectTrigger className="w-[220px]">
-                                <SelectValue placeholder="Select ad account" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {adAccounts.map(a => (
-                                  <SelectItem key={a.id} value={a.id}>
-                                    {a.name} ({a.id})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              size="sm"
-                              onClick={() => handleMapBrand(p.brand_slug)}
-                              disabled={portalSavingSlug === p.brand_slug || !portalSelections[p.brand_slug]}
-                            >
-                              {portalSavingSlug === p.brand_slug ? (
-                                <><IconLoader2 className="size-4 animate-spin" />Mapping...</>
-                              ) : "Map"}
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Current mappings */}
-                  <div className="space-y-3 border-t pt-5">
-                    <h3 className="text-sm font-semibold">Current mappings</h3>
-                    {portalMapped.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No mappings yet.</p>
-                    ) : (
-                      <div className="rounded-lg border divide-y">
-                        {portalMapped.map(m => {
-                          const acct = adAccounts.find(a => a.id === m.ad_account_id)
-                          return (
-                            <div key={m.brand_slug} className="flex flex-wrap items-center gap-3 p-3">
-                              <div className="min-w-0 flex-1">
-                                <p className="font-medium text-sm truncate">{m.brand_slug}</p>
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {acct ? `${acct.name} (${m.ad_account_id})` : m.ad_account_id}
-                                </p>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setRemoveTarget(m)}
-                                className="gap-1.5 text-destructive hover:text-destructive"
-                              >
-                                <IconTrash className="size-4" />Remove
-                              </Button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {portalMessage && (
-                    <p className={`text-sm ${portalMessageType === "success" ? "text-emerald-600" : "text-destructive"}`}>
-                      {portalMessage}
-                    </p>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* Connections Tab */}
         <TabsContent value="connections" className="mt-6">
           <Card>
@@ -1353,28 +1141,6 @@ function SettingsContent() {
               {savingOrg ? <IconLoader2 className="size-4 animate-spin" /> : "Save Changes"}
             </Button>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Remove Portal Brand Mapping Dialog */}
-      <Dialog open={!!removeTarget} onOpenChange={(o) => { if (!o) setRemoveTarget(null) }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <IconTrash className="size-5" />
-              Remove mapping?
-            </DialogTitle>
-            <DialogDescription>
-              Future media for <strong>{removeTarget?.brand_slug}</strong> will become pending again. Existing creatives stay.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setRemoveTarget(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleRemoveMapping} disabled={removingMapping}>
-              {removingMapping ? <IconLoader2 className="size-4 animate-spin" /> : <IconTrash className="size-4" />}
-              Remove
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 

@@ -64,85 +64,82 @@ export async function GET(request: NextRequest) {
 
   if (portalErr) return NextResponse.json({ error: portalErr.message }, { status: 500 })
 
-  const { data: existingRows, error: existingErr } = await adsDb
-    .from("creatives")
-    .select("storage_path")
-    .like("storage_path", "r2://pati-videos/creative-portal/%")
+  // Existing tracked items — object_key is the natural key, avoids reprocessing/duplicate creatives
+  const { data: itemRows, error: itemErr } = await adsDb
+    .from("portal_media_items")
+    .select("id, object_key, status, org_id, ad_account_id, mapped_by, creative_id")
 
-  if (existingErr) return NextResponse.json({ error: existingErr.message }, { status: 500 })
+  if (itemErr) return NextResponse.json({ error: itemErr.message }, { status: 500 })
 
-  const { data: mappingRows, error: mappingErr } = await adsDb
-    .from("portal_brand_mappings")
-    .select("brand_slug, org_id, ad_account_id, mapped_by")
-    .eq("status", "mapped")
-
-  if (mappingErr) return NextResponse.json({ error: mappingErr.message }, { status: 500 })
-
-  const mappings = new Map(
-    (mappingRows || [])
-      .filter(row => row.brand_slug && row.org_id && row.ad_account_id && row.mapped_by)
-      .map(row => [row.brand_slug, row])
-  )
-  const existingPaths = new Set((existingRows || []).map(row => row.storage_path).filter(Boolean))
-  const inserted: Record<string, number> = {}
-  const pending: Record<string, number> = {}
-  const invalid: Record<string, number> = {}
+  const items = new Map((itemRows || []).map(row => [row.object_key, row]))
+  let newlyTracked = 0
+  let importedThisRun = 0
   const errors: { id: string; error: string }[] = []
 
   for (const asset of (portalAssets || []) as PortalAsset[]) {
-    const storagePath = `r2://pati-videos/${asset.object_key}`
-    if (existingPaths.has(storagePath)) continue
-
     const brand = brandFromObjectKey(asset.object_key)
-    if (!brand) {
-      invalid["unknown"] = (invalid["unknown"] || 0) + 1
-      continue
-    }
+    const existing = items.get(asset.object_key)
 
-    const target = mappings.get(brand)
-    if (!target) {
-      pending[brand] = (pending[brand] || 0) + 1
+    if (!existing) {
+      // First time seen — track as pending, do not touch creatives yet
       const now = new Date().toISOString()
-      const { error } = await adsDb.from("portal_brand_mappings").upsert(
-        {
-          brand_slug: brand,
-          status: "pending",
-          sample_asset_id: asset.id,
-          sample_object_key: asset.object_key,
-          last_seen_at: now,
-          updated_at: now,
-        },
-        { onConflict: "brand_slug" }
-      )
+      const { error } = await adsDb.from("portal_media_items").insert({
+        object_key: asset.object_key,
+        portal_asset_id: asset.id,
+        brand_slug: brand,
+        file_name: asset.original_file_name || asset.object_key.split("/").pop() || asset.id,
+        media_type: mediaTypeFromMime(asset.mime_type),
+        mime_type: asset.mime_type,
+        file_size: asset.actual_size_bytes,
+        status: "pending",
+        portal_created_at: asset.created_at || now,
+      })
       if (error) errors.push({ id: asset.id, error: error.message })
+      else newlyTracked++
       continue
     }
 
-    const { error } = await adsDb.from("creatives").insert({
-      org_id: target.org_id,
-      user_id: target.mapped_by,
-      file_name: asset.original_file_name || asset.object_key.split("/").pop() || asset.id,
-      file_url: `https://creative.patigroup.com/api/media/${asset.id}`,
-      storage_path: storagePath,
-      media_type: mediaTypeFromMime(asset.mime_type),
-      file_size: asset.actual_size_bytes,
-      ad_account_id: target.ad_account_id,
-      status: "ready",
-      created_at: asset.created_at || new Date().toISOString(),
-    })
+    // Already tracked. Import into creatives only if a human has mapped it and it is not imported yet.
+    if (existing.status === "mapped" && !existing.creative_id && existing.org_id && existing.ad_account_id && existing.mapped_by) {
+      const storagePath = `r2://pati-videos/${asset.object_key}`
+      const { data: creative, error: insErr } = await adsDb.from("creatives").insert({
+        org_id: existing.org_id,
+        user_id: existing.mapped_by,
+        file_name: asset.original_file_name || asset.object_key.split("/").pop() || asset.id,
+        file_url: `https://creative.patigroup.com/api/media/${asset.id}`,
+        storage_path: storagePath,
+        media_type: mediaTypeFromMime(asset.mime_type),
+        file_size: asset.actual_size_bytes,
+        ad_account_id: existing.ad_account_id,
+        status: "ready",
+        created_at: asset.created_at || new Date().toISOString(),
+      }).select("id").single()
 
-    if (error) {
-      errors.push({ id: asset.id, error: error.message })
-      continue
+      if (insErr) {
+        errors.push({ id: asset.id, error: insErr.message })
+        continue
+      }
+
+      const { error: updErr } = await adsDb
+        .from("portal_media_items")
+        .update({ status: "imported", creative_id: creative.id, updated_at: new Date().toISOString() })
+        .eq("id", existing.id)
+      if (updErr) errors.push({ id: asset.id, error: updErr.message })
+      else importedThisRun++
     }
-
-    existingPaths.add(storagePath)
-    inserted[brand] = (inserted[brand] || 0) + 1
   }
 
-  if (Object.keys(pending).length > 0) {
-    console.warn("[sync-portal-media] pending Portal brand mappings", pending)
-  }
+  const { count: pendingCount } = await adsDb
+    .from("portal_media_items")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending")
+
+  const { count: mappedNotYetImported } = await adsDb
+    .from("portal_media_items")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "mapped")
+    .is("creative_id", null)
+
   if (errors.length > 0) {
     console.error("[sync-portal-media] sync errors", errors.slice(0, 10))
   }
@@ -168,10 +165,10 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     portalApproved: portalAssets?.length || 0,
-    existingAfterSync: existingPaths.size,
-    inserted,
-    pending,
-    invalid,
+    newlyTracked,
+    importedThisRun,
+    pendingCount,
+    mappedNotYetImported,
     errors: errors.length,
     thumbnailsWarmed,
     thumbnailErrors: thumbnailErrors.length,

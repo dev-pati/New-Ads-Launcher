@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/button"
 import { DismissibleBanner } from "@/components/ui/dismissible-banner"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
-  IconSearch, IconUpload, IconFolder, IconFolderPlus, IconRefresh,
+  IconSearch, IconFolder, IconFolderPlus, IconRefresh,
   IconLoader2, IconPhoto, IconLayoutGrid, IconList,
   IconChevronDown, IconPlus, IconCheck, IconDotsVertical,
   IconPlayerPlay, IconX, IconTrash, IconArrowLeft,
   IconClipboardList, IconUser, IconAlertCircle,
+  IconCloudDownload,
 } from "@tabler/icons-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -64,7 +66,19 @@ interface DeleteConfirmState {
   name: string
 }
 
-type Section = "all" | "boards" | "requests" | "my-uploads" | `board_${string}`
+interface PortalMediaItem {
+  id: string
+  object_key: string
+  portal_asset_id: string
+  brand_slug: string
+  file_name: string
+  media_type: "image" | "video"
+  file_url: string
+  first_seen_at: string
+  status: "pending" | "mapped" | "imported"
+}
+
+type Section = "all" | "boards" | "requests" | "my-uploads" | "portal" | `board_${string}`
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -91,6 +105,11 @@ export default function AssetsPage() {
   const [viewMode, setViewMode]         = useState<"grid" | "list">("grid")
   const [creatives, setCreatives]       = useState<Creative[]>([])
   const [boardCreatives, setBoardCreatives] = useState<Creative[]>([])
+  const [portalItems, setPortalItems]   = useState<PortalMediaItem[]>([])
+  const [portalSelected, setPortalSelected] = useState<Set<string>>(new Set())
+  const [portalAccountId, setPortalAccountId] = useState("")
+  const [loadingPortal, setLoadingPortal] = useState(false)
+  const [mappingPortal, setMappingPortal] = useState(false)
   const [boards, setBoards]             = useState<Board[]>([])
   const [requests, setRequests]         = useState<CreativeRequest[]>([])
   const [selected, setSelected]         = useState<Set<string>>(new Set())
@@ -283,6 +302,21 @@ export default function AssetsPage() {
       .finally(() => setLoadingRequests(false))
   }, [])
 
+  const loadPortalItems = useCallback(() => {
+    setLoadingPortal(true)
+    setActionError("")
+    fetch("/api/portal-media-items")
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) throw new Error(d.error)
+        setPortalItems((d.items || []).filter((item: PortalMediaItem) => item.status === "pending"))
+      })
+      .catch((error: unknown) => {
+        setActionError(error instanceof Error ? error.message : "Failed to load Portal media")
+      })
+      .finally(() => setLoadingPortal(false))
+  }, [])
+
   const loadBoardCreatives = useCallback((boardId: string) => {
     setLoadingBoard(true)
     setActionError("")
@@ -316,6 +350,10 @@ export default function AssetsPage() {
   }, [section, requests.length, loadRequests])
 
   useEffect(() => {
+    if (section === "portal") loadPortalItems()
+  }, [section, loadPortalItems])
+
+  useEffect(() => {
     if (currentBoardId) loadBoardCreatives(currentBoardId)
   }, [currentBoardId, loadBoardCreatives])
 
@@ -334,7 +372,7 @@ export default function AssetsPage() {
   useEffect(() => {
     const toAdd = creatives.filter(c =>
       c.media_type === "video" &&
-      !(c as any).fb_video_id &&
+      !c.fb_video_id &&
       (c.status === "pending" || c.status === "processing") &&
       !pendingPollIdsRef.current.has(c.id)
     )
@@ -347,12 +385,12 @@ export default function AssetsPage() {
         try {
           const res = await fetch(`/api/creatives/${c.id}`)
           const data = await res.json()
-          const updated = data.creative
+          const updated = data.creative as Partial<Creative> | undefined
           if (!updated) { retries++; setTimeout(poll, 5000); return }
-          const isDone = !!(updated as any).fb_video_id || updated.status === "error" || updated.status === "ready"
+          const isDone = !!updated.fb_video_id || updated.status === "error" || updated.status === "ready"
           if (isDone) {
             setCreatives(prev => prev.map(x => x.id === c.id ? { ...x, ...updated } : x))
-            if ((updated as any).fb_video_id) refreshVideoPreview(c.id, 0, 3000)
+            if (updated.fb_video_id) refreshVideoPreview(c.id, 0, 3000)
             pendingPollIdsRef.current.delete(c.id)
             return
           }
@@ -377,18 +415,14 @@ export default function AssetsPage() {
     })
   }
 
-  /* eslint-disable @typescript-eslint/no-explicit-any */
   const displayList = (() => {
     if (section === "my-uploads") return filterCreatives(creatives.filter(c => c.user_id === currentUserId))
     if (currentBoardId) return filterCreatives(boardCreatives)
     return filterCreatives(creatives)
   })()
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
   const adAccountName = adAccounts?.find((a: any) => a.id === selectedAccountId)?.name || selectedAccountId || "—"
-
-  // ── Selection ─────────────────────────────────────────────────────────────
-
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev)
@@ -398,6 +432,34 @@ export default function AssetsPage() {
   })
   const selectAll = () => setSelected(new Set(displayList.map(c => c.id)))
   const clearSelected = () => setSelected(new Set())
+
+  const togglePortalSelect = (id: string) => setPortalSelected(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+  const clearPortalSelected = () => setPortalSelected(new Set())
+  const mapPortalMedia = async () => {
+    if (portalSelected.size === 0 || !portalAccountId) return
+    setMappingPortal(true)
+    setActionError("")
+    try {
+      const res = await fetch("/api/portal-media-items", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(portalSelected), ad_account_id: portalAccountId }),
+      })
+      const d = await res.json()
+      if (!res.ok || d.error) throw new Error(d.error || "Failed to map Portal media")
+      clearPortalSelected()
+      loadPortalItems()
+    } catch (error: unknown) {
+      setActionError(error instanceof Error ? error.message : "Failed to map Portal media")
+    } finally {
+      setMappingPortal(false)
+    }
+  }
 
   // ── CRUD: Board ───────────────────────────────────────────────────────────
 
@@ -576,6 +638,7 @@ export default function AssetsPage() {
         <div className="p-3 space-y-0.5">
           {([
             { id: "all",        icon: IconLayoutGrid,    label: "All Assets",   count: creatives.length },
+            { id: "portal",     icon: IconCloudDownload, label: "Portal Media", count: portalItems.length || undefined },
             { id: "boards",     icon: IconFolder,        label: "Boards",       count: boards.length },
             { id: "requests",   icon: IconClipboardList, label: "Requests",     count: requests.filter(r => r.status === "open").length || undefined },
             { id: "my-uploads", icon: IconUser,          label: "My Uploads" },
@@ -797,6 +860,98 @@ export default function AssetsPage() {
           </div>
         )}
 
+        {/* ── Portal Media Section ─────────────────────────────────────── */}
+        {section === "portal" && (
+          <>
+            <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-semibold">Portal Media</h2>
+                <p className="text-xs text-muted-foreground">Map individual Creative Portal media to the right ad account before import.</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={loadPortalItems} disabled={loadingPortal}>
+                {loadingPortal ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
+                Refresh
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
+              <span className="text-xs text-muted-foreground">{portalSelected.size} selected</span>
+              <Select value={portalAccountId} onValueChange={setPortalAccountId}>
+                <SelectTrigger className="w-[260px] h-8">
+                  <SelectValue placeholder="Select ad account" />
+                </SelectTrigger>
+                <SelectContent>
+                  {adAccounts.map((a: { id: string; name?: string }) => (
+                    <SelectItem key={a.id} value={a.id}>{a.name || a.id} ({a.id})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" onClick={mapPortalMedia} disabled={portalSelected.size === 0 || !portalAccountId || mappingPortal}>
+                {mappingPortal ? <IconLoader2 className="size-4 animate-spin" /> : <IconCheck className="size-4" />}
+                Map & Import
+              </Button>
+              {portalSelected.size > 0 && <Button size="sm" variant="outline" onClick={clearPortalSelected}>Deselect</Button>}
+            </div>
+
+            <div className="flex-1 overflow-auto px-4 py-4">
+              {loadingPortal ? (
+                <div className="grid grid-cols-3 gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {[...Array(12)].map((_, i) => <div key={i} className="aspect-square rounded-xl bg-muted animate-pulse" />)}
+                </div>
+              ) : portalItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
+                  <div className="size-16 rounded-2xl bg-muted/50 flex items-center justify-center">
+                    <IconCloudDownload className="size-7 text-muted-foreground/30" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">No pending Portal media</p>
+                    <p className="text-xs text-muted-foreground mt-1">New approved media will appear here after the sync cron runs.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                  {portalItems.map(item => {
+                    const isSelected = portalSelected.has(item.id)
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => togglePortalSelect(item.id)}
+                        className={cn(
+                          "group relative flex flex-col overflow-hidden rounded-xl border-2 text-left transition-all",
+                          isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-muted-foreground/20"
+                        )}
+                      >
+                        <div className="relative aspect-square overflow-hidden bg-muted/40">
+                          {item.media_type === "video" ? (
+                            <video src={item.file_url} className="h-full w-full object-cover" muted preload="metadata" />
+                          ) : (
+                            <img src={item.file_url} alt={item.file_name} className="h-full w-full object-cover" />
+                          )}
+                          <div className={cn(
+                            "absolute top-2 left-2 size-5 rounded-full border-2 flex items-center justify-center transition-all",
+                            isSelected ? "bg-primary border-primary" : "bg-background/80 border-muted-foreground/30 opacity-0 group-hover:opacity-100"
+                          )}>
+                            {isSelected && <IconCheck className="size-3 text-primary-foreground" />}
+                          </div>
+                          {item.media_type === "video" && (
+                            <div className="absolute bottom-2 left-2 size-5 rounded-full bg-black/60 flex items-center justify-center">
+                              <IconPlayerPlay className="size-2.5 text-white" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="px-2 py-1.5 bg-card border-t border-border/50">
+                          <p className="text-xs text-foreground/80 truncate leading-tight">{item.file_name}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{item.brand_slug || "portal"} · {formatDate(item.first_seen_at)}</p>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         {/* ── Asset Grid (All / My Uploads / Board) ──────────────────────── */}
         {isAssetSection && (
           <>
@@ -964,7 +1119,7 @@ export default function AssetsPage() {
                     <p className="text-xs text-muted-foreground mt-1">
                       {search || filterType || filterStatus
                         ? "Clear the active filters to see all assets in this view."
-                        : "Media assets sync from Creative Portal — see Media Control to check sync status."}
+                        : "Media assets sync from Creative Portal — map pending media from Portal Media."}
                     </p>
                   </div>
                   {(search || filterType || filterStatus) ? (
@@ -972,8 +1127,8 @@ export default function AssetsPage() {
                       Clear filters
                     </Button>
                   ) : (
-                    <Button size="sm" asChild>
-                      <a href="/media-sync"><IconUpload className="size-3.5" /> Media Control</a>
+                    <Button size="sm" onClick={() => setSection("portal")}>
+                      <IconCloudDownload className="size-3.5" /> Portal Media
                     </Button>
                   )}
                 </div>
