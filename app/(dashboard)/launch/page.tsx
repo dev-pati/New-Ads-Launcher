@@ -1,5 +1,11 @@
 "use client"
+import dynamic from "next/dynamic"
 import { LaunchProgressDialog, LaunchPhase } from "@/components/launch/launch-progress-dialog"
+
+const CreateCampaignModal = dynamic(
+  () => import("@/components/ads-manager/create-flow/CreateCampaignModal").then(m => m.CreateCampaignModal),
+  { ssr: false }
+)
 
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react"
 import { useAdAccount } from "@/lib/ad-account-context"
@@ -485,10 +491,10 @@ function AdAccountDropdown({ accounts, selectedId, onSelect }: {
 
         {/* Footer */}
         <div className="border-t">
-          <button className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+          <a href="/ad-accounts" className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
             <IconPlus className="size-3.5" />
             Add or edit ad accounts
-          </button>
+          </a>
         </div>
       </PopoverContent>
     </Popover>
@@ -4779,7 +4785,9 @@ function LoadMediaModal({
   useEffect(() => {
     if (!open || !adAccountId) return
     setSelected(new Set(alreadySelected))
-    fetchCreatives()
+    setAllCreatives([])
+    creativesCache.current = null
+    fetchCreatives(true)
     setFbMediaLoaded(false)
     setFbMedia([])
   }, [open, adAccountId])
@@ -5265,7 +5273,7 @@ function LoadMediaModal({
       return
     }
     setLoading(true)
-    fetch(`/api/creatives?ad_account_id=${encodeURIComponent(adAccountId)}&limit=20`)
+    fetch(`/api/creatives?ad_account_id=${encodeURIComponent(adAccountId)}&limit=200`)
       .then(r => r.json())
       .then(d => {
         const list: Creative[] = d.creatives || []
@@ -13858,6 +13866,7 @@ export default function LaunchPage() {
   const { activeOrgId } = useOrg()
 
   const [mode, setMode] = useState<"gallery" | "table">("gallery")
+  const [createCampaignOpen, setCreateCampaignOpen] = useState(false)
 
   const [pages, setPages] = useState<FacebookPage[]>([])
   const [selectedPageId, setSelectedPageId] = useState("")
@@ -15690,6 +15699,7 @@ export default function LaunchPage() {
         }} />
       <ScheduleModal open={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)}
         onConfirm={(start, end) => mode === "table" ? doTableLaunch(start, end) : doLaunch(start, end)} />
+      <CreateCampaignModal open={createCampaignOpen} onClose={() => setCreateCampaignOpen(false)} onSuccess={() => {}} />
       <LaunchProgressDialog
         phase={launchPhase}
         open={launchProgressOpen}
@@ -15906,7 +15916,10 @@ export default function LaunchPage() {
           </div>
 
           {/* Right: mode toggle */}
-          <div className="ml-auto shrink-0">
+          <div className="ml-auto flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs text-primary" onClick={() => setCreateCampaignOpen(true)}>
+              <IconPlus className="size-3.5" />New Campaign
+            </Button>
             <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs"
               onClick={() => {
                 if (mode === "gallery") {

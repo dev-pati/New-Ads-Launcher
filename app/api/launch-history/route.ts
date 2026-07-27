@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const accountId = url.searchParams.get("account_id")
     const userId = url.searchParams.get("user_id")
     const status = url.searchParams.get("status")
+    const batchId = url.searchParams.get("id")
     const limit = parseInt(url.searchParams.get("limit") || "50")
     const trash = url.searchParams.get("trash") === "1"
 
@@ -22,6 +23,7 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(limit)
 
+    if (batchId) query = query.eq("id", batchId)
     if (accountId) query = query.eq("ad_account_id", accountId)
     if (userId) query = query.eq("user_id", userId)
     if (status && status !== "all") query = query.eq("status", status)

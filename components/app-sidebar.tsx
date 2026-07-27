@@ -72,7 +72,6 @@ const navSections: NavSection[] = [
     icon: IconPhoto,
     subItems: [
       { label: "All Assets", href: "/assets" },
-      { label: "Media Control", href: "/media-sync" },
     ],
   },
   {
@@ -129,7 +128,7 @@ const navSections: NavSection[] = [
 
 function getActiveSection(pathname: string): string {
   if (pathname.startsWith("/launch") || pathname.startsWith("/ads-manager") || pathname.startsWith("/templates")) return "launch"
-  if (pathname.startsWith("/assets") || pathname.startsWith("/media-sync")) return "assets"
+  if (pathname.startsWith("/assets")) return "assets"
   if (pathname.startsWith("/insights")) return "insights"
   if (pathname.startsWith("/page-manager")) return "page-manager"
   if (pathname.startsWith("/automate")) return "automate"

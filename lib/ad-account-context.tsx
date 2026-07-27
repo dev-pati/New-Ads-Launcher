@@ -11,6 +11,7 @@ interface AdAccount {
   account_status?: number
   amount_spent?: string
   balance?: string
+  timezone_name?: string
 }
 
 interface AdAccountContextType {

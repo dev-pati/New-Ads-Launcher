@@ -33,6 +33,7 @@ call "/api/cron/activate-scheduled-ads"        # 5min — scheduled ads fire
 call "/api/cron/check-scheduled-triggers"      # 5min — automation time rules
 call "/api/cron/resume-pending-executions"     # 5min — retry failed automations
 call "/api/cron/upload-to-facebook"            # 5min — queued video uploads
+call "/api/cron/sync-portal-media"             # 5min — Creative Portal handoff fallback
 call "/api/cron/check-meta-triggers"           # 15min — meta webhook fallback
 call "/api/cron/check-sheets-triggers"         # 15min
 call "/api/cron/check-drive-triggers"          # 15min

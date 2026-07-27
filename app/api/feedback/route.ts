@@ -6,6 +6,7 @@ import {
   isValidFeedbackType,
   isValidSeverity,
 } from "@/lib/feedback-taxonomy"
+import { sendFeedbackNotifications } from "@/lib/feedback-email"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -96,10 +97,11 @@ export async function POST(request: NextRequest) {
         screenshot_url: screenshotUrl,
         status: "open",
       })
-      .select("id, status, created_at, screenshot_url")
+      .select("id, status, created_at, screenshot_url, feature_area, feature_function, severity, observed_evidence, expected_result, user_email")
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    await sendFeedbackNotifications(data, ctx.orgId)
     return NextResponse.json({ feedback: data }, { status: 201 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to submit feedback"

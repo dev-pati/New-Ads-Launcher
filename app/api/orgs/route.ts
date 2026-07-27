@@ -2,21 +2,19 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+type OrgFields = {
+  id: string
+  name: string
+  slug: string
+  logo_url: string | null
+  feedback_po_email?: string | null
+  feedback_bom_email?: string | null
+  created_at: string
+}
+
 type OrgMemberWithOrg = {
   role: string
-  org: {
-    id: string
-    name: string
-    slug: string
-    logo_url: string | null
-    created_at: string
-  } | Array<{
-    id: string
-    name: string
-    slug: string
-    logo_url: string | null
-    created_at: string
-  }> | null
+  org: OrgFields | OrgFields[] | null
 }
 
 // List user's organizations

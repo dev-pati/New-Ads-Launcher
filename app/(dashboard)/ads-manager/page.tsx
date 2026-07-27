@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import {
@@ -11,7 +11,7 @@ import {
   IconArrowUp, IconArrowDown, IconHistory, IconTable, IconCheck,
   IconChevronRight as IconDrillRight,
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
-  IconAdjustments, IconDownload,
+  IconAdjustments, IconDownload, IconRocket, IconTemplate,
 } from "@tabler/icons-react"
 import dynamic from "next/dynamic"
 import { type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
@@ -498,7 +498,7 @@ function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMov
   )
 }
 
-export default function AdsManagerPage() {
+function AdsManagerContent() {
   const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
 
   const [tab, setTab] = useState<Tab>("campaigns")
@@ -568,6 +568,33 @@ export default function AdsManagerPage() {
   const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
   const [breakdownError,    setBreakdownError]    = useState("")
   const [performancePopup, setPerformancePopup] = useState<{ mode: "charts" | "compare"; rows: ReportRow[] } | null>(null)
+
+  // Launch → Ads Manager connection: ?batch=<id> prefilters ads to that launch's created ads.
+  const searchParams = useSearchParams()
+  const batchParam = searchParams.get("batch")
+  const [launchAdIds, setLaunchAdIds] = useState<Set<string> | null>(null)
+  const [launchLabel, setLaunchLabel] = useState<string | null>(null)
+  const activeLaunchFilter = !!batchParam && tab === "ads" && launchAdIds && launchAdIds.size > 0
+
+  useEffect(() => {
+    if (!batchParam) return
+    let cancelled = false
+    fetch(`/api/launch-history?id=${encodeURIComponent(batchParam)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (cancelled) return
+        const batch = d.batches?.[0]
+        if (!batch) return
+        const ids: string[] = Array.isArray(batch.created_ads)
+          ? batch.created_ads.map((a: any) => typeof a === "string" ? a : (a?.adId || a?.id)).filter(Boolean)
+          : []
+        setLaunchAdIds(new Set(ids))
+        setLaunchLabel(batch.name || batch.id?.slice(0, 8) || "launch")
+        setTab("ads")
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [batchParam])
 
   const router = useRouter()
   const level: Level = tab === "campaigns" ? "campaign" : tab === "adsets" ? "adset" : "ad"
@@ -1073,6 +1100,11 @@ export default function AdsManagerPage() {
   const currentData: (Campaign | AdSet | Ad)[] = useMemo(() => {
     let list: (Campaign | AdSet | Ad)[] = tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads
 
+    // Launch → Ads Manager connection: filter to ads created by the linked launch batch
+    if (activeLaunchFilter && launchAdIds) {
+      list = (list as Ad[]).filter(a => launchAdIds.has(a.id))
+    }
+
     // Hierarchical filter — persists across all tabs
     if (tab === "adsets" && campaignFilter.size > 0) {
       list = (list as AdSet[]).filter(a => campaignFilter.has(a.campaign_id))
@@ -1116,7 +1148,7 @@ export default function AdsManagerPage() {
       })
     }
     return list
-  }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, statusFilter, sortField, sortDir, campaignNameById, adSetNameById])
+  }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, statusFilter, sortField, sortDir, campaignNameById, adSetNameById, activeLaunchFilter, launchAdIds])
 
   const totalPages = Math.max(1, Math.ceil(currentData.length / pageSize))
   const pagedData = currentData.slice((page - 1) * pageSize, page * pageSize)
@@ -2011,6 +2043,16 @@ export default function AdsManagerPage() {
         </div>
       </div>
 
+      {activeLaunchFilter && (
+        <div className="flex items-center gap-2 px-4 py-1.5 border-b shrink-0 bg-primary/5 text-xs">
+          <IconHistory className="size-3.5 text-primary" />
+          <span>Showing {launchAdIds?.size ?? 0} ad{(launchAdIds?.size ?? 0) === 1 ? "" : "s"} from launch <span className="font-medium">{launchLabel}</span></span>
+          <button onClick={() => { setLaunchAdIds(null); router.replace("/ads-manager") }} className="ml-auto flex items-center gap-1 text-muted-foreground hover:text-foreground">
+            <IconX className="size-3.5" />Clear
+          </button>
+        </div>
+      )}
+
       {/* ── Search + Status filter bar ── */}
       <div className="px-4 py-2 border-b shrink-0 flex items-center gap-3 flex-wrap">
         {/* Search input */}
@@ -2161,6 +2203,12 @@ export default function AdsManagerPage() {
       <div className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0 flex-wrap bg-white dark:bg-background">
         <button onClick={() => setCreateModalOpen(true)} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded bg-[#31a24c] hover:bg-[#2b9244] text-white transition-colors font-semibold shadow-sm">
           <IconPlus className="size-3.5" />Create
+        </button>
+        <button onClick={() => router.push("/launch")} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded border border-[#1877f2] text-[#1877f2] hover:bg-[#1877f2]/10 transition-colors font-semibold shadow-sm">
+          <IconRocket className="size-3.5" />AdLauncher
+        </button>
+        <button onClick={() => router.push("/templates")} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded border hover:bg-muted/50 transition-colors font-semibold shadow-sm">
+          <IconTemplate className="size-3.5" />Templates
         </button>
         <button
           disabled={selectedIds.size === 0}
@@ -3193,5 +3241,13 @@ export default function AdsManagerPage() {
       )}
 
     </div>
+  )
+}
+
+export default function AdsManagerPage() {
+  return (
+    <Suspense>
+      <AdsManagerContent />
+    </Suspense>
   )
 }

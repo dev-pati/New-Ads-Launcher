@@ -12,7 +12,7 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id: orgId } = await params
-    const { name, logo_url } = await request.json()
+    const { name, logo_url, feedback_po_email, feedback_bom_email } = await request.json()
     const trimmedName = typeof name === "string" ? name.trim() : ""
 
     if (!trimmedName) {
@@ -31,8 +31,15 @@ export async function PATCH(
       return NextResponse.json({ error: "Only admins can update organizations" }, { status: 403 })
     }
 
-    const updates: { name: string; logo_url?: string | null } = { name: trimmedName }
+    const emailOrNull = (value: unknown) => {
+      if (value === undefined) return undefined
+      const trimmed = typeof value === "string" ? value.trim() : ""
+      return trimmed || null
+    }
+    const updates: { name: string; logo_url?: string | null; feedback_po_email?: string | null; feedback_bom_email?: string | null } = { name: trimmedName }
     if (logo_url !== undefined) updates.logo_url = logo_url
+    if (feedback_po_email !== undefined) updates.feedback_po_email = emailOrNull(feedback_po_email)
+    if (feedback_bom_email !== undefined) updates.feedback_bom_email = emailOrNull(feedback_bom_email)
 
     const { data: org, error } = await supabase
       .from("organizations")

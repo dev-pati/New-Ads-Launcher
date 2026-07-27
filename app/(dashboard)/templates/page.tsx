@@ -9,7 +9,7 @@ import {
   IconFolder, IconFileImport, IconFileExport, IconLayoutDashboard,
   IconCloudDownload, IconPencil, IconTrash, IconLoader2, IconCheck,
   IconCopy, IconX, IconTag, IconChartBar, IconSparkles, IconDotsVertical,
-  IconRefresh,
+  IconRefresh, IconList, IconGridDots
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -82,19 +82,19 @@ function TemplateCard({
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="opacity-0 group-hover:opacity-100 size-7 rounded-lg flex items-center justify-center hover:bg-slate-100 transition-all shrink-0">
-              <IconDotsVertical className="size-3.5 text-slate-500" />
+            <button className="opacity-0 group-hover:opacity-100 size-7 rounded-lg flex items-center justify-center hover:bg-muted transition-all shrink-0 text-muted-foreground">
+              <IconDotsVertical className="size-3.5" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onClick={() => onCopy(t)} className="gap-2 text-xs">
-              <IconCopy className="size-3.5" />Copy template
+              <IconCopy className="size-3.5 text-muted-foreground" />Copy template
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(t)} className="gap-2 text-xs">
-              <IconPencil className="size-3.5" />Edit
+              <IconPencil className="size-3.5 text-muted-foreground" />Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(t.id)} className="gap-2 text-xs text-red-600 focus:text-red-600">
+            <DropdownMenuItem onClick={() => onDelete(t.id)} className="gap-2 text-xs text-destructive focus:text-destructive">
               <IconTrash className="size-3.5" />Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -220,6 +220,80 @@ function TemplateFormDialog({
   )
 }
 
+// ─── Spreadsheet View ──────────────────────────────────────────────────────────
+
+function TemplatesSpreadsheet({
+  templates, onEdit, onDelete, onCopy,
+}: {
+  templates: AdCopyTemplate[]
+  onEdit: (t: AdCopyTemplate) => void
+  onDelete: (id: string) => void
+  onCopy: (t: AdCopyTemplate) => void
+}) {
+  return (
+    <div className="border rounded-lg overflow-hidden bg-white">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left">
+          <thead className="text-xs text-slate-500 bg-slate-50 border-b">
+            <tr>
+              <th className="px-4 py-3 font-medium whitespace-nowrap">Name</th>
+              <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[200px]">Primary Text</th>
+              <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[150px]">Headline</th>
+              <th className="px-4 py-3 font-medium whitespace-nowrap">CTA</th>
+              <th className="px-4 py-3 font-medium whitespace-nowrap">Link</th>
+              <th className="px-4 py-3 font-medium whitespace-nowrap">Tags</th>
+              <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {templates.map(t => (
+              <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
+                <td className="px-4 py-3 font-medium text-slate-900 truncate max-w-[200px]" title={t.name}>{t.name}</td>
+                <td className="px-4 py-3 text-slate-600 truncate max-w-[300px]" title={t.primary_text}>{t.primary_text || "-"}</td>
+                <td className="px-4 py-3 text-slate-700 truncate max-w-[200px]" title={t.headline}>{t.headline || "-"}</td>
+                <td className="px-4 py-3">
+                  {t.cta ? <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-xs font-medium whitespace-nowrap">{t.cta.replace(/_/g, " ")}</span> : "-"}
+                </td>
+                <td className="px-4 py-3 text-slate-500 truncate max-w-[200px]" title={t.link}>{t.link || "-"}</td>
+                <td className="px-4 py-3">
+                  {t.tags?.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {t.tags.map(tag => (
+                        <span key={tag} className="px-1.5 py-0.5 bg-violet-50 text-violet-600 rounded whitespace-nowrap text-[10px] font-medium">{tag}</span>
+                      ))}
+                    </div>
+                  ) : "-"}
+                </td>
+                <td className="px-4 py-2 text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="size-7 rounded-md inline-flex items-center justify-center hover:bg-slate-200 transition-colors text-muted-foreground ml-auto">
+                        <IconDotsVertical className="size-3.5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44">
+                      <DropdownMenuItem onClick={() => onCopy(t)} className="gap-2 text-xs">
+                        <IconCopy className="size-3.5 text-muted-foreground" />Copy template
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => onEdit(t)} className="gap-2 text-xs">
+                        <IconPencil className="size-3.5 text-muted-foreground" />Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => onDelete(t.id)} className="gap-2 text-xs text-destructive focus:text-destructive">
+                        <IconTrash className="size-3.5" />Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 type Tab = "ad-setup" | "tags" | "top-performing" | "ai-naming"
@@ -235,6 +309,7 @@ export default function TemplatesPage() {
   const [search, setSearch] = useState(() => searchParams.get("q") || "")
   const [searchActive, setSearchActive] = useState(() => !!searchParams.get("q"))
   const [sort, setSort] = useState<SortOption>("newest")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
 
   // Dialogs
   const [formOpen, setFormOpen] = useState(false)
@@ -325,15 +400,6 @@ export default function TemplatesPage() {
       setTemplates(prev => prev.filter(t => t.id !== deleteId))
       setDeleteId(null)
     } finally { setDeleting(false) }
-  }
-
-  const handleCopy = (t: AdCopyTemplate) => {
-    setEditTarget(null)
-    setFormOpen(true)
-    // pre-fill form as a copy — handled in TemplateFormDialog via initial=null but we trigger differently
-    setTimeout(() => {
-      // Will open empty form; user copies manually — simple approach
-    }, 0)
   }
 
   const exportCsv = () => {
@@ -573,6 +639,10 @@ export default function TemplatesPage() {
               <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs rounded-full px-3 whitespace-nowrap" onClick={fetchTemplates}>
                 <IconRefresh className="size-3.5 text-muted-foreground" />Refresh
               </Button>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs rounded-full px-3 whitespace-nowrap" onClick={() => setViewMode(viewMode === "grid" ? "table" : "grid")}>
+                {viewMode === "grid" ? <IconList className="size-3.5 text-muted-foreground" /> : <IconGridDots className="size-3.5 text-muted-foreground" />}
+                {viewMode === "grid" ? "Spreadsheet" : "Cards"}
+              </Button>
 
               <Button
                 size="sm"
@@ -611,7 +681,7 @@ export default function TemplatesPage() {
                     </Button>
                   )}
                 </div>
-              ) : (
+              ) : viewMode === "grid" ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {filtered.map(t => (
                     <TemplateCard
@@ -620,12 +690,40 @@ export default function TemplatesPage() {
                       onEdit={openEdit}
                       onDelete={id => setDeleteId(id)}
                       onCopy={ct => {
-                        setEditTarget({ ...ct, id: "", name: `${ct.name} - Copy` } as any)
+                        setPrefillData({
+                          name: `${ct.name} - Copy`,
+                          primary_text: ct.primary_text || "",
+                          headline: ct.headline || "",
+                          description: ct.description || "",
+                          link: ct.link || "",
+                          cta: ct.cta || "SHOP_NOW",
+                          tags: ct.tags?.join(", ") || "",
+                        })
+                        setEditTarget(null)
                         setFormOpen(true)
                       }}
                     />
                   ))}
                 </div>
+              ) : (
+                <TemplatesSpreadsheet
+                  templates={filtered}
+                  onEdit={openEdit}
+                  onDelete={id => setDeleteId(id)}
+                  onCopy={ct => {
+                    setPrefillData({
+                      name: `${ct.name} - Copy`,
+                      primary_text: ct.primary_text || "",
+                      headline: ct.headline || "",
+                      description: ct.description || "",
+                      link: ct.link || "",
+                      cta: ct.cta || "SHOP_NOW",
+                      tags: ct.tags?.join(", ") || "",
+                    })
+                    setEditTarget(null)
+                    setFormOpen(true)
+                  }}
+                />
               )}
             </div>
           </>

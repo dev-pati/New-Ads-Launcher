@@ -38,6 +38,7 @@ interface AdAccount {
   account_id: string
   name: string
   currency: string
+  timezone_name?: string
 }
 
 interface Campaign {
@@ -115,6 +116,7 @@ export default function CampaignsPage() {
   const [deletingCampaign, setDeletingCampaign] = useState<string | null>(null)
   const [confirmTarget, setConfirmTarget] = useState<{ id: string; name: string } | null>(null)
   const [deleteError, setDeleteError] = useState("")
+  const selectedAdAccount = adAccounts.find(a => a.id === selectedAccount)
 
   const fetchCampaigns = useCallback(async () => {
     if (!selectedAccount) return
@@ -221,6 +223,11 @@ export default function CampaignsPage() {
           <p className="text-sm text-muted-foreground">
             View and manage your Facebook campaigns.
           </p>
+          {selectedAdAccount?.timezone_name && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ad account timezone: <span className="font-medium text-foreground">{selectedAdAccount.timezone_name}</span>
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {!loadingAccounts && adAccounts.length > 0 && (

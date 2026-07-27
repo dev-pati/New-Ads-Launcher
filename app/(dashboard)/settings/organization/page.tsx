@@ -26,6 +26,7 @@ import {
   IconLoader2,
   IconMail,
   IconUserPlus,
+  IconMessageReport,
 } from "@tabler/icons-react"
 
 const ROLES = [
@@ -106,6 +107,9 @@ export default function OrganizationPage() {
   const [removing, setRemoving] = useState<string | null>(null)
   const [updatingRole, setUpdatingRole] = useState<string | null>(null)
   const [message, setMessage] = useState("")
+  const [feedbackPoEmail, setFeedbackPoEmail] = useState("")
+  const [feedbackBomEmail, setFeedbackBomEmail] = useState("")
+  const [savingFeedbackLoop, setSavingFeedbackLoop] = useState(false)
   const isAdmin = activeOrg?.role === "admin"
 
   const fetchMembers = useCallback(async () => {
@@ -145,6 +149,40 @@ export default function OrganizationPage() {
     fetchMembers()
     fetchAvailableAccounts()
   }, [fetchMembers, fetchAvailableAccounts])
+
+  useEffect(() => {
+    if (!activeOrgId) return
+    fetch("/api/orgs").then(r => r.json()).then(data => {
+      const org = (data.orgs || []).find((o: { id: string }) => o.id === activeOrgId)
+      setFeedbackPoEmail(org?.feedback_po_email || "")
+      setFeedbackBomEmail(org?.feedback_bom_email || "")
+    }).catch(() => {})
+  }, [activeOrgId])
+
+  const handleSaveFeedbackLoop = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!activeOrgId) return
+    setSavingFeedbackLoop(true)
+    setMessage("")
+    try {
+      const res = await fetch(`/api/orgs/${activeOrgId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: activeOrg?.name,
+          feedback_po_email: feedbackPoEmail,
+          feedback_bom_email: feedbackBomEmail,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setMessage(data.error || "Failed to save"); return }
+      setMessage("Feedback loop recipients saved!")
+    } catch {
+      setMessage("Failed to save feedback loop recipients")
+    } finally {
+      setSavingFeedbackLoop(false)
+    }
+  }
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -246,6 +284,37 @@ export default function OrganizationPage() {
           </CardDescription>
         </CardHeader>
       </Card>
+
+      {/* Feedback Loop */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <IconMessageReport className="size-5" />
+              Feedback Loop
+            </CardTitle>
+            <CardDescription>
+              New feedback sends a ticket email to the PO, CCs BOM, and sends a receipt to the reporter.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSaveFeedbackLoop} className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+              <div className="space-y-2">
+                <Label>Product Owner Email</Label>
+                <Input type="email" placeholder="thanhtin@patigroup.com" value={feedbackPoEmail} onChange={(e) => setFeedbackPoEmail(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label>BOM Group Email</Label>
+                <Input type="email" placeholder="wpjpwk7o7pbxz@patigroup.com" value={feedbackBomEmail} onChange={(e) => setFeedbackBomEmail(e.target.value)} />
+              </div>
+              <Button type="submit" disabled={savingFeedbackLoop || !feedbackPoEmail.trim()}>
+                {savingFeedbackLoop && <IconLoader2 className="mr-2 size-4 animate-spin" />}
+                Save
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Add Existing Account */}
       {isAdmin && (
