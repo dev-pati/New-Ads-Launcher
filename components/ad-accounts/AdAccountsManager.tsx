@@ -296,22 +296,22 @@ export function AdAccountsManager() {
 
   const FILTER_BTN = (active: boolean) =>
     cn("flex h-8 items-center px-3.5 text-sm font-medium transition-all rounded-full",
-      active ? "bg-[#0064E0] text-white shadow-sm" : "text-[#465A69] hover:bg-[#F1F4F7] hover:text-[#1C2B33]")
+      active ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-4">
 
       {/* ── Top card ─────────────────────────────────────────────── */}
-      <div className="relative z-10 overflow-visible rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.06]">
+      <div className="relative z-10 overflow-visible rounded-2xl bg-card shadow-sm ring-1 ring-ring/10">
 
         {/* Tabs */}
-        <div className="flex h-11 items-center gap-6 border-b border-[#EAECEF] px-6">
+        <div className="flex h-11 items-center gap-6 border-b border-border px-6">
           {(["accounts", "spending-limit"] as AccountTab[]).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={cn("flex h-full items-center gap-1.5 border-b-2 text-sm font-semibold transition-colors",
                 activeTab === tab
-                  ? "border-[#0064E0] text-[#0064E0]"
-                  : "border-transparent text-[#8595A4] hover:text-[#1C2B33]"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               )}>
               {tab === "accounts" ? "Ad Accounts" : "Account Spending Limit"}
             </button>
@@ -325,26 +325,26 @@ export function AdAccountsManager() {
             <div className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                  <h2 className="text-lg font-bold text-[#1C2B33]">Ad Accounts</h2>
-                  <span className="text-sm font-semibold text-[#8595A4]">({accounts.length})</span>
+                  <h2 className="text-lg font-bold text-foreground">Ad Accounts</h2>
+                  <span className="text-sm font-semibold text-muted-foreground">({accounts.length})</span>
                 </div>
-                <p className="text-xs text-[#8595A4] mt-0.5">Last synced: {formatLastSynced(lastSynced)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Last synced: {formatLastSynced(lastSynced)}</p>
               </div>
 
               <div className="relative w-72 shrink-0">
-                <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#8595A4]" />
+                <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder="Search by name or ID..."
-                  className="h-9 rounded-full border-[#DEE3E9] bg-[#F7F8FA] pl-9 pr-3 text-sm shadow-none placeholder:text-[#8595A4] focus-visible:bg-white focus-visible:border-[#0064E0] focus-visible:ring-2 focus-visible:ring-[#0064E0]/15"
+                  className="h-9 rounded-full border-border bg-muted/50 pl-9 pr-3 text-sm shadow-none placeholder:text-muted-foreground focus-visible:bg-card focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15"
                 />
               </div>
 
               <Button
                 onClick={() => fetchAccounts(true)}
                 disabled={syncing}
-                className="h-9 shrink-0 rounded-full bg-[#0064E0] px-5 text-sm font-semibold shadow-none transition-transform hover:scale-[1.02] hover:bg-[#0052C2] active:scale-[0.98] disabled:bg-[#DEE3E9] disabled:text-[#8595A4]"
+                className="h-9 shrink-0 rounded-full bg-primary px-5 text-sm font-semibold text-white shadow-none transition-colors hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
               >
                 {syncing
                   ? <IconLoader2 className="mr-1.5 size-3.5 animate-spin" />
@@ -356,18 +356,18 @@ export function AdAccountsManager() {
             {/* Row 2: summary chips + filters + date */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Summary badges */}
-              <span className="rounded-full bg-[#E8F3FF] px-2.5 py-0.5 text-xs font-bold text-[#0064E0]">Own {ownCount}</span>
-              <span className="rounded-full bg-[#F1F4F7] px-2.5 py-0.5 text-xs font-bold text-[#465A69]">Agency {agencyCount}</span>
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-bold text-primary">Own {ownCount}</span>
+              <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">Agency {agencyCount}</span>
               {personalCount > 0 && (
                 <span className="rounded-full bg-[rgba(120,86,255,0.10)] px-2.5 py-0.5 text-xs font-bold text-[#5C3FB5]">Personal {personalCount}</span>
               )}
               <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-xs font-bold text-[#007D1E]">Active {activeCount}</span>
 
-              <div className="mx-1 h-4 w-px bg-[#DEE3E9]" />
+              <div className="mx-1 h-4 w-px bg-border" />
 
               {/* TYPE filter */}
-              <div className="flex items-center gap-0.5 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] p-0.5">
-                <span className="px-2.5 text-xs font-extrabold uppercase tracking-wide text-[#8595A4]">Type</span>
+              <div className="flex items-center gap-0.5 rounded-full border border-border bg-muted/50 p-0.5">
+                <span className="px-2.5 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">Type</span>
                 {(["all", "agency", "own"] as AccountOwnershipFilter[]).map(t => (
                   <button key={t} onClick={() => setOwnershipFilter(t)} className={FILTER_BTN(ownershipFilter === t)}>
                     {t === "all" ? "All" : t === "agency" ? "Agency" : "Own"}
@@ -376,13 +376,13 @@ export function AdAccountsManager() {
               </div>
 
               {/* STATUS filter */}
-              <div className="flex items-center gap-0.5 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] p-0.5">
-                <span className="px-2.5 text-xs font-extrabold uppercase tracking-wide text-[#8595A4]">Status</span>
+              <div className="flex items-center gap-0.5 rounded-full border border-border bg-muted/50 p-0.5">
+                <span className="px-2.5 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">Status</span>
                 {(["all", "active", "disabled"] as AccountStatusFilter[]).map(s => (
                   <button key={s} onClick={() => setStatusFilter(s)}
                     className={cn(FILTER_BTN(statusFilter === s), "gap-1.5")}>
                     <span className={cn("size-1.5 rounded-full shrink-0",
-                      s === "active" ? "bg-[#31A24C]" : s === "disabled" ? "bg-[#E41E3F]" : "bg-[#8595A4]",
+                      s === "active" ? "bg-[#31A24C]" : s === "disabled" ? "bg-[#E41E3F]" : "bg-muted-foreground",
                       statusFilter === s && "bg-white/80"
                     )} />
                     {s === "all" ? "All" : s === "active" ? "Active" : "Disabled"}
@@ -390,45 +390,45 @@ export function AdAccountsManager() {
                 ))}
               </div>
 
-              <div className="mx-1 h-4 w-px bg-[#DEE3E9]" />
+              <div className="mx-1 h-4 w-px bg-border" />
 
               {/* DATE filter — keep FROM/TO/Clear together so they never wrap apart */}
               <div className="flex shrink-0 items-center gap-2">
                 <div className={cn(
                   "flex items-center gap-2 rounded-full border px-3 py-1.5 transition-colors",
-                  hasAcctDateFilter ? "border-[#0064E0] bg-[#E8F3FF]" : "border-[#DEE3E9] bg-[#F7F8FA]"
+                  hasAcctDateFilter ? "border-primary bg-primary/10" : "border-border bg-muted/50"
                 )}>
-                  <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")} />
-                  <span className={cn("text-xs font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")}>From</span>
+                  <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")} />
+                  <span className={cn("text-xs font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")}>From</span>
                   <input
                     type="date"
                     value={acctDateFrom}
                     onChange={e => setAcctDateFrom(e.target.value)}
                     max={acctDateTo || toDateInputValue(new Date().toISOString())}
-                    className="h-6 border-0 bg-transparent text-sm font-medium text-[#1C2B33] outline-none [color-scheme:light]"
+                    className="h-6 border-0 bg-transparent text-sm font-medium text-foreground outline-none [color-scheme:light]"
                   />
                 </div>
 
                 <div className={cn(
                   "flex items-center gap-2 rounded-full border px-3 py-1.5 transition-colors",
-                  hasAcctDateFilter ? "border-[#0064E0] bg-[#E8F3FF]" : "border-[#DEE3E9] bg-[#F7F8FA]"
+                  hasAcctDateFilter ? "border-primary bg-primary/10" : "border-border bg-muted/50"
                 )}>
-                  <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")} />
-                  <span className={cn("text-xs font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-[#0064E0]" : "text-[#8595A4]")}>To</span>
+                  <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")} />
+                  <span className={cn("text-xs font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")}>To</span>
                   <input
                     type="date"
                     value={acctDateTo}
                     onChange={e => setAcctDateTo(e.target.value)}
                     min={acctDateFrom || undefined}
                     max={toDateInputValue(new Date().toISOString())}
-                    className="h-6 border-0 bg-transparent text-sm font-medium text-[#1C2B33] outline-none [color-scheme:light]"
+                    className="h-6 border-0 bg-transparent text-sm font-medium text-foreground outline-none [color-scheme:light]"
                   />
                 </div>
 
                 {hasAcctDateFilter && (
                   <button
                     onClick={() => { setAcctDateFrom(""); setAcctDateTo("") }}
-                    className="flex items-center gap-1 rounded-full bg-[#E8F3FF] px-3 py-1.5 text-xs font-semibold text-[#0064E0] transition-colors hover:bg-[#D0E8FF]"
+                    className="flex items-center gap-1 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
                   >
                     <IconX className="size-3" />
                     Clear
@@ -444,8 +444,8 @@ export function AdAccountsManager() {
             {/* Row 1: title + account selector + sync */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
-                <h2 className="text-lg font-bold text-[#1C2B33]">Account Spending Limit</h2>
-                <p className="text-xs text-[#8595A4] mt-0.5">
+                <h2 className="text-lg font-bold text-foreground">Account Spending Limit</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {selectedAccount ? `${selectedAccount.name} · ${selectedAccount.account_id}` : "Select an ad account"}
                 </p>
               </div>
@@ -455,36 +455,36 @@ export function AdAccountsManager() {
                 <button
                   type="button"
                   onClick={() => setAccountMenuOpen(o => !o)}
-                  className="flex h-9 w-full items-center justify-between rounded-full border border-[#DEE3E9] bg-[#F7F8FA] px-4 text-left text-sm font-medium text-[#1C2B33] transition-colors hover:border-[#0064E0] hover:bg-white"
+                  className="flex h-9 w-full items-center justify-between rounded-full border border-border bg-muted/50 px-4 text-left text-sm font-medium text-foreground transition-colors hover:border-primary hover:bg-card"
                 >
                   <span className="truncate">
                     {selectedAccount ? `${selectedAccount.name} (${selectedAccount.account_id})` : "Select account"}
                   </span>
-                  <IconChevronDown className={cn("ml-2 size-4 shrink-0 text-[#8595A4] transition-transform", accountMenuOpen && "rotate-180")} />
+                  <IconChevronDown className={cn("ml-2 size-4 shrink-0 text-muted-foreground transition-transform", accountMenuOpen && "rotate-180")} />
                 </button>
 
                 {accountMenuOpen && (
-                  <div className="absolute left-0 top-11 z-50 w-full overflow-hidden rounded-xl border border-[#EAECEF] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                    <div className="border-b border-[#EAECEF] p-2">
+                  <div className="absolute left-0 top-11 z-50 w-full overflow-hidden rounded-xl border border-border bg-popover shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
+                    <div className="border-b border-border p-2">
                       <Input
                         autoFocus
                         value={accountSearch}
                         onChange={e => setAccountSearch(e.target.value)}
                         placeholder="Search by name or ID..."
-                        className="h-9 rounded-lg border-[#0064E0] text-sm focus-visible:ring-[#0064E0]/20"
+                        className="h-9 rounded-lg border-primary text-sm focus-visible:ring-primary/20"
                       />
                     </div>
                     <div className="max-h-56 overflow-auto py-1">
                       {accountOptions.length === 0
-                        ? <div className="px-4 py-3 text-sm text-[#8595A4]">No accounts found.</div>
+                        ? <div className="px-4 py-3 text-sm text-muted-foreground">No accounts found.</div>
                         : accountOptions.map(account => (
                           <button key={account.id || account.account_id} type="button"
                             onClick={() => { setSelectedAccountId(account.account_id); setAccountMenuOpen(false); setAccountSearch("") }}
-                            className={cn("flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[#F7F8FA]",
-                              selectedAccount?.account_id === account.account_id ? "bg-[#E8F3FF] text-[#0064E0]" : "text-[#1C2B33]"
+                            className={cn("flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/50",
+                              selectedAccount?.account_id === account.account_id ? "bg-primary/10 text-primary" : "text-foreground"
                             )}>
                             <span className="truncate font-semibold">{account.name}</span>
-                            <span className="shrink-0 font-mono text-xs text-[#8595A4]">{account.account_id}</span>
+                            <span className="shrink-0 font-mono text-xs text-muted-foreground">{account.account_id}</span>
                           </button>
                         ))
                       }
@@ -496,7 +496,7 @@ export function AdAccountsManager() {
               <Button
                 onClick={async () => { await fetchAccounts(true); if (selectedAccountId) await fetchLimitSnapshots(selectedAccountId) }}
                 disabled={syncing}
-                className="h-9 shrink-0 rounded-full bg-[#0064E0] px-5 text-sm font-semibold shadow-none transition-transform hover:scale-[1.02] hover:bg-[#0052C2] active:scale-[0.98] disabled:bg-[#DEE3E9] disabled:text-[#8595A4]"
+                className="h-9 shrink-0 rounded-full bg-primary px-5 text-sm font-semibold text-white shadow-none transition-colors hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground"
               >
                 {syncing ? <IconLoader2 className="mr-1.5 size-3.5 animate-spin" /> : <IconRefresh className="mr-1.5 size-3.5" />}
                 Sync Meta
@@ -505,35 +505,35 @@ export function AdAccountsManager() {
 
             {/* Row 2: date range filter */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] px-3 py-1.5">
-                <IconCalendar className="size-3.5 shrink-0 text-[#8595A4]" />
-                <span className="text-xs font-extrabold uppercase tracking-wide text-[#8595A4]">From</span>
+              <div className="flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5">
+                <IconCalendar className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">From</span>
                 <input
                   type="date"
                   value={dateFrom}
                   onChange={e => setDateFrom(e.target.value)}
                   max={dateTo || toDateInputValue(new Date().toISOString())}
-                  className="h-6 border-0 bg-transparent text-sm font-medium text-[#1C2B33] outline-none [color-scheme:light]"
+                  className="h-6 border-0 bg-transparent text-sm font-medium text-foreground outline-none [color-scheme:light]"
                 />
               </div>
 
-              <div className="flex items-center gap-2 rounded-full border border-[#DEE3E9] bg-[#F7F8FA] px-3 py-1.5">
-                <IconCalendar className="size-3.5 shrink-0 text-[#8595A4]" />
-                <span className="text-xs font-extrabold uppercase tracking-wide text-[#8595A4]">To</span>
+              <div className="flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5">
+                <IconCalendar className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">To</span>
                 <input
                   type="date"
                   value={dateTo}
                   onChange={e => setDateTo(e.target.value)}
                   min={dateFrom || undefined}
                   max={toDateInputValue(new Date().toISOString())}
-                  className="h-6 border-0 bg-transparent text-sm font-medium text-[#1C2B33] outline-none [color-scheme:light]"
+                  className="h-6 border-0 bg-transparent text-sm font-medium text-foreground outline-none [color-scheme:light]"
                 />
               </div>
 
               {hasDateFilter && (
                 <button
                   onClick={() => { setDateFrom(""); setDateTo("") }}
-                  className="flex items-center gap-1 rounded-full bg-[#F1F4F7] px-3 py-1.5 text-xs font-semibold text-[#465A69] transition-colors hover:bg-[#DEE3E9]"
+                  className="flex items-center gap-1 rounded-full bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-border"
                 >
                   <IconX className="size-3" />
                   Clear
@@ -541,7 +541,7 @@ export function AdAccountsManager() {
               )}
 
               {hasDateFilter && (
-                <span className="text-xs text-[#8595A4]">
+                <span className="text-xs text-muted-foreground">
                   {spendingLimitRows.length} result{spendingLimitRows.length !== 1 ? "s" : ""}
                 </span>
               )}
@@ -561,16 +561,16 @@ export function AdAccountsManager() {
       {/* ── Ad Accounts table ── */}
       {activeTab === "accounts" ? (
         <>
-          <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.06]">
+          <div className="overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-ring/10">
             <table className="w-full min-w-[1100px]">
               <thead>
-                <tr className="border-b border-[#EAECEF] bg-[#F7F8FA]">
+                <tr className="border-b border-border bg-muted/50">
                   {["#", "Account ID", "Name", "Type", "Owner", "Status", "Currency", "Timezone", "Spend Cap", "Remaining", "Spent"].map(label => (
-                    <th key={label} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#8595A4]">
+                    <th key={label} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       <span className="flex items-center gap-1">
                         {label}
                         {["Spend Cap", "Remaining", "Spent"].includes(label) && (
-                          <IconArrowsSort className="size-3 text-[#C4CAD4]" />
+                          <IconArrowsSort className="size-3 text-muted-foreground/50" />
                         )}
                       </span>
                     </th>
@@ -581,13 +581,13 @@ export function AdAccountsManager() {
                 {(loading || historicalLoading) ? (
                   <tr>
                     <td colSpan={11} className="py-16 text-center">
-                      <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-[#0064E0]" />
-                      <p className="text-sm text-[#8595A4]">{historicalLoading ? "Loading historical data…" : "Loading ad accounts…"}</p>
+                      <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-primary" />
+                      <p className="text-sm text-muted-foreground">{historicalLoading ? "Loading historical data…" : "Loading ad accounts…"}</p>
                     </td>
                   </tr>
                 ) : displayRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="py-16 text-center text-sm text-[#8595A4]">
+                    <td colSpan={11} className="py-16 text-center text-sm text-muted-foreground">
                       {hasAcctDateFilter ? "No snapshot data found for the selected date range." : "No ad accounts found."}
                     </td>
                   </tr>
@@ -597,20 +597,20 @@ export function AdAccountsManager() {
                     const isActive = snap.account_status === 1
                     return (
                       <tr key={snap.id}
-                        className="border-b border-[#EAECEF] last:border-0 transition-colors hover:bg-[#F7F8FA]">
-                        <td className="px-5 py-3.5 text-sm text-[#C4CAD4]">{index + 1}</td>
-                        <td className="px-5 py-3.5 font-mono text-xs text-[#465A69]">{snap.fb_account_id}</td>
-                        <td className="px-5 py-3.5 text-sm font-semibold text-[#1C2B33]">{snap.name || "-"}</td>
+                        className="border-b border-border last:border-0 transition-colors hover:bg-muted/50">
+                        <td className="px-5 py-3.5 text-sm text-muted-foreground/50">{index + 1}</td>
+                        <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{snap.fb_account_id}</td>
+                        <td className="px-5 py-3.5 text-sm font-semibold text-foreground">{snap.name || "-"}</td>
                         <td className="px-5 py-3.5">
                           <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold",
-                            snap.ownership === "own" ? "bg-[#E8F3FF] text-[#0064E0]"
+                            snap.ownership === "own" ? "bg-primary/10 text-primary"
                               : snap.ownership === "agency" ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
                               : "bg-[rgba(120,86,255,0.10)] text-[#5C3FB5]"
                           )}>
                             {snap.ownership === "own" ? "Own" : snap.ownership === "agency" ? "Agency/Shared" : "Personal"}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-[#465A69]">{snap.owner_business_name || "-"}</td>
+                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{snap.owner_business_name || "-"}</td>
                         <td className="px-5 py-3.5">
                           <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold",
                             isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
@@ -619,10 +619,10 @@ export function AdAccountsManager() {
                             {ACCOUNT_STATUS_LABELS[snap.account_status ?? 0] || `status ${snap.account_status}`}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-[#1C2B33]">{currency}</td>
-                        <td className="px-5 py-3.5 text-sm text-[#8595A4]">{snap.timezone_name || "-"}</td>
-                        <td className="px-5 py-3.5 text-right text-sm text-[#1C2B33]">{formatMinorMoney(snap.spend_cap_minor, currency)}</td>
-                        <td className="px-5 py-3.5 text-right text-sm font-bold text-[#0064E0]">{formatMinorMoney(snap.remaining_minor, currency)}</td>
+                        <td className="px-5 py-3.5 text-sm text-foreground">{currency}</td>
+                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{snap.timezone_name || "-"}</td>
+                        <td className="px-5 py-3.5 text-right text-sm text-foreground">{formatMinorMoney(snap.spend_cap_minor, currency)}</td>
+                        <td className="px-5 py-3.5 text-right text-sm font-bold text-primary">{formatMinorMoney(snap.remaining_minor, currency)}</td>
                         <td className="px-5 py-3.5 text-right text-sm font-bold text-[#007D1E]">{formatMinorMoney(snap.amount_spent_minor, currency)}</td>
                       </tr>
                     )
@@ -635,20 +635,20 @@ export function AdAccountsManager() {
                     const isActive = account.account_status === 1
                     return (
                       <tr key={account.id || account.account_id}
-                        className="border-b border-[#EAECEF] last:border-0 transition-colors hover:bg-[#F7F8FA]">
-                        <td className="px-5 py-3.5 text-sm text-[#C4CAD4]">{index + 1}</td>
-                        <td className="px-5 py-3.5 font-mono text-xs text-[#465A69]">{account.account_id}</td>
-                        <td className="px-5 py-3.5 text-sm font-semibold text-[#1C2B33]">{account.name}</td>
+                        className="border-b border-border last:border-0 transition-colors hover:bg-muted/50">
+                        <td className="px-5 py-3.5 text-sm text-muted-foreground/50">{index + 1}</td>
+                        <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{account.account_id}</td>
+                        <td className="px-5 py-3.5 text-sm font-semibold text-foreground">{account.name}</td>
                         <td className="px-5 py-3.5">
                           <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold",
-                            account.ownership === "own" ? "bg-[#E8F3FF] text-[#0064E0]"
+                            account.ownership === "own" ? "bg-primary/10 text-primary"
                               : account.ownership === "agency" ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
                               : "bg-[rgba(120,86,255,0.10)] text-[#5C3FB5]"
                           )}>
                             {account.ownership === "own" ? "Own" : account.ownership === "agency" ? "Agency/Shared" : "Personal"}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-[#465A69]">
+                        <td className="px-5 py-3.5 text-sm text-muted-foreground">
                           {account.owner_business?.name || account.owner_business?.id || account.business?.name || account.business?.id || "-"}
                         </td>
                         <td className="px-5 py-3.5">
@@ -659,10 +659,10 @@ export function AdAccountsManager() {
                             {ACCOUNT_STATUS_LABELS[account.account_status] || `status ${account.account_status}`}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-[#1C2B33]">{currency}</td>
-                        <td className="px-5 py-3.5 text-sm text-[#8595A4]">{account.timezone_name || "-"}</td>
-                        <td className="px-5 py-3.5 text-right text-sm text-[#1C2B33]">{formatAccountMoney(account.spend_cap, currency)}</td>
-                        <td className="px-5 py-3.5 text-right text-sm font-bold text-[#0064E0]">
+                        <td className="px-5 py-3.5 text-sm text-foreground">{currency}</td>
+                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{account.timezone_name || "-"}</td>
+                        <td className="px-5 py-3.5 text-right text-sm text-foreground">{formatAccountMoney(account.spend_cap, currency)}</td>
+                        <td className="px-5 py-3.5 text-right text-sm font-bold text-primary">
                           {remaining === null ? "-" : formatMajorMoney(remaining, currency)}
                         </td>
                         <td className="px-5 py-3.5 text-right text-sm font-bold text-[#007D1E]">
@@ -675,21 +675,21 @@ export function AdAccountsManager() {
               </tbody>
             </table>
           </div>
-          <p className="px-1 text-xs text-[#8595A4]">
-            Showing <span className="font-semibold text-[#465A69]">{filteredAccounts.length}</span> of{" "}
-            <span className="font-semibold text-[#465A69]">{accounts.length}</span> accounts,{" "}
+          <p className="px-1 text-xs text-muted-foreground">
+            Showing <span className="font-semibold text-muted-foreground">{filteredAccounts.length}</span> of{" "}
+            <span className="font-semibold text-muted-foreground">{accounts.length}</span> accounts,{" "}
             <span className="font-semibold text-[#007D1E]">{activeCount}</span> active.
           </p>
         </>
 
       ) : (
       /* ── Spending Limit table ── */
-        <div className="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.06]">
+        <div className="overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-ring/10">
           <table className="w-full min-w-[640px]">
             <thead>
-              <tr className="border-b border-[#EAECEF] bg-[#F7F8FA]">
+              <tr className="border-b border-border bg-muted/50">
                 {["Start date", "End date", "Activity"].map(label => (
-                  <th key={label} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-[#8595A4]">
+                  <th key={label} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
                     {label}
                   </th>
                 ))}
@@ -699,31 +699,31 @@ export function AdAccountsManager() {
               {limitLoading ? (
                 <tr>
                   <td colSpan={3} className="py-16 text-center">
-                    <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-[#0064E0]" />
-                    <p className="text-sm text-[#8595A4]">Loading spending limit history…</p>
+                    <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading spending limit history…</p>
                   </td>
                 </tr>
               ) : spendingLimitRows.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="py-16 text-center text-sm text-[#8595A4]">
+                  <td colSpan={3} className="py-16 text-center text-sm text-muted-foreground">
                     {hasDateFilter
                       ? "No records found for the selected date range."
                       : "No spending limit snapshots yet. Click Sync Meta to save the first snapshot."}
                   </td>
                 </tr>
               ) : spendingLimitRows.map(row => (
-                <tr key={row.id} className="border-b border-[#EAECEF] last:border-0 transition-colors hover:bg-[#F7F8FA]">
-                  <td className="px-5 py-3.5 text-sm text-[#1C2B33]">{formatDateTime(row.startDate)}</td>
-                  <td className="px-5 py-3.5 text-sm text-[#1C2B33]">
+                <tr key={row.id} className="border-b border-border last:border-0 transition-colors hover:bg-muted/50">
+                  <td className="px-5 py-3.5 text-sm text-foreground">{formatDateTime(row.startDate)}</td>
+                  <td className="px-5 py-3.5 text-sm text-foreground">
                     {row.endDate
                       ? formatDateTime(row.endDate)
                       : <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-xs font-bold text-[#007D1E]">Current</span>
                     }
                   </td>
-                  <td className="px-5 py-3.5 text-sm font-medium text-[#1C2B33]">
+                  <td className="px-5 py-3.5 text-sm font-medium text-foreground">
                     {row.spendCap !== null && row.spendCap !== undefined && row.spendCap !== "" && Number(row.spendCap) !== 0
-                      ? <span>Set to <span className="font-bold text-[#0064E0]">{formatMinorMoney(row.spendCap, row.currency)}</span></span>
-                      : <span className="text-[#8595A4]">Removed spending limit</span>
+                      ? <span>Set to <span className="font-bold text-primary">{formatMinorMoney(row.spendCap, row.currency)}</span></span>
+                      : <span className="text-muted-foreground">Removed spending limit</span>
                     }
                   </td>
                 </tr>

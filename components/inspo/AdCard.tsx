@@ -55,7 +55,7 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer overflow-hidden rounded-lg border border-[#dfe3ea] bg-white transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg hover:shadow-slate-900/10"
+      className="group cursor-pointer overflow-hidden rounded-lg border bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-border hover:shadow-lg hover:shadow-black/5"
     >
       <div className="space-y-2.5 px-4 pb-3 pt-4">
         <div className="flex items-center gap-3">
@@ -81,7 +81,7 @@ export function AdCard({ ad, boards, savedBoardIds, onSave, onUnsave, onCreateBo
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
-            className="flex size-8 shrink-0 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             title="Open in Ad Library"
           >
             <IconShare3 className="size-4" />

@@ -89,7 +89,7 @@ export function BoardSidebar({
               tabIndex={0}
               onClick={e => { e.stopPropagation(); setCreatingBoard(true); setBoardsOpen(true) }}
               onKeyDown={e => e.key === "Enter" && (e.stopPropagation(), setCreatingBoard(true), setBoardsOpen(true))}
-              className="p-0.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+              className="p-0.5 rounded hover:bg-muted hover:text-foreground cursor-pointer transition-colors"
               title="New board"
             >
               <IconPlus className="size-3.5" />

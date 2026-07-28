@@ -115,10 +115,10 @@ export const WorkflowNodeComponent = memo(function WorkflowNodeComponent({
       <div
         onClick={() => data.onSelect?.(id)}
         className={cn(
-          "w-[360px] bg-white dark:bg-card rounded-2xl border transition-all duration-150 cursor-pointer select-none",
+          "w-[360px] bg-card rounded-2xl border transition-all duration-150 cursor-pointer select-none",
           selected
-            ? "border-primary shadow-[0_0_0_3px_rgba(99,102,241,0.15)] shadow-lg"
-            : "border-[#E5E7EB] dark:border-border hover:border-[#C7D2DA] hover:shadow-md shadow-sm"
+            ? "border-primary ring-3 ring-primary/15 shadow-lg"
+            : "border-border hover:border-ring/40 hover:shadow-md shadow-sm"
         )}
       >
         <Handle type="target" position={Position.Top}    className="!border-0 !bg-transparent !size-0" />

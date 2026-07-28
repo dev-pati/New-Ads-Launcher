@@ -2910,7 +2910,7 @@ function AdsManagerContent() {
             </div>
 
             <div className="border-t pt-4">
-              <button type="button" className="w-full flex items-center justify-between text-left">
+              <button type="button" className="w-full flex items-center justify-between text-left hover:bg-muted/30 p-2 rounded-lg transition-colors">
                 <span>
                   <span className="block">Apple SKAdNetwork</span>
                   <span className="block text-xs text-muted-foreground">App ads only</span>

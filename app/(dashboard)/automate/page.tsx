@@ -817,12 +817,12 @@ function CreateAutomationModal({
 
           {/* Approval toggle */}
           <label className="flex items-center gap-2 cursor-pointer">
-            <div onClick={() => setRequiresApproval(p => !p)}
-              className={cn("w-9 h-5 rounded-full relative transition-colors",
+            <button type="button" onClick={() => setRequiresApproval(p => !p)}
+              className={cn("w-9 h-5 rounded-full relative transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 outline-none",
                 requiresApproval ? "bg-primary" : "bg-muted")}>
               <div className={cn("absolute top-0.5 size-4 bg-white rounded-full shadow transition-transform",
                 requiresApproval ? "translate-x-4" : "translate-x-0.5")} />
-            </div>
+            </button>
             <span className="text-sm">Require approval before executing</span>
           </label>
 

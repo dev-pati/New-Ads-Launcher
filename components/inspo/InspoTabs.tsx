@@ -19,13 +19,13 @@ export function InspoTabs({ active, onChange }: Props) {
           className={cn(
             "px-0 py-3.5 text-sm font-semibold capitalize transition-colors relative",
             active === tab
-              ? "text-slate-950"
-              : "text-slate-600 hover:text-slate-950"
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground"
           )}
         >
           {tab.charAt(0).toUpperCase() + tab.slice(1)}
           {active === tab && (
-            <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-[#1373e6] rounded-t-full" />
+            <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full" />
           )}
         </button>
       ))}

@@ -7,7 +7,8 @@ const CreateCampaignModal = dynamic(
   { ssr: false }
 )
 
-import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo, Suspense, type ReactNode } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { useOrg } from "@/lib/org-context"
 import { cn, proxyFbImage } from "@/lib/utils"
@@ -3661,8 +3662,8 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
             <p className="text-white text-xs font-semibold leading-tight truncate">{page?.name || "Your Page"}</p>
             <p className="text-white/70 text-xs">Sponsored</p>
           </div>
-          <button className="text-white/90 p-1"><IconDotsVertical className="size-4" /></button>
-          <button className="text-white/90 p-1"><IconX className="size-4" /></button>
+          <button className="text-white/90 p-1.5 hover:bg-white/10 rounded-full transition-colors"><IconDotsVertical className="size-4" /></button>
+          <button className="text-white/90 p-1.5 hover:bg-white/10 rounded-full transition-colors"><IconX className="size-4" /></button>
         </div>
         {/* Media fills full */}
         <div className="absolute inset-0">
@@ -3703,7 +3704,7 @@ function MetaMockup({ page, creative, thumb, isVideo, primaryText, headline, des
             <IconWorld className="size-3 text-[#65676B]" />
           </div>
         </div>
-        <button className="text-[#65676B] p-1.5 rounded-full"><IconDotsVertical className="size-4" /></button>
+        <button className="text-[#65676B] p-1.5 rounded-full hover:bg-muted/60 transition-colors"><IconDotsVertical className="size-4" /></button>
       </div>
       {primaryText && (
         <div className="px-3 pb-2.5 text-xs">
@@ -3768,8 +3769,8 @@ function InstagramMockup({ page, creative, thumb, isVideo, primaryText, ctaLabel
             <p className="text-white text-xs font-semibold leading-tight truncate">{page?.name || "Your Page"}</p>
             <p className="text-white/70 text-xs">Ad</p>
           </div>
-          <button className="text-white/90 p-1"><IconDotsVertical className="size-4" /></button>
-          <button className="text-white/90 p-1"><IconX className="size-4" /></button>
+          <button className="text-white/90 p-1.5 hover:bg-white/10 rounded-full transition-colors"><IconDotsVertical className="size-4" /></button>
+          <button className="text-white/90 p-1.5 hover:bg-white/10 rounded-full transition-colors"><IconX className="size-4" /></button>
         </div>
         {/* Media */}
         <div className="absolute inset-0">
@@ -9664,8 +9665,11 @@ function SettingsModal({
                   {settings.naming.customTexts.map((ct, i) => (
                     <div key={i} className="flex items-center justify-between px-3 py-2 border rounded-lg">
                       <span className="text-sm">{ct.name}</span>
-                      <button onClick={() => updateNaming({ customTexts: settings.naming.customTexts.filter((_, j) => j !== i) })}>
-                        <IconX className="size-3.5 text-muted-foreground hover:text-destructive" />
+                      <button
+                        onClick={() => updateNaming({ customTexts: settings.naming.customTexts.filter((_, j) => j !== i) })}
+                        className="size-7 flex items-center justify-center rounded hover:bg-muted/60 text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <IconX className="size-3.5" />
                       </button>
                     </div>
                   ))}
@@ -10802,7 +10806,7 @@ function AdSetupPanel({
               />
               {primaryTexts.length > 1 && (
                 <button onClick={() => removeText(idx)}
-                  className="absolute top-2 right-2 text-muted-foreground/40 hover:text-destructive transition-colors">
+                  className="absolute top-1.5 right-1.5 size-7 flex items-center justify-center rounded text-muted-foreground/40 hover:bg-muted/60 hover:text-destructive transition-colors">
                   <IconMinus className="size-3.5" />
                 </button>
               )}
@@ -10868,7 +10872,7 @@ function AdSetupPanel({
                     className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50 pr-8" />
                   {descriptions.length > 1 && (
                     <button onClick={() => removeDescription(idx)}
-                      className="absolute top-2 right-2 text-muted-foreground/40 hover:text-destructive transition-colors">
+                      className="absolute top-1.5 right-1.5 size-7 flex items-center justify-center rounded text-muted-foreground/40 hover:bg-muted/60 hover:text-destructive transition-colors">
                       <IconMinus className="size-3.5" />
                     </button>
                   )}
@@ -13861,9 +13865,20 @@ function TableMode({
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
+// useSearchParams needs a Suspense boundary — the real page lives in LaunchPageContent.
 export default function LaunchPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-sm text-muted-foreground">Loading launcher…</div>}>
+      <LaunchPageContent />
+    </Suspense>
+  )
+}
+
+function LaunchPageContent() {
   const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
   const { activeOrgId } = useOrg()
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [mode, setMode] = useState<"gallery" | "table">("gallery")
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false)
@@ -13911,11 +13926,24 @@ export default function LaunchPage() {
   const [adNameOverrides, setAdNameOverrides] = useState<Record<string, string>>({})
   const thumbRetryCounts = useRef<Map<string, number>>(new Map())
 
+  // ─── Prefill from URL (?template=<id> or ?from_ad=<id>&ad_account_id=<id>) ───
+  // Read once on mount: the params are consumed and stripped, so later renders
+  // must not see them again and re-run the prefill over the user's edits.
+  const urlTemplateId = useRef(searchParams.get("template")).current
+  const urlFromAdId = useRef(searchParams.get("from_ad")).current
+  const urlFromAdAccount = useRef(searchParams.get("ad_account_id")).current
+  const hasUrlPrefill = !!(urlTemplateId || urlFromAdId)
+  const [prefillBanner, setPrefillBanner] = useState("")
+  const [prefillError, setPrefillError] = useState("")
+
   // ─── Persistence: save selected creative IDs per ad account in localStorage ───
   const SELECTION_KEY = "launch_selected_creatives"
 
   // Restore selection when ad account is set / changed
   useEffect(() => {
+    // A URL prefill owns the creative selection; don't let the saved selection
+    // race in and overwrite the creatives the template/ad brought with it.
+    if (hasUrlPrefill) return
     if (!selectedAccountId) return
     try {
       const all = JSON.parse(localStorage.getItem(SELECTION_KEY) || "{}")
@@ -13961,6 +13989,108 @@ export default function LaunchPage() {
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId])
+
+  // ─── Apply the URL prefill (Templates → Launch, Ads Manager → To Launcher) ───
+  // Runs once. Copy always applies; creatives only when the source media exists
+  // in this workspace's library — otherwise the user is told to pick media.
+  const prefillApplied = useRef(false)
+  useEffect(() => {
+    if (!hasUrlPrefill || prefillApplied.current) return
+    prefillApplied.current = true
+
+    const selectCreativesFor = async (
+      accountId: string,
+      match: { ids?: string[]; imageHash?: string | null; videoId?: string | null }
+    ): Promise<number> => {
+      try {
+        const r = await fetch(`/api/creatives?ad_account_id=${encodeURIComponent(accountId)}`)
+        const d = await r.json()
+        const list: Creative[] = d.creatives || []
+        let picked: Creative[] = []
+        if (match.ids?.length) {
+          const byId = new Map(list.map(c => [c.id, c]))
+          picked = match.ids.map(id => byId.get(id)).filter(Boolean) as Creative[]
+        }
+        // No stored ids (or they're gone): fall back to Meta's media identifiers,
+        // which is how the same asset is recognized across ad accounts.
+        if (!picked.length && (match.imageHash || match.videoId)) {
+          picked = list.filter(c =>
+            (match.imageHash && c.fb_image_hash === match.imageHash) ||
+            (match.videoId && c.fb_video_id === match.videoId)
+          )
+        }
+        if (picked.length) {
+          setSelectedCreatives(picked)
+          setSelectedMediaIds(new Set(picked.map(c => c.id)))
+        }
+        return picked.length
+      } catch {
+        return 0
+      }
+    }
+
+    const applyCopy = (c: { primary_text?: string | null; headline?: string | null; description?: string | null; cta?: string | null; link?: string | null }) => {
+      if (c.primary_text) setPrimaryTexts([c.primary_text])
+      if (c.headline) setHeadlines([c.headline])
+      if (c.description) setDescriptions([c.description])
+      if (c.cta) setCta(c.cta)
+      if (c.link) setWebLink(c.link)
+    }
+
+    const run = async () => {
+      try {
+        if (urlTemplateId) {
+          const r = await fetch(`/api/templates/${encodeURIComponent(urlTemplateId)}`)
+          const d = await r.json()
+          if (!r.ok) throw new Error(d.error || "Template not found")
+          const t = d.template
+          const accountId = t.ad_account_id || selectedAccountId
+          if (t.ad_account_id && t.ad_account_id !== selectedAccountId) setSelectedAccountId(t.ad_account_id)
+          applyCopy(t)
+          const n = accountId
+            ? await selectCreativesFor(accountId, {
+                ids: t.media?.creative_ids,
+                imageHash: t.media?.image_hash,
+                videoId: t.media?.video_id,
+              })
+            : 0
+          setPrefillBanner(n > 0
+            ? `Template "${t.name}" loaded — ${n} creative${n > 1 ? "s" : ""} preselected. Pick your ad sets, then launch.`
+            : `Template "${t.name}" loaded (copy only) — chọn media rồi launch.`)
+        } else if (urlFromAdId && urlFromAdAccount) {
+          const r = await fetch(`/api/facebook/ad-detail?ad_id=${encodeURIComponent(urlFromAdId)}&ad_account_id=${encodeURIComponent(urlFromAdAccount)}`)
+          const d = await r.json()
+          if (!r.ok) throw new Error(d.error || "Failed to load ad")
+          const ad = d.ad
+          if (urlFromAdAccount !== selectedAccountId) setSelectedAccountId(urlFromAdAccount)
+          applyCopy({
+            primary_text: ad.primaryText,
+            headline: ad.headline,
+            description: ad.description,
+            cta: ad.cta,
+            link: ad.link,
+          })
+          const n = await selectCreativesFor(urlFromAdAccount, {
+            imageHash: ad.image_hash,
+            videoId: ad.video_id,
+          })
+          setPrefillBanner(n > 0
+            ? `Copied from ad "${ad.name}" — ${n} creative${n > 1 ? "s" : ""} preselected. Pick your ad sets, then launch.`
+            : `Copied from ad "${ad.name}" (copy only) — media của ad này chưa có trong library, chọn media rồi launch.`)
+        } else if (urlFromAdId) {
+          throw new Error("Missing ad_account_id")
+        }
+      } catch (err: any) {
+        setPrefillError(err.message || "Could not prefill from the link")
+      } finally {
+        // Drop the params so a refresh doesn't re-apply the prefill on top of edits.
+        router.replace("/launch")
+        window.scrollTo({ top: 0, behavior: "smooth" })
+      }
+    }
+    run()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Polling for missing thumbnails in selected creatives (max 10 retries per video ~100s at 10s)
   useEffect(() => {
@@ -15636,6 +15766,21 @@ export default function LaunchPage() {
 
   return (
     <>
+      {/* Prefill notice — Templates → Launch, or Ads Manager → To Launcher */}
+      {(prefillBanner || prefillError) && (
+        <div className={cn(
+          "sticky top-0 z-40 mx-4 mt-3 px-3 py-2 rounded-lg text-xs flex items-center gap-2 border",
+          prefillError
+            ? "bg-destructive/10 border-destructive/30 text-destructive"
+            : "bg-primary/10 border-primary/20 text-primary/90 dark:text-primary"
+        )}>
+          {prefillError ? <IconAlertTriangle className="size-3.5 shrink-0" /> : <IconCircleCheck className="size-3.5 shrink-0" />}
+          <span className="flex-1">{prefillError || prefillBanner}</span>
+          <button onClick={() => { setPrefillBanner(""); setPrefillError("") }} className="opacity-60 hover:opacity-100">
+            <IconX className="size-3.5" />
+          </button>
+        </div>
+      )}
       <LoadMediaModal open={mediaModalOpen} onClose={() => setMediaModalOpen(false)}
         adAccountId={selectedAccountId} adAccounts={adAccounts} alreadySelected={selectedMediaIds}
         refreshSignal={mediaRefreshSignal}
