@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { extractThumbnailFromUrl } from "@/lib/ffmpeg-thumbnail"
 
@@ -7,24 +6,19 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120 // 2 minutes to allow for FFmpeg extraction
 
-type PortalAsset = {
-  id: string
-  object_key: string
-  original_file_name: string | null
-  mime_type: string | null
-  actual_size_bytes: number | null
-  created_at: string | null
-}
-
-function brandFromObjectKey(objectKey: string) {
-  const parts = objectKey.split("/")
-  return parts[0] === "creative-portal" && parts[1] === "approved" ? parts[2] : null
-}
-
-function mediaTypeFromMime(mimeType?: string | null): "image" | "video" {
-  return mimeType?.startsWith("video") ? "video" : "image"
-}
-
+/**
+ * Thumbnail warming for Portal-sourced creatives.
+ *
+ * Discovery used to live here too: this route copied `creative_portal.media_assets`
+ * into `portal_media_items` so the Assets page could render them. That made the Portal
+ * section only as fresh as the last cron run, and the crontab installation is
+ * unverified (TD-05 / BL-23) — so nothing new ever appeared and the feature went unused.
+ * Portal Media v2 reads the registry live in `GET /api/portal-media/tree`, and discovery
+ * is deleted rather than scheduled.
+ *
+ * What remains is genuinely a background job: FFmpeg thumbnail extraction, which is too
+ * slow for a request path. It still depends on the scheduler actually running — TD-32.
+ */
 async function cacheThumbnail(params: { id: string; orgId: string; fileUrl: string }) {
   const buffer = await extractThumbnailFromUrl(params.fileUrl)
   if (!buffer) return null
@@ -50,73 +44,17 @@ export async function GET(request: NextRequest) {
   }
 
   const adsDb = createAdminClient()
-  const portalDb = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { db: { schema: "creative_portal" } }
-  )
-
-  const { data: portalAssets, error: portalErr } = await portalDb
-    .from("media_assets")
-    .select("id, object_key, original_file_name, mime_type, actual_size_bytes, created_at")
-    .eq("status", "available")
-    .eq("visibility", "external")
-
-  if (portalErr) return NextResponse.json({ error: portalErr.message }, { status: 500 })
-
-  // Existing tracked items — object_key is the natural key, avoids reprocessing/duplicate creatives
-  const { data: itemRows, error: itemErr } = await adsDb
-    .from("portal_media_items")
-    .select("id, object_key, status, org_id, ad_account_id, mapped_by, creative_id")
-
-  if (itemErr) return NextResponse.json({ error: itemErr.message }, { status: 500 })
-
-  const items = new Map((itemRows || []).map(row => [row.object_key, row]))
-  let newlyTracked = 0
-  const errors: { id: string; error: string }[] = []
-
-  for (const asset of (portalAssets || []) as PortalAsset[]) {
-    const brand = brandFromObjectKey(asset.object_key)
-    const existing = items.get(asset.object_key)
-
-    if (!existing) {
-      // First time seen — track as pending, do not touch creatives yet
-      const now = new Date().toISOString()
-      const { error } = await adsDb.from("portal_media_items").insert({
-        object_key: asset.object_key,
-        portal_asset_id: asset.id,
-        brand_slug: brand,
-        file_name: asset.original_file_name || asset.object_key.split("/").pop() || asset.id,
-        media_type: mediaTypeFromMime(asset.mime_type),
-        mime_type: asset.mime_type,
-        file_size: asset.actual_size_bytes,
-        status: "pending",
-        portal_created_at: asset.created_at || now,
-      })
-      if (error) errors.push({ id: asset.id, error: error.message })
-      else newlyTracked++
-      continue
-    }
-  }
-
-  const { count: pendingCount } = await adsDb
-    .from("portal_media_items")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "pending")
-
-  if (errors.length > 0) {
-    console.error("[sync-portal-media] sync errors", errors.slice(0, 10))
-  }
-
   const thumbnailsWarmed: string[] = []
   const thumbnailErrors: { id: string; error: string }[] = []
 
-  const { data: missingThumbs } = await adsDb
+  const { data: missingThumbs, error } = await adsDb
     .from("creatives")
     .select("id, org_id, file_url")
-    .like("storage_path", "r2://pati-videos/creative-portal/%")
+    .like("storage_path", "r2://pati-videos/%")
     .is("fb_thumbnail_url", null)
     .limit(5)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   for (const row of missingThumbs || []) {
     try {
@@ -128,10 +66,6 @@ export async function GET(request: NextRequest) {
   }
 
   return NextResponse.json({
-    portalApproved: portalAssets?.length || 0,
-    newlyTracked,
-    pendingCount,
-    errors: errors.length,
     thumbnailsWarmed,
     thumbnailErrors: thumbnailErrors.length,
   })

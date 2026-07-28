@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
@@ -13,11 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   IconSearch, IconFolder, IconFolderPlus, IconRefresh,
-  IconLoader2, IconPhoto, IconLayoutGrid, IconList,
+  IconLoader2, IconPhoto, IconLayoutGrid,
   IconChevronDown, IconPlus, IconCheck, IconDotsVertical,
   IconPlayerPlay, IconX, IconTrash, IconArrowLeft,
   IconClipboardList, IconUser, IconAlertCircle,
-  IconCloudDownload,
+  IconCloudDownload, IconArrowBackUp,
 } from "@tabler/icons-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ interface Creative {
   tags?: string[]
   created_at?: string
   ad_account_id?: string
+  storage_path?: string
   status?: "pending" | "processing" | "ready" | "error"
 }
 
@@ -60,23 +61,45 @@ interface CreativeRequest {
 }
 
 interface DeleteConfirmState {
-  type: "creative" | "board" | "request" | "bulk_creative"
+  type: "creative" | "board" | "request" | "bulk_creative" | "revert"
   id?: string
   ids?: string[]
   name: string
 }
 
-interface PortalMediaItem {
-  id: string
-  object_key: string
-  portal_asset_id: string
-  brand_slug: string
-  file_name: string
-  media_type: "image" | "video"
-  file_url: string
-  first_seen_at: string
-  status: "pending" | "mapped" | "imported"
+interface PortalMediaFile {
+  kind: "file"
+  assetId: string
+  objectKey: string
+  name: string
+  mimeType: string | null
+  sizeBytes: number | null
+  createdAt: string | null
 }
+
+interface PortalFolder {
+  kind: "folder"
+  /** Real, uncollapsed object-key prefix — the unit an assign acts on. */
+  path: string
+  /** May span several collapsed levels, e.g. "shilasource/2026/07". */
+  label: string
+  fileCount: number
+  folders: PortalFolder[]
+  files: PortalMediaFile[]
+}
+
+interface PortalAssignment {
+  object_key: string
+  ad_account_id: string
+  creative_id: string | null
+}
+
+/** How many files render at once. The media resolver allows 120 GET/HEAD per IP per
+ *  minute and the whole office shares one IP, so a folder of 114 must not mount at once. */
+const PORTAL_PAGE_SIZE = 24
+
+/** Public media resolver. Mirrors CREATIVE_MEDIA_API_ORIGIN on the server side. */
+const PORTAL_MEDIA_RESOLVER = `${process.env.NEXT_PUBLIC_CREATIVE_MEDIA_API_ORIGIN || "https://creative.patigroup.com"}/api/media`
 
 type Section = "all" | "boards" | "requests" | "my-uploads" | "portal" | `board_${string}`
 
@@ -85,6 +108,16 @@ type Section = "all" | "boards" | "requests" | "my-uploads" | "portal" | `board_
 function formatDate(s?: string) {
   if (!s) return "—"
   return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
+function formatBytes(bytes?: number | null) {
+  if (bytes === null || bytes === undefined) return "—"
+  if (bytes < 1024) return `${bytes} B`
+  const units = ["KB", "MB", "GB"]
+  let value = bytes / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++ }
+  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`
 }
 
 const STATUS_COLORS: Record<CreativeRequest["status"], string> = {
@@ -102,14 +135,21 @@ const STATUS_LABEL: Record<CreativeRequest["status"], string> = {
 export default function AssetsPage() {
   const { selectedAccountId, adAccounts } = useAdAccount()
   const [section, setSection]           = useState<Section>("all")
-  const [viewMode, setViewMode]         = useState<"grid" | "list">("grid")
   const [creatives, setCreatives]       = useState<Creative[]>([])
   const [boardCreatives, setBoardCreatives] = useState<Creative[]>([])
-  const [portalItems, setPortalItems]   = useState<PortalMediaItem[]>([])
+  const [portalTree, setPortalTree]      = useState<PortalFolder[]>([])
+  const [portalAssignments, setPortalAssignments] = useState<PortalAssignment[]>([])
+  const [portalPath, setPortalPath]      = useState<string[]>([])
+  const [portalVisible, setPortalVisible] = useState(PORTAL_PAGE_SIZE)
   const [portalSelected, setPortalSelected] = useState<Set<string>>(new Set())
   const [portalAccountId, setPortalAccountId] = useState("")
   const [loadingPortal, setLoadingPortal] = useState(false)
+  const [portalError, setPortalError]     = useState("")
+  const [portalErrorKind, setPortalErrorKind] = useState<"portal" | "adlauncher" | null>(null)
   const [mappingPortal, setMappingPortal] = useState(false)
+  const [importConfirm, setImportConfirm] = useState<
+    { count: number; adAccountId: string; label: string; folderPath?: string; objectKeys?: string[] } | null
+  >(null)
   const [boards, setBoards]             = useState<Board[]>([])
   const [requests, setRequests]         = useState<CreativeRequest[]>([])
   const [selected, setSelected]         = useState<Set<string>>(new Set())
@@ -302,17 +342,29 @@ export default function AssetsPage() {
       .finally(() => setLoadingRequests(false))
   }, [])
 
-  const loadPortalItems = useCallback(() => {
+  const loadPortalTree = useCallback(() => {
     setLoadingPortal(true)
-    setActionError("")
-    fetch("/api/portal-media-items")
-      .then(r => r.json())
-      .then(d => {
-        if (d.error) throw new Error(d.error)
-        setPortalItems((d.items || []).filter((item: PortalMediaItem) => item.status === "pending"))
+    setPortalError("")
+    setPortalErrorKind(null)
+    fetch("/api/portal-media/tree")
+      .then(async r => ({ status: r.status, ok: r.ok, body: await r.json() }))
+      .then(({ status, ok, body }) => {
+        if (!ok || body.error) {
+          // 502 is the Portal registry itself; anything else is on our side. Saying
+          // "Portal is down" when the real cause is a missing local table sends the
+          // reader to the wrong system.
+          setPortalErrorKind(status === 502 ? "portal" : "adlauncher")
+          throw new Error(body.error || "Failed to load Portal media")
+        }
+        setPortalTree(body.tree || [])
+        setPortalAssignments(body.assignments || [])
       })
       .catch((error: unknown) => {
-        setActionError(error instanceof Error ? error.message : "Failed to load Portal media")
+        // Kept out of the shared actionError banner: a failure must read as a failure,
+        // not as an empty folder, or the next person quietly goes back to asking
+        // Creative for the file over chat.
+        setPortalTree([])
+        setPortalError(error instanceof Error ? error.message : "Failed to load Portal media")
       })
       .finally(() => setLoadingPortal(false))
   }, [])
@@ -350,8 +402,8 @@ export default function AssetsPage() {
   }, [section, requests.length, loadRequests])
 
   useEffect(() => {
-    if (section === "portal") loadPortalItems()
-  }, [section, loadPortalItems])
+    if (section === "portal") loadPortalTree()
+  }, [section, loadPortalTree])
 
   useEffect(() => {
     if (currentBoardId) loadBoardCreatives(currentBoardId)
@@ -433,29 +485,109 @@ export default function AssetsPage() {
   const selectAll = () => setSelected(new Set(displayList.map(c => c.id)))
   const clearSelected = () => setSelected(new Set())
 
-  const togglePortalSelect = (id: string) => setPortalSelected(prev => {
+  // ── Portal Media: folder navigation ───────────────────────────────────────
+
+  /** The folder currently open, found by walking the labels in portalPath. */
+  const portalCurrent = useMemo(() => {
+    let folders = portalTree
+    let current: PortalFolder | null = null
+    for (const label of portalPath) {
+      const next: PortalFolder | undefined = folders.find(f => f.label === label)
+      if (!next) break
+      current = next
+      folders = next.folders
+    }
+    return current
+  }, [portalTree, portalPath])
+
+  const portalFolders = portalCurrent ? portalCurrent.folders : portalTree
+  const portalFiles = portalCurrent ? portalCurrent.files : []
+
+  /** ad_account_id set per object key, so a tile can show where it already went. */
+  const portalAssignedBy = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const a of portalAssignments) {
+      const list = map.get(a.object_key)
+      if (list) list.push(a.ad_account_id)
+      else map.set(a.object_key, [a.ad_account_id])
+    }
+    return map
+  }, [portalAssignments])
+
+  const openPortalFolder = (label: string) => {
+    setPortalPath(prev => [...prev, label])
+    setPortalVisible(PORTAL_PAGE_SIZE)
+    setPortalSelected(new Set())
+  }
+  const gotoPortalCrumb = (index: number) => {
+    setPortalPath(prev => prev.slice(0, index))
+    setPortalVisible(PORTAL_PAGE_SIZE)
+    setPortalSelected(new Set())
+  }
+
+  const togglePortalSelect = (objectKey: string) => setPortalSelected(prev => {
     const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
+    if (next.has(objectKey)) next.delete(objectKey)
+    else next.add(objectKey)
     return next
   })
   const clearPortalSelected = () => setPortalSelected(new Set())
-  const mapPortalMedia = async () => {
+
+  /** Header checkbox acts on the whole folder, not just the rendered page — assigning
+   *  costs no resolver requests, so there is no reason to cap it at PORTAL_PAGE_SIZE. */
+  const portalAllSelected = portalFiles.length > 0 && portalFiles.every(f => portalSelected.has(f.objectKey))
+  const togglePortalSelectAll = () =>
+    setPortalSelected(portalAllSelected ? new Set() : new Set(portalFiles.map(f => f.objectKey)))
+
+  const accountLabel = (id: string) => {
+    const account = adAccounts.find((a: { id: string; name?: string }) => a.id === id)
+    return account?.name || id
+  }
+
+  const assignPortalSelection = () => {
     if (portalSelected.size === 0 || !portalAccountId) return
+    setImportConfirm({
+      count: portalSelected.size,
+      adAccountId: portalAccountId,
+      label: `${portalSelected.size} selected media`,
+      objectKeys: Array.from(portalSelected),
+    })
+  }
+
+  const assignPortalFolder = (folder: PortalFolder) => {
+    if (!portalAccountId) return
+    setImportConfirm({
+      count: folder.fileCount,
+      adAccountId: portalAccountId,
+      label: folder.label,
+      folderPath: folder.path,
+    })
+  }
+
+  const executePortalAssign = async () => {
+    if (!importConfirm) return
     setMappingPortal(true)
-    setActionError("")
+    setPortalError("")
     try {
-      const res = await fetch("/api/portal-media-items", {
+      const res = await fetch("/api/portal-media/assignments", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(portalSelected), ad_account_id: portalAccountId }),
+        body: JSON.stringify({
+          ad_account_id: importConfirm.adAccountId,
+          folder_paths: importConfirm.folderPath ? [importConfirm.folderPath] : [],
+          object_keys: importConfirm.objectKeys || [],
+        }),
       })
       const d = await res.json()
-      if (!res.ok || d.error) throw new Error(d.error || "Failed to map Portal media")
+      if (!res.ok || d.error) throw new Error(d.error || "Failed to assign Portal media")
+      if (d.errors?.length) {
+        setPortalError(`${d.assigned}/${d.requested} assigned — ${d.errors[0].error}`)
+      }
       clearPortalSelected()
-      loadPortalItems()
+      loadPortalTree()
+      setImportConfirm(null)
     } catch (error: unknown) {
-      setActionError(error instanceof Error ? error.message : "Failed to map Portal media")
+      setPortalError(error instanceof Error ? error.message : "Failed to assign Portal media")
     } finally {
       setMappingPortal(false)
     }
@@ -565,7 +697,19 @@ export default function AssetsPage() {
     setActionError("")
     const { type, id, ids } = deleteConfirm
     try {
-      if (type === "creative") {
+      if (type === "revert") {
+        const res = await fetch(`/api/portal-media/assignments?creative_id=${id}`, { method: "DELETE" })
+        const d = await res.json()
+        if (!res.ok || d.error) throw new Error(d.error || "Failed to revert Portal import")
+        setCreatives(prev => prev.filter(c => c.id !== id))
+        setBoardCreatives(prev => prev.filter(c => c.id !== id))
+        setSelected(prev => {
+          const next = new Set(prev)
+          if (id) next.delete(id)
+          return next
+        })
+        loadBoards()
+      } else if (type === "creative") {
         const res = await fetch(`/api/creatives/${id}`, { method: "DELETE" })
         const d = await res.json()
         if (!res.ok || d.error) throw new Error(d.error || "Failed to delete asset")
@@ -638,7 +782,7 @@ export default function AssetsPage() {
         <div className="p-3 space-y-0.5">
           {([
             { id: "all",        icon: IconLayoutGrid,    label: "All Assets",   count: creatives.length },
-            { id: "portal",     icon: IconCloudDownload, label: "Portal Media", count: portalItems.length || undefined },
+            { id: "portal",     icon: IconCloudDownload, label: "Portal Media", count: undefined },
             { id: "boards",     icon: IconFolder,        label: "Boards",       count: boards.length },
             { id: "requests",   icon: IconClipboardList, label: "Requests",     count: requests.filter(r => r.status === "open").length || undefined },
             { id: "my-uploads", icon: IconUser,          label: "My Uploads" },
@@ -866,18 +1010,37 @@ export default function AssetsPage() {
             <div className="flex items-center gap-3 px-4 py-3 border-b shrink-0">
               <div className="min-w-0 flex-1">
                 <h2 className="text-sm font-semibold">Portal Media</h2>
-                <p className="text-xs text-muted-foreground">Map individual Creative Portal media to the right ad account before import.</p>
+                <p className="text-xs text-muted-foreground">Browse media approved by Creative Portal.</p>
               </div>
-              <Button size="sm" variant="outline" onClick={loadPortalItems} disabled={loadingPortal}>
+              <Button size="sm" variant="outline" onClick={loadPortalTree} disabled={loadingPortal}>
                 {loadingPortal ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
                 Refresh
               </Button>
             </div>
 
-            <div className="flex items-center gap-2 px-4 py-3 border-b shrink-0">
-              <span className="text-xs text-muted-foreground">{portalSelected.size} selected</span>
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b shrink-0">
+              <button
+                onClick={() => gotoPortalCrumb(0)}
+                className={cn("text-xs transition-colors", portalPath.length ? "text-muted-foreground hover:text-foreground" : "font-medium text-foreground")}
+              >
+                Portal
+              </button>
+              {portalPath.map((label, i) => (
+                <span key={label} className="flex items-center gap-2">
+                  <span className="text-muted-foreground/50 text-xs">/</span>
+                  <button
+                    onClick={() => gotoPortalCrumb(i + 1)}
+                    className={cn("text-xs transition-colors", i === portalPath.length - 1 ? "font-medium text-foreground" : "text-muted-foreground hover:text-foreground")}
+                  >
+                    {label}
+                  </button>
+                </span>
+              ))}
+
+              <div className="flex-1" />
+
               <Select value={portalAccountId} onValueChange={setPortalAccountId}>
-                <SelectTrigger className="w-[260px] h-8">
+                <SelectTrigger className="w-[240px] h-8">
                   <SelectValue placeholder="Select ad account" />
                 </SelectTrigger>
                 <SelectContent>
@@ -886,66 +1049,173 @@ export default function AssetsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button size="sm" onClick={mapPortalMedia} disabled={portalSelected.size === 0 || !portalAccountId || mappingPortal}>
-                {mappingPortal ? <IconLoader2 className="size-4 animate-spin" /> : <IconCheck className="size-4" />}
-                Map & Import
-              </Button>
-              {portalSelected.size > 0 && <Button size="sm" variant="outline" onClick={clearPortalSelected}>Deselect</Button>}
+              {portalSelected.size > 0 && (
+                <>
+                  <Button size="sm" onClick={assignPortalSelection} disabled={!portalAccountId || mappingPortal}>
+                    {mappingPortal ? <IconLoader2 className="size-4 animate-spin" /> : <IconCheck className="size-4" />}
+                    Assign {portalSelected.size} media
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={clearPortalSelected}>Clear</Button>
+                </>
+              )}
             </div>
+
+            {portalError && (
+              <div className="mx-4 mt-3 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 shrink-0">
+                <p className="text-xs font-medium text-destructive">
+                  {portalErrorKind === "portal" ? "Could not connect to Creative Portal" : "AdLauncher-side error"}
+                </p>
+                <p className="text-[11px] text-destructive/80 mt-0.5 break-words">{portalError}</p>
+              </div>
+            )}
 
             <div className="flex-1 overflow-auto px-4 py-4">
               {loadingPortal ? (
-                <div className="grid grid-cols-3 gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {[...Array(12)].map((_, i) => <div key={i} className="aspect-square rounded-xl bg-muted animate-pulse" />)}
+                <div className="space-y-2">
+                  {[...Array(4)].map((_, i) => <div key={i} className="h-14 rounded-xl bg-muted animate-pulse" />)}
                 </div>
-              ) : portalItems.length === 0 ? (
+              ) : portalFolders.length === 0 && portalFiles.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
                   <div className="size-16 rounded-2xl bg-muted/50 flex items-center justify-center">
                     <IconCloudDownload className="size-7 text-muted-foreground/30" />
                   </div>
                   <div>
-                    <p className="text-sm font-medium">No pending Portal media</p>
-                    <p className="text-xs text-muted-foreground mt-1">New approved media will appear here after the sync cron runs.</p>
+                    <p className="text-sm font-medium">{portalError ? "Could not load folder" : "No approved media found"}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {portalError
+                        ? "Try refreshing. The list is read live from Creative Portal, not from a sync copy."
+                        : "Media will appear as soon as Creative approves it — no sync needed."}
+                    </p>
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-3 gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {portalItems.map(item => {
-                    const isSelected = portalSelected.has(item.id)
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => togglePortalSelect(item.id)}
-                        className={cn(
-                          "group relative flex flex-col overflow-hidden rounded-xl border-2 text-left transition-all",
-                          isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-muted-foreground/20"
-                        )}
-                      >
-                        <div className="relative aspect-square overflow-hidden bg-muted/40">
-                          {item.media_type === "video" ? (
-                            <video src={item.file_url} className="h-full w-full object-cover" muted preload="metadata" />
-                          ) : (
-                            <img src={item.file_url} alt={item.file_name} className="h-full w-full object-cover" />
-                          )}
-                          <div className={cn(
-                            "absolute top-2 left-2 size-5 rounded-full border-2 flex items-center justify-center transition-all",
-                            isSelected ? "bg-primary border-primary" : "bg-background/80 border-muted-foreground/30 opacity-0 group-hover:opacity-100"
-                          )}>
-                            {isSelected && <IconCheck className="size-3 text-primary-foreground" />}
-                          </div>
-                          {item.media_type === "video" && (
-                            <div className="absolute bottom-2 left-2 size-5 rounded-full bg-black/60 flex items-center justify-center">
-                              <IconPlayerPlay className="size-2.5 text-white" />
+                <div className="space-y-4">
+                  {portalFolders.length > 0 && (
+                    <div className="space-y-2">
+                      {portalFolders.map(folder => (
+                        <div
+                          key={folder.path}
+                          className="group flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors hover:border-muted-foreground/30 hover:bg-muted/30"
+                        >
+                          <button onClick={() => openPortalFolder(folder.label)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                            <div className="size-9 rounded-lg bg-muted/60 flex items-center justify-center shrink-0">
+                              <IconFolder className="size-4.5 text-muted-foreground" />
                             </div>
-                          )}
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{folder.label}</p>
+                              <p className="text-[11px] text-muted-foreground">{folder.fileCount} media</p>
+                            </div>
+                          </button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                            onClick={() => assignPortalFolder(folder)}
+                            disabled={!portalAccountId || mappingPortal}
+                          >
+                            <IconCheck className="size-3.5" /> Assign folder
+                          </Button>
                         </div>
-                        <div className="px-2 py-1.5 bg-card border-t border-border/50">
-                          <p className="text-xs text-foreground/80 truncate leading-tight">{item.file_name}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{item.brand_slug || "portal"} · {formatDate(item.first_seen_at)}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  {portalFiles.length > 0 && (
+                    <>
+                      {/* Spreadsheet. No <video>/<img> is mounted here on purpose: the
+                          resolver allows 120 GET/HEAD per IP per minute and the office
+                          shares one IP, so a 114-row folder rendering thumbnails would
+                          burn the whole budget. Preview is one click, via Xem. */}
+                      <div className="border rounded-xl overflow-hidden">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b bg-muted/30">
+                              <th className="w-8 px-3 py-2.5">
+                                <div
+                                  onClick={togglePortalSelectAll}
+                                  className={cn("size-4 rounded border cursor-pointer flex items-center justify-center",
+                                    portalAllSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}
+                                >
+                                  {portalAllSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
+                                </div>
+                              </th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">File name</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Size</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Approved</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assigned</th>
+                              <th className="w-8 px-3 py-2.5"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {portalFiles.slice(0, portalVisible).map(file => {
+                              const isSelected = portalSelected.has(file.objectKey)
+                              const assignedTo = portalAssignedBy.get(file.objectKey) || []
+                              const isVideo = !file.mimeType?.startsWith("image/")
+                              return (
+                                <tr
+                                  key={file.objectKey}
+                                  onClick={() => togglePortalSelect(file.objectKey)}
+                                  title={file.objectKey}
+                                  className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer", isSelected && "bg-primary/5")}
+                                >
+                                  <td className="px-3 py-2.5">
+                                    <div className={cn("size-4 rounded border flex items-center justify-center",
+                                      isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
+                                      {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      {isVideo
+                                        ? <IconPlayerPlay className="size-3.5 shrink-0 text-muted-foreground" />
+                                        : <IconPhoto className="size-3.5 shrink-0 text-muted-foreground" />}
+                                      <span className="text-sm font-medium truncate max-w-[280px]">{file.name}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{isVideo ? "Video" : "Image"}</td>
+                                  <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{formatBytes(file.sizeBytes)}</td>
+                                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(file.createdAt || undefined)}</td>
+                                  <td className="px-3 py-2.5">
+                                    {assignedTo.length > 0 ? (
+                                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                        {assignedTo.map(accountLabel).join(", ")}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground/50">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    {/* Opens the resolver in a new tab — one request, on demand. */}
+                                    <a
+                                      href={`${PORTAL_MEDIA_RESOLVER}/${file.assetId}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      onClick={e => e.stopPropagation()}
+                                      className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+                                    >
+                                      View
+                                    </a>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                        <div className="px-4 py-2 text-xs text-muted-foreground border-t bg-muted/10">
+                          {Math.min(portalVisible, portalFiles.length)} / {portalFiles.length} media
                         </div>
-                      </button>
-                    )
-                  })}
+                      </div>
+
+                      {portalVisible < portalFiles.length && (
+                        <div className="flex justify-center pt-1">
+                          <Button size="sm" variant="outline" onClick={() => setPortalVisible(v => v + PORTAL_PAGE_SIZE)}>
+                            Show more ({portalFiles.length - portalVisible} media)
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -1075,16 +1345,6 @@ export default function AssetsPage() {
                 >
                   <IconRefresh className="size-4" />
                 </button>
-
-                {/* View toggle */}
-                <div className="flex items-center border rounded-lg p-0.5">
-                  <button onClick={() => setViewMode("grid")} className={cn("p-1.5 rounded transition-colors", viewMode === "grid" ? "bg-muted" : "text-muted-foreground hover:text-foreground")}>
-                    <IconLayoutGrid className="size-3.5" />
-                  </button>
-                  <button onClick={() => setViewMode("list")} className={cn("p-1.5 rounded transition-colors", viewMode === "list" ? "bg-muted" : "text-muted-foreground hover:text-foreground")}>
-                    <IconList className="size-3.5" />
-                  </button>
-                </div>
               </div>
             </div>
 
@@ -1104,8 +1364,8 @@ export default function AssetsPage() {
             {/* Grid / List content */}
             <div className="flex-1 overflow-auto px-4 py-4">
               {(loadingCreatives || loadingBoard) ? (
-                <div className="grid grid-cols-3 items-start gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 [grid-auto-rows:max-content]">
-                  {[...Array(12)].map((_, i) => <div key={i} className="aspect-square rounded-xl bg-muted animate-pulse" />)}
+                <div className="space-y-2">
+                  {[...Array(10)].map((_, i) => <div key={i} className="h-11 rounded-lg bg-muted animate-pulse" />)}
                 </div>
               ) : displayList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
@@ -1132,72 +1392,10 @@ export default function AssetsPage() {
                     </Button>
                   )}
                 </div>
-              ) : viewMode === "grid" ? (
-                <div className="grid grid-cols-3 gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-                  {displayList.map(c => {
-                    const isSelected = selected.has(c.id)
-                    const isReady    = !!(c.fb_image_hash || c.fb_video_id)
-                    return (
-                      <div
-                        key={c.id}
-                        className={cn(
-                          "group relative flex flex-col self-start overflow-hidden rounded-xl border-2 cursor-pointer transition-all",
-                          isSelected ? "border-primary ring-2 ring-primary/20" : "border-transparent hover:border-muted-foreground/20"
-                        )}
-                        onClick={() => toggleSelect(c.id)}
-                        onContextMenu={e => { e.preventDefault(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
-                      >
-                        {/* Thumbnail */}
-                        <div className="relative aspect-square overflow-hidden bg-muted/40">
-                          <CreativeCardMedia creative={c} className="h-full w-full object-cover" />
-                          {/* Checkbox */}
-                          <div className={cn(
-                            "absolute top-2 left-2 size-5 rounded-full border-2 flex items-center justify-center transition-all",
-                            isSelected ? "bg-primary border-primary" : "bg-background/80 border-muted-foreground/30 opacity-0 group-hover:opacity-100"
-                          )}>
-                            {isSelected && <IconCheck className="size-3 text-primary-foreground" />}
-                          </div>
-                          {/* Video indicator */}
-                          {c.media_type === "video" && (
-                            <div className="absolute bottom-2 left-2 size-5 rounded-full bg-black/60 flex items-center justify-center">
-                              <IconPlayerPlay className="size-2.5 text-white" />
-                            </div>
-                          )}
-                          {/* Status */}
-                          <div className={cn(
-                            "absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded-full font-semibold",
-                            isReady
-                              ? "bg-emerald-500/90 text-white"
-                              : c.status === "processing"
-                              ? "bg-blue-500/90 text-white"
-                              : c.status === "error"
-                              ? "bg-red-500/90 text-white"
-                              : "bg-black/40 text-white/80"
-                          )}>
-                            {isReady ? "Ready" : c.status === "processing" ? "Processing" : c.status === "error" ? "Error" : "Pending"}
-                          </div>
-                          {/* Context menu trigger */}
-                          <button
-                            onClick={e => { e.stopPropagation(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
-                            className="absolute bottom-2 right-2 size-6 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <IconDotsVertical className="size-3 text-white" />
-                          </button>
-                          {/* Hover overlay */}
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors pointer-events-none" />
-                        </div>
-                        {/* File name */}
-                        <div className="px-2 py-1.5 bg-card border-t border-border/50">
-                          <p className="text-xs text-foreground/80 truncate leading-tight">
-                            {c.file_name.replace(/\.[^/.]+$/, "")}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
               ) : (
-                /* List view */
+                /* Spreadsheet view — the only view. The grid was removed rather than
+                   kept behind a toggle: two renderings of the same list drift, and the
+                   table is the one that shows status and date without a hover. */
                 <div className="border rounded-xl overflow-hidden">
                   <table className="w-full text-sm">
                     <thead>
@@ -1320,6 +1518,23 @@ export default function AssetsPage() {
               <div className="h-px bg-border my-1" />
             </>
           )}
+          {(() => {
+            const c = creatives.find(x => x.id === contextMenu.id) || boardCreatives.find(x => x.id === contextMenu.id)
+            const isPortalSourced = c?.storage_path?.startsWith("r2://pati-videos/creative-portal/")
+            const canRevert = isPortalSourced && !c?.fb_video_id && !c?.fb_image_hash
+            if (!canRevert) return null
+            return (
+              <button
+                onClick={() => {
+                  setDeleteConfirm({ type: "revert", id: contextMenu.id, name: c?.file_name || "this asset" })
+                  setContextMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/50"
+              >
+                <IconArrowBackUp className="size-4 text-muted-foreground" /> Revert Portal Import
+              </button>
+            )
+          })()}
           <button
             onClick={() => {
               const c = creatives.find(x => x.id === contextMenu.id) || boardCreatives.find(x => x.id === contextMenu.id)
@@ -1461,27 +1676,74 @@ export default function AssetsPage() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              Delete {deleteConfirm?.type === "creative"
-                ? "Asset"
-                : deleteConfirm?.type === "board"
-                  ? "Board"
-                  : deleteConfirm?.type === "bulk_creative"
-                    ? "Selected Assets"
-                    : "Request"}?
+              {deleteConfirm?.type === "revert"
+                ? "Revert Portal Import"
+                : `Delete ${deleteConfirm?.type === "creative"
+                  ? "Asset"
+                  : deleteConfirm?.type === "board"
+                    ? "Board"
+                    : deleteConfirm?.type === "bulk_creative"
+                      ? "Selected Assets"
+                      : "Request"}`
+              }?
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground py-2">
-            Are you sure you want to delete <span className="font-medium text-foreground">&quot;{deleteConfirm?.name}&quot;</span>?
-            {deleteConfirm?.type === "creative" && " This will also remove it from any boards."}
-            {deleteConfirm?.type === "bulk_creative" && " Each asset will also be removed from any boards."}
-            {deleteConfirm?.type === "board" && " The assets inside will not be deleted."}
-            {" "}This action cannot be undone.
+            {deleteConfirm?.type === "revert" ? (
+              <>
+                Are you sure you want to revert the import of <span className="font-medium text-foreground">&quot;{deleteConfirm?.name}&quot;</span>?
+                This will remove the creative and return the asset to the Portal Media pool.
+              </>
+            ) : (
+              <>
+                Are you sure you want to delete <span className="font-medium text-foreground">&quot;{deleteConfirm?.name}&quot;</span>?
+                {deleteConfirm?.type === "creative" && " This will also remove it from any boards."}
+                {deleteConfirm?.type === "bulk_creative" && " Each asset will also be removed from any boards."}
+                {deleteConfirm?.type === "board" && " The assets inside will not be deleted."}
+                {" "}This action cannot be undone.
+              </>
+            )}
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-              {deleting ? <IconLoader2 className="size-4 animate-spin" /> : <IconTrash className="size-4" />}
-              Delete
+            <Button
+              variant={deleteConfirm?.type === "revert" ? "default" : "destructive"}
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <IconLoader2 className="size-4 animate-spin" />
+              ) : deleteConfirm?.type === "revert" ? (
+                <IconArrowBackUp className="size-4" />
+              ) : (
+                <IconTrash className="size-4" />
+              )}
+              {deleteConfirm?.type === "revert" ? "Revert" : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Import Confirm Dialog ─────────────────────────────────────────── */}
+      <Dialog open={!!importConfirm} onOpenChange={(open) => !open && setImportConfirm(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Map media to ad account</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Map <span className="font-medium text-foreground">{importConfirm?.count}</span> media in{" "}
+            <span className="font-medium text-foreground">{importConfirm?.label}</span> to{" "}
+            <span className="font-medium text-foreground">{importConfirm ? accountLabel(importConfirm.adAccountId) : ""}</span>?
+            <br /><br />
+            <span className="font-semibold text-destructive">Note: once mapped, this cannot be reverted after the asset is uploaded to Meta.</span> You are responsible for ensuring this media complies with Meta advertising policies.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setImportConfirm(null)} disabled={mappingPortal}>
+              Cancel
+            </Button>
+            <Button onClick={executePortalAssign} disabled={mappingPortal}>
+              {mappingPortal ? <IconLoader2 className="size-4 animate-spin" /> : <IconCheck className="size-4" />}
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

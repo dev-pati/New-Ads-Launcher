@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS ads_launcher.portal_media_items (
   file_size INT,
   org_id UUID REFERENCES ads_launcher.organizations(id) ON DELETE CASCADE,
   ad_account_id TEXT,
-  mapped_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  mapped_by UUID,
   creative_id UUID REFERENCES ads_launcher.creatives(id) ON DELETE SET NULL,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'mapped', 'imported')),
   portal_created_at TIMESTAMPTZ,
@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS ads_launcher.portal_media_items (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Existing installs may have created mapped_by -> auth.users. AdLauncher production uses custom accounts, so drop it.
+ALTER TABLE ads_launcher.portal_media_items DROP CONSTRAINT IF EXISTS portal_media_items_mapped_by_fkey;
 
 CREATE INDEX IF NOT EXISTS idx_portal_media_items_org_status ON ads_launcher.portal_media_items(org_id, status);
 CREATE INDEX IF NOT EXISTS idx_portal_media_items_status_first_seen ON ads_launcher.portal_media_items(status, first_seen_at DESC);
