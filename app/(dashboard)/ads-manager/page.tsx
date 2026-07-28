@@ -11,7 +11,7 @@ import {
   IconArrowUp, IconArrowDown, IconHistory, IconTable, IconCheck,
   IconChevronRight as IconDrillRight,
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
-  IconAdjustments, IconDownload, IconRocket, IconTemplate,
+  IconAdjustments, IconDownload,
 } from "@tabler/icons-react"
 import dynamic from "next/dynamic"
 import { type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
@@ -544,6 +544,8 @@ function AdsManagerContent() {
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [duplicateCount, setDuplicateCount] = useState(1)
   const [isDuplicating, setIsDuplicating] = useState(false)
+  const [savingTemplateId, setSavingTemplateId] = useState<string | null>(null)
+  const [actionToast, setActionToast] = useState<{ kind: "success" | "error"; message: string; href?: string } | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -995,6 +997,44 @@ function AdsManagerContent() {
     } finally {
       setIsDuplicating(false)
     }
+  }
+
+  useEffect(() => {
+    if (!actionToast) return
+    const t = setTimeout(() => setActionToast(null), 6000)
+    return () => clearTimeout(t)
+  }, [actionToast])
+
+  // ─── Save as Template / Duplicate to Launcher ─────────────────────────────────
+  // The P0 loop: a winning ad goes back into Templates, or straight into the
+  // Launcher as a pre-filled draft.
+  const handleSaveAsTemplate = async (ad: Ad) => {
+    if (!selectedAccountId || savingTemplateId) return
+    setSavingTemplateId(ad.id)
+    try {
+      const r = await fetch("/api/templates/from-ad", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ad_id: ad.id,
+          ad_account_id: selectedAccountId,
+          name: ad.name,
+          date_preset: datePreset === "custom" ? "last_30d" : datePreset,
+        }),
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error || "Failed to save template")
+      setActionToast({ kind: "success", message: `Saved "${ad.name}" to Templates`, href: "/templates" })
+    } catch (err: any) {
+      setActionToast({ kind: "error", message: err.message || "Failed to save template" })
+    } finally {
+      setSavingTemplateId(null)
+    }
+  }
+
+  const handleDuplicateToLauncher = (ad: Ad) => {
+    if (!selectedAccountId) return
+    router.push(`/launch?from_ad=${encodeURIComponent(ad.id)}&ad_account_id=${encodeURIComponent(selectedAccountId)}`)
   }
 
   // ─── Save Side Panel Edit ─────────────────────────────────────────────────────
@@ -2027,6 +2067,12 @@ function AdsManagerContent() {
         {selectedAccount && (
           <span className="text-xs text-muted-foreground">{selectedAccount.id}</span>
         )}
+        {selectedAccount?.timezone_name && (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground" title="Ad account timezone — budgets/schedules launch in this zone">
+            <IconCalendar className="size-3.5" />
+            {selectedAccount.timezone_name}
+          </span>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <button onClick={() => { setHistoryOpen(true); fetchHistory() }} className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors mr-2">
             <IconHistory className="size-3.5" />History
@@ -2203,12 +2249,6 @@ function AdsManagerContent() {
       <div className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0 flex-wrap bg-white dark:bg-background">
         <button onClick={() => setCreateModalOpen(true)} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded bg-[#31a24c] hover:bg-[#2b9244] text-white transition-colors font-semibold shadow-sm">
           <IconPlus className="size-3.5" />Create
-        </button>
-        <button onClick={() => router.push("/launch")} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded border border-[#1877f2] text-[#1877f2] hover:bg-[#1877f2]/10 transition-colors font-semibold shadow-sm">
-          <IconRocket className="size-3.5" />AdLauncher
-        </button>
-        <button onClick={() => router.push("/templates")} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded border hover:bg-muted/50 transition-colors font-semibold shadow-sm">
-          <IconTemplate className="size-3.5" />Templates
         </button>
         <button
           disabled={selectedIds.size === 0}
@@ -2639,6 +2679,16 @@ function AdsManagerContent() {
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCharts(a)}>Charts</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openCompare(a)}>Compare</button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button
+                                  className="text-xs text-[#16a34a] font-semibold hover:underline disabled:opacity-50 disabled:no-underline"
+                                  disabled={savingTemplateId === a.id}
+                                  onClick={() => handleSaveAsTemplate(a)}
+                                >
+                                  {savingTemplateId === a.id ? "Saving…" : "Save as Template"}
+                                </button>
+                                <span className="text-[#ccd0d5]">·</span>
+                                <button className="text-xs text-[#1877f2] font-semibold hover:underline" onClick={() => handleDuplicateToLauncher(a)}>To Launcher</button>
                               </div>
                               {adSet && <p className="text-xs text-[#8a8d91] truncate max-w-[200px]">↳ {adSet.name}</p>}
                             </div>
@@ -3215,6 +3265,28 @@ function AdsManagerContent() {
           })()}
         </SheetContent>
       </Sheet>
+
+      {actionToast && (
+        <div className={cn(
+          "fixed bottom-6 right-6 z-[100] flex items-center gap-3 rounded-xl border px-4 py-3 shadow-lg text-sm",
+          actionToast.kind === "success"
+            ? "bg-white dark:bg-background border-green-200 dark:border-green-900 text-[#1c2b33] dark:text-foreground"
+            : "bg-white dark:bg-background border-red-200 dark:border-red-900 text-red-600"
+        )}>
+          {actionToast.kind === "success"
+            ? <IconCheck className="size-4 text-green-600 shrink-0" />
+            : <IconX className="size-4 shrink-0" />}
+          <span>{actionToast.message}</span>
+          {actionToast.href && (
+            <button className="font-semibold text-[#1877f2] hover:underline" onClick={() => router.push(actionToast.href!)}>
+              View
+            </button>
+          )}
+          <button className="text-muted-foreground hover:text-foreground" onClick={() => setActionToast(null)}>
+            <IconX className="size-3.5" />
+          </button>
+        </div>
+      )}
 
       {performancePopup && selectedAccountId && (
         <PerformancePopup

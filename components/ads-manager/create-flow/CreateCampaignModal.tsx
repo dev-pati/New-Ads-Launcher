@@ -182,18 +182,18 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
     } catch {}
   }
 
-  const handleMediaFileSelected = async (file: File | null) => {
-    if (!file) return
+  const handleMediaFileSelected = async (file: File | null): Promise<CreativeAssetOption | null> => {
+    if (!file) return null
     if (!selectedAccountId) {
       setMediaUploadError("Select an ad account before uploading media.")
-      return
+      return null
     }
 
     const isVideo = file.type.startsWith("video/")
     const isImage = file.type.startsWith("image/")
     if (!isImage && !isVideo) {
       setMediaUploadError("Only image and video files are supported.")
-      return
+      return null
     }
 
     const maxSize = isVideo ? 1024 * 1024 * 1024 : 30 * 1024 * 1024
@@ -203,7 +203,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
           ? "Video file is too large. Max 1GB."
           : "Image file is too large. Max 30MB."
       )
-      return
+      return null
     }
 
     setIsUploadingMedia(true)
@@ -234,8 +234,10 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
       if (creative.media_type === "video" && !creative.fb_thumbnail_url && !!(creative as any).fb_video_id) {
         void refreshUploadedVideoPreview(creative.id)
       }
+      return creative
     } catch (error) {
       setMediaUploadError(error instanceof Error ? error.message : "Failed to upload media")
+      return null
     } finally {
       setIsUploadingMedia(false)
     }
@@ -551,6 +553,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
                 pixels={pixels}
                 pixelsLoading={pixelsLoading}
                 currency={currency}
+                timezoneName={selectedAccount?.timezone_name}
               />
             )}
             {activeStep === "ad" && (
@@ -565,6 +568,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
                 mediaUploadError={mediaUploadError}
                 onSelectMediaFile={handleMediaFileSelected}
                 onClearUploadedCreative={clearUploadedCreative}
+                adAccountId={selectedAccountId}
               />
             )}
           </div>

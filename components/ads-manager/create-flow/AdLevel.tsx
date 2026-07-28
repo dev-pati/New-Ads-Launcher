@@ -4,7 +4,8 @@ import {
   IconBrandFacebook,
   IconBrandInstagram,
   IconPhoto,
-  IconUpload,
+  IconPlus,
+  IconTrash,
   IconVideo,
   IconX,
 } from "@tabler/icons-react"
@@ -13,7 +14,10 @@ import {
   FacebookPageOption,
   InstagramOption,
   MediaType,
+  CreativeAssetOption,
 } from "./types"
+import { CreativeLibraryPicker } from "./CreativeLibraryPicker"
+import { useState } from "react"
 
 interface Props {
   state: CampaignFormState
@@ -24,8 +28,9 @@ interface Props {
   instagramLoading: boolean
   mediaUploading: boolean
   mediaUploadError: string
-  onSelectMediaFile: (file: File | null) => void
+  onSelectMediaFile: (file: File | null) => Promise<CreativeAssetOption | null>
   onClearUploadedCreative: () => void
+  adAccountId?: string
 }
 
 const CTA_OPTIONS = [
@@ -51,6 +56,75 @@ function formatCta(cta: string) {
   return cta.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function TextFieldWithVariations({
+  label,
+  value,
+  variations,
+  multiline = false,
+  placeholder,
+  onChange,
+  onVariationsChange,
+}: {
+  label: string
+  value: string
+  variations: string[]
+  multiline?: boolean
+  placeholder: string
+  onChange: (value: string) => void
+  onVariationsChange: (value: string[]) => void
+}) {
+  const add = () => onVariationsChange([...variations, ""])
+  const updateAt = (index: number, next: string) => onVariationsChange(variations.map((v, i) => i === index ? next : v))
+  const removeAt = (index: number) => onVariationsChange(variations.filter((_, i) => i !== index))
+  const inputClass = "mt-1.5 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+
+  return (
+    <div>
+      <div className="flex items-center justify-between gap-2">
+        <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">{label}</label>
+        <button type="button" onClick={add} className="flex items-center gap-1 text-xs font-semibold text-[#1877f2] hover:underline">
+          <IconPlus className="size-3" /> Add variation
+        </button>
+      </div>
+      {multiline ? (
+        <textarea
+          rows={3}
+          className={`${inputClass} resize-none py-2`}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+        />
+      ) : (
+        <input
+          type="text"
+          className={`${inputClass} h-9`}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+        />
+      )}
+      {variations.length > 0 && (
+        <div className="mt-2 space-y-2">
+          {variations.map((variation, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <input
+                type="text"
+                className={`${inputClass} h-8`}
+                value={variation}
+                onChange={(event) => updateAt(index, event.target.value)}
+                placeholder={`${label} variation ${index + 2}`}
+              />
+              <button type="button" onClick={() => removeAt(index)} className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Remove ${label} variation`}>
+                <IconTrash className="size-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AdLevel({
   state,
   update,
@@ -62,12 +136,32 @@ export function AdLevel({
   mediaUploadError,
   onSelectMediaFile,
   onClearUploadedCreative,
+  adAccountId,
 }: Props) {
+  const [pickerOpen, setPickerOpen] = useState(false)
   const selectedPage = pages.find((page) => page.id === state.pageId)
   const previewUrl = state.creativePreviewUrl || state.mediaUrl
+  const pickCreative = (creative: CreativeAssetOption) => {
+    update({
+      creativeId: creative.id,
+      creativeFileName: creative.file_name,
+      creativePreviewUrl: creative.media_type === "video"
+        ? creative.file_url || creative.fb_thumbnail_url || ""
+        : creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || "",
+      mediaType: creative.media_type,
+      mediaUrl: "",
+    })
+  }
 
   return (
     <div className="flex h-full">
+      <CreativeLibraryPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        adAccountId={adAccountId}
+        onPick={pickCreative}
+        onUploadFile={(file) => onSelectMediaFile(file)}
+      />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl space-y-6 px-6 py-8 pb-20">
           <div className="flex items-center gap-2">
@@ -134,54 +228,25 @@ export function AdLevel({
           </div>
 
           <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
-            <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">Ad setup</h3>
-            <div className="rounded-lg border border-[#1877f2] bg-[#e3f0fe]/30 p-3 dark:bg-blue-900/20">
-              <span className="block text-xs font-semibold text-[#1877f2]">
-                Single image or video
-              </span>
-              <span className="mt-0.5 block text-xs text-[#65676b]">
-                Use one image or one video for this ad.
-              </span>
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">Ad setup</h3>
+              <span className="text-[11px] text-[#65676b]">Single image or video</span>
             </div>
-          </div>
 
-          <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
-            <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">Ad creative</h3>
-
-            <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
-              <div>
-                <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                  Media type
-                </label>
-                <select
-                  value={state.mediaType}
-                  onChange={(event) => update({ mediaType: event.target.value as MediaType })}
-                  className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
-                  disabled={Boolean(state.creativeId) || mediaUploading}
+            <div>
+              <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
+                Media
+              </label>
+              <div className="mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  disabled={mediaUploading}
+                  className="flex h-9 items-center gap-2 rounded border border-[#1877f2] bg-white px-3 text-xs font-semibold text-[#1877f2] transition-colors hover:bg-[#1877f2]/10 disabled:opacity-50 dark:bg-background"
                 >
-                  <option value="image">Image</option>
-                  <option value="video">Video</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                  Upload media
-                </label>
-                <label className="mt-1.5 flex h-9 cursor-pointer items-center justify-center gap-2 rounded border border-dashed border-[#ccd0d5] bg-white px-3 text-xs font-medium text-[#1c2b33] transition-colors hover:border-[#1877f2] hover:text-[#1877f2] dark:border-gray-700 dark:bg-background dark:text-gray-200">
-                  <IconUpload className="size-4" />
-                  <span>{mediaUploading ? "Uploading media..." : "Choose image or video"}</span>
-                  <input
-                    type="file"
-                    accept="image/*,video/*"
-                    className="hidden"
-                    disabled={mediaUploading}
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] || null
-                      onSelectMediaFile(file)
-                      event.target.value = ""
-                    }}
-                  />
-                </label>
+                  <IconPhoto className="size-4" />
+                  {mediaUploading ? "Uploading..." : "Load media"}
+                </button>
               </div>
             </div>
 
@@ -235,45 +300,6 @@ export function AdLevel({
               <p className="text-xs text-red-600">{mediaUploadError}</p>
             )}
 
-            <div>
-              <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                Primary text
-              </label>
-              <textarea
-                rows={3}
-                className="mt-1.5 w-full resize-none rounded border border-[#ccd0d5] bg-white p-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
-                value={state.primaryText}
-                onChange={(event) => update({ primaryText: event.target.value })}
-                placeholder="Primary text"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                Headline
-              </label>
-              <input
-                type="text"
-                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
-                value={state.headline}
-                onChange={(event) => update({ headline: event.target.value })}
-                placeholder="Headline"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                Description
-              </label>
-              <input
-                type="text"
-                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
-                value={state.description}
-                onChange={(event) => update({ description: event.target.value })}
-                placeholder="Optional description"
-              />
-            </div>
-
             <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
               <div>
                 <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
@@ -304,13 +330,41 @@ export function AdLevel({
                 />
               </div>
             </div>
-          </div>
 
-          <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
-            <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">Tracking</h3>
-            <div>
+            <div className="border-t border-[#e4e6eb] pt-4 dark:border-gray-800">
+              <TextFieldWithVariations
+                label="Primary text"
+                multiline
+                placeholder="Primary text"
+                value={state.primaryText}
+                variations={state.primaryTextVariations}
+                onChange={(v) => update({ primaryText: v })}
+                onVariationsChange={(v) => update({ primaryTextVariations: v })}
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <TextFieldWithVariations
+                label="Headline"
+                placeholder="Headline"
+                value={state.headline}
+                variations={state.headlineVariations}
+                onChange={(v) => update({ headline: v })}
+                onVariationsChange={(v) => update({ headlineVariations: v })}
+              />
+              <TextFieldWithVariations
+                label="Description"
+                placeholder="Optional description"
+                value={state.description}
+                variations={state.descriptionVariations}
+                onChange={(v) => update({ description: v })}
+                onVariationsChange={(v) => update({ descriptionVariations: v })}
+              />
+            </div>
+
+            <div className="border-t border-[#e4e6eb] pt-4 dark:border-gray-800">
               <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                URL parameters
+                URL parameters (tracking)
               </label>
               <input
                 type="text"

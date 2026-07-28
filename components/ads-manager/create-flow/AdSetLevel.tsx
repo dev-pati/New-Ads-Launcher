@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
+import { getUtcOffsetLabel, wallClockToUtcDate } from "@/lib/timezone"
 import { CampaignFormState, PerformanceGoal, PixelOption } from "./types"
 
 interface Props {
@@ -8,6 +10,52 @@ interface Props {
   pixels: PixelOption[]
   pixelsLoading: boolean
   currency: string
+  timezoneName?: string
+}
+
+// Live clock in the ad account's timezone — schedule fields below are wall-clock
+// times in this same zone (server converts to UTC using it, not the browser's zone).
+function AccountClock({ timezoneName }: { timezoneName: string }) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+  const formatted = useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        timeZone: timezoneName,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      }).format(now)
+    } catch {
+      return null
+    }
+  }, [now, timezoneName])
+  if (!formatted) return null
+  return <span className="tabular-nums">{formatted}</span>
+}
+
+// Shows the UTC equivalent of the picked wall-clock so the operator can confirm the
+// exact instant the ad goes live — the picker itself has no timezone of its own.
+function UtcPreview({ value, timezoneName }: { value: string; timezoneName: string }) {
+  const utc = useMemo(() => {
+    if (!value) return null
+    const date = wallClockToUtcDate(value, timezoneName)
+    if (!date) return null
+    return new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      day: "2-digit",
+      month: "short",
+      timeZone: "UTC",
+      hour12: false,
+    }).format(date)
+  }, [value, timezoneName])
+  if (!utc) return null
+  return <span className="tabular-nums">{utc} UTC</span>
 }
 
 const COUNTRIES = [
@@ -61,7 +109,7 @@ function performanceOptions(objective: CampaignFormState["objective"]): Array<{
   return [{ value: "REACH", label: "Maximize reach" }]
 }
 
-export function AdSetLevel({ state, update, pixels, pixelsLoading, currency }: Props) {
+export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, timezoneName }: Props) {
   const options = performanceOptions(state.objective)
   const budgetStep = ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase()) ? "1" : "0.01"
 
@@ -176,7 +224,13 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency }: P
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-              Start date
+              Start date{" "}
+              {timezoneName && state.scheduleTimeBasis === "account" && (
+                <span className="font-normal text-[#1877f2]">({timezoneName} · {getUtcOffsetLabel(timezoneName)})</span>
+              )}
+              {state.scheduleTimeBasis === "utc" && (
+                <span className="font-normal text-[#1877f2]">(UTC)</span>
+              )}
             </label>
             <input
               type="datetime-local"
@@ -184,10 +238,21 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency }: P
               onChange={(event) => update({ scheduleStart: event.target.value })}
               className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
             />
+            {timezoneName && state.scheduleStart && state.scheduleTimeBasis === "account" && (
+              <p className="mt-1 text-[11px] text-[#65676b]">
+                → <UtcPreview value={state.scheduleStart} timezoneName={timezoneName} />
+              </p>
+            )}
           </div>
           <div>
             <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-              End date
+              End date{" "}
+              {timezoneName && state.scheduleTimeBasis === "account" && (
+                <span className="font-normal text-[#1877f2]">({timezoneName} · {getUtcOffsetLabel(timezoneName)})</span>
+              )}
+              {state.scheduleTimeBasis === "utc" && (
+                <span className="font-normal text-[#1877f2]">(UTC)</span>
+              )}
             </label>
             <input
               type="datetime-local"
@@ -195,8 +260,31 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency }: P
               onChange={(event) => update({ scheduleEnd: event.target.value })}
               className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
             />
+            {timezoneName && state.scheduleEnd && state.scheduleTimeBasis === "account" && (
+              <p className="mt-1 text-[11px] text-[#65676b]">
+                → <UtcPreview value={state.scheduleEnd} timezoneName={timezoneName} />
+              </p>
+            )}
           </div>
         </div>
+        {timezoneName && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#65676b]">
+            <span className="inline-flex items-center gap-1.5">
+              Time basis:
+              <select
+                value={state.scheduleTimeBasis}
+                onChange={(event) => update({ scheduleTimeBasis: event.target.value as "account" | "utc" })}
+                className="h-7 rounded border border-[#ccd0d5] bg-white px-2 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+              >
+                <option value="account">Ad account time ({timezoneName})</option>
+                <option value="utc">UTC</option>
+              </select>
+            </span>
+            {state.scheduleTimeBasis === "account" && (
+              <span>now <span className="font-semibold text-[#1c2b33] dark:text-gray-200"><AccountClock timezoneName={timezoneName} /></span></span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">

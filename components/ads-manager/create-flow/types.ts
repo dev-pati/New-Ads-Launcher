@@ -42,6 +42,7 @@ export interface CampaignFormState {
   dailyBudget: string
   scheduleStart: string
   scheduleEnd: string
+  scheduleTimeBasis: "account" | "utc"
   locations: string[]
   ageMin: number
   ageMax: number
@@ -57,8 +58,11 @@ export interface CampaignFormState {
   mediaUrl: string
   mediaType: MediaType
   primaryText: string
+  primaryTextVariations: string[]
   headline: string
+  headlineVariations: string[]
   description: string
+  descriptionVariations: string[]
   callToAction: string
   destinationUrl: string
   urlParameters: string
@@ -95,6 +99,7 @@ export const defaultCampaignState: CampaignFormState = {
   dailyBudget: "20",
   scheduleStart: "",
   scheduleEnd: "",
+  scheduleTimeBasis: "account",
   locations: ["US"],
   ageMin: 18,
   ageMax: 65,
@@ -109,8 +114,11 @@ export const defaultCampaignState: CampaignFormState = {
   mediaUrl: "",
   mediaType: "image",
   primaryText: "",
+  primaryTextVariations: [],
   headline: "",
+  headlineVariations: [],
   description: "",
+  descriptionVariations: [],
   callToAction: "LEARN_MORE",
   destinationUrl: "",
   urlParameters: "",

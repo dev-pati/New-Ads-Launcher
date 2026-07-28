@@ -8,11 +8,13 @@ import { getAuthContext } from "@/lib/auth"
 interface OrgAdAccountRow {
   fb_ad_account_id: string | null
   currency: string | null
+  timezone_name: string | null
 }
 
 export interface OrgAdAccountInfo {
   id: string
   currency?: string
+  timezoneName?: string
 }
 
 const AD_ACCOUNTS_TTL_MS = 2 * 60 * 1000
@@ -30,17 +32,17 @@ export async function getOrgAdAccountInfo(
   const supabase = createAdminClient()
   const { data: orgAdAccounts } = await supabase
     .from("ad_accounts")
-    .select("fb_ad_account_id, currency")
+    .select("fb_ad_account_id, currency, timezone_name")
     .eq("org_id", orgId)
 
   const dbAccount = ((orgAdAccounts || []) as OrgAdAccountRow[]).find((account) => {
     return normalizeAdAccountId(account.fb_ad_account_id || "") === requested
   })
-  
+
   const isPriority = isPriorityAdAccount(requested)
 
   if (dbAccount) {
-    return { id: adAccountId, currency: dbAccount.currency || undefined }
+    return { id: adAccountId, currency: dbAccount.currency || undefined, timezoneName: dbAccount.timezone_name || undefined }
   }
 
   // If this is a priority account but missing from DB, we want to allow it and try to upsert it
@@ -86,6 +88,7 @@ export async function getOrgAdAccountInfo(
           fb_account_id: liveAccount.account_id,
           name: liveAccount.name,
           currency: liveAccount.currency || "USD",
+          timezone_name: liveAccount.timezone_name || null,
           account_status: liveAccount.account_status ?? 1,
           is_active: true
         }) } catch {}
@@ -93,7 +96,7 @@ export async function getOrgAdAccountInfo(
     }
   }
 
-  return { id: liveAccount.id, currency: liveAccount.currency }
+  return { id: liveAccount.id, currency: liveAccount.currency, timezoneName: liveAccount.timezone_name }
 }
 
 export async function adAccountBelongsToOrg(

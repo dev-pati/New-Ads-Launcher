@@ -13,6 +13,7 @@ import {
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getOrgAdAccountInfo, normalizeAdAccountId } from "../_utils"
+import { wallClockToUtcIso } from "@/lib/timezone"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -68,6 +69,7 @@ interface CreateCampaignState {
   dailyBudget: string
   scheduleStart: string
   scheduleEnd: string
+  scheduleTimeBasis?: "account" | "utc"
   locations: string[]
   ageMin: number
   ageMax: number
@@ -79,8 +81,11 @@ interface CreateCampaignState {
   mediaUrl: string
   mediaType: MediaType
   primaryText: string
+  primaryTextVariations?: string[]
   headline: string
+  headlineVariations?: string[]
   description: string
+  descriptionVariations?: string[]
   callToAction: string
   destinationUrl: string
   urlParameters: string
@@ -105,6 +110,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function asStringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(asString).filter(Boolean) : []
 }
 
 function withActPrefix(id: string) {
@@ -150,11 +159,18 @@ function parseHttpUrl(value: string, label: string): string {
   }
 }
 
-function parseOptionalDate(value: string, label: string): string | undefined {
+function parseOptionalDateUtc(value: string, label: string): string | undefined {
   if (!value) return undefined
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) fail(400, `${label} is invalid`)
-  return date.toISOString()
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/)
+  if (!match) fail(400, `${label} is invalid`)
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]))).toISOString()
+}
+
+function parseOptionalDateInTimeZone(value: string, label: string, timeZone: string): string | undefined {
+  if (!value) return undefined
+  const iso = wallClockToUtcIso(value, timeZone)
+  if (!iso) fail(400, `${label} does not exist in ${timeZone}`)
+  return iso
 }
 
 function parseState(rawState: unknown): CreateCampaignState {
@@ -205,6 +221,7 @@ function parseState(rawState: unknown): CreateCampaignState {
     dailyBudget: asString(rawState.dailyBudget),
     scheduleStart: asString(rawState.scheduleStart),
     scheduleEnd: asString(rawState.scheduleEnd),
+    scheduleTimeBasis: rawState.scheduleTimeBasis === "utc" ? "utc" : "account",
     locations,
     ageMin: typeof rawState.ageMin === "number" ? rawState.ageMin : 18,
     ageMax: typeof rawState.ageMax === "number" ? rawState.ageMax : 65,
@@ -216,8 +233,11 @@ function parseState(rawState: unknown): CreateCampaignState {
     mediaUrl: asString(rawState.mediaUrl),
     mediaType,
     primaryText: asString(rawState.primaryText),
+    primaryTextVariations: asStringList(rawState.primaryTextVariations),
     headline: asString(rawState.headline),
+    headlineVariations: asStringList(rawState.headlineVariations),
     description: asString(rawState.description),
+    descriptionVariations: asStringList(rawState.descriptionVariations),
     callToAction: asString(rawState.callToAction) || "LEARN_MORE",
     destinationUrl: asString(rawState.destinationUrl),
     urlParameters: asString(rawState.urlParameters),
@@ -513,8 +533,11 @@ async function createSingleMediaAd(
     videoId?: string
     thumbnailUrl?: string
     headline: string
+    headlineVariations?: string[]
     primaryText: string
+    primaryTextVariations?: string[]
     description: string
+    descriptionVariations?: string[]
     cta: string
     destinationUrl: string
     urlTags?: string
@@ -556,11 +579,52 @@ async function createSingleMediaAd(
     }
   }
 
+  // Multiple Text Options (MTO) — Meta asset_feed_spec, only when more than one
+  // value is present per field. Matches the format lib/facebook.ts#createAd uses
+  // for the Ad Launcher flow so both surfaces produce identical creatives.
+  const bodies = Array.from(new Set([params.primaryText, ...(params.primaryTextVariations || [])].map(s => s.trim()).filter(Boolean)))
+  const titles = Array.from(new Set([params.headline, ...(params.headlineVariations || [])].map(s => s.trim()).filter(Boolean)))
+  const descriptions = Array.from(new Set([params.description, ...(params.descriptionVariations || [])].map(s => s.trim()).filter(Boolean)))
+  const usesTextVariations = bodies.length > 1 || titles.length > 1 || descriptions.length > 1
+  let assetFeedSpec: Record<string, unknown> | undefined
+  let degreesOfFreedomSpec: Record<string, unknown> | undefined
+
+  if (usesTextVariations) {
+    assetFeedSpec = { optimization_type: "DEGREES_OF_FREEDOM" }
+    if (bodies.length > 0) (assetFeedSpec as any).bodies = bodies.map(t => ({ text: t }))
+    if (titles.length > 0) (assetFeedSpec as any).titles = titles.map(t => ({ text: t }))
+    if (descriptions.length > 0) (assetFeedSpec as any).descriptions = descriptions.map(t => ({ text: t }))
+    // OPT_OUT of Advantage+ creative enhancements — required alongside MTO (see lib/facebook.ts createAd)
+    const validFeatureKeys = [
+      "IG_VIDEO_NATIVE_SUBTITLE", "IMAGE_ANIMATION", "PRODUCT_BROWSING",
+      "PRODUCT_METADATA_AUTOMATION", "PROFILE_CARD", "STANDARD_ENHANCEMENTS_CATALOG",
+      "TEXT_OVERLAY_TRANSLATION",
+    ]
+    degreesOfFreedomSpec = {
+      creative_features_spec: Object.fromEntries(validFeatureKeys.map(k => [k, { enroll_status: "OPT_OUT" }])),
+    }
+    if (storySpec.link_data) {
+      delete (storySpec.link_data as any).message
+      delete (storySpec.link_data as any).name
+      delete (storySpec.link_data as any).description
+    }
+    if (storySpec.video_data) {
+      delete (storySpec.video_data as any).message
+      delete (storySpec.video_data as any).title
+    }
+  }
+
+  const creativeJson: Record<string, unknown> = { object_story_spec: storySpec }
+  if (assetFeedSpec) creativeJson.asset_feed_spec = assetFeedSpec
+  if (degreesOfFreedomSpec) creativeJson.degrees_of_freedom_spec = degreesOfFreedomSpec
+
   const creativeBody = new URLSearchParams({
     access_token: token,
     name: `Creative - ${params.adName}`,
-    object_story_spec: JSON.stringify(storySpec),
   })
+  for (const [key, value] of Object.entries(creativeJson)) {
+    creativeBody.set(key, JSON.stringify(value))
+  }
   if (params.urlTags) creativeBody.set("url_tags", params.urlTags)
 
   const creativeRes = await fetch(`${GRAPH_API}/${adAccountId}/adcreatives`, {
@@ -636,8 +700,14 @@ export async function POST(request: NextRequest) {
       ? undefined
       : budgetMinorUnits(state.dailyBudget, "Ad set budget", currency)
 
-    const startTime = parseOptionalDate(state.scheduleStart, "Start date")
-    const endTime = parseOptionalDate(state.scheduleEnd, "End date")
+    const accountTimeZone = account.timezoneName || "UTC"
+    const useUtc = state.scheduleTimeBasis === "utc"
+    const parseSchedule = (value: string, label: string) =>
+      useUtc
+        ? parseOptionalDateUtc(value, label)
+        : parseOptionalDateInTimeZone(value, label, accountTimeZone)
+    const startTime = parseSchedule(state.scheduleStart, "Start date")
+    const endTime = parseSchedule(state.scheduleEnd, "End date")
     if (startTime && endTime && new Date(endTime) <= new Date(startTime)) {
       fail(400, "End date must be after start date")
     }
@@ -674,8 +744,11 @@ export async function POST(request: NextRequest) {
       videoId: media.videoId,
       thumbnailUrl: media.thumbnailUrl,
       headline: state.headline,
+      headlineVariations: state.headlineVariations,
       primaryText: state.primaryText,
+      primaryTextVariations: state.primaryTextVariations,
       description: state.description,
+      descriptionVariations: state.descriptionVariations,
       cta: state.callToAction,
       destinationUrl: parseHttpUrl(state.destinationUrl, "Website URL"),
       instagramId: state.instagramId || undefined,
