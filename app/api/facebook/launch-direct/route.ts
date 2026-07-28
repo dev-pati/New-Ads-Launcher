@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
+import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createAd, getVideoThumbnail, getResourceAccountId, getDynamicCreativeAdSets, pollVideoReady } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
@@ -103,11 +104,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Creatives not found" }, { status: 400 })
     }
 
-    const notReady = (creatives || []).filter((c: any) => c.status !== "ready")
-    if (notReady.length > 0) {
-      const names = notReady.map((c: any) => `"${c.file_name}" (${c.status})`).join(", ")
+    // Launchability = Meta has the asset. Video processing readiness is checked
+    // by pollVideoReady below; the seam here is the asset id, not status.
+    const notUploaded = (creatives || []).filter((c: any) => !isLaunchable(c))
+    if (notUploaded.length > 0) {
       return NextResponse.json({
-        error: `Some media isn't ready to launch yet (uploading or processing on Meta): ${names}. Please wait until it finishes and try again.`
+        error: `${notUploaded.length} creative(s) not yet uploaded to Meta. Open Ads Manager and upload them before launching.`,
+        creativeIds: notUploaded.map((c: any) => c.id),
       }, { status: 400 })
     }
 
@@ -407,7 +410,7 @@ export async function POST(request: NextRequest) {
               title: "", body: "", cta: cta || "LEARN_MORE", link_url: webLink || "",
               status: adStatus,
             }, tokenOpts)
-            await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+            await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
             created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "post_id" })
           } catch (err: any) {
             errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (post_id mode)" })
@@ -426,7 +429,7 @@ export async function POST(request: NextRequest) {
               title: "", body: "", cta: cta || "LEARN_MORE", link_url: webLink || "",
               status: adStatus,
             }, tokenOpts)
-            await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+            await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
             created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "creative_id" })
           } catch (err: any) {
             errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (creative_id mode)" })
@@ -488,7 +491,7 @@ export async function POST(request: NextRequest) {
               : undefined,
           }, tokenOpts)
 
-          await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+          await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
 
           created.push({
             adId: ad.id,

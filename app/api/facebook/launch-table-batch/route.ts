@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
+import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createAd, getVideoThumbnail, getResourceAccountId, pollVideoReady } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
 
       for (const adSetId of (adSetIds || [])) {
         for (const creative of rowCreatives) {
-          if (!creative.fb_image_hash && !creative.fb_video_id) {
+          if (!isLaunchable(creative)) {
             errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: "Creative not yet uploaded to Meta." })
             continue
           }
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
                 object_story_id: sourceId, title: "", body: "",
                 cta: cta || "LEARN_MORE", link_url: webLink || "", status: adStatus,
               }, tokenOpts)
-              await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+              await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
               created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "post_id" })
             } catch (err: any) {
               errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message })
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
                 reuse_creative_id: sourceId, title: "", body: "",
                 cta: cta || "LEARN_MORE", link_url: webLink || "", status: adStatus,
               }, tokenOpts)
-              await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+              await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
               created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "creative_id" })
             } catch (err: any) {
               errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message })
@@ -224,7 +225,7 @@ export async function POST(request: NextRequest) {
                 : undefined,
             }, tokenOpts)
 
-            await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+            await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
 
             created.push({
               adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId,

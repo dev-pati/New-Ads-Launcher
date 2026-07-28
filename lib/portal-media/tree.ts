@@ -28,6 +28,24 @@ export type MediaNode = {
   mimeType: string | null
   sizeBytes: number | null
   createdAt: string | null
+  fileUrl: string | null
+
+  brandName: string | null
+  brandSlug: string | null
+  productName: string | null
+  pdpUrl: string | null
+  salesPageUrl: string | null
+  landingUrl: string | null
+  checkoutFunnelUrl: string | null
+
+  language: string | null
+  briefType: string | null
+  voiceVariant: string | null
+
+  mediaType: string | null
+  width: number | null
+  height: number | null
+  durationSeconds: number | null
 }
 
 export type FolderNode = {
@@ -62,6 +80,21 @@ function toMediaNode(asset: PortalRegistryAsset, fileName: string): MediaNode {
     mimeType: asset.mime_type,
     sizeBytes: asset.actual_size_bytes,
     createdAt: asset.created_at,
+    fileUrl: asset.file_url,
+    brandName: asset.brand_name,
+    brandSlug: asset.brand_slug,
+    productName: asset.product_name,
+    pdpUrl: asset.product_catalog_pdp_url,
+    salesPageUrl: asset.product_catalog_sales_page_url,
+    landingUrl: asset.product_catalog_landing_url,
+    checkoutFunnelUrl: asset.product_catalog_checkoutchamp_funnel_url,
+    language: asset.language,
+    briefType: asset.brief_type,
+    voiceVariant: asset.voice_variant,
+    mediaType: asset.media_type,
+    width: asset.width,
+    height: asset.height,
+    durationSeconds: asset.duration_seconds,
   }
 }
 

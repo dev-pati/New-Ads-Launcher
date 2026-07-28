@@ -57,6 +57,8 @@ export interface CampaignFormState {
   creativePreviewUrl: string
   mediaUrl: string
   mediaType: MediaType
+  creativeIds: string[]
+  selectedCreatives: SelectedCreative[]
   primaryText: string
   primaryTextVariations: string[]
   headline: string
@@ -66,6 +68,13 @@ export interface CampaignFormState {
   callToAction: string
   destinationUrl: string
   urlParameters: string
+}
+
+export interface SelectedCreative {
+  id: string
+  file_name: string
+  preview_url: string
+  media_type: MediaType
 }
 
 export interface FacebookPageOption {
@@ -113,6 +122,8 @@ export const defaultCampaignState: CampaignFormState = {
   creativePreviewUrl: "",
   mediaUrl: "",
   mediaType: "image",
+  creativeIds: [],
+  selectedCreatives: [],
   primaryText: "",
   primaryTextVariations: [],
   headline: "",

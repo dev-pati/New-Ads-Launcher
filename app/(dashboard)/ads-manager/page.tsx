@@ -983,7 +983,7 @@ function AdsManagerContent() {
           body: JSON.stringify({
             id,
             name: node ? `${node.name} - Copy` : undefined,
-            deep_copy: tab === "campaigns",
+            deep_copy: tab === "campaigns" || tab === "adsets",
             status_option: "PAUSED",
             copies: duplicateCount
           })
@@ -2247,7 +2247,7 @@ function AdsManagerContent() {
 
       {/* ── Action toolbar ── */}
       <div className="flex items-center gap-2 px-4 py-2.5 border-b shrink-0 flex-wrap bg-white dark:bg-background">
-        <button onClick={() => setCreateModalOpen(true)} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded bg-[#31a24c] hover:bg-[#2b9244] text-white transition-colors font-semibold shadow-sm">
+        <button onClick={() => setCreateModalOpen(true)} className="flex items-center gap-1.5 h-7 px-3 text-xs rounded bg-primary hover:bg-primary/90 text-primary-foreground transition-colors font-semibold shadow-sm">
           <IconPlus className="size-3.5" />Create
         </button>
         <button

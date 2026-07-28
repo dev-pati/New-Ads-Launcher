@@ -105,10 +105,11 @@ function validateState(state: CampaignFormState, selectedAccountId: string, curr
     return { step: "adset" as Step, message: "End date must be after start date." }
   }
   if (!state.pageId) return { step: "ad" as Step, message: "Select a Facebook Page." }
-  if (!state.creativeId && !state.mediaUrl.trim()) {
+  const hasCreative = state.creativeIds.length > 0 || Boolean(state.creativeId)
+  if (!hasCreative && !state.mediaUrl.trim()) {
     return { step: "ad" as Step, message: "Upload a media file or enter a valid media URL." }
   }
-  if (!state.creativeId && (!state.mediaUrl.trim() || !isValidHttpUrl(state.mediaUrl))) {
+  if (!hasCreative && (!state.mediaUrl.trim() || !isValidHttpUrl(state.mediaUrl))) {
     return { step: "ad" as Step, message: "Enter a valid image or video URL." }
   }
   if (!state.primaryText.trim()) return { step: "ad" as Step, message: "Primary text is required." }

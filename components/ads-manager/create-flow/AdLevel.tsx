@@ -16,7 +16,8 @@ import {
   MediaType,
   CreativeAssetOption,
 } from "./types"
-import { CreativeLibraryPicker } from "./CreativeLibraryPicker"
+import { LoadMediaModal } from "@/components/shared/load-media-modal"
+import type { Creative } from "@/types/creative"
 import { useState } from "react"
 
 interface Props {
@@ -140,28 +141,59 @@ export function AdLevel({
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const selectedPage = pages.find((page) => page.id === state.pageId)
-  const previewUrl = state.creativePreviewUrl || state.mediaUrl
-  const pickCreative = (creative: CreativeAssetOption) => {
+
+  // Use first creative for the legacy preview
+  const firstCreative = state.selectedCreatives[0]
+  const previewUrl = firstCreative?.preview_url || state.creativePreviewUrl || state.mediaUrl
+  const previewType = firstCreative?.media_type || state.mediaType
+
+  const handleConfirmMedia = (ids: string[], creatives: Creative[]) => {
+    const selected = creatives.map(c => ({
+      id: c.id,
+      file_name: c.file_name,
+      preview_url: c.media_type === "video"
+        ? c.file_url || c.fb_thumbnail_url || ""
+        : c.fb_thumbnail_url || c.fb_image_url || c.file_url || "",
+      media_type: c.media_type,
+    }))
+
     update({
-      creativeId: creative.id,
-      creativeFileName: creative.file_name,
-      creativePreviewUrl: creative.media_type === "video"
-        ? creative.file_url || creative.fb_thumbnail_url || ""
-        : creative.fb_thumbnail_url || creative.fb_image_url || creative.file_url || "",
-      mediaType: creative.media_type,
+      creativeIds: ids,
+      selectedCreatives: selected,
+      // Back-compat for single-ad preview if needed
+      creativeId: ids[0] || "",
+      creativeFileName: selected[0]?.file_name || "",
+      creativePreviewUrl: selected[0]?.preview_url || "",
+      mediaType: selected[0]?.media_type || "image",
       mediaUrl: "",
+    })
+  }
+
+  const removeCreative = (idToRemove: string) => {
+    const nextIds = state.creativeIds.filter(id => id !== idToRemove)
+    const nextSelected = state.selectedCreatives.filter(c => c.id !== idToRemove)
+    update({
+      creativeIds: nextIds,
+      selectedCreatives: nextSelected,
+      creativeId: nextIds[0] || "",
+      creativeFileName: nextSelected[0]?.file_name || "",
+      creativePreviewUrl: nextSelected[0]?.preview_url || "",
+      mediaType: nextSelected[0]?.media_type || "image",
     })
   }
 
   return (
     <div className="flex h-full">
-      <CreativeLibraryPicker
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        adAccountId={adAccountId}
-        onPick={pickCreative}
-        onUploadFile={(file) => onSelectMediaFile(file)}
-      />
+      {pickerOpen && (
+        <LoadMediaModal
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          adAccountId={adAccountId || ""}
+          alreadySelected={new Set(state.creativeIds)}
+          onConfirm={handleConfirmMedia}
+          tabs={["library", "vault", "gdrive", "drive_link"]}
+        />
+      )}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-2xl space-y-6 px-6 py-8 pb-20">
           <div className="flex items-center gap-2">
@@ -230,7 +262,11 @@ export function AdLevel({
           <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
             <div className="flex items-baseline justify-between gap-3">
               <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">Ad setup</h3>
-              <span className="text-[11px] text-[#65676b]">Single image or video</span>
+              <span className="text-[11px] text-[#65676b]">
+                {state.creativeIds.length > 0
+                  ? `${state.creativeIds.length} media selected → ${state.creativeIds.length} ads`
+                  : "Single image or video"}
+              </span>
             </div>
 
             <div>
@@ -250,7 +286,68 @@ export function AdLevel({
               </div>
             </div>
 
-            {state.creativeId ? (
+            {state.creativeIds.length > 0 ? (
+              <div className="rounded-lg border border-[#d7e3f4] bg-[#f7fbff] p-3 dark:border-gray-700 dark:bg-muted/30">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold text-[#1c2b33] dark:text-gray-100">
+                    {state.creativeIds.length} media · each becomes its own ad
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClearUploadedCreative()
+                      update({ creativeIds: [], selectedCreatives: [] })
+                    }}
+                    className="text-[11px] font-medium text-[#65676b] hover:text-red-600"
+                  >
+                    Clear all
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {state.selectedCreatives.map((c) => (
+                    <div
+                      key={c.id}
+                      className="group relative size-16 overflow-hidden rounded-md border border-[#e4e6eb] bg-muted/30 dark:border-gray-800"
+                      title={c.file_name}
+                    >
+                      {c.preview_url ? (
+                        c.media_type === "video" ? (
+                          <video
+                            src={c.preview_url}
+                            className="h-full w-full object-cover"
+                            muted
+                            playsInline
+                            preload="metadata"
+                          />
+                        ) : (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={c.preview_url} alt={c.file_name} className="h-full w-full object-cover" />
+                        )
+                      ) : c.media_type === "video" ? (
+                        <div className="flex h-full items-center justify-center">
+                          <IconVideo className="size-5 text-muted-foreground" />
+                        </div>
+                      ) : (
+                        <div className="flex h-full items-center justify-center">
+                          <IconPhoto className="size-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeCreative(c.id)}
+                        className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        aria-label={`Remove ${c.file_name}`}
+                      >
+                        <IconX className="size-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-xs text-[#65676b]">
+                  Each selected media creates a separate ad in the new ad set, sharing the same Page, text, and link below.
+                </p>
+              </div>
+            ) : state.creativeId ? (
               <div className="rounded-lg border border-[#d7e3f4] bg-[#f7fbff] p-3 dark:border-gray-700 dark:bg-muted/30">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -399,7 +496,7 @@ export function AdLevel({
             )}
             <div className="flex aspect-square w-full items-center justify-center border-y border-gray-200 bg-gray-100">
               {previewUrl ? (
-                state.mediaType === "video" ? (
+                previewType === "video" ? (
                   <video
                     src={previewUrl}
                     className="h-full w-full object-cover"
@@ -416,7 +513,7 @@ export function AdLevel({
                     className="h-full w-full object-cover"
                   />
                 )
-              ) : state.mediaType === "video" ? (
+              ) : previewType === "video" ? (
                 <IconVideo className="size-10 text-gray-400" />
               ) : (
                 <IconPhoto className="size-10 text-gray-400" />

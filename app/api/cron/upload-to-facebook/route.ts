@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadVideoUrlToMeta, uploadImageToMeta, getVideoReadyData } from "@/lib/facebook"
 import { getConnectionForAdAccount, MissingViaError, isManual } from "@/lib/auth"
+import { CREATIVE_STATUS, assertCanMarkUploaded } from "@/lib/creative-readiness"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
   // 1. Process "pending" creatives
   const { data: pending } = await db
     .from("creatives")
-    .select("id, org_id, ad_account_id, file_url, file_name, media_type")
+    .select("id, org_id, ad_account_id, file_url, file_name, media_type, status")
     .eq("status", "pending")
     .not("file_url", "eq", "")
     .order("created_at", { ascending: true })
@@ -76,6 +77,8 @@ export async function GET(request: NextRequest) {
           continue
         }
 
+        assertCanMarkUploaded(row.status)
+
         const normAccountId = row.ad_account_id?.startsWith("act_")
           ? row.ad_account_id
           : `act_${row.ad_account_id}`
@@ -92,7 +95,7 @@ export async function GET(request: NextRequest) {
 
             await db
               .from("creatives")
-              .update({ fb_video_id: result.videoId, status: "processing" })
+              .update({ fb_video_id: result.videoId, status: CREATIVE_STATUS.PROCESSING })
               .eq("id", row.id)
           } else {
             const imgRes = await fetch(row.file_url)
@@ -113,7 +116,7 @@ export async function GET(request: NextRequest) {
                 fb_image_hash: result.hash,
                 fb_image_url: result.url,
                 fb_thumbnail_url: result.url_128,
-                status: "ready",
+                status: CREATIVE_STATUS.READY,
               })
               .eq("id", row.id)
           }
@@ -126,7 +129,7 @@ export async function GET(request: NextRequest) {
             break
           }
 
-          await db.from("creatives").update({ status: "error" }).eq("id", row.id)
+          await db.from("creatives").update({ status: CREATIVE_STATUS.ERROR }).eq("id", row.id)
           errors.push({ id: row.id, error: msg })
           console.error(`[cron/upload-to-facebook] creative ${row.id} failed:`, msg)
         }
@@ -137,7 +140,7 @@ export async function GET(request: NextRequest) {
   // 2. Poll "processing" videos
   const { data: processing } = await db
     .from("creatives")
-    .select("id, org_id, ad_account_id, fb_video_id, file_url, fb_thumbnail_url")
+    .select("id, org_id, ad_account_id, fb_video_id, file_url, fb_thumbnail_url, status")
     .eq("status", "processing")
     .eq("media_type", "video")
     .not("fb_video_id", "is", null)
@@ -166,12 +169,13 @@ export async function GET(request: NextRequest) {
         if (!conn?.access_token) continue
 
         try {
+          assertCanMarkUploaded(row.status)
           const videoData = await getVideoReadyData(row.fb_video_id!, conn.access_token, { skipProof: isManual(conn) })
           if (videoData.status === "error") {
-            await db.from("creatives").update({ status: "error" }).eq("id", row.id)
+            await db.from("creatives").update({ status: CREATIVE_STATUS.ERROR }).eq("id", row.id)
             errors.push({ id: row.id, error: videoData.errorMsg || "Video processing failed" })
           } else if (videoData.ready) {
-            const update: Record<string, unknown> = { status: "ready" }
+            const update: Record<string, unknown> = { status: CREATIVE_STATUS.READY }
             if (videoData.thumbnailUrl) update.fb_thumbnail_url = videoData.thumbnailUrl
             // videoData.sourceUrl is a temporary Meta CDN URL — never overwrite the
             // stable file_url (creative.patigroup.com resolver) or storage_path.

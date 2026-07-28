@@ -304,7 +304,7 @@ export async function DELETE(request: NextRequest) {
     const supabase = createAdminClient()
     const { data: creatives, error: fetchError } = await supabase
       .from("creatives")
-      .select("id, storage_path")
+      .select("id, storage_path, fb_video_id, fb_image_hash")
       .eq("org_id", ctx.orgId)
       .in("id", ids)
 
@@ -317,12 +317,36 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Some selected assets were not found" }, { status: 404 })
     }
 
+    const hasMetaUploadedPortal = (creatives || []).some(creative => {
+      const isPortal = creative.storage_path?.startsWith("r2://pati-videos/creative-portal/")
+      return isPortal && (creative.fb_video_id || creative.fb_image_hash)
+    })
+
+    if (hasMetaUploadedPortal) {
+      return NextResponse.json(
+        { error: "One or more selected Portal assets are already uploaded to Meta. Remove them from Meta before deleting." },
+        { status: 409 }
+      )
+    }
+
     for (const creative of creatives || []) {
       if (!creative.storage_path) continue
       const deleted = await deleteMediaObject(creative.storage_path, ctx.orgId, ctx.user.id, supabase)
       if (!deleted.ok) {
         return NextResponse.json({ error: deleted.reason || "Failed to delete media object" }, { status: 502 })
       }
+    }
+
+    const portalSourcedIds = (creatives || [])
+      .filter(creative => creative.storage_path?.startsWith("r2://pati-videos/creative-portal/"))
+      .map(c => c.id)
+
+    // Order B: reset the Portal tracking rows before deleting the creatives
+    if (portalSourcedIds.length > 0) {
+      await supabase
+        .from("portal_media_items")
+        .update({ org_id: null, ad_account_id: null, mapped_by: null, creative_id: null, status: "pending", updated_at: new Date().toISOString() })
+        .in("creative_id", portalSourcedIds)
     }
 
     const { error: deleteError } = await supabase

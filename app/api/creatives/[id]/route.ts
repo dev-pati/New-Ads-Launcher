@@ -92,16 +92,33 @@ export async function DELETE(
 
     const { data: creative } = await supabase
       .from("creatives")
-      .select("storage_path")
+      .select("storage_path, fb_video_id, fb_image_hash")
       .eq("id", id)
       .eq("org_id", ctx.orgId)
       .single()
+
+    const isPortalSourced = creative?.storage_path?.startsWith("r2://pati-videos/creative-portal/")
+    if (isPortalSourced && (creative?.fb_video_id || creative?.fb_image_hash)) {
+      return NextResponse.json(
+        { error: "Asset already uploaded to Meta. Remove it from Meta before deleting." },
+        { status: 409 }
+      )
+    }
 
     if (creative?.storage_path) {
       const deleted = await deleteMediaObject(creative.storage_path, ctx.orgId, ctx.user.id, supabase)
       if (!deleted.ok) {
         return NextResponse.json({ error: deleted.reason || "Failed to delete media object" }, { status: 502 })
       }
+    }
+
+    // Order B: reset the Portal tracking row before deleting the creative so
+    // partial failure self-heals via the storage_path dedup check in claim.ts.
+    if (isPortalSourced) {
+      await supabase
+        .from("portal_media_items")
+        .update({ org_id: null, ad_account_id: null, mapped_by: null, creative_id: null, status: "pending", updated_at: new Date().toISOString() })
+        .eq("creative_id", id)
     }
 
     await supabase.from("creatives").delete().eq("id", id).eq("org_id", ctx.orgId)

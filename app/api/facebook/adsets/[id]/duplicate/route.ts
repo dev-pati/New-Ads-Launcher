@@ -47,6 +47,7 @@ export async function POST(
       deep_copy: deepCopy ? "true" : "false",
       status_option: statusOption,
     }
+    if (body.campaignId) copyQs.campaign_id = body.campaignId
     if (Object.keys(renameOptions).length > 0) copyQs.rename_options = JSON.stringify(renameOptions)
     const params_ = new URLSearchParams(copyQs)
 
@@ -75,6 +76,8 @@ export async function POST(
     if (body.spendingLimits?.max) updates.daily_spend_cap = String(body.spendingLimits.max)
     if (body.optimizationGoal) updates.optimization_goal = body.optimizationGoal
     if (body.bidStrategy) updates.bid_strategy = body.bidStrategy
+    if (body.startTime) updates.start_time = body.startTime
+    if (body.endTime) updates.end_time = body.endTime
 
     // Targeting override — must fetch existing targeting first, then merge only the changed fields.
     // Sending a partial targeting object to Meta replaces the full targeting, destroying interests,

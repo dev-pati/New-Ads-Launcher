@@ -17,8 +17,15 @@ import {
   IconChevronDown, IconPlus, IconCheck, IconDotsVertical,
   IconPlayerPlay, IconX, IconTrash, IconArrowLeft,
   IconClipboardList, IconUser, IconAlertCircle,
-  IconCloudDownload, IconArrowBackUp,
+  IconCloudDownload, IconArrowBackUp, IconExternalLink,
 } from "@tabler/icons-react"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,6 +82,24 @@ interface PortalMediaFile {
   mimeType: string | null
   sizeBytes: number | null
   createdAt: string | null
+  fileUrl: string | null
+
+  brandName: string | null
+  brandSlug: string | null
+  productName: string | null
+  pdpUrl: string | null
+  salesPageUrl: string | null
+  landingUrl: string | null
+  checkoutFunnelUrl: string | null
+
+  language: string | null
+  briefType: string | null
+  voiceVariant: string | null
+
+  mediaType: string | null
+  width: number | null
+  height: number | null
+  durationSeconds: number | null
 }
 
 interface PortalFolder {
@@ -108,6 +133,15 @@ type Section = "all" | "boards" | "requests" | "my-uploads" | "portal" | `board_
 function formatDate(s?: string) {
   if (!s) return "—"
   return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+}
+
+
+function formatDuration(seconds?: number | null) {
+  if (seconds === null || seconds === undefined) return null
+  const total = Math.round(seconds * 100) / 100
+  const m = Math.floor(total / 60)
+  const s = total - m * 60
+  return `${m}:${s.toFixed(2).padStart(5, "0")}`
 }
 
 function formatBytes(bytes?: number | null) {
@@ -147,6 +181,19 @@ export default function AssetsPage() {
   const [portalError, setPortalError]     = useState("")
   const [portalErrorKind, setPortalErrorKind] = useState<"portal" | "adlauncher" | null>(null)
   const [mappingPortal, setMappingPortal] = useState(false)
+  const [portalDetailOpen, setPortalDetailOpen] = useState(false)
+  const [portalDetailFile, setPortalDetailFile] = useState<PortalMediaFile | null>(null)
+
+  const openPortalDetail = (file: PortalMediaFile, e: React.MouseEvent) => {
+    // Only open if the click wasn't on the checkbox or an explicit link/button
+    const target = e.target as HTMLElement
+    if (target.closest('input[type="checkbox"]') || target.closest('a') || target.closest('button')) {
+      return
+    }
+    setPortalDetailFile(file)
+    setPortalDetailOpen(true)
+  }
+
   const [importConfirm, setImportConfirm] = useState<
     { count: number; adAccountId: string; label: string; folderPath?: string; objectKeys?: string[] } | null
   >(null)
@@ -157,6 +204,9 @@ export default function AssetsPage() {
   const [search, setSearch]             = useState(() => searchParams.get("q") || "")
   const [filterType, setFilterType]     = useState<"" | "image" | "video">("")
   const [filterStatus, setFilterStatus] = useState<"" | "ready" | "pending">("")
+  const [filterBrand, setFilterBrand]   = useState<string>("")
+  const [filterProduct, setFilterProduct] = useState<string>("")
+  const [filterLanguage, setFilterLanguage] = useState<string>("")
   const [loadingCreatives, setLoadingCreatives] = useState(true)
   const [loadingBoards, setLoadingBoards]       = useState(false)
   const [loadingRequests, setLoadingRequests]   = useState(false)
@@ -390,6 +440,7 @@ export default function AssetsPage() {
 
   useEffect(() => { setCreativesNextCursor(null); setCreativesHasMore(false); loadCreatives(null, true) }, [selectedAccountId])
   useEffect(() => { loadBoards() }, [loadBoards])
+  useEffect(() => { loadPortalTree() }, [loadPortalTree])
 
   useEffect(() => {
     fetch("/api/auth/me").then(r => r.ok ? r.json() : null).then(d => setCurrentUserId(d?.user?.id || null))
@@ -400,10 +451,6 @@ export default function AssetsPage() {
   useEffect(() => {
     if (section === "requests" && requests.length === 0) loadRequests()
   }, [section, requests.length, loadRequests])
-
-  useEffect(() => {
-    if (section === "portal") loadPortalTree()
-  }, [section, loadPortalTree])
 
   useEffect(() => {
     if (currentBoardId) loadBoardCreatives(currentBoardId)
@@ -456,6 +503,41 @@ export default function AssetsPage() {
 
   // ── Filtering ─────────────────────────────────────────────────────────────
 
+  // Flatten portal tree to map creatives by their object key
+  const portalFileMap = useMemo(() => {
+    const map = new Map<string, PortalMediaFile>()
+    const walk = (folders: PortalFolder[], files: PortalMediaFile[]) => {
+      for (const file of files) map.set(file.objectKey, file)
+      for (const folder of folders) walk(folder.folders, folder.files)
+    }
+    walk(portalTree, [])
+    return map
+  }, [portalTree])
+
+  const resolvePortalMetadata = useCallback((creative: Creative): PortalMediaFile | null => {
+    if (!creative.storage_path?.startsWith("r2://pati-videos/")) return null
+    const objectKey = creative.storage_path.slice(17) // remove prefix
+    return portalFileMap.get(objectKey) || null
+  }, [portalFileMap])
+
+  // Automatically derive available brands/products/languages from the loaded creatives
+  const availableFilters = useMemo(() => {
+    const brands = new Set<string>()
+    const products = new Set<string>()
+    const languages = new Set<string>()
+    creatives.forEach(c => {
+      const pm = resolvePortalMetadata(c)
+      if (pm?.brandName) brands.add(pm.brandName)
+      if (pm?.productName) products.add(pm.productName)
+      if (pm?.language) languages.add(pm.language)
+    })
+    return {
+      brands: Array.from(brands).sort(),
+      products: Array.from(products).sort(),
+      languages: Array.from(languages).sort(),
+    }
+  }, [creatives, portalFileMap])
+
   const filterCreatives = (list: Creative[]) => {
     const q = search.toLowerCase()
     return list.filter(c => {
@@ -463,6 +545,12 @@ export default function AssetsPage() {
       if (filterType && c.media_type !== filterType) return false
       if (filterStatus === "ready" && !(c.fb_image_hash || c.fb_video_id)) return false
       if (filterStatus === "pending" && !!(c.fb_image_hash || c.fb_video_id)) return false
+
+      const pm = resolvePortalMetadata(c)
+      if (filterBrand && pm?.brandName !== filterBrand) return false
+      if (filterProduct && pm?.productName !== filterProduct) return false
+      if (filterLanguage && pm?.language !== filterLanguage) return false
+
       return true
     })
   }
@@ -1140,7 +1228,10 @@ export default function AssetsPage() {
                                 </div>
                               </th>
                               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">File name</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Brand</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Product</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lang</th>
+                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
                               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Size</th>
                               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Approved</th>
                               <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assigned</th>
@@ -1155,11 +1246,11 @@ export default function AssetsPage() {
                               return (
                                 <tr
                                   key={file.objectKey}
-                                  onClick={() => togglePortalSelect(file.objectKey)}
                                   title={file.objectKey}
                                   className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer", isSelected && "bg-primary/5")}
+                                  onClick={(e) => openPortalDetail(file, e)}
                                 >
-                                  <td className="px-3 py-2.5">
+                                  <td className="px-3 py-2.5" onClick={e => { e.stopPropagation(); togglePortalSelect(file.objectKey); }}>
                                     <div className={cn("size-4 rounded border flex items-center justify-center",
                                       isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
                                       {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
@@ -1170,10 +1261,20 @@ export default function AssetsPage() {
                                       {isVideo
                                         ? <IconPlayerPlay className="size-3.5 shrink-0 text-muted-foreground" />
                                         : <IconPhoto className="size-3.5 shrink-0 text-muted-foreground" />}
-                                      <span className="text-sm font-medium truncate max-w-[280px]">{file.name}</span>
+                                      <span className="text-sm font-medium truncate max-w-[220px]">{file.name}</span>
                                     </div>
                                   </td>
-                                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{isVideo ? "Video" : "Image"}</td>
+                                  <td className="px-3 py-2.5 text-sm truncate max-w-[120px] font-medium" title={file.brandName || ""}>{file.brandName || "—"}</td>
+                                  <td className="px-3 py-2.5 text-sm text-muted-foreground truncate max-w-[180px]" title={file.productName || ""}>{file.productName || "—"}</td>
+                                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                                    {file.language ? (
+                                      <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold">{file.language}</span>
+                                    ) : "—"}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">
+                                    {file.width && file.height ? `${file.width}x${file.height}` : "—"}
+                                    {file.durationSeconds ? ` • ${formatDuration(file.durationSeconds)}` : ""}
+                                  </td>
                                   <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{formatBytes(file.sizeBytes)}</td>
                                   <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(file.createdAt || undefined)}</td>
                                   <td className="px-3 py-2.5">
@@ -1194,7 +1295,7 @@ export default function AssetsPage() {
                                       onClick={e => e.stopPropagation()}
                                       className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
                                     >
-                                      View
+                                      View media
                                     </a>
                                   </td>
                                 </tr>
@@ -1297,8 +1398,102 @@ export default function AssetsPage() {
                   </div>
                 </div>
 
-                {(filterType || filterStatus) && (
-                  <button onClick={() => { setFilterType(""); setFilterStatus("") }}
+                {/* Brand */}
+                {availableFilters.brands.length > 0 && (
+                  <div className="relative group">
+                    <button className={cn(
+                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border transition-colors max-w-[160px]",
+                      filterBrand ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"
+                    )}>
+                      <span className="truncate">Brand {filterBrand ? `: ${filterBrand}` : ""}</span> <IconChevronDown className="size-3 shrink-0" />
+                    </button>
+                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[140px] max-h-[240px] overflow-y-auto hidden group-hover:block">
+                      <button onClick={() => setFilterBrand("")}
+                        className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
+                          !filterBrand && "text-primary"
+                        )}>
+                        {!filterBrand && <IconCheck className="size-3" />}
+                        All Brands
+                      </button>
+                      {availableFilters.brands.map(brand => (
+                        <button key={brand} onClick={() => setFilterBrand(brand)}
+                          className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2 truncate",
+                            filterBrand === brand && "text-primary"
+                          )}
+                          title={brand}
+                        >
+                          {filterBrand === brand && <IconCheck className="size-3" />}
+                          {brand}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Product */}
+                {availableFilters.products.length > 0 && (
+                  <div className="relative group">
+                    <button className={cn(
+                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border transition-colors max-w-[200px]",
+                      filterProduct ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"
+                    )}>
+                      <span className="truncate">Product {filterProduct ? `: ${filterProduct}` : ""}</span> <IconChevronDown className="size-3 shrink-0" />
+                    </button>
+                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[180px] max-h-[240px] overflow-y-auto hidden group-hover:block">
+                      <button onClick={() => setFilterProduct("")}
+                        className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
+                          !filterProduct && "text-primary"
+                        )}>
+                        {!filterProduct && <IconCheck className="size-3" />}
+                        All Products
+                      </button>
+                      {availableFilters.products.map(product => (
+                        <button key={product} onClick={() => setFilterProduct(product)}
+                          className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2 truncate",
+                            filterProduct === product && "text-primary"
+                          )}
+                          title={product}
+                        >
+                          {filterProduct === product && <IconCheck className="size-3" />}
+                          {product}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Language */}
+                {availableFilters.languages.length > 0 && (
+                  <div className="relative group">
+                    <button className={cn(
+                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border transition-colors",
+                      filterLanguage ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"
+                    )}>
+                      Language {filterLanguage ? `: ${filterLanguage.toUpperCase()}` : ""} <IconChevronDown className="size-3" />
+                    </button>
+                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[100px] hidden group-hover:block">
+                      <button onClick={() => setFilterLanguage("")}
+                        className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
+                          !filterLanguage && "text-primary"
+                        )}>
+                        {!filterLanguage && <IconCheck className="size-3" />}
+                        All
+                      </button>
+                      {availableFilters.languages.map(lang => (
+                        <button key={lang} onClick={() => setFilterLanguage(lang)}
+                          className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2 uppercase",
+                            filterLanguage === lang && "text-primary"
+                          )}>
+                          {filterLanguage === lang && <IconCheck className="size-3" />}
+                          {lang}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(filterType || filterStatus || filterBrand || filterProduct || filterLanguage) && (
+                  <button onClick={() => { setFilterType(""); setFilterStatus(""); setFilterBrand(""); setFilterProduct(""); setFilterLanguage("") }}
                     className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 border rounded-lg">
                     <IconX className="size-3" /> Clear
                   </button>
@@ -1410,6 +1605,10 @@ export default function AssetsPage() {
                           </div>
                         </th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Name</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Brand</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Product</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lang</th>
+                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
                         <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date Added</th>
@@ -1420,9 +1619,17 @@ export default function AssetsPage() {
                       {displayList.map(c => {
                         const isSelected = selected.has(c.id)
                         const isReady    = !!(c.fb_image_hash || c.fb_video_id)
+                        const portalMeta = resolvePortalMetadata(c)
                         return (
-                          <tr key={c.id} className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer", isSelected && "bg-primary/5")} onClick={() => toggleSelect(c.id)}>
-                            <td className="px-3 py-2.5">
+                          <tr
+                            key={c.id}
+                            className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer", isSelected && "bg-primary/5")}
+                            onClick={(e) => {
+                              if (portalMeta) { openPortalDetail(portalMeta, e); return }
+                              toggleSelect(c.id)
+                            }}
+                          >
+                            <td className="px-3 py-2.5" onClick={e => { e.stopPropagation(); toggleSelect(c.id) }}>
                               <div className={cn("size-4 rounded border flex items-center justify-center", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
                                 {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
                               </div>
@@ -1434,6 +1641,17 @@ export default function AssetsPage() {
                                 </div>
                                 <span className="text-sm font-medium truncate max-w-[200px]">{c.file_name}</span>
                               </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-sm truncate max-w-[120px] font-medium" title={portalMeta?.brandName || ""}>{portalMeta?.brandName || "—"}</td>
+                            <td className="px-3 py-2.5 text-sm text-muted-foreground truncate max-w-[180px]" title={portalMeta?.productName || ""}>{portalMeta?.productName || "—"}</td>
+                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                              {portalMeta?.language ? (
+                                <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold">{portalMeta.language}</span>
+                              ) : "—"}
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">
+                              {portalMeta?.width && portalMeta?.height ? `${portalMeta.width}x${portalMeta.height}` : "—"}
+                              {portalMeta?.durationSeconds ? ` • ${formatDuration(portalMeta.durationSeconds)}` : ""}
                             </td>
                             <td className="px-3 py-2.5 text-xs text-muted-foreground capitalize">{c.media_type}</td>
                             <td className="px-3 py-2.5">
@@ -1748,6 +1966,90 @@ export default function AssetsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    
+      {/* Detail Sheet */}
+      <Sheet open={portalDetailOpen} onOpenChange={setPortalDetailOpen}>
+        <SheetContent className="sm:max-w-md w-full overflow-y-auto p-0 flex flex-col gap-0 border-l border-border/40 shadow-xl bg-card">
+          <SheetHeader className="px-6 py-5 border-b border-border/40 bg-muted/20 shrink-0">
+            <SheetTitle className="text-base font-semibold">Media Details</SheetTitle>
+            <SheetDescription className="text-xs">
+              Metadata joined live from Creative Portal.
+            </SheetDescription>
+          </SheetHeader>
+
+          {portalDetailFile && (
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              {/* No thumbnail/video player here by design — see the rate-limit
+                  comment on the Portal spreadsheet above; "View media" opens
+                  the resolver on demand instead. */}
+
+              {/* File Info */}
+              <div className="space-y-4 min-w-0">
+                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">File Information</h3>
+
+                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-[13px] font-medium text-foreground/80 break-words leading-relaxed shadow-sm">
+                  {portalDetailFile.name}
+                </div>
+
+                <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px]">
+                  <span className="text-muted-foreground font-medium">Type</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.mimeType || (portalDetailFile.mimeType?.startsWith("video/") ? "Video" : "Image")}</span>
+                  <span className="text-muted-foreground font-medium">Size</span><span className="min-w-0 font-medium text-foreground/80">{formatBytes(portalDetailFile.sizeBytes)}</span>
+                  <span className="text-muted-foreground font-medium">Dimensions</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.width && portalDetailFile.height ? `${portalDetailFile.width}x${portalDetailFile.height}` : "—"}</span>
+                  <span className="text-muted-foreground font-medium">Duration</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.durationSeconds ? formatDuration(portalDetailFile.durationSeconds) : "—"}</span>
+                  <span className="text-muted-foreground font-medium">Added</span><span className="min-w-0 font-medium text-foreground/80">{formatDate(portalDetailFile.createdAt || undefined)}</span>
+                </div>
+
+                <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] font-mono text-muted-foreground break-all leading-relaxed">
+                  {portalDetailFile.objectKey}
+                </div>
+              </div>
+
+              {/* Brand & Product */}
+              <div className="space-y-4 min-w-0">
+                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">Product & Context</h3>
+                <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px] p-3 rounded-lg border bg-muted/10 shadow-sm">
+                  <span className="text-muted-foreground font-medium">Brand</span><span className="font-medium min-w-0 break-words text-foreground/90">{portalDetailFile.brandName || "—"} {portalDetailFile.brandSlug ? <span className="text-muted-foreground font-normal">({portalDetailFile.brandSlug})</span> : ""}</span>
+                  <span className="text-muted-foreground font-medium">Product</span><span className="min-w-0 break-words font-medium text-foreground/80 leading-snug">{portalDetailFile.productName || "—"}</span>
+                  <span className="text-muted-foreground font-medium flex items-center">Language</span><span className="min-w-0 flex items-center">{portalDetailFile.language ? <span className="uppercase text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded shadow-sm">{portalDetailFile.language}</span> : "—"}</span>
+                  <span className="text-muted-foreground font-medium">Brief Type</span><span className="min-w-0 break-words font-medium text-foreground/80">{portalDetailFile.briefType || "—"}</span>
+                  <span className="text-muted-foreground font-medium">Voice</span><span className="min-w-0 break-words font-medium text-foreground/80">{portalDetailFile.voiceVariant || "—"}</span>
+                </div>
+              </div>
+
+              {/* Links */}
+              <div className="space-y-4 min-w-0">
+                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">Links</h3>
+                <div className="flex flex-col gap-3 text-[13px] p-3 rounded-lg border bg-muted/10 shadow-sm">
+                  {portalDetailFile.pdpUrl ? (
+                    <a href={portalDetailFile.pdpUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
+                      Product Detail Page (PDP) <IconExternalLink className="size-3.5" />
+                    </a>
+                  ) : <span className="text-muted-foreground italic">No PDP URL</span>}
+
+                  {portalDetailFile.salesPageUrl && (
+                    <a href={portalDetailFile.salesPageUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
+                      Sales Page <IconExternalLink className="size-3.5" />
+                    </a>
+                  )}
+
+                  {portalDetailFile.landingUrl && (
+                    <a href={portalDetailFile.landingUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
+                      Landing Page <IconExternalLink className="size-3.5" />
+                    </a>
+                  )}
+
+                  {portalDetailFile.checkoutFunnelUrl && (
+                    <a href={portalDetailFile.checkoutFunnelUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
+                      Checkout Funnel <IconExternalLink className="size-3.5" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
     </div>
   )
 }

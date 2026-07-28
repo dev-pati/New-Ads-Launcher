@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import {
@@ -9,7 +9,7 @@ import {
   IconFolder, IconFileImport, IconFileExport, IconLayoutDashboard,
   IconCloudDownload, IconPencil, IconTrash, IconLoader2, IconCheck,
   IconCopy, IconX, IconTag, IconChartBar, IconSparkles, IconDotsVertical,
-  IconRefresh, IconList, IconGridDots
+  IconRefresh, IconList, IconGridDots, IconRocket, IconPhotoPlus
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,6 +24,26 @@ import { AINamingTab } from "@/components/templates/AINamingTab"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
+interface TemplateMedia {
+  creative_ids: string[]
+  media_type: "image" | "video" | "unknown"
+  thumb_url: string | null
+  image_hash: string | null
+  video_id: string | null
+  // true when the source ad's media was never uploaded through AdLauncher, so
+  // there is no creative row to preselect — the user picks media at launch time.
+  needs_media: boolean
+}
+
+interface TemplateMetrics {
+  spend: number
+  roas: number
+  results: number
+  impressions: number
+  date_preset: string
+  captured_at: string
+}
+
 interface AdCopyTemplate {
   id: string
   org_id: string
@@ -37,6 +57,10 @@ interface AdCopyTemplate {
   tags: string[]
   created_at: string
   updated_at: string
+  // Present only on templates saved from an ad via Ads Manager → Save as Template
+  media?: TemplateMedia | null
+  metrics?: TemplateMetrics | null
+  source_ad_id?: string | null
 }
 
 const CTA_OPTIONS = [
@@ -61,20 +85,32 @@ const emptyForm = () => ({
 // ─── Template Card ──────────────────────────────────────────────────────────────
 
 function TemplateCard({
-  t, onEdit, onDelete, onCopy,
+  t, onEdit, onDelete, onCopy, onLaunch,
 }: {
   t: AdCopyTemplate
   onEdit: (t: AdCopyTemplate) => void
   onDelete: (id: string) => void
   onCopy: (t: AdCopyTemplate) => void
+  onLaunch: (t: AdCopyTemplate) => void
 }) {
+  const thumb = t.media?.thumb_url
+  const roas = t.metrics?.roas
   return (
-    <div className="group bg-white border rounded-xl p-4 hover:border-blue-200 hover:shadow-sm transition-all">
+    <div className="group bg-white border rounded-xl p-4 hover:border-blue-200 hover:shadow-sm transition-all flex flex-col">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="size-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 mt-0.5">
-            <IconTemplate className="size-4 text-blue-500" />
-          </div>
+          {thumb ? (
+            <div className="relative size-9 rounded-lg overflow-hidden shrink-0 mt-0.5 border">
+              <img src={thumb} alt="" className="size-full object-cover" loading="lazy" />
+              {t.media?.media_type === "video" && (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/30 text-white text-[9px] font-bold">▶</span>
+              )}
+            </div>
+          ) : (
+            <div className="size-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 mt-0.5">
+              <IconTemplate className="size-4 text-blue-500" />
+            </div>
+          )}
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-900 truncate">{t.name}</p>
             <p className="text-xs text-slate-400 mt-0.5">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
@@ -99,6 +135,28 @@ function TemplateCard({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
+
+      {/* What this template carries: media+copy or copy only, and how the source ad did */}
+      <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+        <span className={cn(
+          "px-2 py-0.5 rounded-full text-[11px] font-semibold",
+          t.media && !t.media.needs_media ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
+        )}>
+          {t.media && !t.media.needs_media
+            ? `${t.media.media_type === "video" ? "Video" : "Image"} + Copy`
+            : "Copy Only"}
+        </span>
+        {typeof roas === "number" && roas > 0 && (
+          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
+            ROAS {roas.toFixed(1)}x
+          </span>
+        )}
+        {t.media?.needs_media && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+            <IconPhotoPlus className="size-3" />Cần upload media
+          </span>
+        )}
       </div>
 
       <div className="mt-3 space-y-1.5">
@@ -127,6 +185,15 @@ function TemplateCard({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="mt-3 pt-3 border-t flex items-center gap-2">
+        <Button size="sm" className="flex-1 h-8 gap-1.5 text-xs" onClick={() => onLaunch(t)}>
+          <IconRocket className="size-3.5" />Launch
+        </Button>
+        <Button size="sm" variant="outline" className="h-8 px-2.5" onClick={() => onEdit(t)} title="Edit">
+          <IconPencil className="size-3.5" />
+        </Button>
       </div>
     </div>
   )
@@ -223,12 +290,13 @@ function TemplateFormDialog({
 // ─── Spreadsheet View ──────────────────────────────────────────────────────────
 
 function TemplatesSpreadsheet({
-  templates, onEdit, onDelete, onCopy,
+  templates, onEdit, onDelete, onCopy, onLaunch,
 }: {
   templates: AdCopyTemplate[]
   onEdit: (t: AdCopyTemplate) => void
   onDelete: (id: string) => void
   onCopy: (t: AdCopyTemplate) => void
+  onLaunch: (t: AdCopyTemplate) => void
 }) {
   return (
     <div className="border rounded-lg overflow-hidden bg-white">
@@ -265,6 +333,10 @@ function TemplatesSpreadsheet({
                   ) : "-"}
                 </td>
                 <td className="px-4 py-2 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                  <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => onLaunch(t)}>
+                    <IconRocket className="size-3.5" />Launch
+                  </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button className="size-7 rounded-md inline-flex items-center justify-center hover:bg-slate-200 transition-colors text-muted-foreground ml-auto">
@@ -284,6 +356,7 @@ function TemplatesSpreadsheet({
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -302,6 +375,7 @@ type SortOption = "newest" | "oldest" | "name-az" | "name-za"
 export default function TemplatesPage() {
   const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
 
+  const router = useRouter()
   const [tab, setTab] = useState<Tab>("ad-setup")
   const [templates, setTemplates] = useState<AdCopyTemplate[]>([])
   const [loading, setLoading] = useState(false)
@@ -365,6 +439,12 @@ export default function TemplatesPage() {
 
   const openCreate = () => { setEditTarget(null); setFormOpen(true) }
   const openEdit = (t: AdCopyTemplate) => { setEditTarget(t); setFormOpen(true) }
+
+  // Launch hands the template id to the launcher, which fetches it and prefills
+  // copy + preselects the creatives the template was saved with.
+  const handleLaunch = (t: AdCopyTemplate) => {
+    router.push(`/launch?template=${encodeURIComponent(t.id)}`)
+  }
 
   const handleSave = async (form: ReturnType<typeof emptyForm>) => {
     setSaving(true)
@@ -702,6 +782,7 @@ export default function TemplatesPage() {
                         setEditTarget(null)
                         setFormOpen(true)
                       }}
+                      onLaunch={handleLaunch}
                     />
                   ))}
                 </div>
@@ -723,6 +804,7 @@ export default function TemplatesPage() {
                     setEditTarget(null)
                     setFormOpen(true)
                   }}
+                  onLaunch={handleLaunch}
                 />
               )}
             </div>

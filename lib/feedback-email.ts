@@ -1,10 +1,12 @@
 /**
  * feedback-email.ts — Launch/Feedback loop notifications.
- * On new feedback: PO gets the ticket (BOM cc'd), reporter gets a receipt.
+ * On new feedback: PO gets the ticket (BOM cc'd), reporter gets a receipt, PM alert gets a short ping.
  * One thread — PO/BOM reply to each other by normal email, no reply-to-ticket feature.
  */
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendEmail } from "@/lib/send-email"
+
+const PM_ALERT_EMAIL = process.env.FEEDBACK_ALERT_EMAIL || "thanhtin@patigroup.com"
 
 interface FeedbackRow {
   id: string
@@ -72,6 +74,13 @@ We'll follow up if we need more details.
 AdLauncher Product Team`,
       })
     }
+
+    // Ping alert email
+    await sendEmail({
+      to: PM_ALERT_EMAIL,
+      subject: `New feedback received: ${subjectTag}`,
+      text: `Bạn vừa nhận 1 feedback về, vui lòng mở ads.patigroup.com/pm-feedback check ngay`,
+    })
   } catch (err) {
     console.error("feedback notification failed:", err)
   }

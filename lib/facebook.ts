@@ -1720,6 +1720,90 @@ export interface ExistingAdItem {
   description?: string
   link?: string
   cta?: string
+  // Set by getAdDetail only — lets callers confirm the ad really belongs to the
+  // ad account the client claimed, instead of trusting the query param.
+  account_id?: string
+}
+
+// One ad, normalized the same way getExistingAds normalizes a list. Used by the
+// P0 template loop: "Save as Template" and "Duplicate to Launcher" both need the
+// copy + media + a metrics snapshot for a single ad picked in Ads Manager.
+export async function getAdDetail(
+  adId: string,
+  accessToken: string,
+  opts: { datePreset?: string } = {}
+): Promise<ExistingAdItem> {
+  const datePreset = opts.datePreset || "last_30d"
+  const fields = [
+    "id",
+    "name",
+    "status",
+    "effective_status",
+    "created_time",
+    "account_id",
+    "campaign{id,name}",
+    "adset{id,name}",
+    "creative{id,title,body,thumbnail_url,image_hash,video_id,object_story_id,effective_object_story_id,object_story_spec{page_id,link_data,video_data}}",
+    `insights.date_preset(${datePreset}){spend,impressions,reach,actions,purchase_roas}`,
+  ].join(",")
+
+  const params = graphTokenParams(accessToken)
+  params.set("fields", fields)
+
+  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${adId}?${params}`)
+  const ad = await res.json()
+  if (!res.ok || ad?.error) throwMetaError(ad, "Failed to fetch ad")
+
+  const insights = ad.insights?.data?.[0] || {}
+  const oss = ad.creative?.object_story_spec || {}
+  const linkData = oss.link_data
+  const videoData = oss.video_data
+  const postId = ad.creative?.object_story_id || ad.creative?.effective_object_story_id
+  const pageId = oss.page_id || (typeof postId === "string" && postId.includes("_") ? postId.split("_")[0] : undefined)
+
+  const imageHash = ad.creative?.image_hash || linkData?.image_hash
+  const videoId = ad.creative?.video_id || videoData?.video_id
+
+  const actions = (insights.actions || []) as Array<{ action_type: string; value: string }>
+  const purchases = actions.find(a => a.action_type === "purchase" || a.action_type === "offsite_conversion.fb_pixel_purchase")
+  const leads = actions.find(a => a.action_type === "lead" || a.action_type === "offsite_conversion.fb_pixel_lead")
+  const linkClicks = actions.find(a => a.action_type === "link_click")
+  const roasArr = insights.purchase_roas || []
+
+  return {
+    id: ad.id,
+    name: ad.name,
+    status: ad.status,
+    effective_status: ad.effective_status,
+    date_created: ad.created_time,
+    account_id: ad.account_id,
+    campaign_id: ad.campaign?.id,
+    campaign_name: ad.campaign?.name,
+    adset_id: ad.adset?.id,
+    adset_name: ad.adset?.name,
+    page_id: pageId,
+    post_id: postId,
+    post_url: postId ? `https://www.facebook.com/${postId.split("_").join("/posts/")}` : undefined,
+    object_story_id: ad.creative?.object_story_id,
+    effective_object_story_id: ad.creative?.effective_object_story_id,
+    thumb_url: ad.creative?.thumbnail_url,
+    image_hash: imageHash,
+    video_id: videoId,
+    media_type: videoId ? "video" : imageHash ? "image" : "unknown",
+    spend: parseFloat(insights.spend || "0"),
+    impressions: parseInt(insights.impressions || "0", 10),
+    reach: parseInt(insights.reach || "0", 10),
+    results: parseFloat(purchases?.value || leads?.value || linkClicks?.value || "0"),
+    roas: roasArr.length > 0 ? parseFloat(roasArr[0].value || "0") : 0,
+    platform: "Web",
+    // creative.body/title are the flat mirrors Meta keeps for non-story creatives;
+    // object_story_spec wins when present because that is what the ad actually renders.
+    primaryText: linkData?.message || videoData?.message || ad.creative?.body || undefined,
+    headline: linkData?.name || videoData?.title || ad.creative?.title || undefined,
+    description: linkData?.description || undefined,
+    link: linkData?.link || videoData?.call_to_action?.value?.link || undefined,
+    cta: linkData?.call_to_action?.type || videoData?.call_to_action?.type || undefined,
+  }
 }
 
 export interface DarkPostAdItem {

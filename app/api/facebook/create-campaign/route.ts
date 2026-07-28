@@ -78,6 +78,7 @@ interface CreateCampaignState {
   pageId: string
   instagramId: string
   creativeId: string
+  creativeIds: string[]
   mediaUrl: string
   mediaType: MediaType
   primaryText: string
@@ -230,6 +231,7 @@ function parseState(rawState: unknown): CreateCampaignState {
     pageId: asString(rawState.pageId),
     instagramId: asString(rawState.instagramId),
     creativeId: asString(rawState.creativeId),
+    creativeIds: asStringList(rawState.creativeIds),
     mediaUrl: asString(rawState.mediaUrl),
     mediaType,
     primaryText: asString(rawState.primaryText),
@@ -248,7 +250,8 @@ function parseState(rawState: unknown): CreateCampaignState {
   if (!state.adSetName) fail(400, "Ad set name is required")
   if (!state.adName) fail(400, "Ad name is required")
   if (!state.pageId) fail(400, "Facebook Page is required")
-  if (!state.creativeId && !state.mediaUrl) fail(400, "Media file or media URL is required")
+  const hasCreative = state.creativeIds.length > 0 || Boolean(state.creativeId)
+  if (!hasCreative && !state.mediaUrl) fail(400, "Media file or media URL is required")
   if (!state.destinationUrl) fail(400, "Website URL is required")
   if (!state.headline) fail(400, "Headline is required")
   if (!state.primaryText) fail(400, "Primary text is required")
@@ -257,7 +260,7 @@ function parseState(rawState: unknown): CreateCampaignState {
     fail(400, "Age range must be between 18 and 65+")
   }
 
-  if (!state.creativeId) parseHttpUrl(state.mediaUrl, "Media URL")
+  if (!hasCreative) parseHttpUrl(state.mediaUrl, "Media URL")
   parseHttpUrl(state.destinationUrl, "Website URL")
   parseMoney(state.advantageCampaignBudget ? state.campaignBudget : state.dailyBudget, "Budget")
 
@@ -735,6 +738,88 @@ export async function POST(request: NextRequest) {
     }, tokenOpts)
     await patchAdSetEndTime(adSet.id, token, endTime)
 
+    // ── Multi-creative branch: N ads, one per media, sharing the new ad set ──
+    if (state.creativeIds.length > 0) {
+      const created: Array<{ adId: string; creativeId: string; fileName: string }> = []
+      const errors: Array<{ creativeId: string; fileName: string; error: string }> = []
+
+      for (const creativeId of state.creativeIds) {
+        try {
+          const media = await resolveStoredCreativeMedia(ctx.orgId, adAccountId, token, creativeId, tokenOpts)
+          const ad = await createSingleMediaAd(adAccountId, token, {
+            adName: state.adName,
+            adSetId: adSet.id,
+            pageId: state.pageId,
+            imageHash: media.imageHash,
+            videoId: media.videoId,
+            thumbnailUrl: media.thumbnailUrl,
+            headline: state.headline,
+            headlineVariations: state.headlineVariations,
+            primaryText: state.primaryText,
+            primaryTextVariations: state.primaryTextVariations,
+            description: state.description,
+            descriptionVariations: state.descriptionVariations,
+            cta: state.callToAction,
+            destinationUrl: parseHttpUrl(state.destinationUrl, "Website URL"),
+            instagramId: state.instagramId || undefined,
+            urlTags: state.urlParameters || undefined,
+          })
+          created.push({ adId: ad.id, creativeId, fileName: "" })
+        } catch (err: any) {
+          errors.push({
+            creativeId,
+            fileName: "",
+            error: err instanceof Error ? err.message : "Failed to create ad",
+          })
+        }
+      }
+
+      // Zero successes → roll back the whole campaign so the user isn't left with an empty shell.
+      if (created.length === 0) {
+        await rollbackCampaign(campaign.id, token)
+        return NextResponse.json({
+          success: false,
+          campaignId: null,
+          adSetId: null,
+          errors,
+        }, { status: 500 })
+      }
+
+      // Record the launch batch — required for every launch route (CONTEXT.md).
+      const batchStatus = errors.length === 0 ? "success" : "partial"
+      const supabase = createAdminClient()
+      await supabase.from("launch_batches").insert({
+        org_id: ctx.orgId,
+        user_id: ctx.user.id,
+        user_name: ctx.user.full_name || ctx.user.email?.split("@")[0] || "Unknown",
+        ad_account_id: adAccountId,
+        ad_account_name: adAccountId,
+        adset_ids: [adSet.id],
+        adset_names: [state.adSetName],
+        creative_ids: state.creativeIds,
+        primary_text: state.primaryText || null,
+        headline: state.headline || null,
+        cta: state.callToAction || null,
+        web_link: state.destinationUrl || null,
+        page_id: state.pageId || null,
+        status: batchStatus,
+        total_ads: created.length,
+        failed_ads: errors.length,
+        errors,
+        created_ads: created,
+      })
+
+      return NextResponse.json({
+        success: true,
+        campaignId: campaign.id,
+        adSetId: adSet.id,
+        createdAds: created,
+        errors,
+        batchStatus,
+      })
+    }
+
+    // ── Single-creative / remote-URL branch (unchanged) ──────────────────────
     const media = await resolveMediaForAd(ctx.orgId, adAccountId, token, state, tokenOpts)
     const ad = await createSingleMediaAd(adAccountId, token, {
       adName: state.adName,

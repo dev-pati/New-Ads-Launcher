@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
+import { assertLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail, getResourceAccountId } from "@/lib/facebook"
 import { normalizeAdAccountId } from "../_utils"
@@ -217,7 +218,7 @@ async function createAdsInAdset(
           ? { bodies: allBodies.length ? allBodies : [body], titles: allTitles.length ? allTitles : [title], descriptions: allDescs }
           : undefined,
       }, tokenOpts)
-      await supabase.from("creatives").update({ status: "launched", fb_ad_id: ad.id }).eq("id", creative.id)
+      await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
       results.push({
         creativeId: creative.id,
         adId: ad.id,
@@ -440,22 +441,18 @@ export async function POST(request: NextRequest) {
     const { data: creatives } = await supabase.from("creatives").select("*").in("id", creativeIds).eq("org_id", ctx.orgId)
     if (!creatives?.length) return NextResponse.json({ error: "No creatives found" }, { status: 400 })
 
-    const notReady = (creatives || []).filter((c: any) => c.status !== "ready")
-    if (notReady.length > 0) {
-      const names = notReady.map((c: any) => `"${c.file_name}" (${c.status})`).join(", ")
-      return NextResponse.json({
-        error: `Some media isn't ready to launch yet (uploading or processing on Meta): ${names}. Please wait until it finishes and try again.`
-      }, { status: 400 })
-    }
-
     const launchCreatives = creatives as any[]
 
-    const notUploaded = launchCreatives.filter(c => !c.fb_image_hash && !c.fb_video_id)
-    if (notUploaded.length) {
-      return NextResponse.json({
-        error: `${notUploaded.length} creative(s) not yet uploaded to Meta. Open Ads Manager and upload them before launching.`,
-        creativeIds: notUploaded.map(c => c.id),
-      }, { status: 400 })
+    try {
+      launchCreatives.forEach(assertLaunchable)
+    } catch (err: any) {
+      if (err.name === "CreativeNotReadyError") {
+        return NextResponse.json({
+          error: err.message,
+          creativeIds: [err.creative.id],
+        }, { status: 400 })
+      }
+      throw err
     }
 
     const allResults: any[] = []
