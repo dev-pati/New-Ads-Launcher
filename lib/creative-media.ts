@@ -31,6 +31,10 @@ export interface ClientCreativeMedia {
   fb_thumbnail_url?: string | null
   fb_video_id?: string | null
   fb_image_hash?: string | null
+  // Present only when the query joined portal_media_assignments (see /api/creatives).
+  // Not a column on `creatives` itself — the row that actually carries "when was this
+  // claimed for this ad account" is the assignment, not the creative.
+  portal_media_assignments?: { created_at: string }[] | { created_at: string } | null
 }
 
 export function isMetaCdnUrl(url?: string | null) {
@@ -41,10 +45,20 @@ export function buildCreativeMediaRoute(id: string, variant: CreativeMediaVarian
   return `/api/creatives/${id}/media?variant=${variant}`
 }
 
-export function mapCreativeForClient<T extends ClientCreativeMedia>(creative: T): T {
-  if (!creative?.id) return creative
+export function mapCreativeForClient<T extends ClientCreativeMedia>(creative: T): T & { assigned_at?: string } {
+  if (!creative?.id) return creative as T & { assigned_at?: string }
 
-  const mapped = { ...creative }
+  const mapped = { ...creative } as T & { assigned_at?: string }
+
+  // Flatten the portal_media_assignments join (if present) into assigned_at.
+  // The join carries the timestamp of when this Portal asset was claimed for an ad account,
+  // which is the field Portal Vault sorts on and labels "Date Assigned".
+  const join = (creative as ClientCreativeMedia).portal_media_assignments
+  if (join !== undefined) {
+    const arr = Array.isArray(join) ? join : join ? [join] : []
+    mapped.assigned_at = arr[0]?.created_at ?? undefined
+    delete (mapped as ClientCreativeMedia).portal_media_assignments
+  }
 
   if (creative.media_type === "image") {
     if (creative.storage_path && creative.file_url) {

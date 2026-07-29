@@ -45,6 +45,7 @@ interface Creative {
   fb_video_id?: string
   tags?: string[]
   created_at?: string
+  assigned_at?: string
   ad_account_id?: string
   storage_path?: string
   status?: "pending" | "processing" | "ready" | "error"
@@ -177,6 +178,8 @@ export default function AssetsPage() {
   const [portalVisible, setPortalVisible] = useState(PORTAL_PAGE_SIZE)
   const [portalSelected, setPortalSelected] = useState<Set<string>>(new Set())
   const [portalAccountId, setPortalAccountId] = useState("")
+  const [assetFilterAccounts, setAssetFilterAccounts] = useState<string[]>([])
+  const [filterAccountsOpen, setFilterAccountsOpen] = useState(false)
   const [loadingPortal, setLoadingPortal] = useState(false)
   const [portalError, setPortalError]     = useState("")
   const [portalErrorKind, setPortalErrorKind] = useState<"portal" | "adlauncher" | null>(null)
@@ -347,10 +350,12 @@ export default function AssetsPage() {
   // ── Load helpers ──────────────────────────────────────────────────────────
 
   const loadCreatives = useCallback((cursor: string | null, reset: boolean) => {
-    if (!selectedAccountId) { setLoadingCreatives(false); return }
+    // Empty assetFilterAccounts = "All ad accounts" (no ad_account_id param => org-wide).
+    // Picking one or more accounts narrows the fetch to exactly those accounts.
     if (reset) setLoadingCreatives(true); else setLoadingMoreCreatives(true)
     setActionError("")
-    const params = new URLSearchParams({ ad_account_id: selectedAccountId, limit: String(CREATIVES_PAGE) })
+    const params = new URLSearchParams({ limit: String(CREATIVES_PAGE) })
+    for (const id of assetFilterAccounts) params.append("ad_account_id", id)
     if (cursor) params.set("cursor", cursor)
     fetch(`/api/creatives?${params}`)
       .then(r => r.json())
@@ -366,7 +371,7 @@ export default function AssetsPage() {
         setActionError(error instanceof Error ? error.message : "Failed to load assets")
       })
       .finally(() => { setLoadingCreatives(false); setLoadingMoreCreatives(false) })
-  }, [refreshVideoPreviews, selectedAccountId])
+  }, [refreshVideoPreviews, assetFilterAccounts])
 
   const loadBoards = useCallback(() => {
     setLoadingBoards(true)
@@ -438,7 +443,14 @@ export default function AssetsPage() {
 
   // ── Initial loads ─────────────────────────────────────────────────────────
 
-  useEffect(() => { setCreativesNextCursor(null); setCreativesHasMore(false); loadCreatives(null, true) }, [selectedAccountId])
+  // Default "All" (empty assetFilterAccounts) means "every ad account in the org".
+  // loadCreatives fetches org-wide when no specific accounts are picked.
+  useEffect(() => {
+    setCreativesNextCursor(null)
+    setCreativesHasMore(false)
+    loadCreatives(null, true)
+  }, [assetFilterAccounts, loadCreatives])
+
   useEffect(() => { loadBoards() }, [loadBoards])
   useEffect(() => { loadPortalTree() }, [loadPortalTree])
 
@@ -540,7 +552,33 @@ export default function AssetsPage() {
 
   const filterCreatives = (list: Creative[]) => {
     const q = search.toLowerCase()
+    // Multi-account AND filter: when more than one account is selected, only keep the
+    // Portal files (grouped by storage_path) that have been claimed by ALL selected
+    // accounts. Single selection (or none) skips this step. See ask: "filter đè lên
+    // nhau — [A,B] chỉ show media được assign cho cả A và B".
+    let andObjectKeys: Set<string> | null = null
+    if (assetFilterAccounts.length > 1) {
+      const keysByAccount = new Map<string, Set<string>>()
+      for (const c of list) {
+        if (!c.storage_path) continue
+        let set = keysByAccount.get(c.ad_account_id || "")
+        if (!set) { set = new Set(); keysByAccount.set(c.ad_account_id || "", set) }
+        set.add(c.storage_path)
+      }
+      const present = assetFilterAccounts.filter(a => keysByAccount.has(a))
+      if (present.length < assetFilterAccounts.length) {
+        andObjectKeys = new Set()
+      } else {
+        andObjectKeys = new Set(Array.from(keysByAccount.get(present[0])!))
+        for (let i = 1; i < present.length; i++) {
+          const s = keysByAccount.get(present[i])!
+          andObjectKeys = new Set([...andObjectKeys].filter(k => s.has(k)))
+        }
+      }
+    }
+
     return list.filter(c => {
+      if (andObjectKeys && (!c.storage_path || !andObjectKeys.has(c.storage_path))) return false
       if (q && !c.file_name.toLowerCase().includes(q)) return false
       if (filterType && c.media_type !== filterType) return false
       if (filterStatus === "ready" && !(c.fb_image_hash || c.fb_video_id)) return false
@@ -673,6 +711,13 @@ export default function AssetsPage() {
       }
       clearPortalSelected()
       loadPortalTree()
+      // If the assigned ad account is the one All Assets is showing, refresh it
+      // immediately so the newly-assigned creative appears without a manual reload.
+      if (importConfirm.adAccountId === selectedAccountId) {
+        setCreativesNextCursor(null)
+        setCreativesHasMore(false)
+        loadCreatives(null, true)
+      }
       setImportConfirm(null)
     } catch (error: unknown) {
       setPortalError(error instanceof Error ? error.message : "Failed to assign Portal media")
@@ -1214,7 +1259,15 @@ export default function AssetsPage() {
                           resolver allows 120 GET/HEAD per IP per minute and the office
                           shares one IP, so a 114-row folder rendering thumbnails would
                           burn the whole budget. Preview is one click, via Xem. */}
-                      <div className="border rounded-xl overflow-hidden">
+                      <div className={cn("relative border rounded-xl overflow-hidden", mappingPortal && "pointer-events-none opacity-60")}>
+                        {mappingPortal && (
+                          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40">
+                            <div className="flex items-center gap-2 rounded-full bg-background border px-3 py-1.5 text-sm font-medium shadow-sm">
+                              <IconLoader2 className="size-4 animate-spin text-primary" />
+                              Assigning to ad account…
+                            </div>
+                          </div>
+                        )}
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-muted/30">
@@ -1227,14 +1280,14 @@ export default function AssetsPage() {
                                   {portalAllSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
                                 </div>
                               </th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">File name</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Brand</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Product</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lang</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Size</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Approved</th>
-                              <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assigned</th>
+                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">File name</th>
+                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Brand</th>
+                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Product</th>
+                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Lang</th>
+                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
+                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Size</th>
+                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Approved</th>
+                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Assigned</th>
                               <th className="w-8 px-3 py-2.5"></th>
                             </tr>
                           </thead>
@@ -1261,39 +1314,38 @@ export default function AssetsPage() {
                                       {isVideo
                                         ? <IconPlayerPlay className="size-3.5 shrink-0 text-muted-foreground" />
                                         : <IconPhoto className="size-3.5 shrink-0 text-muted-foreground" />}
-                                      <span className="text-sm font-medium truncate max-w-[220px]">{file.name}</span>
+                                      <span className="text-base font-medium truncate max-w-[220px]">{file.name}</span>
                                     </div>
                                   </td>
-                                  <td className="px-3 py-2.5 text-sm truncate max-w-[120px] font-medium" title={file.brandName || ""}>{file.brandName || "—"}</td>
-                                  <td className="px-3 py-2.5 text-sm text-muted-foreground truncate max-w-[180px]" title={file.productName || ""}>{file.productName || "—"}</td>
-                                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                                  <td className="px-3 py-2.5 text-base truncate max-w-[120px] font-medium" title={file.brandName || ""}>{file.brandName || "—"}</td>
+                                  <td className="px-3 py-2.5 text-base text-muted-foreground truncate max-w-[180px]" title={file.productName || ""}>{file.productName || "—"}</td>
+                                  <td className="px-3 py-2.5 text-sm text-muted-foreground">
                                     {file.language ? (
-                                      <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold">{file.language}</span>
+                                      <span className="bg-muted px-1.5 py-0.5 rounded text-xs uppercase font-semibold">{file.language}</span>
                                     ) : "—"}
                                   </td>
-                                  <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">
+                                  <td className="px-3 py-2.5 text-sm text-muted-foreground font-mono">
                                     {file.width && file.height ? `${file.width}x${file.height}` : "—"}
                                     {file.durationSeconds ? ` • ${formatDuration(file.durationSeconds)}` : ""}
                                   </td>
-                                  <td className="px-3 py-2.5 text-xs text-muted-foreground tabular-nums">{formatBytes(file.sizeBytes)}</td>
-                                  <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(file.createdAt || undefined)}</td>
+                                  <td className="px-3 py-2.5 text-sm text-muted-foreground tabular-nums">{formatBytes(file.sizeBytes)}</td>
+                                  <td className="px-3 py-2.5 text-sm text-muted-foreground">{formatDate(file.createdAt || undefined)}</td>
                                   <td className="px-3 py-2.5">
                                     {assignedTo.length > 0 ? (
-                                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                      <span className="text-sm px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                                         {assignedTo.map(accountLabel).join(", ")}
                                       </span>
                                     ) : (
-                                      <span className="text-xs text-muted-foreground/50">—</span>
+                                      <span className="text-sm text-muted-foreground/50">—</span>
                                     )}
                                   </td>
                                   <td className="px-3 py-2.5">
-                                    {/* Opens the resolver in a new tab — one request, on demand. */}
                                     <a
                                       href={`${PORTAL_MEDIA_RESOLVER}/${file.assetId}`}
                                       target="_blank"
                                       rel="noreferrer"
                                       onClick={e => e.stopPropagation()}
-                                      className="text-xs text-muted-foreground hover:text-foreground whitespace-nowrap"
+                                      className="text-sm text-muted-foreground hover:text-foreground whitespace-nowrap"
                                     >
                                       View media
                                     </a>
@@ -1356,11 +1408,66 @@ export default function AssetsPage() {
 
               {/* Filters */}
               <div className="flex items-center gap-1.5 flex-wrap">
+                {/* Ad Account (multi-select) */}
+                <div className="relative">
+                  <button
+                    onClick={() => setFilterAccountsOpen(o => !o)}
+                    className={cn(
+                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
+                      assetFilterAccounts.length > 0
+                        ? "border-primary bg-primary/10 text-primary font-semibold shadow"
+                        : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
+                    )}
+                  >
+                    Account {assetFilterAccounts.length > 0 ? `(${assetFilterAccounts.length})` : ""} <IconChevronDown className="size-3" />
+                  </button>
+                  {filterAccountsOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setFilterAccountsOpen(false)} />
+                      <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[240px] py-1 max-h-72 overflow-y-auto">
+                        <button
+                          onClick={() => setAssetFilterAccounts([])}
+                          className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent text-left",
+                            assetFilterAccounts.length === 0 && "text-primary font-semibold")}
+                        >
+                          <span className={cn(
+                            "size-3.5 rounded border flex items-center justify-center shrink-0",
+                            assetFilterAccounts.length === 0 ? "bg-primary border-primary" : "border-muted-foreground/30"
+                          )}>
+                            {assetFilterAccounts.length === 0 && <IconCheck className="size-2.5 text-primary-foreground" />}
+                          </span>
+                          <span className="truncate flex-1">All accounts</span>
+                        </button>
+                        {adAccounts.map((a: { id: string; name?: string }) => {
+                          const isChecked = assetFilterAccounts.includes(a.id)
+                          return (
+                            <button
+                              key={a.id}
+                              onClick={() => {
+                                setAssetFilterAccounts(prev => isChecked ? prev.filter(x => x !== a.id) : [...prev, a.id])
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent text-left"
+                            >
+                              <span className={cn(
+                                "size-3.5 rounded border flex items-center justify-center shrink-0",
+                                isChecked ? "bg-primary border-primary" : "border-muted-foreground/30"
+                              )}>
+                                {isChecked && <IconCheck className="size-2.5 text-primary-foreground" />}
+                              </span>
+                              <span className="truncate flex-1" title={a.name || a.id}>{a.name || a.id}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 {/* Type */}
                 <div className="relative group">
                   <button className={cn(
-                    "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border transition-colors",
-                    filterType ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"
+                    "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
+                    filterType ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                   )}>
                     Type {filterType ? `: ${filterType}` : ""} <IconChevronDown className="size-3" />
                   </button>
@@ -1380,8 +1487,8 @@ export default function AssetsPage() {
                 {/* Status */}
                 <div className="relative group">
                   <button className={cn(
-                    "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border transition-colors",
-                    filterStatus ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"
+                    "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
+                    filterStatus ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                   )}>
                     Status {filterStatus ? `: ${filterStatus}` : ""} <IconChevronDown className="size-3" />
                   </button>
@@ -1402,8 +1509,8 @@ export default function AssetsPage() {
                 {availableFilters.brands.length > 0 && (
                   <div className="relative group">
                     <button className={cn(
-                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border transition-colors max-w-[160px]",
-                      filterBrand ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"
+                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors max-w-[160px]",
+                      filterBrand ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                     )}>
                       <span className="truncate">Brand {filterBrand ? `: ${filterBrand}` : ""}</span> <IconChevronDown className="size-3 shrink-0" />
                     </button>
@@ -1434,8 +1541,8 @@ export default function AssetsPage() {
                 {availableFilters.products.length > 0 && (
                   <div className="relative group">
                     <button className={cn(
-                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border transition-colors max-w-[200px]",
-                      filterProduct ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"
+                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors max-w-[200px]",
+                      filterProduct ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                     )}>
                       <span className="truncate">Product {filterProduct ? `: ${filterProduct}` : ""}</span> <IconChevronDown className="size-3 shrink-0" />
                     </button>
@@ -1466,8 +1573,8 @@ export default function AssetsPage() {
                 {availableFilters.languages.length > 0 && (
                   <div className="relative group">
                     <button className={cn(
-                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border transition-colors",
-                      filterLanguage ? "border-primary text-primary bg-primary/5" : "border-border text-muted-foreground hover:text-foreground"
+                      "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
+                      filterLanguage ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                     )}>
                       Language {filterLanguage ? `: ${filterLanguage.toUpperCase()}` : ""} <IconChevronDown className="size-3" />
                     </button>
@@ -1604,14 +1711,14 @@ export default function AssetsPage() {
                             {selected.size === displayList.length && <IconCheck className="size-2.5 text-primary-foreground" />}
                           </div>
                         </th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Name</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Brand</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Product</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Lang</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Type</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</th>
-                        <th className="px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date Added</th>
+                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Name</th>
+                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Brand</th>
+                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Product</th>
+                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Lang</th>
+                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
+                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Type</th>
+                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Status</th>
+                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Date Assigned</th>
                         <th className="w-8 px-3 py-2.5"></th>
                       </tr>
                     </thead>
@@ -1639,23 +1746,23 @@ export default function AssetsPage() {
                                 <div className="size-9 rounded-lg overflow-hidden bg-muted shrink-0">
                                   <CreativeCardMedia creative={c} className="h-full w-full object-cover" compact />
                                 </div>
-                                <span className="text-sm font-medium truncate max-w-[200px]">{c.file_name}</span>
+                                <span className="text-base font-medium truncate max-w-[200px]">{c.file_name}</span>
                               </div>
                             </td>
-                            <td className="px-3 py-2.5 text-sm truncate max-w-[120px] font-medium" title={portalMeta?.brandName || ""}>{portalMeta?.brandName || "—"}</td>
-                            <td className="px-3 py-2.5 text-sm text-muted-foreground truncate max-w-[180px]" title={portalMeta?.productName || ""}>{portalMeta?.productName || "—"}</td>
-                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                            <td className="px-3 py-2.5 text-base truncate max-w-[120px] font-medium" title={portalMeta?.brandName || ""}>{portalMeta?.brandName || "—"}</td>
+                            <td className="px-3 py-2.5 text-base text-muted-foreground truncate max-w-[180px]" title={portalMeta?.productName || ""}>{portalMeta?.productName || "—"}</td>
+                            <td className="px-3 py-2.5 text-sm text-muted-foreground">
                               {portalMeta?.language ? (
-                                <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] uppercase font-semibold">{portalMeta.language}</span>
+                                <span className="bg-muted px-1.5 py-0.5 rounded text-xs uppercase font-semibold">{portalMeta.language}</span>
                               ) : "—"}
                             </td>
-                            <td className="px-3 py-2.5 text-xs text-muted-foreground font-mono">
+                            <td className="px-3 py-2.5 text-sm text-muted-foreground font-mono">
                               {portalMeta?.width && portalMeta?.height ? `${portalMeta.width}x${portalMeta.height}` : "—"}
                               {portalMeta?.durationSeconds ? ` • ${formatDuration(portalMeta.durationSeconds)}` : ""}
                             </td>
-                            <td className="px-3 py-2.5 text-xs text-muted-foreground capitalize">{c.media_type}</td>
+                            <td className="px-3 py-2.5 text-sm text-muted-foreground capitalize">{c.media_type}</td>
                             <td className="px-3 py-2.5">
-                              <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium",
+                              <span className={cn("inline-flex items-center gap-1 text-sm px-2 py-0.5 rounded-full font-medium",
                                 isReady
                                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
                                   : c.status === "processing"
@@ -1664,10 +1771,11 @@ export default function AssetsPage() {
                                   ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                                   : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                               )}>
-                                {isReady ? "Ready" : c.status === "processing" ? "Processing" : c.status === "error" ? "Error" : "Pending Meta"}
+                                {!isReady && c.status !== "error" && <IconLoader2 className="size-3 shrink-0 animate-spin" />}
+                                {isReady ? "Ready" : c.status === "processing" ? "Syncing to Meta" : c.status === "error" ? "Error" : "Syncing to Meta"}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(c.created_at)}</td>
+                            <td className="px-3 py-2.5 text-sm text-muted-foreground">{formatDate(c.assigned_at || c.created_at)}</td>
                             <td className="px-3 py-2.5">
                               <button
                                 onClick={e => { e.stopPropagation(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
@@ -1985,41 +2093,60 @@ export default function AssetsPage() {
 
               {/* File Info */}
               <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">File Information</h3>
+                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">File Information</h3>
 
-                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-[13px] font-medium text-foreground/80 break-words leading-relaxed shadow-sm">
+                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-[13px] font-medium text-foreground break-words leading-relaxed shadow">
                   {portalDetailFile.name}
                 </div>
 
                 <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px]">
-                  <span className="text-muted-foreground font-medium">Type</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.mimeType || (portalDetailFile.mimeType?.startsWith("video/") ? "Video" : "Image")}</span>
-                  <span className="text-muted-foreground font-medium">Size</span><span className="min-w-0 font-medium text-foreground/80">{formatBytes(portalDetailFile.sizeBytes)}</span>
-                  <span className="text-muted-foreground font-medium">Dimensions</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.width && portalDetailFile.height ? `${portalDetailFile.width}x${portalDetailFile.height}` : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Duration</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.durationSeconds ? formatDuration(portalDetailFile.durationSeconds) : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Added</span><span className="min-w-0 font-medium text-foreground/80">{formatDate(portalDetailFile.createdAt || undefined)}</span>
+                  <span className="text-muted-foreground font-medium">Type</span><span className="min-w-0 font-medium text-foreground">{portalDetailFile.mimeType || (portalDetailFile.mimeType?.startsWith("video/") ? "Video" : "Image")}</span>
+                  <span className="text-muted-foreground font-medium">Size</span><span className="min-w-0 font-medium text-foreground">{formatBytes(portalDetailFile.sizeBytes)}</span>
+                  <span className="text-muted-foreground font-medium">Dimensions</span><span className="min-w-0 font-medium text-foreground">{portalDetailFile.width && portalDetailFile.height ? `${portalDetailFile.width}x${portalDetailFile.height}` : "—"}</span>
+                  <span className="text-muted-foreground font-medium">Duration</span><span className="min-w-0 font-medium text-foreground">{portalDetailFile.durationSeconds ? formatDuration(portalDetailFile.durationSeconds) : "—"}</span>
+                  <span className="text-muted-foreground font-medium">Added</span><span className="min-w-0 font-medium text-foreground">{formatDate(portalDetailFile.createdAt || undefined)}</span>
                 </div>
 
-                <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] font-mono text-muted-foreground break-all leading-relaxed">
+                <div className="rounded-md border border-border/50 bg-muted/40 px-3 py-2 text-[11px] font-mono text-muted-foreground break-all leading-relaxed">
                   {portalDetailFile.objectKey}
+                </div>
+              </div>
+
+              {/* Assigned To */}
+              <div className="space-y-3 min-w-0">
+                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">Assigned To</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {(portalAssignedBy.get(portalDetailFile.objectKey) || []).length > 0 ? (
+                    (portalAssignedBy.get(portalDetailFile.objectKey) || []).map(accId => (
+                      <span
+                        key={accId}
+                        className="text-xs px-2 py-1 rounded-full font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800"
+                      >
+                        {accountLabel(accId)}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[13px] text-muted-foreground">Not assigned to any ad account yet</span>
+                  )}
                 </div>
               </div>
 
               {/* Brand & Product */}
               <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">Product & Context</h3>
-                <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px] p-3 rounded-lg border bg-muted/10 shadow-sm">
-                  <span className="text-muted-foreground font-medium">Brand</span><span className="font-medium min-w-0 break-words text-foreground/90">{portalDetailFile.brandName || "—"} {portalDetailFile.brandSlug ? <span className="text-muted-foreground font-normal">({portalDetailFile.brandSlug})</span> : ""}</span>
-                  <span className="text-muted-foreground font-medium">Product</span><span className="min-w-0 break-words font-medium text-foreground/80 leading-snug">{portalDetailFile.productName || "—"}</span>
+                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">Product & Context</h3>
+                <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px] p-3 rounded-lg border bg-muted/40 shadow">
+                  <span className="text-muted-foreground font-medium">Brand</span><span className="font-medium min-w-0 break-words text-foreground">{portalDetailFile.brandName || "—"} {portalDetailFile.brandSlug ? <span className="text-muted-foreground font-normal">({portalDetailFile.brandSlug})</span> : ""}</span>
+                  <span className="text-muted-foreground font-medium">Product</span><span className="min-w-0 break-words font-medium text-foreground leading-snug">{portalDetailFile.productName || "—"}</span>
                   <span className="text-muted-foreground font-medium flex items-center">Language</span><span className="min-w-0 flex items-center">{portalDetailFile.language ? <span className="uppercase text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded shadow-sm">{portalDetailFile.language}</span> : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Brief Type</span><span className="min-w-0 break-words font-medium text-foreground/80">{portalDetailFile.briefType || "—"}</span>
-                  <span className="text-muted-foreground font-medium">Voice</span><span className="min-w-0 break-words font-medium text-foreground/80">{portalDetailFile.voiceVariant || "—"}</span>
+                  <span className="text-muted-foreground font-medium">Brief Type</span><span className="min-w-0 break-words font-medium text-foreground">{portalDetailFile.briefType || "—"}</span>
+                  <span className="text-muted-foreground font-medium">Voice</span><span className="min-w-0 break-words font-medium text-foreground">{portalDetailFile.voiceVariant || "—"}</span>
                 </div>
               </div>
 
               {/* Links */}
               <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">Links</h3>
-                <div className="flex flex-col gap-3 text-[13px] p-3 rounded-lg border bg-muted/10 shadow-sm">
+                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">Links</h3>
+                <div className="flex flex-col gap-3 text-[13px] p-3 rounded-lg border bg-muted/40 shadow">
                   {portalDetailFile.pdpUrl ? (
                     <a href={portalDetailFile.pdpUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
                       Product Detail Page (PDP) <IconExternalLink className="size-3.5" />

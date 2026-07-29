@@ -43,7 +43,9 @@ export async function GET(request: NextRequest) {
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const url = new URL(request.url)
-    const adAccountId  = url.searchParams.get("ad_account_id")
+    // Repeat ?ad_account_id=X&ad_account_id=Y for a multi-account filter (Assets page);
+    // a single value still works the same as before.
+    const adAccountIds = url.searchParams.getAll("ad_account_id")
     const mediaType    = url.searchParams.get("media_type")   // "image" | "video"
     const statusFilter = url.searchParams.get("status")       // "uploaded" | "pending" | "processing" | "archived"
     const nameContains = url.searchParams.get("name_contains")
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient()
     let query = supabase
       .from("creatives")
-      .select("*")
+      .select("*, portal_media_assignments(created_at)")
       .eq("org_id", ctx.orgId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
@@ -79,7 +81,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ creatives: (data ?? []).map(mapCreativeForClient) })
     }
 
-    if (adAccountId)  query = query.eq("ad_account_id", adAccountId)
+    if (adAccountIds.length === 1) {
+      query = query.eq("ad_account_id", adAccountIds[0])
+    } else if (adAccountIds.length > 1) {
+      query = query.in("ad_account_id", adAccountIds)
+    }
     if (mediaType)    query = query.eq("media_type", mediaType)
     if (statusFilter) query = query.eq("status", statusFilter)
     if (nameContains) query = (query as any).ilike("file_name", `%${nameContains}%`)

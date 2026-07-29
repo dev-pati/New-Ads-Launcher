@@ -5,7 +5,7 @@ import {
   getFacebookUser,
   getBusinessManagers,
   getBusinessPages,
-  getBusinessAdAccounts,
+  getAdAccounts,
 } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAuthUser } from "@/lib/auth"
@@ -144,30 +144,48 @@ export async function GET(request: NextRequest) {
         } catch (e) {
           console.error(`Failed to sync pages for BM ${bm.id}:`, e)
         }
-
-        try {
-          const adAccounts = await getBusinessAdAccounts(bm.id, longLivedToken.access_token)
-          for (const acc of adAccounts) {
-            await supabase.from("ad_accounts").upsert(
-              {
-                org_id: orgId,
-                user_id: user.id,
-                business_manager_id: bmRow.id,
-                fb_ad_account_id: acc.id,
-                fb_account_id: acc.account_id,
-                name: acc.name,
-                currency: acc.currency,
-                account_status: acc.account_status,
-              },
-              { onConflict: "org_id,fb_ad_account_id" }
-            )
-          }
-        } catch (e) {
-          console.error(`Failed to sync ad accounts for BM ${bm.id}:`, e)
-        }
       }
     } catch (e) {
       console.error("Failed to sync business managers:", e)
+    }
+
+    // Pull every ad account the token can access via /me/adaccounts — this catches
+    // accounts not owned by any synced BM (personal accounts, or accounts under a BM
+    // we didn't enumerate). BM mapping is best-effort; business_manager_id is nullable
+    // so unmapped accounts are still assignable.
+    try {
+      const [allAccounts, { data: orgBms }] = await Promise.all([
+        getAdAccounts(longLivedToken.access_token),
+        supabase.from("business_managers").select("id, fb_business_id").eq("org_id", orgId),
+      ])
+      const bmDbByFb = new Map((orgBms || []).map((b: { id: string; fb_business_id: string }) => [b.fb_business_id, b.id]))
+
+      for (const acc of allAccounts) {
+        const bmDbId = acc.business?.id ? bmDbByFb.get(acc.business.id) ?? null : null
+        await supabase.from("ad_accounts").upsert(
+          {
+            org_id: orgId,
+            user_id: user.id,
+            business_manager_id: bmDbId,
+            fb_ad_account_id: acc.id,
+            fb_account_id: acc.account_id,
+            name: acc.name,
+            currency: acc.currency || "USD",
+            timezone_name: acc.timezone_name || null,
+            account_status: acc.account_status ?? 1,
+            amount_spent_minor: acc.amount_spent != null ? Number(acc.amount_spent) : null,
+            balance_minor: acc.balance != null ? Number(acc.balance) : null,
+            spend_cap_minor: acc.spend_cap != null ? Number(acc.spend_cap) : null,
+            owner_business_id: acc.business?.id || null,
+            owner_business_name: acc.business?.name || null,
+            raw_meta: acc,
+            is_active: true,
+          },
+          { onConflict: "org_id,fb_ad_account_id" }
+        )
+      }
+    } catch (e) {
+      console.error("Failed to sync all ad accounts:", e)
     }
 
     const response = NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/?fb_connected=true`)

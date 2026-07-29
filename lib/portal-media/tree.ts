@@ -30,8 +30,10 @@ export type MediaNode = {
   createdAt: string | null
   fileUrl: string | null
 
+  brandId: string | null
   brandName: string | null
   brandSlug: string | null
+  productId: string | null
   productName: string | null
   pdpUrl: string | null
   salesPageUrl: string | null
@@ -81,8 +83,10 @@ function toMediaNode(asset: PortalRegistryAsset, fileName: string): MediaNode {
     sizeBytes: asset.actual_size_bytes,
     createdAt: asset.created_at,
     fileUrl: asset.file_url,
+    brandId: asset.brand_id,
     brandName: asset.brand_name,
     brandSlug: asset.brand_slug,
+    productId: asset.product_id,
     productName: asset.product_name,
     pdpUrl: asset.product_catalog_pdp_url,
     salesPageUrl: asset.product_catalog_sales_page_url,

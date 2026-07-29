@@ -12,6 +12,7 @@ export interface Creative {
   fb_image_hash?: string
   fb_video_id?: string
   created_at?: string
+  assigned_at?: string
   transcript?: string
   tags?: string[]
   status?: "pending" | "processing" | "ready" | "error"

@@ -14,12 +14,13 @@ async function requireLaunchRole() {
 }
 
 async function assertAdAccountInOrg(orgId: string, adAccountId: string) {
+  const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
   const supabase = createAdminClient()
   const { data } = await supabase
     .from("ad_accounts")
     .select("fb_ad_account_id")
     .eq("org_id", orgId)
-    .eq("fb_ad_account_id", adAccountId)
+    .eq("fb_ad_account_id", normId)
     .maybeSingle()
   return Boolean(data)
 }

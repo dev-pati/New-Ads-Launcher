@@ -23,7 +23,7 @@ import {
   IconChevronDown, IconChevronUp, IconCheck, IconCircleCheck, IconClipboard, IconDots,
   IconArrowsUpDown, IconSelector, IconCalendar, IconExternalLink,
   IconBrandGoogleDrive, IconBrandMeta as IconMetaBadge,
-  IconClock, IconArrowsSort, IconAlertCircle
+  IconClock, IconArrowsSort, IconAlertCircle, IconCopy
 } from "@tabler/icons-react"
 import { Creative } from "@/types/creative"
 import { DynamicMediaToggle } from "@/components/ui/dynamic-media-toggle"
@@ -206,7 +206,9 @@ interface PortalMediaFile {
   assetId: string
   objectKey: string
   name: string
+  brandId: string | null
   brandName: string | null
+  productId: string | null
   productName: string | null
   language: string | null
   width: number | null
@@ -326,7 +328,10 @@ export function LoadMediaModal({
   const [allCreatives, setAllCreatives] = useState<Creative[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState("")
-  const [mediaTab, setMediaTab] = useState<MediaTab>("library")
+  const [mediaTab, setMediaTab] = useState<MediaTab>(() => {
+    const allowed = tabs && tabs.length > 0 ? tabs : (["vault", "library", "existing", "gdrive", "drive_browser", "drive_link", "integrations"] as MediaTab[])
+    return allowed.includes("vault") ? "vault" : allowed[0]
+  })
   const libThumbRetryCounts = useRef<Map<string, number>>(new Map())
   // Client-side cache: avoid re-fetching creatives if modal reopened within 90s
   const creativesCache = useRef<{ accountId: string; data: Creative[]; at: number } | null>(null)
@@ -1061,9 +1066,12 @@ export function LoadMediaModal({
         va = resolveCreativePortal(a)?.durationSeconds || 0;
         vb = resolveCreativePortal(b)?.durationSeconds || 0;
         break
-      case "date": va = a.created_at || ""; vb = b.created_at || ""; break
+      // assigned_at (when this Portal asset was claimed for the ad account) is what
+      // "most recently assigned" means — created_at is only a fallback for creatives
+      // that predate the assignments join (e.g. manual uploads).
+      case "date": va = a.assigned_at || a.created_at || ""; vb = b.assigned_at || b.created_at || ""; break
       case "status": va = a.status || ""; vb = b.status || ""; break
-      default: va = a.created_at || ""; vb = b.created_at || ""; break
+      default: va = a.assigned_at || a.created_at || ""; vb = b.assigned_at || b.created_at || ""; break
     }
     if (typeof va === "number") return sortDir === "asc" ? va - vb : vb - va
     return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
@@ -1378,8 +1386,8 @@ export function LoadMediaModal({
   }
 
   const ALL_TABS: { id: MediaTab; label: string; Icon: React.ElementType; beta?: boolean }[] = [
-    { id: "library", label: "Media Library", Icon: IconStack2 },
     { id: "vault", label: "Portal Vault", Icon: IconFolder },
+    { id: "library", label: "Media Library", Icon: IconStack2 },
     { id: "existing", label: "Existing Ads", Icon: IconLayoutGrid },
     { id: "gdrive", label: "Google Drive", Icon: IconBrandGoogleDrive },
     { id: "drive_browser", label: "Drive Browser", Icon: IconBrandGoogleDrive, beta: true },
@@ -1409,7 +1417,7 @@ export function LoadMediaModal({
           )}
         >
           <span className="font-medium">{label}</span>
-          {isActive && <span className="bg-primary/10 px-1 rounded text-xs">{value}</span>}
+          {isActive && <span className={cn("bg-primary/10 px-1 rounded text-xs", id === "language" && "uppercase")}>{value}</span>}
           <IconChevronDown className="size-3" />
         </button>
         {openFilter === id && (
@@ -1424,7 +1432,7 @@ export function LoadMediaModal({
               <button
                 key={o}
                 onClick={() => { setFilters(f => ({ ...f, [id]: o })); setOpenFilter(null) }}
-                className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent capitalize", value === o && "font-semibold")}
+                className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent", id === "language" ? "uppercase" : "capitalize", value === o && "font-semibold")}
               >
                 {o}
               </button>
@@ -1507,7 +1515,7 @@ export function LoadMediaModal({
                     filters.dateAdded !== "all" ? "border-primary bg-primary/5 text-primary" : "hover:bg-muted/30")}
                 >
                   <IconCalendar className="size-3" />
-                  <span className="font-medium">Date added{filters.dateAdded !== "all" && ` · ${filters.dateAdded}`}</span>
+                  <span className="font-medium">Date assigned{filters.dateAdded !== "all" && ` · ${filters.dateAdded}`}</span>
                   <IconChevronDown className="size-3" />
                 </button>
                 {openFilter === "dateAdded" && (
@@ -1576,7 +1584,7 @@ export function LoadMediaModal({
             </div>
 
             {/* Table header */}
-            <div className="grid items-center text-xs font-semibold text-muted-foreground/70 uppercase tracking-wide border-b px-6 py-2 shrink-0"
+            <div className="grid items-center text-sm font-bold text-muted-foreground/70 uppercase tracking-wide border-b px-6 py-2 shrink-0"
               style={{ gridTemplateColumns: "28px 2.5fr 90px 110px 100px 120px" }}>
               <button onClick={toggleAll} className={cn("size-4 rounded border-2 flex items-center justify-center transition-colors",
                 selected.size > 0 ? "bg-primary border-primary" : "border-muted-foreground/30 hover:border-muted-foreground/60")}>
@@ -1611,7 +1619,8 @@ export function LoadMediaModal({
                 sorted.map(m => {
                   const isSelected = selected.has(m.id)
                   const statusRaw = String(m.status || "active").toLowerCase()
-                  const statusLabel = statusRaw.replace(/_/g, " ")
+                  const isSyncing = statusRaw.includes("process") || statusRaw.includes("pending")
+                  const statusLabel = isSyncing ? "Syncing to Meta" : statusRaw.replace(/_/g, " ")
                   const statusColor = statusRaw === "active" || statusRaw === "ready"
                     ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
                     : statusRaw === "paused"
@@ -1642,7 +1651,7 @@ export function LoadMediaModal({
                             </div>
                           )}
                         </div>
-                        <span className="text-sm truncate flex-1" title={m.name}>{m.name}</span>
+                        <span className="text-base truncate flex-1" title={m.name}>{m.name}</span>
                         <button
                           onClick={e => { e.stopPropagation(); deleteFbMedia([m.id]) }}
                           className="opacity-0 group-hover:opacity-100 shrink-0 p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-all"
@@ -1651,12 +1660,15 @@ export function LoadMediaModal({
                           <IconTrash className="size-3.5" />
                         </button>
                       </div>
-                      <span className="text-xs text-muted-foreground font-mono">{m.fb_id?.slice(-6) || "—"}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-muted/50 w-fit">{fmtDims(m)}</span>
-                      <span className={cn("inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full w-fit max-w-full", statusColor)}>
+                      <span className="text-sm text-muted-foreground font-mono">{m.fb_id?.slice(-6) || "—"}</span>
+                      <span className="text-sm px-1.5 py-0.5 rounded bg-muted/50 w-fit">{fmtDims(m)}</span>
+                      <span className={cn("inline-flex items-center gap-1 text-sm px-1.5 py-0.5 rounded-full w-fit max-w-full", statusColor)}>
+                        {isSyncing && (
+                          <IconLoader2 className="size-3 shrink-0 animate-spin" />
+                        )}
                         <span className="truncate capitalize">{statusLabel}</span>
                       </span>
-                      <span className="text-xs text-muted-foreground truncate font-mono">{adAccountId.replace("act_", "").slice(0, 12)}</span>
+                      <span className="text-sm text-muted-foreground truncate font-mono">{adAccountId.replace("act_", "").slice(0, 12)}</span>
                     </div>
                   )
                 })
@@ -1713,7 +1725,7 @@ export function LoadMediaModal({
                     filters.dateAdded !== "all" ? "border-primary bg-primary/5 text-primary" : "hover:bg-muted/30")}
                 >
                   <IconCalendar className="size-3" />
-                  <span className="font-medium">Date added{filters.dateAdded !== "all" && ` · ${filters.dateAdded}`}</span>
+                  <span className="font-medium">Date assigned{filters.dateAdded !== "all" && ` · ${filters.dateAdded}`}</span>
                   <IconChevronDown className="size-3" />
                 </button>
                 {openFilter === "dateAdded" && (
@@ -1738,8 +1750,8 @@ export function LoadMediaModal({
               )}
             </div>
 
-            {/* Table header — matches Assets table: Name/Brand/Product/Lang/Dims-Dur/Type/Status/Date Added */}
-            <div className="grid items-center text-xs font-semibold text-muted-foreground/70 uppercase tracking-wide border-b px-6 py-2 shrink-0"
+            {/* Table header — matches Assets table: Name/Brand/Product/Lang/Dims-Dur/Type/Status/Date Assigned */}
+            <div className="grid items-center text-sm font-bold text-muted-foreground/70 uppercase tracking-wide border-b px-6 py-2 shrink-0"
               style={{ gridTemplateColumns: "28px 2.5fr 1fr 1.4fr 60px 1fr 70px 100px 120px 32px" }}>
               <button onClick={toggleAllVault} className={cn("size-4 rounded border-2 flex items-center justify-center transition-colors",
                 selected.size > 0 ? "bg-primary border-primary" : "border-muted-foreground/30 hover:border-muted-foreground/60")}>
@@ -1753,7 +1765,7 @@ export function LoadMediaModal({
               <button onClick={() => toggleSort("dimensions")} className="flex items-center hover:text-foreground">Dims<SortIcon field="dimensions" /></button>
               <button onClick={() => toggleSort("duration")} className="flex items-center hover:text-foreground">Duration<SortIcon field="duration" /></button>
               <button onClick={() => toggleSort("status")} className="flex items-center hover:text-foreground">Status<SortIcon field="status" /></button>
-              <button onClick={() => toggleSort("date")} className="flex items-center hover:text-foreground">Date Added<SortIcon field="date" /></button>
+              <button onClick={() => toggleSort("date")} className="flex items-center hover:text-foreground">Date Assigned<SortIcon field="date" /></button>
             </div>
 
             {/* Table body */}
@@ -1772,7 +1784,7 @@ export function LoadMediaModal({
                   const isSelected = selected.has(c.id)
                   const isReady = !!(c.fb_image_hash || c.fb_video_id)
                   const pm = resolveCreativePortal(c)
-                  const statusLabel = isReady ? "Ready" : c.status === "processing" ? "Processing" : c.status === "error" ? "Error" : "Pending Meta"
+                  const statusLabel = isReady ? "Ready" : c.status === "processing" ? "Syncing to Meta" : c.status === "error" ? "Error" : "Syncing to Meta"
                   return (
                     <div key={c.id}
                       onClick={() => toggle(c.id)}
@@ -1789,24 +1801,27 @@ export function LoadMediaModal({
                         <div className="size-9 rounded-lg overflow-hidden bg-muted shrink-0">
                           <CreativeCardMedia creative={c} className="h-full w-full object-cover" compact />
                         </div>
-                        <span className="text-sm truncate flex-1" title={c.file_name}>{c.file_name}</span>
+                        <span className="text-base truncate flex-1" title={c.file_name}>{c.file_name}</span>
                       </div>
-                      <span className="text-xs truncate min-w-0" title={pm?.brandName || ""}>{pm?.brandName || "—"}</span>
-                      <span className="text-xs text-muted-foreground truncate min-w-0" title={pm?.productName || ""}>{pm?.productName || "—"}</span>
-                      <span className="text-xs text-muted-foreground">
+                      <span className="text-sm truncate min-w-0" title={pm?.brandName || ""}>{pm?.brandName || "—"}</span>
+                      <span className="text-sm text-muted-foreground truncate min-w-0" title={pm?.productName || ""}>{pm?.productName || "—"}</span>
+                      <span className="text-sm text-muted-foreground">
                         {pm?.language ? <span className="uppercase text-[10px] font-bold bg-muted px-1 rounded">{pm.language}</span> : "—"}
                       </span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-muted/50 w-fit">{pm?.width && pm?.height ? `${pm.width}x${pm.height}` : "—"}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-muted/50 w-fit">{pm?.durationSeconds ? fmtDuration(pm.durationSeconds) : "—"}</span>
-                      <span className={cn("text-xs px-1.5 py-0.5 rounded-full w-fit",
+                      <span className="text-sm px-1.5 py-0.5 rounded bg-muted/50 w-fit">{pm?.width && pm?.height ? `${pm.width}x${pm.height}` : "—"}</span>
+                      <span className="text-sm px-1.5 py-0.5 rounded bg-muted/50 w-fit">{pm?.durationSeconds ? fmtDuration(pm.durationSeconds) : "—"}</span>
+                      <span className={cn("inline-flex items-center gap-1 text-sm px-1.5 py-0.5 rounded-full w-fit",
                         isReady ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
                           : c.status === "processing" ? "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
                           : c.status === "error" ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
                           : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400")}>
+                        {!isReady && c.status !== "error" && (
+                          <IconLoader2 className="size-3 shrink-0 animate-spin" />
+                        )}
                         {statusLabel}
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {c.created_at ? new Date(c.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                      <span className="text-sm text-muted-foreground">
+                        {(c.assigned_at || c.created_at) ? new Date(c.assigned_at || c.created_at!).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                       </span>
                       {pm ? (
                         <button
@@ -2007,25 +2022,25 @@ export function LoadMediaModal({
                   <p className="text-sm">No ads found in this time range</p>
                 </div>
               ) : (
-                <table className="w-full text-xs">
+                <table className="w-full text-sm">
                   <thead className="bg-background sticky top-0 z-10">
                     <tr className="border-b">
                       <th className="w-10 px-3 py-2"></th>
                       <th className="w-12 px-2 py-2"><IconPhoto className="size-3.5 text-muted-foreground inline" /></th>
-                      <th className="px-3 py-2 text-left font-semibold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("name")}>
+                      <th className="px-3 py-2 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("name")}>
                         <span className="inline-flex items-center">Name {existingSortField === "name" && <IconChevronDown className={cn("size-3 ml-0.5 transition-transform", existingSortDir === "asc" && "rotate-180")} />}</span>
                       </th>
-                      {visibleColumns.has("page") && <th className="px-3 py-2 text-left font-semibold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("page")}>Page</th>}
-                      {visibleColumns.has("date") && <th className="px-3 py-2 text-left font-semibold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("date")}>Date Created</th>}
-                      {visibleColumns.has("post") && <th className="px-3 py-2 text-left font-semibold text-muted-foreground/80">Post</th>}
-                      {visibleColumns.has("status") && <th className="px-3 py-2 text-left font-semibold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("status")}>Status</th>}
-                      {visibleColumns.has("platform") && <th className="px-3 py-2 text-left font-semibold text-muted-foreground/80">Platform</th>}
-                      {visibleColumns.has("spend") && <th className="px-3 py-2 text-right font-semibold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("spend")}>
+                      {visibleColumns.has("page") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("page")}>Page</th>}
+                      {visibleColumns.has("date") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("date")}>Date Created</th>}
+                      {visibleColumns.has("post") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80">Post</th>}
+                      {visibleColumns.has("status") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("status")}>Status</th>}
+                      {visibleColumns.has("platform") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80">Platform</th>}
+                      {visibleColumns.has("spend") && <th className="px-3 py-2 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("spend")}>
                         <span className="inline-flex items-center">Spend <IconChevronDown className={cn("size-3 ml-0.5", existingSortField === "spend" && existingSortDir === "asc" && "rotate-180")} /></span>
                       </th>}
-                      {visibleColumns.has("roas") && <th className="px-3 py-2 text-right font-semibold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("roas")}>ROAS</th>}
-                      {visibleColumns.has("results") && <th className="px-3 py-2 text-right font-semibold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("results")}>Results</th>}
-                      {visibleColumns.has("impressions") && <th className="px-3 py-2 text-right font-semibold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("impressions")}>Impr.</th>}
+                      {visibleColumns.has("roas") && <th className="px-3 py-2 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("roas")}>ROAS</th>}
+                      {visibleColumns.has("results") && <th className="px-3 py-2 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("results")}>Results</th>}
+                      {visibleColumns.has("impressions") && <th className="px-3 py-2 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("impressions")}>Impr.</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -2059,7 +2074,7 @@ export function LoadMediaModal({
                             </div>
                           </td>
                           <td className="px-3 py-2 max-w-[280px]">
-                            <span className="truncate block" title={ad.name}>{ad.name}</span>
+                            <span className="text-base truncate block" title={ad.name}>{ad.name}</span>
                           </td>
                           {visibleColumns.has("page") && <td className="px-3 py-2 text-muted-foreground">{ad.page_name || "—"}</td>}
                           {visibleColumns.has("date") && <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{new Date(ad.date_created).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>}
@@ -2067,7 +2082,7 @@ export function LoadMediaModal({
                             {ad.post_url ? <a href={ad.post_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" onClick={e => e.stopPropagation()}>Post</a> : "—"}
                           </td>}
                           {visibleColumns.has("status") && <td className="px-3 py-2">
-                            <span className={cn("text-xs px-1.5 py-0.5 rounded font-bold whitespace-nowrap",
+                            <span className={cn("text-sm px-1.5 py-0.5 rounded font-bold whitespace-nowrap",
                               ad.effective_status === "ACTIVE" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
                               /PAUSED/.test(ad.effective_status) ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
                               /DISAPPROVED|DELETED|ARCHIVED/.test(ad.effective_status) ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400" :
@@ -2081,7 +2096,7 @@ export function LoadMediaModal({
                             </span>
                           </td>}
                           {visibleColumns.has("platform") && <td className="px-3 py-2">
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">{ad.platform}</span>
+                            <span className="text-sm px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">{ad.platform}</span>
                           </td>}
                           {visibleColumns.has("spend") && <td className="px-3 py-2 text-right font-medium">{formatCurrency(ad.spend)}</td>}
                           {visibleColumns.has("roas") && <td className="px-3 py-2 text-right">{ad.roas > 0 ? ad.roas.toFixed(2) : "—"}</td>}
@@ -2396,29 +2411,29 @@ export function LoadMediaModal({
 
               {/* File Info */}
               <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">File Information</h3>
-                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-[13px] font-medium text-foreground/80 break-words leading-relaxed shadow-sm">
+                <h3 className="font-semibold text-[18px] tracking-tight text-foreground/90">File Information</h3>
+                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-[17px] font-medium text-foreground/80 break-words leading-relaxed shadow-sm">
                   {portalDetailFile.name}
                 </div>
-                <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px]">
+                <div className="grid grid-cols-[130px_1fr] gap-x-3 gap-y-3.5 text-[17px]">
                   <span className="text-muted-foreground font-medium">Type</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.mimeType || (portalDetailFile.mimeType?.startsWith("video/") ? "Video" : "Image")}</span>
                   <span className="text-muted-foreground font-medium">Size</span><span className="min-w-0 font-medium text-foreground/80">{formatBytes(portalDetailFile.sizeBytes)}</span>
                   <span className="text-muted-foreground font-medium">Dimensions</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.width && portalDetailFile.height ? `${portalDetailFile.width}x${portalDetailFile.height}` : "—"}</span>
                   <span className="text-muted-foreground font-medium">Duration</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.durationSeconds ? fmtDuration(portalDetailFile.durationSeconds) : "—"}</span>
                   <span className="text-muted-foreground font-medium">Added</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.createdAt ? new Date(portalDetailFile.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
                 </div>
-                <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[11px] font-mono text-muted-foreground break-all leading-relaxed">
+                <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[14px] font-mono text-muted-foreground break-all leading-relaxed">
                   {portalDetailFile.objectKey}
                 </div>
               </div>
 
               {/* Brand & Product */}
               <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">Product & Context</h3>
-                <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px] p-3 rounded-lg border bg-muted/10 shadow-sm">
-                  <span className="text-muted-foreground font-medium">Brand</span><span className="font-medium min-w-0 break-words text-foreground/90">{portalDetailFile.brandName || "—"} {portalDetailFile.brandSlug ? <span className="text-muted-foreground font-normal">({portalDetailFile.brandSlug})</span> : ""}</span>
+                <h3 className="font-semibold text-[18px] tracking-tight text-foreground/90">Product & Context</h3>
+                <div className="grid grid-cols-[130px_1fr] gap-x-3 gap-y-3.5 text-[17px] p-3 rounded-lg border bg-muted/10 shadow-sm">
+                  <span className="text-muted-foreground font-medium">Brand</span><span className="font-medium min-w-0 break-words text-foreground/90">{portalDetailFile.brandName || "—"} {portalDetailFile.brandSlug ? <span className="text-muted-foreground font-normal text-[15px]">({portalDetailFile.brandSlug})</span> : ""}</span>
                   <span className="text-muted-foreground font-medium">Product</span><span className="min-w-0 break-words font-medium text-foreground/80 leading-snug">{portalDetailFile.productName || "—"}</span>
-                  <span className="text-muted-foreground font-medium flex items-center">Language</span><span className="min-w-0 flex items-center">{portalDetailFile.language ? <span className="uppercase text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded shadow-sm">{portalDetailFile.language}</span> : "—"}</span>
+                  <span className="text-muted-foreground font-medium flex items-center">Language</span><span className="min-w-0 flex items-center">{portalDetailFile.language ? <span className="uppercase text-[13px] font-bold bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded shadow-sm">{portalDetailFile.language}</span> : "—"}</span>
                   <span className="text-muted-foreground font-medium">Brief Type</span><span className="min-w-0 break-words font-medium text-foreground/80">{portalDetailFile.briefType || "—"}</span>
                   <span className="text-muted-foreground font-medium">Voice</span><span className="min-w-0 break-words font-medium text-foreground/80">{portalDetailFile.voiceVariant || "—"}</span>
                 </div>
@@ -2426,28 +2441,63 @@ export function LoadMediaModal({
 
               {/* Links */}
               <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-sm tracking-tight text-foreground/90">Links</h3>
-                <div className="flex flex-col gap-3 text-[13px] p-3 rounded-lg border bg-muted/10 shadow-sm">
+                <h3 className="font-semibold text-[18px] tracking-tight text-foreground/90">Links</h3>
+                <div className="flex flex-col gap-3 text-[17px] p-3 rounded-lg border bg-muted/10 shadow-sm">
                   {portalDetailFile.pdpUrl ? (
                     <a href={portalDetailFile.pdpUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Product Detail Page (PDP) <IconExternalLink className="size-3.5" />
+                      Product Detail Page (PDP) <IconExternalLink className="size-4" />
                     </a>
                   ) : <span className="text-muted-foreground italic">No PDP URL</span>}
                   {portalDetailFile.salesPageUrl && (
                     <a href={portalDetailFile.salesPageUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Sales Page <IconExternalLink className="size-3.5" />
+                      Sales Page <IconExternalLink className="size-4" />
                     </a>
                   )}
                   {portalDetailFile.landingUrl && (
                     <a href={portalDetailFile.landingUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Landing Page <IconExternalLink className="size-3.5" />
+                      Landing Page <IconExternalLink className="size-4" />
                     </a>
                   )}
                   {portalDetailFile.checkoutFunnelUrl && (
                     <a href={portalDetailFile.checkoutFunnelUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Checkout Funnel <IconExternalLink className="size-3.5" />
+                      Checkout Funnel <IconExternalLink className="size-4" />
                     </a>
                   )}
+                </div>
+              </div>
+
+              {/* Identifiers */}
+              <div className="space-y-4 min-w-0 pb-6">
+                <h3 className="font-semibold text-[18px] tracking-tight text-foreground/90">Identifiers</h3>
+                <div className="flex flex-col gap-3.5 p-3 rounded-lg border bg-muted/10 shadow-sm text-[16px]">
+                  {[
+                    { label: "Asset ID", value: portalDetailFile.assetId },
+                    { label: "Brand ID", value: portalDetailFile.brandId },
+                    { label: "Product ID", value: portalDetailFile.productId },
+                  ].map((row) => (
+                    <div key={row.label} className="flex items-center justify-between gap-3 min-w-0">
+                      <span className="text-muted-foreground font-medium shrink-0 w-[90px]">{row.label}</span>
+                      <div className="flex items-center gap-2 min-w-0 bg-muted/20 rounded px-2.5 py-1 border border-border/50 max-w-full">
+                        <span className="font-mono text-muted-foreground truncate text-[14px]">{row.value || "—"}</span>
+                        {row.value && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              navigator.clipboard.writeText(row.value!)
+                              const btn = e.currentTarget
+                              const originalHtml = btn.innerHTML
+                              btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-500"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+                              setTimeout(() => { btn.innerHTML = originalHtml }, 1500)
+                            }}
+                            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground shrink-0 transition-colors"
+                            title={`Copy ${row.label}`}
+                          >
+                            <IconCopy className="size-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
