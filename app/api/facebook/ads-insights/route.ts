@@ -10,43 +10,27 @@ export const maxDuration = 30
 const TTL_MS = 5 * 60 * 1000  // 5-minute cache — insights data is stable
 
 const RATE_LIMIT_CODES = new Set([4, 17, 32, 613])
-const MAX_RETRIES = 3
-const BACKOFF_BASE_MS = 1000
 
+// H2 fix: no in-request backoff sleep. On a rate limit, fail fast with 429 so the
+// client (or the _cache.ts stale-while-revalidate wrapper) can decide to retry —
+// blocking the Node event loop for up to ~14s per request was the actual bug.
 async function batchFetchWithRetry(
   url: string,
   body: URLSearchParams,
   caller: string
 ): Promise<any> {
-  let lastError: Error | null = null
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (attempt > 0) {
-      const wait = BACKOFF_BASE_MS * Math.pow(2, attempt - 1)
-      console.warn(`[${caller}] BACKOFF attempt=${attempt}/${MAX_RETRIES} wait=${wait}ms`)
-      await new Promise(r => setTimeout(r, wait))
+  const res = await fetch(url, { method: "POST", body })
+  const data = await res.json()
+  if (!res.ok) {
+    const code: number = data?.error?.code ?? 0
+    const msg: string = data?.error?.message ?? "Batch request failed"
+    if (RATE_LIMIT_CODES.has(code)) {
+      console.error(`[${caller}] RATE LIMIT code=${code} | ${msg}`)
+      throw new MetaRateLimitError(msg, code)
     }
-    try {
-      const res = await fetch(url, { method: "POST", body })
-      const data = await res.json()
-      if (!res.ok) {
-        const code: number = data?.error?.code ?? 0
-        const msg: string = data?.error?.message ?? "Batch request failed"
-        if (RATE_LIMIT_CODES.has(code)) {
-          console.error(`[${caller}] RATE LIMIT code=${code} attempt=${attempt}/${MAX_RETRIES} | ${msg}`)
-          lastError = new MetaRateLimitError(msg, code)
-          if (attempt < MAX_RETRIES) continue
-          throw lastError
-        }
-        throw new Error(msg)
-      }
-      return data
-    } catch (err) {
-      if (err instanceof MetaRateLimitError) throw err
-      lastError = err as Error
-      if (attempt >= MAX_RETRIES) throw lastError
-    }
+    throw new Error(msg)
   }
-  throw lastError ?? new Error("Batch fetch failed")
+  return data
 }
 
 // POST { adAccountId, adIds: string[], datePreset?: string, statusOnly?: boolean }

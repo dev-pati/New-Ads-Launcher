@@ -3,7 +3,7 @@ import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createAd, getVideoThumbnail, getResourceAccountId, getDynamicCreativeAdSets, pollVideoReady } from "@/lib/facebook"
+import { createAd, getVideoThumbnail, getResourceAccountId, getDynamicCreativeAdSets, getAdSetCampaignsAndNames, copyAdSet, pollVideoReady } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
 
 // Simple launch: create ads directly in existing ad sets.
@@ -157,31 +157,24 @@ export async function POST(request: NextRequest) {
       const ready = readyResults.filter(r => r.ready)
       console.log(`[launch-direct] ${ready.length}/${videosToCheck.length} videos ready (max wait ${Math.max(...readyResults.map(r => r.waitedMs))}ms)`)
 
-      // Save thumbnails so next launch skips this video entirely
-      await Promise.all(ready.map(async (r) => {
+      // Save thumbnails asynchronously (defer generation/checks) or retrieve immediately
+      ready.forEach((r) => {
         const cr: any = creatives.find((c: any) => c.id === r.creativeId)
         if (!cr) return
-        
-        try {
-          // Meta sometimes needs a few extra seconds to generate thumbnails even after video_status is "ready"
-          let thumbUrl: string | null = null
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            thumbUrl = await getVideoThumbnail(r.videoId, token, { skipProof: tokenOpts.isManual })
-            if (thumbUrl) break
-            console.log(`[launch-direct] Thumbnail not ready yet for ${r.videoId}, attempt ${attempt}/3. Waiting 3s...`)
-            await new Promise(res => setTimeout(res, 3000))
-          }
 
-          if (thumbUrl) {
-            cr.fb_thumbnail_url = thumbUrl
-            await supabase.from("creatives").update({ fb_thumbnail_url: thumbUrl }).eq("id", r.creativeId)
-          } else {
-            console.warn(`[launch-direct] WARNING: No thumbnail found for video ${r.videoId} after 3 attempts. Ad delivery might fail.`)
-          }
-        } catch (err) {
-          console.error(`[launch-direct] Failed to get/save thumbnail for ${r.videoId}:`, err)
-        }
-      }))
+        // Retrieve immediately without a blocking poll loop to prevent thread stalls.
+        // A background worker or subsequent read will populate if not ready yet.
+        getVideoThumbnail(r.videoId, token, { skipProof: tokenOpts.isManual })
+          .then(async (thumbUrl) => {
+            if (thumbUrl) {
+              cr.fb_thumbnail_url = thumbUrl
+              await supabase.from("creatives").update({ fb_thumbnail_url: thumbUrl }).eq("id", r.creativeId)
+            }
+          })
+          .catch(err => {
+            console.error(`[launch-direct] Deferred thumbnail fetch failed for ${r.videoId}:`, err)
+          })
+      })
     }
 
     // ── Multi Placement Ads branch ──────────────────────────────────
@@ -377,7 +370,15 @@ export async function POST(request: NextRequest) {
       ? await getDynamicCreativeAdSets(adSetIds as string[], token, { skipProof: tokenOpts.isManual })
       : new Set<string>()
 
-    for (const adSetId of adSetIds) {
+    // oneAdPerAdset (Special Ad Testing): N adsets × M creatives must produce N*M adsets,
+    // each with exactly 1 ad — not N ads round-robined across the original adsets. The first
+    // creative reuses each original adset; creatives 2..M get a fresh adset via copyAdSet
+    // (deep_copy: false — structure only, no ads), which needs the source adset's campaign_id.
+    const adSetCampaigns = launchSettings?.oneAdPerAdset
+      ? await getAdSetCampaignsAndNames(adSetIds as string[], token, { skipProof: tokenOpts.isManual })
+      : new Map<string, { campaign_id: string; name: string }>()
+
+    for (const [adSetIndex, adSetId] of (adSetIds as string[]).entries()) {
       if (legacyDynamicAdsets.has(adSetId)) {
         errors.push({
           adSetId,
@@ -385,7 +386,8 @@ export async function POST(request: NextRequest) {
         })
         continue
       }
-      for (const creative of creatives) {
+      for (let creativeIndex = 0; creativeIndex < creatives.length; creativeIndex++) {
+        const creative = creatives[creativeIndex]
         if (!creative.fb_image_hash && !creative.fb_video_id) {
           errors.push({
             adSetId,
@@ -396,6 +398,29 @@ export async function POST(request: NextRequest) {
           continue
         }
 
+        // Resolve the adset this ad actually lands in. oneAdPerAdset + not the first
+        // creative for this adset → duplicate the original adset instead of reusing it.
+        let targetAdSetId = adSetId
+        if (launchSettings?.oneAdPerAdset && creativeIndex > 0) {
+          const adSetInfo = adSetCampaigns.get(adSetId)
+          if (!adSetInfo) {
+            errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: "Cannot duplicate ad set: campaign_id lookup failed." })
+            continue
+          }
+          try {
+            const copy = await copyAdSet(token, adSetId, {
+              campaign_id: adSetInfo.campaign_id,
+              name: `${adSetInfo.name} - ${creative.file_name}`,
+              status: adStatus,
+            }, tokenOpts)
+            targetAdSetId = copy.id
+            adSetNameMap.set(targetAdSetId, `${adSetInfo.name} - ${creative.file_name}`)
+          } catch (err: any) {
+            errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: `Failed to duplicate ad set: ${err.message || "Unknown error"}` })
+            continue
+          }
+        }
+
         const adName = (rowAdName?.trim()) || creative.file_name.replace(/\.[^/.]+$/, "")
         const sourceId = adSourceIds?.[creative.id] || ""
 
@@ -404,16 +429,16 @@ export async function POST(request: NextRequest) {
           try {
             const ad = await createAd(adAccountId, token, {
               name: adName,
-              adset_id: adSetId,
+              adset_id: targetAdSetId,
               page_id: pageId,
               object_story_id: sourceId,
               title: "", body: "", cta: cta || "LEARN_MORE", link_url: webLink || "",
               status: adStatus,
             }, tokenOpts)
             await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
-            created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "post_id" })
+            created.push({ adId: ad.id, adSetId: targetAdSetId, adSetName: adSetNameMap.get(targetAdSetId) || targetAdSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "post_id" })
           } catch (err: any) {
-            errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (post_id mode)" })
+            errors.push({ adSetId: targetAdSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (post_id mode)" })
           }
           continue
         }
@@ -423,16 +448,16 @@ export async function POST(request: NextRequest) {
           try {
             const ad = await createAd(adAccountId, token, {
               name: adName,
-              adset_id: adSetId,
+              adset_id: targetAdSetId,
               page_id: pageId,
               reuse_creative_id: sourceId,
               title: "", body: "", cta: cta || "LEARN_MORE", link_url: webLink || "",
               status: adStatus,
             }, tokenOpts)
             await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
-            created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "creative_id" })
+            created.push({ adId: ad.id, adSetId: targetAdSetId, adSetName: adSetNameMap.get(targetAdSetId) || targetAdSetId, creativeId: creative.id, fileName: creative.file_name, thumbnailUrl: creative.fb_thumbnail_url || creative.fb_image_url || null, mediaType: creative.media_type || "image", mode: "creative_id" })
           } catch (err: any) {
-            errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (creative_id mode)" })
+            errors.push({ adSetId: targetAdSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed (creative_id mode)" })
           }
           continue
         }
@@ -468,7 +493,7 @@ export async function POST(request: NextRequest) {
 
           const ad = await createAd(adAccountId, token, {
             name: adName,
-            adset_id: adSetId,
+            adset_id: targetAdSetId,
             page_id: pageId,
             instagram_actor_id: instagramAccountId || undefined,
             image_hash: creative.fb_image_hash || undefined,
@@ -495,8 +520,8 @@ export async function POST(request: NextRequest) {
 
           created.push({
             adId: ad.id,
-            adSetId,
-            adSetName: adSetNameMap.get(adSetId) || adSetId,
+            adSetId: targetAdSetId,
+            adSetName: adSetNameMap.get(targetAdSetId) || targetAdSetId,
             creativeId: creative.id,
             fileName: creative.file_name,
             thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || null,
@@ -504,7 +529,7 @@ export async function POST(request: NextRequest) {
           })
         } catch (err: any) {
           errors.push({
-            adSetId,
+            adSetId: targetAdSetId,
             creativeId: creative.id,
             fileName: creative.file_name,
             error: err.message || "Failed to create ad",
@@ -524,6 +549,9 @@ export async function POST(request: NextRequest) {
 
     const userName = ctx.user.full_name || ctx.user.email?.split("@")[0] || "Unknown"
 
+    const finalAdSetIds = Array.from(new Set(created.map((c: any) => c.adSetId)))
+    const finalAdSetNames = finalAdSetIds.map(id => adSetNameMap.get(id) || id)
+
     const adminDb = createAdminClient()
     const { data: batchRecord, error: batchErr } = await adminDb.from("launch_batches").insert({
       org_id: ctx.orgId,
@@ -531,8 +559,8 @@ export async function POST(request: NextRequest) {
       user_name: userName,
       ad_account_id: adAccountId,
       ad_account_name: adAccountName || adAccountId,
-      adset_ids: adSetIds,
-      adset_names: adSetNames || adSetIds,
+      adset_ids: finalAdSetIds.length > 0 ? finalAdSetIds : adSetIds,
+      adset_names: finalAdSetNames.length > 0 ? finalAdSetNames : (adSetNames || adSetIds),
       creative_ids: creativeIds,
       creative_thumbs: creativeThumbs,
       primary_text: primaryText || null,

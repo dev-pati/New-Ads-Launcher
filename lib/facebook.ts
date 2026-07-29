@@ -897,6 +897,26 @@ export async function getDynamicCreativeAdSets(adsetIds: string[], accessToken: 
   return out
 }
 
+// Batch-fetch campaign_id + name for ad sets — needed to duplicate an ad set via copyAdSet,
+// which requires the destination campaign_id. Best-effort: on failure the caller sees an
+// empty map and reports "can't duplicate" per adset rather than crashing the whole launch.
+export async function getAdSetCampaignsAndNames(adsetIds: string[], accessToken: string, opts?: MetaFetchOpts): Promise<Map<string, { campaign_id: string; name: string }>> {
+  const out = new Map<string, { campaign_id: string; name: string }>()
+  if (!adsetIds.length) return out
+  try {
+    const res = await secureMetaFetch(`${GRAPH_API_BASE}/?ids=${adsetIds.join(",")}&fields=campaign_id,name&access_token=${accessToken}`, undefined, opts)
+    const data = await res.json()
+    if (res.ok && data && !data.error) {
+      for (const [id, v] of Object.entries<any>(data)) {
+        if (v?.campaign_id) out.set(id, { campaign_id: v.campaign_id, name: v.name || id })
+      }
+    }
+  } catch (e) {
+    console.warn("[getAdSetCampaignsAndNames] lookup failed:", e)
+  }
+  return out
+}
+
 export async function getResourceAccountId(resourceId: string, accessToken: string, opts?: { isManual?: boolean }): Promise<string | null> {
   const res = await secureMetaFetch(`${GRAPH_API_BASE}/${resourceId}?fields=account_id&access_token=${accessToken}`, undefined, { skipProof: opts?.isManual })
   const data = await res.json()

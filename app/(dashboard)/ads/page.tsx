@@ -691,14 +691,18 @@ export default function AdsManagerPage() {
     fetchPageLinks()
   }, [])
 
-  const fetchCreatives = async (accountId?: string) => {
+  const fetchCreatives = async (accountId?: string, cursor: string | null = null) => {
     setLoading(true)
     try {
       const id = accountId ?? adAccountId
-      const url = id ? `/api/creatives?ad_account_id=${encodeURIComponent(id)}` : "/api/creatives"
+      let url = id ? `/api/creatives?ad_account_id=${encodeURIComponent(id)}&limit=100` : "/api/creatives?limit=100"
+      if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`
       const res = await fetch(url)
       const data = await res.json()
-      setCreatives(data.creatives || [])
+      setCreatives(prev => cursor ? [...prev, ...(data.creatives || [])] : (data.creatives || []))
+      if (data.hasMore && data.nextCursor) {
+        fetchCreatives(id, data.nextCursor)
+      }
     } catch {
       /* ignore */
     } finally {

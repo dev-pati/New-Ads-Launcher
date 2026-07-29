@@ -173,7 +173,6 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
             onMouseLeave={e => {
               const v = e.currentTarget
               v.pause()
-              try { v.currentTime = 0 } catch {}
             }}
           />
           {isGDrive && (
@@ -213,7 +212,6 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
           onMouseLeave={() => {
             if (videoRef.current) {
               videoRef.current.pause()
-              try { videoRef.current.currentTime = 0 } catch {}
             }
           }}
         />

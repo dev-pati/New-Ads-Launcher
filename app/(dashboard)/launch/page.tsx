@@ -6815,7 +6815,6 @@ const LAUNCH_SETTING_DEFS: { key: keyof LaunchSettings; label: string; desc: str
   { key: "hidePromoCode", label: "Hide Promo Code & Email Sign Up", desc: "Prevent promo codes from being used" },
   { key: "autoUploadCaptions", label: "Auto Upload Captions (Meta)", desc: "Auto-transcribe and upload captions to improve Meta performance for viewers who watch without sound" },
   { key: "fastUpload", label: "Fast Upload", desc: "Pre-queue videos to upload to ad account when media is loaded" },
-  { key: "launchAsPaused", label: "Launch Ads as Paused", desc: "Create ads in paused state as default (instead of active)" },
   { key: "oneAdPerAdset", label: "Launch 1 ad per adset (Special Ad Testing)", desc: "Enable special ad testing features. This will be visible as a toggle on the launch page after an ad set is selected" },
   { key: "launchAsPostId", label: "Launch ads as POST_ID when launched", desc: "Use POST_ID when recreating ads" },
   { key: "trackingSpecs", label: "Tracking Specs", desc: "Enable tracking specs to monitor both website events and app installs" },
@@ -7194,38 +7193,72 @@ function SettingsModal({
             )}
 
             {/* TAB: LAUNCH SETTINGS */}
-            {activeTab === "launch" && (
-              <div className="space-y-3">
-                <h3 className="text-base font-bold">Launch Settings</h3>
-                <div className="relative">
-                  <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-                  <input
-                    value={launchSearch}
-                    onChange={e => setLaunchSearch(e.target.value)}
-                    placeholder="Search settings..."
-                    className="w-full pl-9 pr-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
-                  />
-                </div>
-                <div className="space-y-1">
-                  {LAUNCH_SETTING_DEFS.filter(s => !launchSearch || s.label.toLowerCase().includes(launchSearch.toLowerCase()) || s.desc.toLowerCase().includes(launchSearch.toLowerCase())).map(def => (
-                    <div key={def.key} className="flex items-start justify-between gap-3 p-3 border rounded-lg hover:bg-muted/20">
-                      <div className="flex-1">
-                        <p className="text-sm font-medium flex items-center gap-1">{def.label} <IconInfoCircle className="size-3 text-muted-foreground" /></p>
-                        <p className="text-xs text-muted-foreground mt-0.5">{def.desc}</p>
+            {activeTab === "launch" && (() => {
+              const matchesSearch = (s: (typeof LAUNCH_SETTING_DEFS)[number]) =>
+                !launchSearch || s.label.toLowerCase().includes(launchSearch.toLowerCase()) || s.desc.toLowerCase().includes(launchSearch.toLowerCase())
+              const regularSettings = LAUNCH_SETTING_DEFS.filter(s => s.key === "oneAdPerAdset" && matchesSearch(s))
+              const legacySettings = LAUNCH_SETTING_DEFS.filter(s => s.key !== "oneAdPerAdset" && matchesSearch(s))
+
+              return (
+                <div className="space-y-4">
+                  <h3 className="text-base font-bold">Launch Settings</h3>
+                  <div className="relative">
+                    <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+                    <input
+                      value={launchSearch}
+                      onChange={e => setLaunchSearch(e.target.value)}
+                      placeholder="Search settings..."
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="rounded-xl border bg-background p-3">
+                      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Regular</p>
+                      <div className="mt-3 space-y-2">
+                        {regularSettings.map(def => (
+                          <div key={def.key} className="flex items-start justify-between gap-3 rounded-lg border bg-muted/10 p-3 hover:bg-muted/20">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">{def.label}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{def.desc}</p>
+                            </div>
+                            <button
+                              onClick={() => setSettings(s => ({ ...s, launch: { ...s.launch, [def.key]: !s.launch[def.key] } }))}
+                              className={cn("relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full",
+                                settings.launch[def.key] ? "bg-primary" : "bg-muted-foreground/30")}
+                            >
+                              <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
+                                settings.launch[def.key] ? "translate-x-4" : "translate-x-0.5")} />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                      <button
-                        onClick={() => setSettings(s => ({ ...s, launch: { ...s.launch, [def.key]: !s.launch[def.key] } }))}
-                        className={cn("relative inline-flex h-5 w-9 items-center rounded-full shrink-0 mt-0.5",
-                          settings.launch[def.key] ? "bg-primary" : "bg-muted-foreground/30")}
-                      >
-                        <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
-                          settings.launch[def.key] ? "translate-x-4" : "translate-x-0.5")} />
-                      </button>
                     </div>
-                  ))}
+                    <div className="rounded-xl border bg-muted/20 p-3 opacity-60">
+                      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Legacy</p>
+                      <div className="mt-3 space-y-2">
+                        {legacySettings.map(def => (
+                          <div key={def.key} className="flex items-start justify-between gap-3 rounded-lg border bg-background/40 p-3">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-muted-foreground">{def.label}</p>
+                              <p className="mt-0.5 text-xs text-muted-foreground">{def.desc}</p>
+                            </div>
+                            <button
+                              disabled
+                              aria-disabled="true"
+                              className={cn("relative mt-0.5 inline-flex h-5 w-9 shrink-0 cursor-not-allowed items-center rounded-full",
+                                settings.launch[def.key] ? "bg-primary/50" : "bg-muted-foreground/20")}
+                            >
+                              <span className={cn("inline-block size-3.5 rounded-full bg-white/80 shadow-sm transition-transform",
+                                settings.launch[def.key] ? "translate-x-4" : "translate-x-0.5")} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
 
             {/* TAB: AD COPY DEFAULTS */}
             {activeTab === "adCopy" && (

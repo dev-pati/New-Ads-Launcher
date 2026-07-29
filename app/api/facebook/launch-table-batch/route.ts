@@ -3,7 +3,7 @@ import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createAd, getVideoThumbnail, getResourceAccountId, pollVideoReady } from "@/lib/facebook"
+import { createAd, getVideoThumbnail, getResourceAccountId, getAdSetCampaignsAndNames, copyAdSet, pollVideoReady } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
 
 // Table Mode batch launch: accepts all rows in one request.
@@ -96,23 +96,28 @@ export async function POST(request: NextRequest) {
       const readyResults = await Promise.all(
         allVideosToCheck.map(v => pollVideoReady(v.videoId, token, 120_000, { skipProof: tokenOpts.isManual }).then(r => ({ ...v, ...r })))
       )
-      await Promise.all(
-        readyResults.filter(r => r.ready).map(async (r) => {
-          const cr: any = creativeMap.get(r.creativeId)
-          if (!cr) return
-          let thumbUrl: string | null = null
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            thumbUrl = await getVideoThumbnail(r.videoId, token, { skipProof: tokenOpts.isManual })
-            if (thumbUrl) break
-            await new Promise(res => setTimeout(res, 3000))
-          }
-          if (thumbUrl) {
-            cr.fb_thumbnail_url = thumbUrl
-            await supabase.from("creatives").update({ fb_thumbnail_url: thumbUrl }).eq("id", r.creativeId)
-          }
-        })
-      )
+      // Trigger thumbnail updates asynchronously instead of serial thread sleeps
+      readyResults.filter(r => r.ready).forEach((r) => {
+        const cr: any = creativeMap.get(r.creativeId)
+        if (!cr) return
+        getVideoThumbnail(r.videoId, token, { skipProof: tokenOpts.isManual })
+          .then(async (thumbUrl) => {
+            if (thumbUrl) {
+              cr.fb_thumbnail_url = thumbUrl
+              await supabase.from("creatives").update({ fb_thumbnail_url: thumbUrl }).eq("id", r.creativeId)
+            }
+          })
+          .catch(err => {
+            console.error(`[launch-table-batch] Deferred thumbnail fetch failed for ${r.videoId}:`, err)
+          })
+      })
     }
+
+    // Pre-fetch campaign IDs for all ad sets across all rows if any row uses oneAdPerAdset
+    const needsCampaignIds = rows.some((r: any) => r.launchSettings?.oneAdPerAdset)
+    const adSetCampaigns = needsCampaignIds
+      ? await getAdSetCampaignsAndNames(batchAdSetIds, token, { skipProof: tokenOpts.isManual })
+      : new Map<string, { campaign_id: string; name: string }>()
 
     const userName = ctx.user.full_name || ctx.user.email?.split("@")[0] || "Unknown"
     const rowResults: any[] = []
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest) {
         description, descriptionVariations, cta, webLink,
         createPaused, startTime: scheduledStart, endTime: scheduledEnd,
         partnerPageId, partnershipDisplayMode, multilanguage, catalogAds,
-        collectionAds, sitelinks, adSourceMode, adSourceIds, enhancements,
+        collectionAds, sitelinks, adSourceMode, adSourceIds, enhancements, launchSettings,
       } = row
 
       const adSetNameMap = new Map<string, string>(
@@ -137,26 +142,49 @@ export async function POST(request: NextRequest) {
       const created: any[] = []
       const errors: any[] = []
 
-      for (const adSetId of (adSetIds || [])) {
-        for (const creative of rowCreatives) {
+      for (const [adSetIndex, adSetId] of (adSetIds || []).entries()) {
+        for (let creativeIndex = 0; creativeIndex < rowCreatives.length; creativeIndex++) {
+          const creative = rowCreatives[creativeIndex]
           if (!isLaunchable(creative)) {
             errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: "Creative not yet uploaded to Meta." })
             continue
           }
+
+          let targetAdSetId = adSetId
+          if (launchSettings?.oneAdPerAdset && creativeIndex > 0) {
+            const adSetInfo = adSetCampaigns.get(adSetId)
+            if (!adSetInfo) {
+              errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: "Cannot duplicate ad set: campaign_id lookup failed." })
+              continue
+            }
+            try {
+              const copy = await copyAdSet(token, adSetId, {
+                campaign_id: adSetInfo.campaign_id,
+                name: `${adSetInfo.name} - ${creative.file_name}`,
+                status: adStatus,
+              }, tokenOpts)
+              targetAdSetId = copy.id
+              adSetNameMap.set(targetAdSetId, `${adSetInfo.name} - ${creative.file_name}`)
+            } catch (err: any) {
+              errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: `Failed to duplicate ad set: ${err.message || "Unknown error"}` })
+              continue
+            }
+          }
+
           const adName = rowAdName?.trim() || creative.file_name.replace(/\.[^/.]+$/, "")
           const sourceId = adSourceIds?.[creative.id] || ""
 
           if (adSourceMode === "post_id" && sourceId) {
             try {
               const ad = await createAd(adAccountId, token, {
-                name: adName, adset_id: adSetId, page_id: pageId,
+                name: adName, adset_id: targetAdSetId, page_id: pageId,
                 object_story_id: sourceId, title: "", body: "",
                 cta: cta || "LEARN_MORE", link_url: webLink || "", status: adStatus,
               }, tokenOpts)
               await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
-              created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "post_id" })
+              created.push({ adId: ad.id, adSetId: targetAdSetId, adSetName: adSetNameMap.get(targetAdSetId) || targetAdSetId, creativeId: creative.id, fileName: creative.file_name, mode: "post_id" })
             } catch (err: any) {
-              errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message })
+              errors.push({ adSetId: targetAdSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message })
             }
             continue
           }
@@ -164,14 +192,14 @@ export async function POST(request: NextRequest) {
           if (adSourceMode === "creative_id" && sourceId) {
             try {
               const ad = await createAd(adAccountId, token, {
-                name: adName, adset_id: adSetId, page_id: pageId,
+                name: adName, adset_id: targetAdSetId, page_id: pageId,
                 reuse_creative_id: sourceId, title: "", body: "",
                 cta: cta || "LEARN_MORE", link_url: webLink || "", status: adStatus,
               }, tokenOpts)
               await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
-              created.push({ adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId, creativeId: creative.id, fileName: creative.file_name, mode: "creative_id" })
+              created.push({ adId: ad.id, adSetId: targetAdSetId, adSetName: adSetNameMap.get(targetAdSetId) || targetAdSetId, creativeId: creative.id, fileName: creative.file_name, mode: "creative_id" })
             } catch (err: any) {
-              errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message })
+              errors.push({ adSetId: targetAdSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message })
             }
             continue
           }
@@ -202,7 +230,7 @@ export async function POST(request: NextRequest) {
 
             const ad = await createAd(adAccountId, token, {
               name: adName,
-              adset_id: adSetId,
+              adset_id: targetAdSetId,
               page_id: pageId,
               instagram_actor_id: instagramAccountId || undefined,
               image_hash: creative.fb_image_hash || undefined,
@@ -228,13 +256,13 @@ export async function POST(request: NextRequest) {
             await supabase.from("creatives").update({ fb_ad_id: ad.id }).eq("id", creative.id)
 
             created.push({
-              adId: ad.id, adSetId, adSetName: adSetNameMap.get(adSetId) || adSetId,
+              adId: ad.id, adSetId: targetAdSetId, adSetName: adSetNameMap.get(targetAdSetId) || targetAdSetId,
               creativeId: creative.id, fileName: creative.file_name,
               thumbnailUrl: thumbnailUrl || creative.fb_thumbnail_url || creative.fb_image_url || null,
               mediaType: creative.media_type || "image",
             })
           } catch (err: any) {
-            errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed to create ad" })
+            errors.push({ adSetId: targetAdSetId, creativeId: creative.id, fileName: creative.file_name, error: err.message || "Failed to create ad" })
           }
         }
       }
@@ -248,8 +276,15 @@ export async function POST(request: NextRequest) {
     const totalCreated = allCreated.length
     const totalFailed  = allErrors.length
 
-    const allAdSetIds    = [...new Set(rows.flatMap((r: any) => r.adSetIds   || []))] as string[]
-    const allAdSetNames  = [...new Set(rows.flatMap((r: any) => r.adSetNames || []))] as string[]
+    const originalAdSetIds   = [...new Set(rows.flatMap((r: any) => r.adSetIds   || []))] as string[]
+    const originalAdSetNames = [...new Set(rows.flatMap((r: any) => r.adSetNames || []))] as string[]
+
+    const finalAdSetIds = [...new Set(allCreated.map(c => c.adSetId))] as string[]
+    const finalAdSetNames = finalAdSetIds.map(id => {
+      const match = allCreated.find(c => c.adSetId === id)
+      return match ? match.adSetName : id
+    })
+
     const allThumbs      = [...new Set(
       [...creativeMap.values()].map((c: any) => c.fb_thumbnail_url || c.fb_image_url || c.file_url || null).filter(Boolean)
     )] as string[]
@@ -263,8 +298,8 @@ export async function POST(request: NextRequest) {
       user_name: userName,
       ad_account_id: adAccountId,
       ad_account_name: adAccountName || adAccountId,
-      adset_ids: allAdSetIds,
-      adset_names: allAdSetNames,
+      adset_ids: finalAdSetIds.length > 0 ? finalAdSetIds : originalAdSetIds,
+      adset_names: finalAdSetNames.length > 0 ? finalAdSetNames : originalAdSetNames,
       creative_ids: allCreativeIds,
       creative_thumbs: allThumbs,
       primary_text: firstRow.primaryText || null,
