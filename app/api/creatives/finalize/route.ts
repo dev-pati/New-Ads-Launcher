@@ -40,6 +40,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // SEC-008: publicUrl must point at our own Supabase Storage — reject anything else
+    // to prevent a crafted file_url from causing SSRF when the upload-to-facebook cron fetches it.
+    const allowedStorageHost = (() => { try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host } catch { return null } })()
+    let publicUrlHost: string | null = null
+    try { publicUrlHost = new URL(publicUrl).host } catch { /* invalid URL below */ }
+    if (!allowedStorageHost || !publicUrlHost || publicUrlHost !== allowedStorageHost) {
+      return NextResponse.json({ error: "publicUrl not allowed" }, { status: 400 })
+    }
+
     const isVideo = (fileType as string).startsWith("video/")
     const isImage = (fileType as string).startsWith("image/")
     if (!isVideo && !isImage) {

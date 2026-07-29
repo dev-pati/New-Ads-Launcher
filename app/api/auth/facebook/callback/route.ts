@@ -8,7 +8,7 @@ import {
   getAdAccounts,
 } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getAuthUser } from "@/lib/auth"
+import { getAuthContext } from "@/lib/auth"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -36,25 +36,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/auth/login`)
     }
-
-    // Get user's org (from cookie or first org)
-    const supabaseServer = createAdminClient()
-    const cookieStore = request.cookies
-    let orgId = cookieStore.get("active_org_id")?.value
-
-    if (!orgId) {
-      const { data: membership } = await supabaseServer
-        .from("org_members")
-        .select("org_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .single()
-      orgId = membership?.org_id
-    }
+    const { orgId, user } = ctx
 
     if (!orgId) {
       return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/?fb_error=no_org`)

@@ -45,15 +45,22 @@ export async function POST(request: NextRequest) {
     // ── Slack ──────────────────────────────────────────────────────────────────
     const webhookUrl: string = notification.slackWebhookUrl ?? ""
     if (webhookUrl && (notification.via === "slack" || notification.via === "both")) {
-      const res = await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: "🧪 *Dry-run test* — Automation notification is configured correctly.",
-        }),
-      })
-      if (!res.ok) errors.push(`Slack: HTTP ${res.status}`)
-      else results.push("slack webhook")
+      // SEC-007: only ever POST to Slack's own webhook host to prevent SSRF
+      let isSlackHost = false
+      try { const u = new URL(webhookUrl); isSlackHost = u.protocol === "https:" && u.host === "hooks.slack.com" } catch {}
+      if (!isSlackHost) {
+        errors.push("Slack: webhook URL must be an https://hooks.slack.com/... URL")
+      } else {
+        const res = await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: "🧪 *Dry-run test* — Automation notification is configured correctly.",
+          }),
+        })
+        if (!res.ok) errors.push(`Slack: HTTP ${res.status}`)
+        else results.push("slack webhook")
+      }
     }
 
     // ── Lark ───────────────────────────────────────────────────────────────────

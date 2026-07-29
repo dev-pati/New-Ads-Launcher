@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext } from "@/lib/auth"
+import { getAuthContext, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import {
   fetchViaProfile,
@@ -57,6 +57,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
 
     const body = await request.json().catch(() => null)
     const token: string | undefined = body?.token?.trim()

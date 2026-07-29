@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext } from "@/lib/auth"
+import { getAuthContext, requireRole } from "@/lib/auth"
 import { executeAutomation } from "@/lib/automation-engine"
 
 export const dynamic = "force-dynamic"
@@ -14,6 +14,8 @@ export async function POST(
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
 
     const { id } = await params
     const body = await request.json().catch(() => ({}))

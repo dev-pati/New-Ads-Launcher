@@ -1,6 +1,7 @@
 import { cookies } from "next/headers"
 import { SignJWT, jwtVerify } from "jose"
 import bcrypt from "bcryptjs"
+import crypto from "crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendOtpEmail } from "@/lib/smtp-email"
 
@@ -20,11 +21,10 @@ const CLIENT_COOKIE_NAME = "adlauncher_client_token"
 const encoder = new TextEncoder()
 
 function authSecret() {
-  const secret =
-    process.env.CUSTOM_AUTH_SECRET ||
-    process.env.JWT_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!secret) throw new Error("CUSTOM_AUTH_SECRET is not set")
+  const secret = process.env.CUSTOM_AUTH_SECRET || process.env.JWT_SECRET
+  if (!secret || secret.length < 32) {
+    throw new Error("CUSTOM_AUTH_SECRET must be set to a secure string >= 32 characters.")
+  }
   return encoder.encode(secret)
 }
 
@@ -89,15 +89,28 @@ export async function getSessionAccount(): Promise<AuthAccount | null> {
   }
 }
 
+// SEC-011: In-memory rate limiter for single-instance Docker deployment.
+// ponytail: if this app is ever scaled horizontally to multiple instances,
+// this MUST be replaced with Upstash Redis or similar shared cache.
+const OTP_LIMITS = {
+  verify: new Map<string, { count: number; lockedUntil: number }>(),
+  send: new Map<string, { count: number; windowStart: number }>(),
+}
+
+function hashOtp(otp: string, email: string): string {
+  return crypto.createHash("sha256").update(otp.trim() + email.trim().toLowerCase()).digest("hex")
+}
+
 export async function verifyPassword(email: string, password: string): Promise<AuthAccount | null> {
   const db = createAdminClient()
   const { data: account, error } = await db
     .from("accounts")
-    .select("id,email,full_name,avatar_url,encrypted_password")
+    .select("id,email,full_name,avatar_url,encrypted_password,disabled_at")
     .ilike("email", email.trim())
     .single()
 
   if (error || !account?.encrypted_password) return null
+  if (account.disabled_at) return null // SEC-011
 
   const ok = await bcrypt.compare(password, account.encrypted_password)
   if (!ok) return null
@@ -124,11 +137,26 @@ export async function hashPassword(password: string) {
 }
 
 export async function generateAndSendOtp(email: string): Promise<{ ok: boolean; error?: string; status?: number }> {
+  const normEmail = email.trim().toLowerCase()
+
+  // Rate limit OTP generation (max 3 per 5 minutes)
+  const now = Date.now()
+  const sendLimit = OTP_LIMITS.send.get(normEmail) || { count: 0, windowStart: now }
+  if (now > sendLimit.windowStart + 5 * 60 * 1000) {
+    sendLimit.count = 0
+    sendLimit.windowStart = now
+  }
+  if (sendLimit.count >= 3) {
+    return { ok: false, error: "Too many OTP requests. Please wait 5 minutes.", status: 429 }
+  }
+  sendLimit.count++
+  OTP_LIMITS.send.set(normEmail, sendLimit)
+
   const db = createAdminClient()
   const { data: account, error } = await db
     .from("accounts")
-    .select("id, email")
-    .ilike("email", email.trim())
+    .select("id, email, disabled_at")
+    .ilike("email", normEmail)
     .maybeSingle()
 
   if (error) {
@@ -137,14 +165,18 @@ export async function generateAndSendOtp(email: string): Promise<{ ok: boolean; 
   if (!account) {
     return { ok: false, error: "Email not registered", status: 404 }
   }
+  if (account.disabled_at) {
+    return { ok: false, error: "Account disabled", status: 403 }
+  }
 
-  // Generate 6-digit OTP
-  const otp = Math.floor(100000 + Math.random() * 900000).toString()
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes from now
+  // Generate 6-digit OTP securely
+  const otp = crypto.randomInt(100000, 1000000).toString()
+  const hashedOtp = hashOtp(otp, account.email)
+  const expiresAt = new Date(now + 10 * 60 * 1000).toISOString() // 10 minutes from now
 
   const { error: updateError } = await db
     .from("accounts")
-    .update({ otp_code: otp, otp_expires_at: expiresAt })
+    .update({ otp_code: hashedOtp, otp_expires_at: expiresAt })
     .eq("id", account.id)
 
   if (updateError) {
@@ -160,24 +192,47 @@ export async function generateAndSendOtp(email: string): Promise<{ ok: boolean; 
 }
 
 export async function verifyOtp(email: string, otp: string): Promise<AuthAccount | null> {
+  const normEmail = email.trim().toLowerCase()
+
+  // Check lockout (max 5 failed attempts)
+  const now = Date.now()
+  const verifyLimit = OTP_LIMITS.verify.get(normEmail) || { count: 0, lockedUntil: 0 }
+  if (verifyLimit.lockedUntil > now) {
+    throw new Error("Account locked due to too many failed attempts. Please request a new OTP.")
+  }
+
   const db = createAdminClient()
   const { data: account, error } = await db
     .from("accounts")
-    .select("id, email, full_name, avatar_url, otp_code, otp_expires_at")
-    .ilike("email", email.trim())
+    .select("id, email, full_name, avatar_url, otp_code, otp_expires_at, disabled_at")
+    .ilike("email", normEmail)
     .maybeSingle()
 
   if (error || !account) return null
+  if (account.disabled_at) return null
   if (!account.otp_code || !account.otp_expires_at) return null
 
   // Verify expiration
-  const expired = new Date(account.otp_expires_at).getTime() < Date.now()
+  const expired = new Date(account.otp_expires_at).getTime() < now
   if (expired) return null
 
-  // Verify code
-  if (account.otp_code !== otp.trim()) return null
+  // Verify code using constant-time comparison on hashes
+  const expectedHash = Buffer.from(account.otp_code)
+  const actualHash = Buffer.from(hashOtp(otp, account.email))
+
+  const valid = expectedHash.length === actualHash.length && crypto.timingSafeEqual(expectedHash, actualHash)
+
+  if (!valid) {
+    verifyLimit.count++
+    if (verifyLimit.count >= 5) {
+      verifyLimit.lockedUntil = now + 15 * 60 * 1000 // lock for 15m
+    }
+    OTP_LIMITS.verify.set(normEmail, verifyLimit)
+    return null
+  }
 
   // Clear OTP code and update sign in time
+  OTP_LIMITS.verify.delete(normEmail)
   await db
     .from("accounts")
     .update({

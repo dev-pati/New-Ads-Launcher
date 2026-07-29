@@ -19,7 +19,7 @@ function batchSize(pct: number): number {
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization")
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!process.env.CRON_SECRET || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -78,6 +78,16 @@ export async function GET(request: NextRequest) {
         }
 
         assertCanMarkUploaded(row.status)
+
+        // SEC-008: file_url must be our own Supabase Storage before we fetch/hand it to Meta.
+        const allowedStorageHost = (() => { try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host } catch { return null } })()
+        let fileUrlHost: string | null = null
+        try { fileUrlHost = new URL(row.file_url).host } catch { /* invalid */ }
+        if (!allowedStorageHost || !fileUrlHost || fileUrlHost !== allowedStorageHost) {
+          console.error(`[cron/upload-to-facebook] creative ${row.id} has disallowed file_url host; skipping`)
+          skipped.push(row.id)
+          continue
+        }
 
         const normAccountId = row.ad_account_id?.startsWith("act_")
           ? row.ad_account_id

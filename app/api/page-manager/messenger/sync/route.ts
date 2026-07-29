@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
             .maybeSingle()
         : await supabase
             .from("page_conversations")
-            .insert({ org_id: ctx.orgId, page_id, customer_psid: customerPsid, ...conversationPatch })
+            .insert({ ...conversationPatch, org_id: ctx.orgId, page_id, customer_psid: customerPsid })
             .select("id")
             .maybeSingle()
 

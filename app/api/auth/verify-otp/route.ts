@@ -16,6 +16,10 @@ export async function POST(request: Request) {
     await createSession(account)
     return NextResponse.json({ user: account })
   } catch (err: any) {
+    // SEC-011: lockout signal from the rate limiter
+    if (err?.message?.includes("locked")) {
+      return NextResponse.json({ error: err.message }, { status: 429 })
+    }
     console.error("[verify-otp] unexpected error:", err)
     return NextResponse.json({ error: err?.message || "Verification failed" }, { status: 500 })
   }

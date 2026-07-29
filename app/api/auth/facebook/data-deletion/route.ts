@@ -16,8 +16,13 @@ function decodeSignedRequest(signedRequest: string): any {
     }
     
     const expectedSig = crypto.createHmac('sha256', appSecret).update(payload).digest('hex')
-    
-    if (sig !== expectedSig) {
+
+    // SEC-017: use constant-time comparison for HMAC signature
+    const sigBuf = Buffer.from(sig)
+    const expectedBuf = Buffer.from(expectedSig)
+    const valid = sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf)
+
+    if (!valid) {
       console.error("Bad signature in Facebook signed_request")
       return null
     }

@@ -8,19 +8,18 @@ import { getAuthContext } from "@/lib/auth"
 
 export const dynamic = "force-dynamic"
 
-// Only proxy known safe domains
+// Only proxy known safe domains (exact match or subdomain — never bare substring)
 const ALLOWED_DOMAINS = [
   "fbcdn.net",
-  "scontent",
   "fbsbx.com",
   "cdninstagram.com",
-  "lookaside.fbsbx.com",
 ]
 
 function isAllowedUrl(url: string): boolean {
   try {
-    const { hostname } = new URL(url)
-    return ALLOWED_DOMAINS.some(d => hostname.includes(d))
+    const { hostname, protocol } = new URL(url)
+    if (protocol !== "https:") return false
+    return ALLOWED_DOMAINS.some(d => hostname === d || hostname.endsWith("." + d))
   } catch {
     return false
   }
@@ -52,14 +51,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: `Upstream ${res.status}` }, { status: res.status })
     }
 
-    const contentType = res.headers.get("content-type") ?? "image/jpeg"
+    const contentType = res.headers.get("content-type") ?? ""
+    // SEC-009: reject non-image content types — upstream text/html would render on our origin (XSS)
+    if (!contentType.startsWith("image/")) {
+      return NextResponse.json({ error: "not an image" }, { status: 400 })
+    }
     const buffer = await res.arrayBuffer()
 
     return new NextResponse(buffer, {
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
-        "Access-Control-Allow-Origin": "*",
       },
     })
   } catch (err: any) {

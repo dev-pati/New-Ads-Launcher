@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext } from "@/lib/auth"
+import { getAuthContext, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
@@ -25,11 +25,13 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
     const body = await request.json()
     const supabase = createAdminClient()
     const { data, error } = await supabase
       .from("comment_automations")
-      .insert({ org_id: ctx.orgId, ...body })
+      .insert({ ...body, org_id: ctx.orgId })
       .select()
       .single()
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -449,16 +449,23 @@ async function execNotification(
         }] : [])
       ]
     }
-    const res = await fetch(slackWebhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(slackBody),
-    })
-    if (!res.ok) {
-      addLog(logs, `Slack notification failed (${res.status})`, "warn")
+    // SEC-007: restrict Slack webhooks to hooks.slack.com to prevent SSRF
+    let isSlackHost = false
+    try { const u = new URL(slackWebhookUrl); isSlackHost = u.protocol === "https:" && u.host === "hooks.slack.com" } catch {}
+    if (!isSlackHost) {
+      addLog(logs, `Slack notification skipped: webhook URL must be an https://hooks.slack.com/... URL`, "warn")
     } else {
-      addLog(logs, `Slack notification sent`)
-      results.push("slack")
+      const res = await fetch(slackWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(slackBody),
+      })
+      if (!res.ok) {
+        addLog(logs, `Slack notification failed (${res.status})`, "warn")
+      } else {
+        addLog(logs, `Slack notification sent`)
+        results.push("slack")
+      }
     }
   }
 

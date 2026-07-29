@@ -16,6 +16,15 @@ export async function PUT(request: NextRequest) {
   const signedUrl = request.nextUrl.searchParams.get("url")
   if (!signedUrl) return NextResponse.json({ error: "url required" }, { status: 400 })
 
+  // SEC-006: restrict to the project's own Supabase Storage host to prevent SSRF
+  const allowedHost = (() => { try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host } catch { return null } })()
+  if (!allowedHost) return NextResponse.json({ error: "storage host not configured" }, { status: 500 })
+  let target: URL
+  try { target = new URL(signedUrl) } catch { return NextResponse.json({ error: "invalid url" }, { status: 400 }) }
+  if (target.protocol !== "https:" || target.host !== allowedHost) {
+    return NextResponse.json({ error: "url not allowed" }, { status: 403 })
+  }
+
   const contentType = request.headers.get("content-type") || "application/octet-stream"
 
   try {

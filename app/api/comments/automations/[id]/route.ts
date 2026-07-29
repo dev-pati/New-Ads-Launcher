@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext } from "@/lib/auth"
+import { getAuthContext, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
@@ -8,6 +8,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
+
     const { id } = await params
     const body = await request.json()
     const supabase = createAdminClient()
@@ -29,6 +32,9 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
+
     const { id } = await params
     const supabase = createAdminClient()
     const { error } = await supabase

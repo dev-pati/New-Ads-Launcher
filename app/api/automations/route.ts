@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext } from "@/lib/auth"
+import { getAuthContext, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export const dynamic = "force-dynamic"
@@ -38,6 +38,8 @@ export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const denied = requireRole(ctx)
+    if (denied) return denied
 
     const body = await request.json()
     const { name, description, trigger_type, trigger_config, conditions, actions, ad_account_ids, requires_approval, template_id, notif_config, steps } = body
