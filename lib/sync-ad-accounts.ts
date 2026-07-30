@@ -79,6 +79,12 @@ export async function persistAdAccountMetrics(
     console.warn("Failed to save ad account metric snapshots:", snapshotError.message)
   }
 
+  const { data: orgBms } = await supabase
+    .from("business_managers")
+    .select("id, fb_business_id")
+    .eq("org_id", orgId)
+  const bmDbByFb = new Map((orgBms || []).map((b: { id: string; fb_business_id: string }) => [b.fb_business_id, b.id]))
+
   await Promise.all(rows.map(async row => {
     const latest = {
       name: row.name,
@@ -96,6 +102,7 @@ export async function persistAdAccountMetrics(
       last_synced_at: syncedAt,
     }
 
+    // Update the existing row by (org_id, fb_ad_account_id) — the canonical key.
     const byId = await supabase
       .from("ad_accounts")
       .update(latest)
@@ -108,12 +115,49 @@ export async function persistAdAccountMetrics(
       return
     }
 
-    if ((byId.data || []).length === 0) {
-      await supabase
-        .from("ad_accounts")
-        .update(latest)
-        .eq("org_id", orgId)
-        .eq("fb_account_id", row.fb_account_id)
+    if ((byId.data || []).length > 0) return
+
+    // fb_ad_account_id missed — some rows are keyed only by fb_account_id (the bare number).
+    const byAccountId = await supabase
+      .from("ad_accounts")
+      .update(latest)
+      .eq("org_id", orgId)
+      .eq("fb_account_id", row.fb_account_id)
+      .select("id")
+
+    if ((byAccountId.data || []).length > 0) return
+
+    // Account not yet in the DB — INSERT it so a newly-granted ad account becomes
+    // assignable without a manual row or an OAuth re-connect. business_manager_id maps
+    // to a synced BM when owner_business matches; otherwise nullable (Personal / outside BM).
+    const bmId = row.owner_business_id ? bmDbByFb.get(row.owner_business_id) ?? null : null
+    const { error: insertError } = await supabase
+      .from("ad_accounts")
+      .insert({
+        org_id: orgId,
+        user_id: userId,
+        business_manager_id: bmId,
+        fb_ad_account_id: row.fb_ad_account_id,
+        fb_account_id: row.fb_account_id,
+        name: row.name,
+        currency: row.currency,
+        account_status: row.account_status,
+        timezone_name: row.timezone_name,
+        amount_spent_minor: row.amount_spent_minor,
+        balance_minor: row.balance_minor,
+        spend_cap_minor: row.spend_cap_minor,
+        owner_business_id: row.owner_business_id,
+        owner_business_name: row.owner_business_name,
+        ownership: row.ownership,
+        raw_meta: row.raw_meta,
+        last_synced_at: syncedAt,
+        is_active: true,
+      })
+
+    if (insertError) {
+      // A concurrent insert under the same (org_id, fb_ad_account_id) unique key is the
+      // expected race here — log only, do not fail the whole sync.
+      console.warn(`[sync-ad-accounts] insert ad account ${row.fb_ad_account_id} failed:`, insertError.message)
     }
   }))
 }

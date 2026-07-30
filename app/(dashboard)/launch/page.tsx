@@ -8170,6 +8170,7 @@ function AdSetupPanel({
   utmParams, setUtmParams,
   displayLink, setDisplayLink,
   launchAsActive, setLaunchAsActive,
+  oneAdPerAdset, setOneAdPerAdset,
   adAccountId, adAccountName, orgName,
   selectedCreatives,
   adSourceMode, setAdSourceMode,
@@ -8184,6 +8185,7 @@ function AdSetupPanel({
   utmParams: string; setUtmParams: (v: string) => void
   displayLink: string; setDisplayLink: (v: string) => void
   launchAsActive: boolean; setLaunchAsActive: (v: boolean) => void
+  oneAdPerAdset: boolean; setOneAdPerAdset: (v: boolean) => void
   adAccountId: string
   adAccountName: string
   orgName: string
@@ -8642,7 +8644,7 @@ function AdSetupPanel({
         />
 
         {/* CTA + Active toggle */}
-        <div className="grid grid-cols-2 gap-3 items-end">
+        <div className="grid grid-cols-3 gap-3 items-end">
           <div>
             <label className="text-xs font-medium text-muted-foreground block mb-1.5">Call to Action</label>
             <Select value={cta} onValueChange={setCta}>
@@ -8651,6 +8653,18 @@ function AdSetupPanel({
                 {CTA_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
               </SelectContent>
             </Select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground block mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis">1 ad per adset (Special)</label>
+            <button onClick={() => setOneAdPerAdset(!oneAdPerAdset)}
+              className="h-9 w-full px-3 rounded-lg border bg-muted/30 flex items-center justify-between text-sm">
+              <span className="font-medium text-muted-foreground">{oneAdPerAdset ? "On" : "Off"}</span>
+              <span className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                oneAdPerAdset ? "bg-primary" : "bg-muted-foreground/30")}>
+                <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
+                  oneAdPerAdset ? "translate-x-4" : "translate-x-0.5")} />
+              </span>
+            </button>
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground block mb-1.5">Launch ads as</label>
@@ -11735,6 +11749,7 @@ function LaunchPageContent() {
   const [cta, setCta] = useState("LEARN_MORE")
   const [webLink, setWebLink] = useState("")
   const [launchAsActive, setLaunchAsActive] = useState(false)
+  const [oneAdPerAdset, setOneAdPerAdset] = useState(false)
   const [adSourceMode, setAdSourceMode] = useState<AdSourceMode>("new_ad")
   const [adSourceIds, setAdSourceIds] = useState<Record<string, string>>({})
   const [utmParams, setUtmParams] = useState("")
@@ -11817,6 +11832,7 @@ function LaunchPageContent() {
       if (!displayLink && s.links.displayLink) setDisplayLink(s.links.displayLink)
       // Apply launch defaults
       setLaunchAsActive(!s.launch.launchAsPaused)
+      setOneAdPerAdset(!!s.launch.oneAdPerAdset)
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId])
@@ -13285,7 +13301,7 @@ function LaunchPageContent() {
           adSourceMode,
           adSourceIds: Object.keys(adSourceIds).length > 0 ? adSourceIds : undefined,
           enhancements: savedEnhancements,
-          launchSettings: savedLaunchSettings,
+          launchSettings: { ...savedLaunchSettings, oneAdPerAdset },
           collectionAds: collectionAds.enabled && collectionAds.catalogId && collectionAds.productSetId
             ? {
                 templateType: collectionAds.templateType,
@@ -13557,7 +13573,7 @@ function LaunchPageContent() {
         startTime: row.schedule?.start || scheduledTime,
         endTime: row.schedule?.end || scheduleEndTime,
         enhancements: savedEnhancements,
-        launchSettings: savedLaunchSettings,
+        launchSettings: { ...savedLaunchSettings, oneAdPerAdset },
       }
     })
 
@@ -14101,6 +14117,7 @@ function LaunchPageContent() {
                   cta={cta} setCta={setCta}
                   webLink={webLink} setWebLink={setWebLink}
                   launchAsActive={launchAsActive} setLaunchAsActive={setLaunchAsActive}
+                  oneAdPerAdset={oneAdPerAdset} setOneAdPerAdset={setOneAdPerAdset}
                   utmParams={utmParams} setUtmParams={setUtmParams}
                   displayLink={displayLink} setDisplayLink={setDisplayLink}
                   adAccountId={selectedAccountId}
