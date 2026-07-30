@@ -299,12 +299,13 @@ export function PerformancePopup({
   const [creativeByRow, setCreativeByRow] = useState<Record<string, any>>({})
   const [videoByRow, setVideoByRow] = useState<Record<string, any>>({})
   const [activities, setActivities] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [pendingKeys, setPendingKeys] = useState<Record<string, boolean>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   // Demographics + Platform sections
   const [demoRows, setDemoRows] = useState<BreakdownRow[]>([])
   const [platRows, setPlatRows] = useState<BreakdownRow[]>([])
+  const [demoLoading, setDemoLoading] = useState(false)
   const [chartsSub, setChartsSub] = useState<"demographics" | "platform">("demographics")
 
   // ── Charts mode: active-node override (tree click) ─────────────────────────
@@ -410,29 +411,32 @@ export function PerformancePopup({
   // ── Fetch Trends (metric & row dependent) ──────────────────────────────────
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
     const load = async () => {
       // Find what needs to be loaded
-      const queue: { row: ReportRow; metricKey: string }[] = []
+      const queue: { row: ReportRow; metricKey: string; cacheKey: string }[] = []
       capped.forEach(row => {
         activeMetrics.forEach(m => {
           const cacheKey = `${row.id}:${m}:${granularity}:${trendQs}`
           if (!trendDataStore[cacheKey]) {
-            queue.push({ row, metricKey: m })
+            queue.push({ row, metricKey: m, cacheKey })
           }
         })
       })
 
-      if (queue.length === 0) {
-        setLoading(false)
-        return
-      }
+      if (queue.length === 0) return
+
+      // Mark only the genuinely-pending keys so skeletons render per-chart.
+      setPendingKeys(prev => {
+        const next = { ...prev }
+        queue.forEach(q => { next[q.cacheKey] = true })
+        return next
+      })
 
       const results = await Promise.allSettled(queue.map(async item => {
         const res = await fetch(`/api/insights/report-trends?${trendQs}&id=${item.row.id}&metric=${item.metricKey}&granularity=${granularity}`)
         const d = await res.json()
         if (d.error) throw new Error(d.error)
-        return { key: `${item.row.id}:${item.metricKey}:${granularity}:${trendQs}`, series: (d.series || []) as Series[] }
+        return { key: item.cacheKey, series: (d.series || []) as Series[] }
       }))
 
       if (cancelled) return
@@ -450,7 +454,11 @@ export function PerformancePopup({
 
       setTrendDataStore(nextTrend)
       setErrors(errs)
-      setLoading(false)
+      setPendingKeys(prev => {
+        const next = { ...prev }
+        queue.forEach(q => { next[q.cacheKey] = false })
+        return next
+      })
     }
     load()
     return () => { cancelled = true }
@@ -490,23 +498,29 @@ export function PerformancePopup({
     if (!isCompare || tab !== "breakdowns") return
     let cancelled = false
     const load = async () => {
-      const queue: { row: ReportRow; metricKey: string }[] = []
+      const queue: { row: ReportRow; metricKey: string; cacheKey: string }[] = []
       capped.forEach(row => {
         compareCharts.forEach(m => {
           const cacheKey = `${row.id}:${m}:${compareBreakdown}`
           if (!breakdownDataStore[cacheKey]) {
-            queue.push({ row, metricKey: m })
+            queue.push({ row, metricKey: m, cacheKey })
           }
         })
       })
 
       if (queue.length === 0) return
 
+      setPendingKeys(prev => {
+        const next = { ...prev }
+        queue.forEach(q => { next[q.cacheKey] = true })
+        return next
+      })
+
       const results = await Promise.allSettled(queue.map(async item => {
         const res = await fetch(`/api/insights/breakdown?${qsBase}&id=${item.row.id}&breakdown=${encodeURIComponent(compareBreakdown)}`)
         const d = await res.json()
         if (d.error) throw new Error(d.error)
-        return { key: `${item.row.id}:${item.metricKey}:${compareBreakdown}`, rows: (d.rows || []) as BreakdownRow[] }
+        return { key: item.cacheKey, rows: (d.rows || []) as BreakdownRow[] }
       }))
 
       if (cancelled) return
@@ -518,6 +532,11 @@ export function PerformancePopup({
         }
       })
       setBreakdownDataStore(nextBreakdown)
+      setPendingKeys(prev => {
+        const next = { ...prev }
+        queue.forEach(q => { next[q.cacheKey] = false })
+        return next
+      })
     }
     load()
     return () => { cancelled = true }
@@ -545,6 +564,7 @@ export function PerformancePopup({
     let cancelled = false
     const row = capped[0]
     const load = async () => {
+      setDemoLoading(true)
       try {
         const [ageRes, platRes] = await Promise.all([
           fetch(`/api/insights/breakdown?${qsBase}&id=${row.id}&breakdown=age,gender`),
@@ -555,6 +575,7 @@ export function PerformancePopup({
         setDemoRows(age.rows || [])
         setPlatRows(plat.rows || [])
       } catch { if (!cancelled) { setDemoRows([]); setPlatRows([]) } }
+      finally { if (!cancelled) setDemoLoading(false) }
     }
     load()
     return () => { cancelled = true }
@@ -760,6 +781,11 @@ export function PerformancePopup({
                 ? getTrendDataForMetric(mKey)
                 : getBreakdownDataForMetric(mKey)
               const hasError = capped.some(r => errors[r.id])
+              const isPending = capped.some(r => pendingKeys[
+                tab === "trends"
+                  ? `${r.id}:${mKey}:${granularity}:${trendQs}`
+                  : `${r.id}:${mKey}:${compareBreakdown}`
+              ])
 
               return (
                 <div key={mKey + chartIdx} className="border rounded-xl p-3 bg-card">
@@ -810,6 +836,11 @@ export function PerformancePopup({
                   {hasError ? (
                     <div className="h-40 flex items-center justify-center text-xs text-destructive">
                       Failed to load chart data.
+                    </div>
+                  ) : isPending ? (
+                    <div className="h-40 flex flex-col items-center justify-center gap-2 rounded-lg bg-muted/20 animate-pulse">
+                      <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Loading chart data...</span>
                     </div>
                   ) : data.length === 0 ? (
                     <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">
@@ -888,6 +919,7 @@ export function PerformancePopup({
   // CHARTS MODE — LARGE POPUP (SINGLE OBJECT)
   // ═══════════════════════════════════════════════════════════════════════════
   const trendData = getTrendDataForMetric(metric)
+  const isTrendPending = capped.some(r => pendingKeys[`${r.id}:${metric}:${granularity}:${trendQs}`])
   const activeId = capped[0]?.id
   const activeAd = allAds.find(a => a.id === activeId) || null
   const activeAdSet = allAdSets.find(a => a.id === activeId || a.id === activeAd?.adset_id) || null
@@ -1209,7 +1241,12 @@ export function PerformancePopup({
             {/* Trendline chart with historical edit markers */}
             <div className="rounded-xl border bg-card p-4">
               <p className="text-sm font-semibold mb-3">{metricLabel(metric)} over time</p>
-              {trendData.length === 0 ? (
+              {isTrendPending ? (
+                <div className="h-56 flex flex-col items-center justify-center gap-2 rounded-lg bg-muted/20 animate-pulse">
+                  <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Loading chart data...</span>
+                </div>
+              ) : trendData.length === 0 ? (
                 <div className="h-56 flex items-center justify-center text-sm text-muted-foreground">No trend data</div>
               ) : (
                 <ResponsiveContainer width="100%" height={280}>
@@ -1326,7 +1363,12 @@ export function PerformancePopup({
                       </select>
                     </div>
                   </div>
-                  {demoBarData.length === 0 ? (
+                  {demoLoading ? (
+                    <div className="flex flex-col items-center justify-center gap-2 h-[320px] rounded-lg bg-muted/20 animate-pulse">
+                      <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Loading breakdown data...</span>
+                    </div>
+                  ) : demoBarData.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 py-10 text-center">
                       <p className="text-sm font-semibold">Reach breakdowns not available</p>
                       <p className="text-xs text-muted-foreground max-w-sm">
@@ -1379,7 +1421,12 @@ export function PerformancePopup({
                     * You may see low delivery of ads to the Facebook Stories placement until it's available to everyone who uses Facebook Stories. A more accurate metric is cost per result.
                   </p>
 
-                  {platBarData.length === 0 ? (
+                  {demoLoading ? (
+                    <div className="flex flex-col items-center justify-center gap-2 h-[320px] rounded-lg bg-muted/20 animate-pulse">
+                      <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">Loading breakdown data...</span>
+                    </div>
+                  ) : platBarData.length === 0 ? (
                     <p className="text-xs text-muted-foreground text-center py-8">No platform data</p>
                   ) : (
                     <ResponsiveContainer width="100%" height={320}>
