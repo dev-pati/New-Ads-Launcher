@@ -68,13 +68,18 @@ export async function GET(request: NextRequest) {
           conn = await getConnectionForAdAccount(orgId, row.ad_account_id, "write")
         } catch (err) {
           if (err instanceof MissingViaError) {
-            skipped.push(row.id)
+            // MissingViaError is permanent skip until user connects: mark error to let UI know
+            console.error(`[cron/upload-to-facebook] creative ${row.id} skipped: Missing via connection`)
+            await db.from("creatives").update({ status: CREATIVE_STATUS.ERROR }).eq("id", row.id)
+            errors.push({ id: row.id, error: "Missing via connection for this ad account" })
             continue
           }
           throw err
         }
         if (!conn?.access_token) {
-          skipped.push(row.id)
+          console.error(`[cron/upload-to-facebook] creative ${row.id} skipped: Missing access token`)
+          await db.from("creatives").update({ status: CREATIVE_STATUS.ERROR }).eq("id", row.id)
+          errors.push({ id: row.id, error: "Meta connection is invalid or missing access token" })
           continue
         }
 
@@ -89,7 +94,8 @@ export async function GET(request: NextRequest) {
         try { fileUrlHost = new URL(row.file_url).host } catch { /* invalid */ }
         if (!fileUrlHost || !allowedHosts.has(fileUrlHost)) {
           console.error(`[cron/upload-to-facebook] creative ${row.id} has disallowed file_url host; skipping`)
-          skipped.push(row.id)
+          await db.from("creatives").update({ status: CREATIVE_STATUS.ERROR }).eq("id", row.id)
+          errors.push({ id: row.id, error: `Disallowed file url host: ${fileUrlHost || 'invalid URL'}` })
           continue
         }
 
