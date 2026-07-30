@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadVideoUrlToMeta, uploadImageToMeta, getVideoReadyData } from "@/lib/facebook"
 import { getConnectionForAdAccount, MissingViaError, isManual } from "@/lib/auth"
 import { CREATIVE_STATUS, assertCanMarkUploaded } from "@/lib/creative-readiness"
+import { PORTAL_MEDIA_ORIGIN } from "@/lib/portal-media/claim"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -79,11 +80,14 @@ export async function GET(request: NextRequest) {
 
         assertCanMarkUploaded(row.status)
 
-        // SEC-008: file_url must be our own Supabase Storage before we fetch/hand it to Meta.
-        const allowedStorageHost = (() => { try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host } catch { return null } })()
+        // SEC-008: file_url must be our own Supabase Storage or the audited Creative Portal
+        // media origin (ADR-0003) before we fetch/hand it to Meta — anything else is SSRF risk.
+        const allowedHosts = new Set<string>()
+        try { allowedHosts.add(new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host) } catch { /* unset */ }
+        try { allowedHosts.add(new URL(PORTAL_MEDIA_ORIGIN).host) } catch { /* unset */ }
         let fileUrlHost: string | null = null
         try { fileUrlHost = new URL(row.file_url).host } catch { /* invalid */ }
-        if (!allowedStorageHost || !fileUrlHost || fileUrlHost !== allowedStorageHost) {
+        if (!fileUrlHost || !allowedHosts.has(fileUrlHost)) {
           console.error(`[cron/upload-to-facebook] creative ${row.id} has disallowed file_url host; skipping`)
           skipped.push(row.id)
           continue

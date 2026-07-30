@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { CREATIVE_STATUS } from "@/lib/creative-readiness"
 import type { PortalRegistryAsset } from "@/lib/supabase/portal-registry"
 
-const PORTAL_MEDIA_ORIGIN = process.env.CREATIVE_MEDIA_API_ORIGIN || "https://creative.patigroup.com"
+export const PORTAL_MEDIA_ORIGIN = process.env.CREATIVE_MEDIA_API_ORIGIN || "https://creative.patigroup.com"
 
 export function portalMediaUrl(assetId: string) {
   return `${PORTAL_MEDIA_ORIGIN}/api/media/${assetId}`
