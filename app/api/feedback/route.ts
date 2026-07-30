@@ -6,7 +6,7 @@ import {
   isValidFeedbackType,
   isValidSeverity,
 } from "@/lib/feedback-taxonomy"
-import { sendFeedbackNotifications } from "@/lib/feedback-email"
+import { enqueueFeedback, drainOutbox } from "@/lib/feedback-hub"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -97,11 +97,12 @@ export async function POST(request: NextRequest) {
         screenshot_url: screenshotUrl,
         status: "open",
       })
-      .select("id, status, created_at, screenshot_url, feature_area, feature_function, severity, observed_evidence, expected_result, user_email")
+      .select("id, status, created_at, screenshot_url, feature_area, feature_function, feedback_type, severity, observed_evidence, expected_result, user_email, org_id, reference_url, extra_note, expected_done_at, artifact_url")
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    await sendFeedbackNotifications(data, ctx.orgId)
+    await enqueueFeedback(data)
+    drainOutbox().catch(() => {})
     return NextResponse.json({ feedback: data }, { status: 201 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to submit feedback"
@@ -126,7 +127,7 @@ export async function GET(request: NextRequest) {
 
     let query = createAdminClient()
       .from("feedback_events")
-      .select("*")
+      .select("*, outbox:feedback_hub_outbox(status)")
       .eq("org_id", ctx.orgId)
       .order("created_at", { ascending: false })
       .limit(limit)
@@ -142,7 +143,25 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json({ feedback: data || [] })
+
+    interface FeedbackEventWithOutbox {
+      outbox?: { status: string } | { status: string }[]
+      [key: string]: unknown
+    }
+
+    const formatted = ((data || []) as unknown as FeedbackEventWithOutbox[]).map((row) => {
+      const outboxStatus = Array.isArray(row.outbox)
+        ? row.outbox[0]?.status
+        : row.outbox?.status
+      const { outbox: _outbox, ...rest } = row
+      return {
+        ...rest,
+        outbox_status: outboxStatus || "queued",
+        hub_url: "https://ai.patigroup.com/staff#feedback",
+      }
+    })
+
+    return NextResponse.json({ feedback: formatted })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to load feedback"
     return NextResponse.json({ error: message }, { status: 500 })
