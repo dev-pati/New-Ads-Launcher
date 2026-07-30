@@ -1,6 +1,7 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -8,7 +9,6 @@ import {
   IconAlertCircle,
   IconArrowsSort,
   IconCalendar,
-  IconChevronDown,
   IconLoader2,
   IconRefresh,
   IconSearch,
@@ -120,8 +120,6 @@ export function AdAccountsManager() {
   const [error, setError] = useState("")
   const [lastSynced, setLastSynced] = useState<Date | null>(null)
   const [selectedAccountId, setSelectedAccountId] = useState("")
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
-  const [accountSearch, setAccountSearch] = useState("")
   const [limitSnapshots, setLimitSnapshots] = useState<AccountMetricSnapshot[]>([])
   const [limitLoading, setLimitLoading] = useState(false)
   const [dateFrom, setDateFrom] = useState("")
@@ -131,18 +129,6 @@ export function AdAccountsManager() {
   const [acctDateTo, setAcctDateTo] = useState("")
   const [historicalAccounts, setHistoricalAccounts] = useState<AccountMetricSnapshot[]>([])
   const [historicalLoading, setHistoricalLoading] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  // Close dropdown on outside click
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setAccountMenuOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handleClick)
-    return () => document.removeEventListener("mousedown", handleClick)
-  }, [])
 
   const fetchAccounts = useCallback(async (refresh = false) => {
     if (refresh) setSyncing(true)
@@ -249,12 +235,6 @@ export function AdAccountsManager() {
 
   const selectedAccount =
     accounts.find(a => a.account_id === selectedAccountId || a.id === selectedAccountId) || accounts[0]
-
-  const accountOptions = accounts.filter(account => {
-    const term = accountSearch.trim().toLowerCase()
-    if (!term) return true
-    return `${account.name} ${account.account_id}`.toLowerCase().includes(term)
-  })
 
   const spendingLimitRows = (() => {
     const rows = limitSnapshots.length > 0
@@ -450,48 +430,21 @@ export function AdAccountsManager() {
                 </p>
               </div>
 
-              {/* Account dropdown */}
-              <div className="relative w-72 shrink-0" ref={dropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setAccountMenuOpen(o => !o)}
-                  className="flex h-9 w-full items-center justify-between rounded-full border border-border bg-muted/50 px-4 text-left text-sm font-medium text-foreground transition-colors hover:border-primary hover:bg-card"
-                >
-                  <span className="truncate">
-                    {selectedAccount ? `${selectedAccount.name} (${selectedAccount.account_id})` : "Select account"}
-                  </span>
-                  <IconChevronDown className={cn("ml-2 size-4 shrink-0 text-muted-foreground transition-transform", accountMenuOpen && "rotate-180")} />
-                </button>
-
-                {accountMenuOpen && (
-                  <div className="absolute left-0 top-11 z-50 w-full overflow-hidden rounded-xl border border-border bg-popover shadow-[0_8px_24px_rgba(0,0,0,0.12)]">
-                    <div className="border-b border-border p-2">
-                      <Input
-                        autoFocus
-                        value={accountSearch}
-                        onChange={e => setAccountSearch(e.target.value)}
-                        placeholder="Search by name or ID..."
-                        className="h-9 rounded-lg border-primary text-sm focus-visible:ring-primary/20"
-                      />
-                    </div>
-                    <div className="max-h-56 overflow-auto py-1">
-                      {accountOptions.length === 0
-                        ? <div className="px-4 py-3 text-sm text-muted-foreground">No accounts found.</div>
-                        : accountOptions.map(account => (
-                          <button key={account.id || account.account_id} type="button"
-                            onClick={() => { setSelectedAccountId(account.account_id); setAccountMenuOpen(false); setAccountSearch("") }}
-                            className={cn("flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/50",
-                              selectedAccount?.account_id === account.account_id ? "bg-primary/10 text-primary" : "text-foreground"
-                            )}>
-                            <span className="truncate font-semibold">{account.name}</span>
-                            <span className="shrink-0 font-mono text-xs text-muted-foreground">{account.account_id}</span>
-                          </button>
-                        ))
-                      }
-                    </div>
-                  </div>
-                )}
-              </div>
+              {/* Account dropdown — the shared pill in controlled mode. This page is the one
+                  consumer that does not read the AdAccountProvider: it owns its own `accounts`
+                  list (the Meta sync result, including accounts the provider filters out) and it
+                  keys the selection by `account_id`, not `id`. Hence the explicit props. */}
+              <AdAccountPill
+                accounts={accounts}
+                value={selectedAccountId}
+                onChange={setSelectedAccountId}
+                optionKey="account_id"
+                showAccountId
+                searchThreshold={0}
+                align="start"
+                className="h-9 w-72 shrink-0 justify-between bg-muted/50 px-4"
+                labelClassName="flex-1 text-left"
+              />
 
               <Button
                 onClick={async () => { await fetchAccounts(true); if (selectedAccountId) await fetchLimitSnapshots(selectedAccountId) }}
@@ -562,11 +515,11 @@ export function AdAccountsManager() {
       {activeTab === "accounts" ? (
         <>
           <div className="overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-ring/10">
-            <table className="w-full min-w-[1100px]">
+            <table data-table="comfortable" className="w-full min-w-[1100px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
                   {["#", "Account ID", "Name", "Type", "Owner", "Status", "Currency", "Timezone", "Spend Cap", "Remaining", "Spent"].map(label => (
-                    <th key={label} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    <th key={label} className="px-3 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       <span className="flex items-center gap-1">
                         {label}
                         {["Spend Cap", "Remaining", "Spent"].includes(label) && (
@@ -598,10 +551,10 @@ export function AdAccountsManager() {
                     return (
                       <tr key={snap.id}
                         className="border-b border-border last:border-0 transition-colors hover:bg-muted/50">
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground/50">{index + 1}</td>
-                        <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{snap.fb_account_id}</td>
-                        <td className="px-5 py-3.5 text-sm font-semibold text-foreground">{snap.name || "-"}</td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 text-sm text-muted-foreground/50">{index + 1}</td>
+                        <td className="px-3 font-mono text-xs text-muted-foreground">{snap.fb_account_id}</td>
+                        <td className="px-3 text-sm font-semibold text-foreground">{snap.name || "-"}</td>
+                        <td className="px-3">
                           <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold",
                             snap.ownership === "own" ? "bg-primary/10 text-primary"
                               : snap.ownership === "agency" ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
@@ -610,8 +563,8 @@ export function AdAccountsManager() {
                             {snap.ownership === "own" ? "Own" : snap.ownership === "agency" ? "Agency/Shared" : "Personal"}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{snap.owner_business_name || "-"}</td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-3 text-sm text-muted-foreground">{snap.owner_business_name || "-"}</td>
+                        <td className="px-3">
                           <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold",
                             isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
                           )}>
@@ -619,11 +572,11 @@ export function AdAccountsManager() {
                             {ACCOUNT_STATUS_LABELS[snap.account_status ?? 0] || `status ${snap.account_status}`}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-foreground">{currency}</td>
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{snap.timezone_name || "-"}</td>
-                        <td className="px-5 py-3.5 text-right text-sm text-foreground">{formatMinorMoney(snap.spend_cap_minor, currency)}</td>
-                        <td className="px-5 py-3.5 text-right text-sm font-bold text-primary">{formatMinorMoney(snap.remaining_minor, currency)}</td>
-                        <td className="px-5 py-3.5 text-right text-sm font-bold text-[#007D1E]">{formatMinorMoney(snap.amount_spent_minor, currency)}</td>
+                        <td className="px-3 text-sm text-foreground">{currency}</td>
+                        <td className="px-3 text-sm text-muted-foreground">{snap.timezone_name || "-"}</td>
+                        <td className="px-3 text-right text-sm text-foreground">{formatMinorMoney(snap.spend_cap_minor, currency)}</td>
+                        <td className="px-3 text-right text-sm font-bold text-primary">{formatMinorMoney(snap.remaining_minor, currency)}</td>
+                        <td className="px-5 text-right text-sm font-bold text-[#007D1E]">{formatMinorMoney(snap.amount_spent_minor, currency)}</td>
                       </tr>
                     )
                   })
@@ -636,10 +589,10 @@ export function AdAccountsManager() {
                     return (
                       <tr key={account.id || account.account_id}
                         className="border-b border-border last:border-0 transition-colors hover:bg-muted/50">
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground/50">{index + 1}</td>
-                        <td className="px-5 py-3.5 font-mono text-xs text-muted-foreground">{account.account_id}</td>
-                        <td className="px-5 py-3.5 text-sm font-semibold text-foreground">{account.name}</td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-5 text-sm text-muted-foreground/50">{index + 1}</td>
+                        <td className="px-3 font-mono text-xs text-muted-foreground">{account.account_id}</td>
+                        <td className="px-3 text-sm font-semibold text-foreground">{account.name}</td>
+                        <td className="px-3">
                           <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-bold",
                             account.ownership === "own" ? "bg-primary/10 text-primary"
                               : account.ownership === "agency" ? "bg-[rgba(255,185,0,0.12)] text-[#9A6700]"
@@ -648,10 +601,10 @@ export function AdAccountsManager() {
                             {account.ownership === "own" ? "Own" : account.ownership === "agency" ? "Agency/Shared" : "Personal"}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground">
+                        <td className="px-3 text-sm text-muted-foreground">
                           {account.owner_business?.name || account.owner_business?.id || account.business?.name || account.business?.id || "-"}
                         </td>
-                        <td className="px-5 py-3.5">
+                        <td className="px-3">
                           <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold",
                             isActive ? "bg-[rgba(36,228,0,0.10)] text-[#007D1E]" : "bg-[rgba(228,30,63,0.08)] text-[#C80A28]"
                           )}>
@@ -659,13 +612,13 @@ export function AdAccountsManager() {
                             {ACCOUNT_STATUS_LABELS[account.account_status] || `status ${account.account_status}`}
                           </span>
                         </td>
-                        <td className="px-5 py-3.5 text-sm text-foreground">{currency}</td>
-                        <td className="px-5 py-3.5 text-sm text-muted-foreground">{account.timezone_name || "-"}</td>
-                        <td className="px-5 py-3.5 text-right text-sm text-foreground">{formatAccountMoney(account.spend_cap, currency)}</td>
-                        <td className="px-5 py-3.5 text-right text-sm font-bold text-primary">
+                        <td className="px-3 text-sm text-foreground">{currency}</td>
+                        <td className="px-3 text-sm text-muted-foreground">{account.timezone_name || "-"}</td>
+                        <td className="px-3 text-right text-sm text-foreground">{formatAccountMoney(account.spend_cap, currency)}</td>
+                        <td className="px-3 text-right text-sm font-bold text-primary">
                           {remaining === null ? "-" : formatMajorMoney(remaining, currency)}
                         </td>
-                        <td className="px-5 py-3.5 text-right text-sm font-bold text-[#007D1E]">
+                        <td className="px-5 text-right text-sm font-bold text-[#007D1E]">
                           {formatAccountMoney(account.amount_spent, currency)}
                         </td>
                       </tr>
@@ -685,11 +638,11 @@ export function AdAccountsManager() {
       ) : (
       /* ── Spending Limit table ── */
         <div className="overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-ring/10">
-          <table className="w-full min-w-[640px]">
+          <table data-table="comfortable" className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 {["Start date", "End date", "Activity"].map(label => (
-                  <th key={label} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  <th key={label} className="px-3 text-left text-xs font-bold uppercase tracking-wide text-muted-foreground">
                     {label}
                   </th>
                 ))}
@@ -713,14 +666,14 @@ export function AdAccountsManager() {
                 </tr>
               ) : spendingLimitRows.map(row => (
                 <tr key={row.id} className="border-b border-border last:border-0 transition-colors hover:bg-muted/50">
-                  <td className="px-5 py-3.5 text-sm text-foreground">{formatDateTime(row.startDate)}</td>
-                  <td className="px-5 py-3.5 text-sm text-foreground">
+                  <td className="px-5 text-sm text-foreground">{formatDateTime(row.startDate)}</td>
+                  <td className="px-3 text-sm text-foreground">
                     {row.endDate
                       ? formatDateTime(row.endDate)
                       : <span className="rounded-full bg-[rgba(36,228,0,0.10)] px-2.5 py-0.5 text-xs font-bold text-[#007D1E]">Current</span>
                     }
                   </td>
-                  <td className="px-5 py-3.5 text-sm font-medium text-foreground">
+                  <td className="px-5 text-sm font-medium text-foreground">
                     {row.spendCap !== null && row.spendCap !== undefined && row.spendCap !== "" && Number(row.spendCap) !== 0
                       ? <span>Set to <span className="font-bold text-primary">{formatMinorMoney(row.spendCap, row.currency)}</span></span>
                       : <span className="text-muted-foreground">Removed spending limit</span>

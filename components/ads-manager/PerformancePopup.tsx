@@ -1010,14 +1010,14 @@ export function PerformancePopup({
                   <p className="text-xs text-muted-foreground px-1 py-8 text-center">No activity in this date range.</p>
                 ) : (
                   <div className="overflow-x-auto max-h-[60vh] overflow-y-auto border rounded-md">
-                    <table className="w-full text-xs">
+                    <table data-table="compact" className="w-full text-xs">
                       <thead className="bg-muted/40 sticky top-0">
                         <tr className="text-left text-muted-foreground">
-                          <th className="font-medium px-3 py-2">Activity</th>
-                          <th className="font-medium px-3 py-2">Activity details</th>
-                          <th className="font-medium px-3 py-2">Item changed</th>
-                          <th className="font-medium px-3 py-2">Changed by</th>
-                          <th className="font-medium px-3 py-2 whitespace-nowrap">Date and Time</th>
+                          <th className="font-medium px-3">Activity</th>
+                          <th className="font-medium px-3">Activity details</th>
+                          <th className="font-medium px-3">Item changed</th>
+                          <th className="font-medium px-3">Changed by</th>
+                          <th className="font-medium px-3 whitespace-nowrap">Date and Time</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -1025,14 +1025,14 @@ export function PerformancePopup({
                           const { activity, details } = splitActivity(e.summary, e.type)
                           return (
                             <tr key={i} className="hover:bg-muted/30">
-                              <td className="px-3 py-2 font-medium">{activity}</td>
-                              <td className="px-3 py-2 text-muted-foreground">{details}</td>
-                              <td className="px-3 py-2">
+                              <td className="px-3 font-medium">{activity}</td>
+                              <td className="px-3 text-muted-foreground">{details}</td>
+                              <td className="px-3">
                                 <div className="truncate max-w-[200px]">{e.objectName || e.objectId || "—"}</div>
                                 {e.objectId && <div className="text-[10px] text-muted-foreground">ID: {e.objectId}</div>}
                               </td>
-                              <td className="px-3 py-2">{e.actor || "Meta"}</td>
-                              <td className="px-3 py-2 whitespace-nowrap">{fmtActivityTime(e.time)}</td>
+                              <td className="px-3">{e.actor || "Meta"}</td>
+                              <td className="px-3 whitespace-nowrap">{fmtActivityTime(e.time)}</td>
                             </tr>
                           )
                         })}

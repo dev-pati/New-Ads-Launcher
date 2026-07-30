@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,13 +13,6 @@ import {
   DialogFooter,
   DialogDescription,
 } from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -104,7 +98,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function CampaignsPage() {
-  const { adAccounts, selectedAccountId: selectedAccount, setSelectedAccountId: setSelectedAccount, loading: loadingAccounts } = useAdAccount()
+  const { adAccounts, selectedAccountId: selectedAccount, loading: loadingAccounts } = useAdAccount()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [adSets, setAdSets] = useState<Record<string, AdSet[]>>({})
   const [ads, setAds] = useState<Record<string, Ad[]>>({})
@@ -231,18 +225,7 @@ export default function CampaignsPage() {
         </div>
         <div className="flex items-center gap-3">
           {!loadingAccounts && adAccounts.length > 0 && (
-            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-              <SelectTrigger className="w-[240px]">
-                <SelectValue placeholder="Select Ad Account" />
-              </SelectTrigger>
-              <SelectContent>
-                {adAccounts.map((acc) => (
-                  <SelectItem key={acc.id} value={acc.id}>
-                    {acc.name || acc.account_id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AdAccountPill labelClassName="max-w-[200px]" />
           )}
           <Button
             variant="outline"

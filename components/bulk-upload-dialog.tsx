@@ -457,20 +457,20 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
 
         {/* Table */}
         <div className="flex-1 overflow-auto min-h-0">
-          <table className="w-full text-sm border-collapse">
+          <table data-table="compact" className="w-full text-sm border-collapse">
             <thead className="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
               <tr className="border-b">
-                <th className="w-8 px-2 py-2" />
-                <th className="w-10 px-3 py-2 text-left text-xs font-medium text-muted-foreground">#</th>
-                <th className="w-16 px-2 py-2 text-left text-xs font-medium text-muted-foreground">Preview</th>
-                <th className="w-[160px] px-2 py-2 text-left text-xs font-medium text-muted-foreground">File Name</th>
-                <th className="w-[160px] px-2 py-2 text-left text-xs font-medium text-muted-foreground">Campaign / Ad Set</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Headline</th>
-                <th className="w-[22%] px-2 py-2 text-left text-xs font-medium text-muted-foreground">Primary Text</th>
-                <th className="px-2 py-2 text-left text-xs font-medium text-muted-foreground">Description</th>
-                <th className="w-[130px] px-2 py-2 text-left text-xs font-medium text-muted-foreground">CTA</th>
-                <th className="w-[140px] px-2 py-2 text-left text-xs font-medium text-muted-foreground">Link URL</th>
-                <th className="w-20 px-2 py-2 text-left text-xs font-medium text-muted-foreground">Status</th>
+                <th className="w-8 px-2" />
+                <th className="w-10 px-2 text-left text-xs font-medium text-muted-foreground">#</th>
+                <th className="w-16 px-3 text-left text-xs font-medium text-muted-foreground">Preview</th>
+                <th className="w-[160px] px-3 text-left text-xs font-medium text-muted-foreground">File Name</th>
+                <th className="w-[160px] px-3 text-left text-xs font-medium text-muted-foreground">Campaign / Ad Set</th>
+                <th className="px-3 text-left text-xs font-medium text-muted-foreground">Headline</th>
+                <th className="w-[22%] px-3 text-left text-xs font-medium text-muted-foreground">Primary Text</th>
+                <th className="px-3 text-left text-xs font-medium text-muted-foreground">Description</th>
+                <th className="w-[130px] px-3 text-left text-xs font-medium text-muted-foreground">CTA</th>
+                <th className="w-[140px] px-3 text-left text-xs font-medium text-muted-foreground">Link URL</th>
+                <th className="w-20 px-3 text-left text-xs font-medium text-muted-foreground">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -482,20 +482,20 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                   onDrop={() => handleDrop(i)}
                   onDragEnd={handleDragEnd}
                   className={`border-b transition-colors ${dragOverIdx === i ? "bg-primary/10 border-primary" : "hover:bg-muted/20"}`}>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     <IconGripVertical className="size-4 text-muted-foreground/40 cursor-grab active:cursor-grabbing" />
                   </td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground text-center font-medium">{i + 1}</td>
-                  <td className="px-2 py-2">
+                  <td className="px-3 text-xs text-muted-foreground text-center font-medium">{i + 1}</td>
+                  <td className="px-3">
                     {row.previewUrl
                       ? <img src={row.previewUrl} alt="" loading="lazy" className="size-12 rounded object-cover border" />
                       : <div className="size-12 rounded bg-muted border flex items-center justify-center"><IconVideo className="size-5 text-muted-foreground" /></div>}
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     <p className="text-xs truncate max-w-[150px] text-muted-foreground" title={row.file.name}>{row.file.name}</p>
                     <p className="text-xs text-muted-foreground/60">{(row.file.size / 1024).toFixed(0)} KB</p>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     {row.campaign_name || row.adset_name ? (
                       <div className="space-y-1">
                         {row.campaign_name && (
@@ -515,27 +515,27 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                       <span className="text-xs text-muted-foreground/40 italic">—</span>
                     )}
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     <Input value={row.headline} onChange={e => update(row.id, "headline", e.target.value)}
                       className="h-8 text-xs" placeholder="Headline…" disabled={row.status === "uploading" || row.status === "done"} />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     <textarea value={row.primary_text} onChange={e => update(row.id, "primary_text", e.target.value)}
                       className="w-full min-h-[56px] rounded-md border border-input bg-background px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-primary resize-none disabled:opacity-50"
                       placeholder="Primary text…" disabled={row.status === "uploading" || row.status === "done"} />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     <Input value={row.description} onChange={e => update(row.id, "description", e.target.value)}
                       className="h-8 text-xs" placeholder="Description…" disabled={row.status === "uploading" || row.status === "done"} />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     <select value={row.cta} onChange={e => update(row.id, "cta", e.target.value)}
                       disabled={row.status === "uploading" || row.status === "done"}
                       className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs disabled:opacity-50">
                       {ctaOptions.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                     </select>
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     <Input
                       type="url"
                       value={row.link_url}
@@ -545,7 +545,7 @@ export function BulkUploadDialog({ open, onClose, files, ctaOptions, pageLinks, 
                       disabled={row.status === "uploading" || row.status === "done"}
                     />
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-3">
                     {row.status === "pending" && <span className="text-xs text-muted-foreground">Pending</span>}
                     {row.status === "uploading" && (
                       <div className="flex flex-col gap-1 min-w-[60px]">

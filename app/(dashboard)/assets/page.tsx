@@ -10,6 +10,7 @@ import { DismissibleBanner } from "@/components/ui/dismissible-banner"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
   IconSearch, IconFolder, IconFolderPlus, IconRefresh,
@@ -17,15 +18,16 @@ import {
   IconChevronDown, IconPlus, IconCheck, IconDotsVertical,
   IconPlayerPlay, IconX, IconTrash, IconArrowLeft,
   IconClipboardList, IconUser, IconAlertCircle,
-  IconCloudDownload, IconArrowBackUp, IconExternalLink,
+  IconCloudDownload, IconArrowBackUp,
 } from "@tabler/icons-react"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from "@/components/ui/sheet"
+  MediaDetailSheet,
+  formatMediaBytes,
+  formatMediaDuration,
+  formatMediaDate,
+  type MediaDetailFile,
+} from "@/components/shared/media-detail-sheet"
+import type { FolderNode } from "@/lib/portal-media/tree"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,44 +77,11 @@ interface DeleteConfirmState {
   name: string
 }
 
-interface PortalMediaFile {
-  kind: "file"
-  assetId: string
-  objectKey: string
-  name: string
-  mimeType: string | null
-  sizeBytes: number | null
-  createdAt: string | null
-  fileUrl: string | null
-
-  brandName: string | null
-  brandSlug: string | null
-  productName: string | null
-  pdpUrl: string | null
-  salesPageUrl: string | null
-  landingUrl: string | null
-  checkoutFunnelUrl: string | null
-
-  language: string | null
-  briefType: string | null
-  voiceVariant: string | null
-
-  mediaType: string | null
-  width: number | null
-  height: number | null
-  durationSeconds: number | null
-}
-
-interface PortalFolder {
-  kind: "folder"
-  /** Real, uncollapsed object-key prefix — the unit an assign acts on. */
-  path: string
-  /** May span several collapsed levels, e.g. "shilasource/2026/07". */
-  label: string
-  fileCount: number
-  folders: PortalFolder[]
-  files: PortalMediaFile[]
-}
+/** The shapes the tree API returns. Type-only imports, so no server module is pulled
+ *  into this client bundle — previously these were hand-copied and had already drifted
+ *  (the local copy was missing brandId/productId, which the Identifiers block needs). */
+type PortalMediaFile = MediaDetailFile
+type PortalFolder = FolderNode
 
 interface PortalAssignment {
   object_key: string
@@ -124,45 +93,66 @@ interface PortalAssignment {
  *  minute and the whole office shares one IP, so a folder of 114 must not mount at once. */
 const PORTAL_PAGE_SIZE = 24
 
-/** Public media resolver. Mirrors CREATIVE_MEDIA_API_ORIGIN on the server side. */
-const PORTAL_MEDIA_RESOLVER = `${process.env.NEXT_PUBLIC_CREATIVE_MEDIA_API_ORIGIN || "https://creative.patigroup.com"}/api/media`
-
 type Section = "all" | "boards" | "requests" | "my-uploads" | "portal" | `board_${string}`
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function formatDate(s?: string) {
-  if (!s) return "—"
-  return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-}
-
-
-function formatDuration(seconds?: number | null) {
-  if (seconds === null || seconds === undefined) return null
-  const total = Math.round(seconds * 100) / 100
-  const m = Math.floor(total / 60)
-  const s = total - m * 60
-  return `${m}:${s.toFixed(2).padStart(5, "0")}`
-}
-
-function formatBytes(bytes?: number | null) {
-  if (bytes === null || bytes === undefined) return "—"
-  if (bytes < 1024) return `${bytes} B`
-  const units = ["KB", "MB", "GB"]
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++ }
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`
-}
+// Formatters live with the shared Media Detail sheet — three copies of formatBytes
+// across two files is how "1.5 MB" here and "2 MB" there happens.
+const formatDate = (s?: string | null) => formatMediaDate(s)
+const formatDuration = formatMediaDuration
+const formatBytes = formatMediaBytes
 
 const STATUS_COLORS: Record<CreativeRequest["status"], string> = {
-  open:        "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  // Neutral, not blue: "Open" is plain information and blue-as-information is what makes
+  // dark mode hard to read. Colour is reserved for the states that need attention.
+  open:        "bg-muted text-foreground border border-border",
   in_progress: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
   completed:   "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
   cancelled:   "bg-muted text-muted-foreground",
 }
 const STATUS_LABEL: Record<CreativeRequest["status"], string> = {
   open: "Open", in_progress: "In Progress", completed: "Completed", cancelled: "Cancelled",
+}
+
+/**
+ * One row of the asset actions menu. `whitespace-nowrap` is the part that matters: the menu
+ * sizes to its widest label instead of wrapping or truncating, which combined with the
+ * viewport clamp is what makes every option readable wherever the row sits on screen.
+ */
+const CONTEXT_MENU_ITEM =
+  "w-full flex items-center gap-2.5 px-3 py-2 text-sm text-left whitespace-nowrap " +
+  "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+
+/**
+ * The tick boxes in both spreadsheets. Was a bare <div onClick> in four places: no focus
+ * ring, no keyboard, and `cursor-pointer` present on two of them and missing on the other
+ * two. A real button keeps the look and gets all three for free.
+ */
+function RowCheckbox({ checked, onToggle, label, className }: {
+  checked: boolean
+  onToggle: () => void
+  label: string
+  className?: string
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      onClick={(e) => { e.stopPropagation(); onToggle() }}
+      className={cn(
+        "size-4 rounded border flex items-center justify-center shrink-0 cursor-pointer transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+        checked ? "bg-primary border-primary" : "border-muted-foreground/30 hover:border-muted-foreground/60",
+        className
+      )}
+    >
+      {checked && <IconCheck className="size-2.5 text-primary-foreground" />}
+    </button>
+  )
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -178,6 +168,16 @@ export default function AssetsPage() {
   const [portalVisible, setPortalVisible] = useState(PORTAL_PAGE_SIZE)
   const [portalSelected, setPortalSelected] = useState<Set<string>>(new Set())
   const [portalAccountId, setPortalAccountId] = useState("")
+  /**
+   * The provider's accounts reshaped for AdAccountPill's `showAccountId`, which reads
+   * `account_id`. In this list `id` already *is* the ad account id — the replaced Select rendered
+   * it as both name and parenthetical — so this only names the field the pill expects. Memoised
+   * because a fresh array each render would defeat the pill's own filter memo.
+   */
+  const portalPillAccounts = useMemo(
+    () => adAccounts.map((a: { id: string; name?: string }) => ({ id: a.id, name: a.name, account_id: a.id })),
+    [adAccounts]
+  )
   const [assetFilterAccounts, setAssetFilterAccounts] = useState<string[]>([])
   const [filterAccountsOpen, setFilterAccountsOpen] = useState(false)
   const [loadingPortal, setLoadingPortal] = useState(false)
@@ -187,15 +187,10 @@ export default function AssetsPage() {
   const [portalDetailOpen, setPortalDetailOpen] = useState(false)
   const [portalDetailFile, setPortalDetailFile] = useState<PortalMediaFile | null>(null)
 
-  const openPortalDetail = (file: PortalMediaFile, e: React.MouseEvent) => {
-    // Only open if the click wasn't on the checkbox or an explicit link/button
-    const target = e.target as HTMLElement
-    if (target.closest('input[type="checkbox"]') || target.closest('a') || target.closest('button')) {
-      return
-    }
-    setPortalDetailFile(file)
-    setPortalDetailOpen(true)
-  }
+  // undefined = derive the resolver URL from assetId (Portal media);
+  // a string = a non-Portal asset's own file_url; null = nothing to view.
+  const [portalDetailHref, setPortalDetailHref] = useState<string | null | undefined>(undefined)
+  const [portalDetailAssigned, setPortalDetailAssigned] = useState<string[]>([])
 
   const [importConfirm, setImportConfirm] = useState<
     { count: number; adAccountId: string; label: string; folderPath?: string; objectKeys?: string[] } | null
@@ -244,7 +239,8 @@ export default function AssetsPage() {
 
   const [addToBoardOpen, setAddToBoardOpen]       = useState(false)
   const [addingToBoard, setAddingToBoard]         = useState<string | null>(null)
-  const [contextMenu, setContextMenu]             = useState<{ id: string; x: number; y: number } | null>(null)
+  // The trigger's viewport rect, not the cursor — see the clamping effect below.
+  const [contextMenu, setContextMenu]             = useState<{ id: string; top: number; bottom: number; right: number } | null>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
   // Saved searches (localStorage)
@@ -468,16 +464,55 @@ export default function AssetsPage() {
     if (currentBoardId) loadBoardCreatives(currentBoardId)
   }, [currentBoardId, loadBoardCreatives])
 
-  // Close context menu on outside click
+  // Close context menu on outside click, or on Escape
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
         setContextMenu(null)
       }
     }
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setContextMenu(null) }
     document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
+    document.addEventListener("keydown", onKey)
+    return () => {
+      document.removeEventListener("mousedown", handler)
+      document.removeEventListener("keydown", onKey)
+    }
   }, [])
+
+  /**
+   * Keep the row menu inside the viewport.
+   *
+   * It was positioned with `top: clientY; left: clientX` — the menu's top-left placed at the
+   * cursor. The 3-dot trigger is the last column of a full-width table, so the cursor is
+   * ~20px from the right edge and a 160px-wide menu extended past it: the labels were cut
+   * off mid-word ("Add to Board" → "Ad…"), which reads as missing options rather than an
+   * off-screen menu. Rows near the bottom of the list lost their last item the same way.
+   *
+   * The click handler now records the trigger's rect and this measures the rendered menu, so
+   * the clamp works for any option count — the menu grows and shrinks with the row's state
+   * (board vs. library, revertible Portal import or not).
+   */
+  useEffect(() => {
+    const el = contextMenuRef.current
+    if (!contextMenu || !el) return
+    const MARGIN = 8
+    const { width, height } = el.getBoundingClientRect()
+    // Right-align under the trigger, which is what a menu opened from an end-aligned
+    // control should do; fall back to flush-left if the menu is wider than the viewport.
+    const left = Math.max(MARGIN, Math.min(contextMenu.right - width, window.innerWidth - width - MARGIN))
+    // Flip above the trigger when there is no room below.
+    const below = contextMenu.bottom + height + MARGIN <= window.innerHeight
+    const top = below
+      ? contextMenu.bottom + 4
+      : Math.max(MARGIN, contextMenu.top - height - 4)
+    el.style.left = `${left}px`
+    el.style.top = `${top}px`
+    el.style.visibility = "visible"
+    // Focus the first item so the menu is operable from the keyboard, and so Escape has a
+    // sensible place to return from.
+    el.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus()
+  }, [contextMenu])
 
   // Poll pending videos (fb_video_id=null) until IIFE uploads to Meta
   useEffect(() => {
@@ -532,6 +567,7 @@ export default function AssetsPage() {
     return portalFileMap.get(objectKey) || null
   }, [portalFileMap])
 
+
   // Automatically derive available brands/products/languages from the loaded creatives
   const availableFilters = useMemo(() => {
     const brands = new Set<string>()
@@ -552,33 +588,20 @@ export default function AssetsPage() {
 
   const filterCreatives = (list: Creative[]) => {
     const q = search.toLowerCase()
-    // Multi-account AND filter: when more than one account is selected, only keep the
-    // Portal files (grouped by storage_path) that have been claimed by ALL selected
-    // accounts. Single selection (or none) skips this step. See ask: "filter đè lên
-    // nhau — [A,B] chỉ show media được assign cho cả A và B".
-    let andObjectKeys: Set<string> | null = null
-    if (assetFilterAccounts.length > 1) {
-      const keysByAccount = new Map<string, Set<string>>()
-      for (const c of list) {
-        if (!c.storage_path) continue
-        let set = keysByAccount.get(c.ad_account_id || "")
-        if (!set) { set = new Set(); keysByAccount.set(c.ad_account_id || "", set) }
-        set.add(c.storage_path)
-      }
-      const present = assetFilterAccounts.filter(a => keysByAccount.has(a))
-      if (present.length < assetFilterAccounts.length) {
-        andObjectKeys = new Set()
-      } else {
-        andObjectKeys = new Set(Array.from(keysByAccount.get(present[0])!))
-        for (let i = 1; i < present.length; i++) {
-          const s = keysByAccount.get(present[i])!
-          andObjectKeys = new Set([...andObjectKeys].filter(k => s.has(k)))
-        }
-      }
-    }
-
+    // The account filter is ANY-match (OR): a media item shows when it is assigned to at
+    // least one selected account. Empty selection = every account in the org.
+    //
+    // It is enforced server-side — GET /api/creatives does `.in("ad_account_id", ids)` —
+    // so there is deliberately no client-side account predicate here. There used to be an
+    // ALL-match (AND) intersection, and it is what made "Hooray 37 + Hooray 52" return
+    // nothing:
+    //   1. it intersected by storage_path over only the rows loaded so far (page = 20,
+    //      cursor-paginated), so two rows for the same asset on different pages never met;
+    //   2. it dropped every row with storage_path = null — i.e. all manual and Drive
+    //      uploads — the moment a second account was ticked;
+    //   3. if either account had no loaded row it returned the empty set outright.
+    // See the account-filter cases in tests/assets-account-filter.test.mjs.
     return list.filter(c => {
-      if (andObjectKeys && (!c.storage_path || !andObjectKeys.has(c.storage_path))) return false
       if (q && !c.file_name.toLowerCase().includes(q)) return false
       if (filterType && c.media_type !== filterType) return false
       if (filterStatus === "ready" && !(c.fb_image_hash || c.fb_video_id)) return false
@@ -610,6 +633,7 @@ export default function AssetsPage() {
   })
   const selectAll = () => setSelected(new Set(displayList.map(c => c.id)))
   const clearSelected = () => setSelected(new Set())
+  const allDisplayedSelected = displayList.length > 0 && selected.size === displayList.length
 
   // ── Portal Media: folder navigation ───────────────────────────────────────
 
@@ -668,6 +692,66 @@ export default function AssetsPage() {
   const accountLabel = (id: string) => {
     const account = adAccounts.find((a: { id: string; name?: string }) => a.id === id)
     return account?.name || id
+  }
+
+  // ── Media Detail sidebar (shared with Portal Vault) ───────────────────────
+  // Two entry points, one sheet. A click that landed on the row's own checkbox, a link or
+  // a button is that control's click, not the row's.
+  const isRowChrome = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    return !!(target.closest('[role="checkbox"]') || target.closest("a") || target.closest("button"))
+  }
+
+  /** Portal Media spreadsheet — the registry row is already in hand. */
+  const openPortalDetail = (file: PortalMediaFile, e: React.MouseEvent) => {
+    if (isRowChrome(e)) return
+    setPortalDetailFile(file)
+    setPortalDetailHref(undefined)
+    setPortalDetailAssigned((portalAssignedBy.get(file.objectKey) || []).map(accountLabel))
+    setPortalDetailOpen(true)
+  }
+
+  /**
+   * All Assets / My Uploads / a board — the row is a `creatives` record.
+   *
+   * With Portal lineage it shows the full registry metadata. Without it (manual upload,
+   * Drive import) the row used to open nothing at all and silently toggled selection
+   * instead, which is why the sidebar read as a Portal-only feature. It now opens the same
+   * sheet, populated from the fields the creatives row does know; absent Portal fields
+   * render as "—" rather than disappearing.
+   */
+  const openCreativeDetail = (creative: Creative, e: React.MouseEvent) => {
+    if (isRowChrome(e)) return
+
+    const portalMeta = resolvePortalMetadata(creative)
+    if (portalMeta) {
+      setPortalDetailFile(portalMeta)
+      setPortalDetailHref(undefined)
+      setPortalDetailAssigned((portalAssignedBy.get(portalMeta.objectKey) || []).map(accountLabel))
+    } else {
+      setPortalDetailFile({
+        kind: "file",
+        assetId: "",
+        objectKey: creative.storage_path || creative.file_name,
+        name: creative.file_name,
+        mimeType: null,
+        sizeBytes: null,
+        createdAt: creative.assigned_at || creative.created_at || null,
+        fileUrl: creative.file_url || null,
+        brandId: null, brandName: null, brandSlug: null,
+        productId: null, productName: null,
+        pdpUrl: creative.link_url || null,
+        salesPageUrl: null, landingUrl: null, checkoutFunnelUrl: null,
+        language: null, briefType: null, voiceVariant: null,
+        mediaType: creative.media_type,
+        width: null, height: null, durationSeconds: null,
+      })
+      setPortalDetailHref(creative.fb_image_url || creative.file_url || null)
+      // A non-Portal creative carries its ad account on the row itself; there is no
+      // portal_media_assignments entry to look up.
+      setPortalDetailAssigned(creative.ad_account_id ? [accountLabel(creative.ad_account_id)] : [])
+    }
+    setPortalDetailOpen(true)
   }
 
   const assignPortalSelection = () => {
@@ -1172,16 +1256,20 @@ export default function AssetsPage() {
 
               <div className="flex-1" />
 
-              <Select value={portalAccountId} onValueChange={setPortalAccountId}>
-                <SelectTrigger className="w-[240px] h-8">
-                  <SelectValue placeholder="Select ad account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {adAccounts.map((a: { id: string; name?: string }) => (
-                    <SelectItem key={a.id} value={a.id}>{a.name || a.id} ({a.id})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {/* Controlled, not provider-backed. `portalAccountId` is the *assignment target* for
+                  mapping Portal media into an org's ad account — it is deliberately independent of
+                  the app-wide selection, so letting the pill fall through to `useAdAccount()`
+                  would make picking a mapping target switch the account for every other page. */}
+              <AdAccountPill
+                accounts={portalPillAccounts}
+                value={portalAccountId}
+                onChange={setPortalAccountId}
+                showAccountId
+                placeholder="Select ad account"
+                labelClassName="max-w-[200px]"
+                align="end"
+                className="h-8"
+              />
               {portalSelected.size > 0 && (
                 <>
                   <Button size="sm" onClick={assignPortalSelection} disabled={!portalAccountId || mappingPortal}>
@@ -1268,27 +1356,26 @@ export default function AssetsPage() {
                             </div>
                           </div>
                         )}
-                        <table className="w-full text-sm">
+                        <table data-table="compact" className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-muted/30">
-                              <th className="w-8 px-3 py-2.5">
-                                <div
-                                  onClick={togglePortalSelectAll}
-                                  className={cn("size-4 rounded border cursor-pointer flex items-center justify-center",
-                                    portalAllSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}
-                                >
-                                  {portalAllSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
-                                </div>
+                              <th className="w-8 px-2">
+                                <RowCheckbox
+                                  checked={portalAllSelected}
+                                  label={portalAllSelected ? "Deselect all media" : "Select all media"}
+                                  onToggle={togglePortalSelectAll}
+                                />
                               </th>
-                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">File name</th>
-                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Brand</th>
-                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Product</th>
-                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Lang</th>
-                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
-                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Size</th>
-                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Approved</th>
-                              <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Assigned</th>
-                              <th className="w-8 px-3 py-2.5"></th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">File name</th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Brand</th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Product</th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Lang</th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Size</th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Approved</th>
+                              {/* "View media" used to be a column here; it lives in the
+                                  Media Detail sidebar now, above File Information. */}
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Assigned</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1300,16 +1387,20 @@ export default function AssetsPage() {
                                 <tr
                                   key={file.objectKey}
                                   title={file.objectKey}
-                                  className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer", isSelected && "bg-primary/5")}
+                                  className={cn(
+                                    "border-b last:border-0 transition-colors cursor-pointer hover:bg-muted/20",
+                                    isSelected && "bg-primary/5 hover:bg-primary/10"
+                                  )}
                                   onClick={(e) => openPortalDetail(file, e)}
                                 >
-                                  <td className="px-3 py-2.5" onClick={e => { e.stopPropagation(); togglePortalSelect(file.objectKey); }}>
-                                    <div className={cn("size-4 rounded border flex items-center justify-center",
-                                      isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
-                                      {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
-                                    </div>
+                                  <td className="px-3">
+                                    <RowCheckbox
+                                      checked={isSelected}
+                                      label={`Select ${file.name}`}
+                                      onToggle={() => togglePortalSelect(file.objectKey)}
+                                    />
                                   </td>
-                                  <td className="px-3 py-2.5">
+                                  <td className="px-3">
                                     <div className="flex items-center gap-2 min-w-0">
                                       {isVideo
                                         ? <IconPlayerPlay className="size-3.5 shrink-0 text-muted-foreground" />
@@ -1317,20 +1408,20 @@ export default function AssetsPage() {
                                       <span className="text-base font-medium truncate max-w-[220px]">{file.name}</span>
                                     </div>
                                   </td>
-                                  <td className="px-3 py-2.5 text-base truncate max-w-[120px] font-medium" title={file.brandName || ""}>{file.brandName || "—"}</td>
-                                  <td className="px-3 py-2.5 text-base text-muted-foreground truncate max-w-[180px]" title={file.productName || ""}>{file.productName || "—"}</td>
-                                  <td className="px-3 py-2.5 text-sm text-muted-foreground">
+                                  <td className="px-3 text-base truncate max-w-[120px] font-medium" title={file.brandName || ""}>{file.brandName || "—"}</td>
+                                  <td className="px-3 text-base text-muted-foreground truncate max-w-[180px]" title={file.productName || ""}>{file.productName || "—"}</td>
+                                  <td className="px-3 text-sm text-muted-foreground">
                                     {file.language ? (
                                       <span className="bg-muted px-1.5 py-0.5 rounded text-xs uppercase font-semibold">{file.language}</span>
                                     ) : "—"}
                                   </td>
-                                  <td className="px-3 py-2.5 text-sm text-muted-foreground font-mono">
+                                  <td className="px-3 text-sm text-muted-foreground font-mono">
                                     {file.width && file.height ? `${file.width}x${file.height}` : "—"}
                                     {file.durationSeconds ? ` • ${formatDuration(file.durationSeconds)}` : ""}
                                   </td>
-                                  <td className="px-3 py-2.5 text-sm text-muted-foreground tabular-nums">{formatBytes(file.sizeBytes)}</td>
-                                  <td className="px-3 py-2.5 text-sm text-muted-foreground">{formatDate(file.createdAt || undefined)}</td>
-                                  <td className="px-3 py-2.5">
+                                  <td className="px-3 text-sm text-muted-foreground tabular-nums">{formatBytes(file.sizeBytes)}</td>
+                                  <td className="px-3 text-sm text-muted-foreground">{formatDate(file.createdAt || undefined)}</td>
+                                  <td className="px-3">
                                     {assignedTo.length > 0 ? (
                                       <span className="text-sm px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                                         {assignedTo.map(accountLabel).join(", ")}
@@ -1338,17 +1429,6 @@ export default function AssetsPage() {
                                     ) : (
                                       <span className="text-sm text-muted-foreground/50">—</span>
                                     )}
-                                  </td>
-                                  <td className="px-3 py-2.5">
-                                    <a
-                                      href={`${PORTAL_MEDIA_RESOLVER}/${file.assetId}`}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      onClick={e => e.stopPropagation()}
-                                      className="text-sm text-muted-foreground hover:text-foreground whitespace-nowrap"
-                                    >
-                                      View media
-                                    </a>
                                   </td>
                                 </tr>
                               )
@@ -1411,11 +1491,13 @@ export default function AssetsPage() {
                 {/* Ad Account (multi-select) */}
                 <div className="relative">
                   <button
+                    type="button"
+                    aria-expanded={filterAccountsOpen}
                     onClick={() => setFilterAccountsOpen(o => !o)}
                     className={cn(
                       "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
                       assetFilterAccounts.length > 0
-                        ? "border-primary bg-primary/10 text-primary font-semibold shadow"
+                        ? "border-primary bg-primary/10 text-link font-semibold shadow"
                         : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                     )}
                   >
@@ -1426,9 +1508,12 @@ export default function AssetsPage() {
                       <div className="fixed inset-0 z-40" onClick={() => setFilterAccountsOpen(false)} />
                       <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[240px] py-1 max-h-72 overflow-y-auto">
                         <button
+                          type="button"
+                          role="checkbox"
+                          aria-checked={assetFilterAccounts.length === 0}
                           onClick={() => setAssetFilterAccounts([])}
-                          className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent text-left",
-                            assetFilterAccounts.length === 0 && "text-primary font-semibold")}
+                          className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent focus-visible:bg-accent focus-visible:outline-none text-left",
+                            assetFilterAccounts.length === 0 && "text-link font-semibold")}
                         >
                           <span className={cn(
                             "size-3.5 rounded border flex items-center justify-center shrink-0",
@@ -1443,10 +1528,13 @@ export default function AssetsPage() {
                           return (
                             <button
                               key={a.id}
+                              type="button"
+                              role="checkbox"
+                              aria-checked={isChecked}
                               onClick={() => {
                                 setAssetFilterAccounts(prev => isChecked ? prev.filter(x => x !== a.id) : [...prev, a.id])
                               }}
-                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent text-left"
+                              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent focus-visible:bg-accent focus-visible:outline-none text-left"
                             >
                               <span className={cn(
                                 "size-3.5 rounded border flex items-center justify-center shrink-0",
@@ -1467,15 +1555,15 @@ export default function AssetsPage() {
                 <div className="relative group">
                   <button className={cn(
                     "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
-                    filterType ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
+                    filterType ? "border-primary bg-primary/10 text-link font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                   )}>
                     Type {filterType ? `: ${filterType}` : ""} <IconChevronDown className="size-3" />
                   </button>
-                  <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[120px] hidden group-hover:block">
+                  <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[120px] hidden group-hover:block group-focus-within:block">
                     {(["", "image", "video"] as const).map(v => (
                       <button key={v} onClick={() => setFilterType(v)}
                         className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
-                          filterType === v && "text-primary"
+                          filterType === v && "text-link"
                         )}>
                         {filterType === v && <IconCheck className="size-3" />}
                         {v === "" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
@@ -1488,15 +1576,15 @@ export default function AssetsPage() {
                 <div className="relative group">
                   <button className={cn(
                     "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
-                    filterStatus ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
+                    filterStatus ? "border-primary bg-primary/10 text-link font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                   )}>
                     Status {filterStatus ? `: ${filterStatus}` : ""} <IconChevronDown className="size-3" />
                   </button>
-                  <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[120px] hidden group-hover:block">
+                  <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[120px] hidden group-hover:block group-focus-within:block">
                     {(["", "ready", "pending"] as const).map(v => (
                       <button key={v} onClick={() => setFilterStatus(v)}
                         className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
-                          filterStatus === v && "text-primary"
+                          filterStatus === v && "text-link"
                         )}>
                         {filterStatus === v && <IconCheck className="size-3" />}
                         {v === "" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
@@ -1510,14 +1598,14 @@ export default function AssetsPage() {
                   <div className="relative group">
                     <button className={cn(
                       "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors max-w-[160px]",
-                      filterBrand ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
+                      filterBrand ? "border-primary bg-primary/10 text-link font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                     )}>
                       <span className="truncate">Brand {filterBrand ? `: ${filterBrand}` : ""}</span> <IconChevronDown className="size-3 shrink-0" />
                     </button>
-                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[140px] max-h-[240px] overflow-y-auto hidden group-hover:block">
+                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[140px] max-h-[240px] overflow-y-auto hidden group-hover:block group-focus-within:block">
                       <button onClick={() => setFilterBrand("")}
                         className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
-                          !filterBrand && "text-primary"
+                          !filterBrand && "text-link"
                         )}>
                         {!filterBrand && <IconCheck className="size-3" />}
                         All Brands
@@ -1525,7 +1613,7 @@ export default function AssetsPage() {
                       {availableFilters.brands.map(brand => (
                         <button key={brand} onClick={() => setFilterBrand(brand)}
                           className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2 truncate",
-                            filterBrand === brand && "text-primary"
+                            filterBrand === brand && "text-link"
                           )}
                           title={brand}
                         >
@@ -1542,14 +1630,14 @@ export default function AssetsPage() {
                   <div className="relative group">
                     <button className={cn(
                       "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors max-w-[200px]",
-                      filterProduct ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
+                      filterProduct ? "border-primary bg-primary/10 text-link font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                     )}>
                       <span className="truncate">Product {filterProduct ? `: ${filterProduct}` : ""}</span> <IconChevronDown className="size-3 shrink-0" />
                     </button>
-                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[180px] max-h-[240px] overflow-y-auto hidden group-hover:block">
+                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[180px] max-h-[240px] overflow-y-auto hidden group-hover:block group-focus-within:block">
                       <button onClick={() => setFilterProduct("")}
                         className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
-                          !filterProduct && "text-primary"
+                          !filterProduct && "text-link"
                         )}>
                         {!filterProduct && <IconCheck className="size-3" />}
                         All Products
@@ -1557,7 +1645,7 @@ export default function AssetsPage() {
                       {availableFilters.products.map(product => (
                         <button key={product} onClick={() => setFilterProduct(product)}
                           className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2 truncate",
-                            filterProduct === product && "text-primary"
+                            filterProduct === product && "text-link"
                           )}
                           title={product}
                         >
@@ -1574,14 +1662,14 @@ export default function AssetsPage() {
                   <div className="relative group">
                     <button className={cn(
                       "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
-                      filterLanguage ? "border-primary bg-primary/10 text-primary font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
+                      filterLanguage ? "border-primary bg-primary/10 text-link font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
                     )}>
                       Language {filterLanguage ? `: ${filterLanguage.toUpperCase()}` : ""} <IconChevronDown className="size-3" />
                     </button>
-                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[100px] hidden group-hover:block">
+                    <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[100px] hidden group-hover:block group-focus-within:block">
                       <button onClick={() => setFilterLanguage("")}
                         className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
-                          !filterLanguage && "text-primary"
+                          !filterLanguage && "text-link"
                         )}>
                         {!filterLanguage && <IconCheck className="size-3" />}
                         All
@@ -1589,7 +1677,7 @@ export default function AssetsPage() {
                       {availableFilters.languages.map(lang => (
                         <button key={lang} onClick={() => setFilterLanguage(lang)}
                           className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2 uppercase",
-                            filterLanguage === lang && "text-primary"
+                            filterLanguage === lang && "text-link"
                           )}>
                           {filterLanguage === lang && <IconCheck className="size-3" />}
                           {lang}
@@ -1659,7 +1747,7 @@ export default function AssetsPage() {
                 {" — "}{displayList.length} of {currentBoardId ? boardCreatives.length : creatives.length} assets
               </span>
               {search && (
-                <button onClick={saveSearch} className="text-primary hover:underline">Save search</button>
+                <button onClick={saveSearch} className="text-link hover:underline">Save search</button>
               )}
             </div>
 
@@ -1699,27 +1787,27 @@ export default function AssetsPage() {
                    kept behind a toggle: two renderings of the same list drift, and the
                    table is the one that shows status and date without a hover. */
                 <div className="border rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                  <table data-table="compact" className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30">
-                        <th className="w-8 px-3 py-2.5">
-                          <div
-                            onClick={() => selected.size === displayList.length ? clearSelected() : selectAll()}
-                            className={cn("size-4 rounded border cursor-pointer flex items-center justify-center",
-                              selected.size === displayList.length ? "bg-primary border-primary" : "border-muted-foreground/30")}
-                          >
-                            {selected.size === displayList.length && <IconCheck className="size-2.5 text-primary-foreground" />}
-                          </div>
+                        <th className="w-8 px-2">
+                          {/* `selected.size === displayList.length` alone reads as
+                              "all selected" on an empty table, because 0 === 0. */}
+                          <RowCheckbox
+                            checked={allDisplayedSelected}
+                            label={allDisplayedSelected ? "Deselect all assets" : "Select all assets"}
+                            onToggle={() => allDisplayedSelected ? clearSelected() : selectAll()}
+                          />
                         </th>
-                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Name</th>
-                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Brand</th>
-                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Product</th>
-                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Lang</th>
-                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
-                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Type</th>
-                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Status</th>
-                        <th className="px-3 py-2.5 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Date Assigned</th>
-                        <th className="w-8 px-3 py-2.5"></th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Name</th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Brand</th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Product</th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Lang</th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Type</th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Status</th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Date Assigned</th>
+                        <th className="w-8 px-2"></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1730,18 +1818,24 @@ export default function AssetsPage() {
                         return (
                           <tr
                             key={c.id}
-                            className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer", isSelected && "bg-primary/5")}
-                            onClick={(e) => {
-                              if (portalMeta) { openPortalDetail(portalMeta, e); return }
-                              toggleSelect(c.id)
-                            }}
+                            className={cn(
+                              "border-b last:border-0 transition-colors cursor-pointer hover:bg-muted/20",
+                              isSelected && "bg-primary/5 hover:bg-primary/10"
+                            )}
+                            /* Every row opens the Media Detail sidebar now. It used to
+                               open only for Portal-backed rows and silently toggle
+                               selection for the rest — same cursor, two behaviours.
+                               Selection stays on the checkbox cell. */
+                            onClick={(e) => openCreativeDetail(c, e)}
                           >
-                            <td className="px-3 py-2.5" onClick={e => { e.stopPropagation(); toggleSelect(c.id) }}>
-                              <div className={cn("size-4 rounded border flex items-center justify-center", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
-                                {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
-                              </div>
+                            <td className="px-3">
+                              <RowCheckbox
+                                checked={isSelected}
+                                label={`Select ${c.file_name}`}
+                                onToggle={() => toggleSelect(c.id)}
+                              />
                             </td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-3">
                               <div className="flex items-center gap-3">
                                 <div className="size-9 rounded-lg overflow-hidden bg-muted shrink-0">
                                   <CreativeCardMedia creative={c} className="h-full w-full object-cover" compact />
@@ -1749,19 +1843,19 @@ export default function AssetsPage() {
                                 <span className="text-base font-medium truncate max-w-[200px]">{c.file_name}</span>
                               </div>
                             </td>
-                            <td className="px-3 py-2.5 text-base truncate max-w-[120px] font-medium" title={portalMeta?.brandName || ""}>{portalMeta?.brandName || "—"}</td>
-                            <td className="px-3 py-2.5 text-base text-muted-foreground truncate max-w-[180px]" title={portalMeta?.productName || ""}>{portalMeta?.productName || "—"}</td>
-                            <td className="px-3 py-2.5 text-sm text-muted-foreground">
+                            <td className="px-3 text-base truncate max-w-[120px] font-medium" title={portalMeta?.brandName || ""}>{portalMeta?.brandName || "—"}</td>
+                            <td className="px-3 text-base text-muted-foreground truncate max-w-[180px]" title={portalMeta?.productName || ""}>{portalMeta?.productName || "—"}</td>
+                            <td className="px-3 text-sm text-muted-foreground">
                               {portalMeta?.language ? (
                                 <span className="bg-muted px-1.5 py-0.5 rounded text-xs uppercase font-semibold">{portalMeta.language}</span>
                               ) : "—"}
                             </td>
-                            <td className="px-3 py-2.5 text-sm text-muted-foreground font-mono">
+                            <td className="px-3 text-sm text-muted-foreground font-mono">
                               {portalMeta?.width && portalMeta?.height ? `${portalMeta.width}x${portalMeta.height}` : "—"}
                               {portalMeta?.durationSeconds ? ` • ${formatDuration(portalMeta.durationSeconds)}` : ""}
                             </td>
-                            <td className="px-3 py-2.5 text-sm text-muted-foreground capitalize">{c.media_type}</td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-3 text-sm text-muted-foreground capitalize">{c.media_type}</td>
+                            <td className="px-3">
                               <span className={cn("inline-flex items-center gap-1 text-sm px-2 py-0.5 rounded-full font-medium",
                                 isReady
                                   ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
@@ -1775,11 +1869,19 @@ export default function AssetsPage() {
                                 {isReady ? "Ready" : c.status === "processing" ? "Syncing to Meta" : c.status === "error" ? "Error" : "Syncing to Meta"}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-sm text-muted-foreground">{formatDate(c.assigned_at || c.created_at)}</td>
-                            <td className="px-3 py-2.5">
+                            <td className="px-3 text-sm text-muted-foreground">{formatDate(c.assigned_at || c.created_at)}</td>
+                            <td className="px-3">
                               <button
-                                onClick={e => { e.stopPropagation(); setContextMenu({ id: c.id, x: e.clientX, y: e.clientY }) }}
-                                className="p-1 rounded hover:bg-muted text-muted-foreground"
+                                type="button"
+                                aria-haspopup="menu"
+                                aria-expanded={contextMenu?.id === c.id}
+                                aria-label={`Actions for ${c.file_name}`}
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  const r = e.currentTarget.getBoundingClientRect()
+                                  setContextMenu({ id: c.id, top: r.top, bottom: r.bottom, right: r.right })
+                                }}
+                                className="p-1 rounded hover:bg-muted text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               >
                                 <IconDotsVertical className="size-3.5" />
                               </button>
@@ -1820,26 +1922,35 @@ export default function AssetsPage() {
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="fixed z-50 bg-popover border rounded-lg shadow-lg py-1 min-w-[160px]"
+          role="menu"
+          aria-label="Asset actions"
+          // Rendered hidden at 0,0 and moved by the clamping effect once its real size is
+          // known. Without `visibility: hidden` the menu would paint at the origin for one
+          // frame before jumping to the trigger.
+          style={{ top: 0, left: 0, visibility: "hidden" }}
+          className="fixed z-50 bg-popover border rounded-lg shadow-lg py-1 min-w-[180px] max-w-[calc(100vw-1rem)]"
         >
           {!currentBoardId ? (
             <>
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => { setSelected(new Set([contextMenu.id])); setAddToBoardOpen(true); setContextMenu(null) }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/50"
+                className={CONTEXT_MENU_ITEM}
               >
-                <IconFolderPlus className="size-4 text-muted-foreground" /> Add to Board
+                <IconFolderPlus className="size-4 shrink-0 text-muted-foreground" /> Add to Board
               </button>
               <div className="h-px bg-border my-1" />
             </>
           ) : (
             <>
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => { handleRemoveFromBoard(contextMenu.id); setContextMenu(null) }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/50"
+                className={CONTEXT_MENU_ITEM}
               >
-                <IconFolder className="size-4 text-muted-foreground" /> Remove from Board
+                <IconFolder className="size-4 shrink-0 text-muted-foreground" /> Remove from Board
               </button>
               <div className="h-px bg-border my-1" />
             </>
@@ -1851,25 +1962,29 @@ export default function AssetsPage() {
             if (!canRevert) return null
             return (
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   setDeleteConfirm({ type: "revert", id: contextMenu.id, name: c?.file_name || "this asset" })
                   setContextMenu(null)
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-muted/50"
+                className={CONTEXT_MENU_ITEM}
               >
-                <IconArrowBackUp className="size-4 text-muted-foreground" /> Revert Portal Import
+                <IconArrowBackUp className="size-4 shrink-0 text-muted-foreground" /> Revert Portal Import
               </button>
             )
           })()}
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               const c = creatives.find(x => x.id === contextMenu.id) || boardCreatives.find(x => x.id === contextMenu.id)
               setDeleteConfirm({ type: "creative", id: contextMenu.id, name: c?.file_name || "this asset" })
               setContextMenu(null)
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+            className={cn(CONTEXT_MENU_ITEM, "text-destructive hover:bg-destructive/10 focus-visible:bg-destructive/10")}
           >
-            <IconTrash className="size-4" /> Delete
+            <IconTrash className="size-4 shrink-0" /> Delete
           </button>
         </div>
       )}
@@ -2075,107 +2190,15 @@ export default function AssetsPage() {
         </DialogContent>
       </Dialog>
     
-      {/* Detail Sheet */}
-      <Sheet open={portalDetailOpen} onOpenChange={setPortalDetailOpen}>
-        <SheetContent className="sm:max-w-md w-full overflow-y-auto p-0 flex flex-col gap-0 border-l border-border/40 shadow-xl bg-card">
-          <SheetHeader className="px-6 py-5 border-b border-border/40 bg-muted/20 shrink-0">
-            <SheetTitle className="text-base font-semibold">Media Details</SheetTitle>
-            <SheetDescription className="text-xs">
-              Metadata joined live from Creative Portal.
-            </SheetDescription>
-          </SheetHeader>
-
-          {portalDetailFile && (
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              {/* No thumbnail/video player here by design — see the rate-limit
-                  comment on the Portal spreadsheet above; "View media" opens
-                  the resolver on demand instead. */}
-
-              {/* File Info */}
-              <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">File Information</h3>
-
-                <div className="rounded-lg border bg-muted/40 px-3 py-2 text-[13px] font-medium text-foreground break-words leading-relaxed shadow">
-                  {portalDetailFile.name}
-                </div>
-
-                <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px]">
-                  <span className="text-muted-foreground font-medium">Type</span><span className="min-w-0 font-medium text-foreground">{portalDetailFile.mimeType || (portalDetailFile.mimeType?.startsWith("video/") ? "Video" : "Image")}</span>
-                  <span className="text-muted-foreground font-medium">Size</span><span className="min-w-0 font-medium text-foreground">{formatBytes(portalDetailFile.sizeBytes)}</span>
-                  <span className="text-muted-foreground font-medium">Dimensions</span><span className="min-w-0 font-medium text-foreground">{portalDetailFile.width && portalDetailFile.height ? `${portalDetailFile.width}x${portalDetailFile.height}` : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Duration</span><span className="min-w-0 font-medium text-foreground">{portalDetailFile.durationSeconds ? formatDuration(portalDetailFile.durationSeconds) : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Added</span><span className="min-w-0 font-medium text-foreground">{formatDate(portalDetailFile.createdAt || undefined)}</span>
-                </div>
-
-                <div className="rounded-md border border-border/50 bg-muted/40 px-3 py-2 text-[11px] font-mono text-muted-foreground break-all leading-relaxed">
-                  {portalDetailFile.objectKey}
-                </div>
-              </div>
-
-              {/* Assigned To */}
-              <div className="space-y-3 min-w-0">
-                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">Assigned To</h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {(portalAssignedBy.get(portalDetailFile.objectKey) || []).length > 0 ? (
-                    (portalAssignedBy.get(portalDetailFile.objectKey) || []).map(accId => (
-                      <span
-                        key={accId}
-                        className="text-xs px-2 py-1 rounded-full font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800"
-                      >
-                        {accountLabel(accId)}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-[13px] text-muted-foreground">Not assigned to any ad account yet</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Brand & Product */}
-              <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">Product & Context</h3>
-                <div className="grid grid-cols-[100px_1fr] gap-x-3 gap-y-2.5 text-[13px] p-3 rounded-lg border bg-muted/40 shadow">
-                  <span className="text-muted-foreground font-medium">Brand</span><span className="font-medium min-w-0 break-words text-foreground">{portalDetailFile.brandName || "—"} {portalDetailFile.brandSlug ? <span className="text-muted-foreground font-normal">({portalDetailFile.brandSlug})</span> : ""}</span>
-                  <span className="text-muted-foreground font-medium">Product</span><span className="min-w-0 break-words font-medium text-foreground leading-snug">{portalDetailFile.productName || "—"}</span>
-                  <span className="text-muted-foreground font-medium flex items-center">Language</span><span className="min-w-0 flex items-center">{portalDetailFile.language ? <span className="uppercase text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded shadow-sm">{portalDetailFile.language}</span> : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Brief Type</span><span className="min-w-0 break-words font-medium text-foreground">{portalDetailFile.briefType || "—"}</span>
-                  <span className="text-muted-foreground font-medium">Voice</span><span className="min-w-0 break-words font-medium text-foreground">{portalDetailFile.voiceVariant || "—"}</span>
-                </div>
-              </div>
-
-              {/* Links */}
-              <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-[15px] tracking-tight text-foreground">Links</h3>
-                <div className="flex flex-col gap-3 text-[13px] p-3 rounded-lg border bg-muted/40 shadow">
-                  {portalDetailFile.pdpUrl ? (
-                    <a href={portalDetailFile.pdpUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Product Detail Page (PDP) <IconExternalLink className="size-3.5" />
-                    </a>
-                  ) : <span className="text-muted-foreground italic">No PDP URL</span>}
-
-                  {portalDetailFile.salesPageUrl && (
-                    <a href={portalDetailFile.salesPageUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Sales Page <IconExternalLink className="size-3.5" />
-                    </a>
-                  )}
-
-                  {portalDetailFile.landingUrl && (
-                    <a href={portalDetailFile.landingUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Landing Page <IconExternalLink className="size-3.5" />
-                    </a>
-                  )}
-
-                  {portalDetailFile.checkoutFunnelUrl && (
-                    <a href={portalDetailFile.checkoutFunnelUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Checkout Funnel <IconExternalLink className="size-3.5" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      {/* Detail Sheet — the one shared implementation (Portal Vault is the source of
+          truth). Both the All Assets table and the Portal Media spreadsheet open this. */}
+      <MediaDetailSheet
+        open={portalDetailOpen}
+        onOpenChange={setPortalDetailOpen}
+        file={portalDetailFile}
+        assignedTo={portalDetailAssigned}
+        viewMediaHref={portalDetailHref}
+      />
 
     </div>
   )

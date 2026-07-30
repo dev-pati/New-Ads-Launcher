@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react"
+import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
-  IconTrendingUp, IconLayoutDashboard, IconChartBar, IconMessageCircle,
+  IconTrendingUp, IconLayoutDashboard, IconChartBar,
   IconLoader2, IconChevronDown, IconRefresh, IconPlus, IconAlertCircle,
   IconPlayerPlay, IconPhoto, IconFilter, IconX, IconMoodEmpty,
   IconArrowDown, IconArrowUp, IconArrowsUpDown, IconSearch,
@@ -19,7 +20,6 @@ import {
   BarChart,
 } from "recharts"
 import { AllAccountsView, SpendView, DemographicView, CountryView, AdHistoryView, PlacementsView, DeviceView, ReachView, CreativeAuditView, UploadStatsView, PageInsightsView } from "./_statistics"
-import { CommentsView } from "./_comments"
 import { ReportsView, ReportSection } from "./_reports"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -298,11 +298,11 @@ function MetricCard({ label, value, sparkData }: { label: string; value: string;
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-type Section = "dashboard" | "statistics" | "comments" | ReportSection
+type Section = "dashboard" | "statistics" | ReportSection
 type StatTab = "all-accounts" | "spend" | "demographic" | "country" | "ad-history" | "placements" | "device" | "reach" | "creative-audit" | "upload-stats" | "page-insights"
 
 export default function InsightsPage() {
-  const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
+  const { selectedAccountId, adAccounts } = useAdAccount()
   const [section, setSection] = useState<Section>("top-creatives")
   const [statTab, setStatTab] = useState<StatTab>("all-accounts")
   const [visitedStatTabs, setVisitedStatTabs] = useState<Set<StatTab>>(() => new Set<StatTab>(["all-accounts"]))
@@ -336,10 +336,6 @@ export default function InsightsPage() {
   const [valueSearch, setValueSearch]     = useState("")
   const filterRef = useRef<HTMLDivElement>(null)
 
-  // ── Account picker ────────────────────────────────────────────────────
-  const [accountPickerOpen, setAccountPickerOpen] = useState(false)
-  const accountPickerRef = useRef<HTMLDivElement>(null)
-
   // ── Custom Dashboard state ────────────────────────────────────────────
   const [metrics, setMetrics]       = useState<MetricTotals | null>(null)
   const [daily, setDaily]           = useState<DailyMetric[]>([])
@@ -361,8 +357,6 @@ export default function InsightsPage() {
   const [dragging, setDragging]         = useState<string | null>(null)
   const [dragOver, setDragOver]         = useState<string | null>(null)
 
-  const accountName = adAccounts?.find((a: any) => a.id === selectedAccountId)?.name || selectedAccountId || "—"
-
   // ── Close dropdowns on outside click ─────────────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -372,7 +366,6 @@ export default function InsightsPage() {
         setFilterOpen(false); setPendingField(null); setPendingValue(""); setFilterSearch(""); setValueSearch("")
       }
       if (dashDateRef.current && !dashDateRef.current.contains(e.target as Node)) setDashDateOpen(false)
-      if (accountPickerRef.current && !accountPickerRef.current.contains(e.target as Node)) setAccountPickerOpen(false)
     }
     document.addEventListener("mousedown", handler)
     return () => document.removeEventListener("mousedown", handler)
@@ -610,40 +603,6 @@ export default function InsightsPage() {
             )}
           </div>
 
-          {/* Comments */}
-          <div>
-            <button onClick={() => setSection("comments")}
-              className={cn("flex items-center gap-2.5 w-full px-2.5 py-2 text-sm rounded-md transition-colors",
-                section === "comments" ? "bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-              )}>
-              <IconMessageCircle className="size-4 shrink-0" />
-              <span className="flex-1 text-left">Comments</span>
-              <IconChevronDown className={cn("size-3.5 transition-transform", section === "comments" && "rotate-180")} />
-            </button>
-            {section === "comments" && (
-              <div className="ml-3 mt-0.5 mb-1 space-y-0.5">
-                {([
-                  { label: "All",        dot: "#94a3b8" },
-                  { label: "Unreplied",  dot: "#3b82f6" },
-                  { label: "Positive",   dot: "#22c55e" },
-                  { label: "Neutral",    dot: "#94a3b8" },
-                  { label: "Negative",   dot: "#ef4444" },
-                  { label: "Analytics",  dot: null },
-                  { label: "Automation", dot: null },
-                  { label: "History",    dot: null },
-                ]).map(sub => (
-                  <div key={sub.label}
-                    className="flex items-center h-7 px-2.5 rounded-md text-xs w-full text-muted-foreground hover:text-foreground hover:bg-muted/50 cursor-default">
-                    {sub.dot
-                      ? <span className="size-2 rounded-full mr-2 shrink-0" style={{ backgroundColor: sub.dot }} />
-                      : <span className="size-2 mr-2 shrink-0" />}
-                    {sub.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
         </div>
 
         {/* FOLDERS section */}
@@ -708,32 +667,7 @@ export default function InsightsPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <div className="relative" ref={accountPickerRef}>
-                  <button onClick={() => setAccountPickerOpen(v => !v)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-muted/50 transition-colors">
-                    <span className="size-2 rounded-full bg-blue-500 shrink-0" />
-                    <span className="max-w-[160px] truncate">{accountName}</span>
-                    <IconChevronDown className="size-3.5 text-muted-foreground" />
-                  </button>
-                  {accountPickerOpen && adAccounts.length > 0 && (
-                    <div className="absolute top-full right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl py-1 min-w-[220px] max-h-72 overflow-y-auto">
-                      <p className="px-3 pt-1.5 pb-1 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
-                      {adAccounts.map((acc: any) => (
-                        <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setAccountPickerOpen(false) }}
-                          className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 transition-colors",
-                            acc.id === selectedAccountId && "text-primary font-medium"
-                          )}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={cn("size-2 rounded-full shrink-0", acc.id === selectedAccountId ? "bg-primary" : "bg-muted-foreground/30")} />
-                            <span className="truncate">{acc.name}</span>
-                          </div>
-                          {acc.id === selectedAccountId && <IconCheck className="size-3.5 shrink-0" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <AdAccountPill />
                 <Button size="sm" variant="ghost" className="h-8" onClick={() => loadTop()} disabled={loadingTop}>
                   <IconRefresh className={cn("size-3.5", loadingTop && "animate-spin")} />
                 </Button>
@@ -1038,32 +972,7 @@ export default function InsightsPage() {
                 <p className="text-xs text-muted-foreground mt-0.5">Drag widgets to reorder · click × to remove</p>
               </div>
               <div className="flex items-center gap-2">
-                <div className="relative" ref={accountPickerRef}>
-                  <button onClick={() => setAccountPickerOpen(v => !v)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-muted/50 transition-colors">
-                    <span className="size-2 rounded-full bg-blue-500 shrink-0" />
-                    <span className="max-w-[160px] truncate">{accountName}</span>
-                    <IconChevronDown className="size-3.5 text-muted-foreground" />
-                  </button>
-                  {accountPickerOpen && adAccounts.length > 0 && (
-                    <div className="absolute top-full right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl py-1 min-w-[220px] max-h-72 overflow-y-auto">
-                      <p className="px-3 pt-1.5 pb-1 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
-                      {adAccounts.map((acc: any) => (
-                        <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setAccountPickerOpen(false) }}
-                          className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 transition-colors",
-                            acc.id === selectedAccountId && "text-primary font-medium"
-                          )}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={cn("size-2 rounded-full shrink-0", acc.id === selectedAccountId ? "bg-primary" : "bg-muted-foreground/30")} />
-                            <span className="truncate">{acc.name}</span>
-                          </div>
-                          {acc.id === selectedAccountId && <IconCheck className="size-3.5 shrink-0" />}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <AdAccountPill />
                 {/* Date preset */}
                 <div className="relative" ref={dashDateRef}>
                   <button onClick={() => setDashDateOpen(v => !v)}
@@ -1244,9 +1153,6 @@ export default function InsightsPage() {
           </div>
         )}
 
-        {section === "comments" && (
-          <CommentsView />
-        )}
       </div>
 
       {/* ── Add Widget Modal ──────────────────────────────────────────── */}

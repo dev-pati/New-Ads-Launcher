@@ -34,6 +34,7 @@
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
     --color-primary: var(--primary);
+    --color-link: var(--link);
     --color-popover-foreground: var(--popover-foreground);
     --color-popover: var(--popover);
     --color-card-foreground: var(--card-foreground);
@@ -71,6 +72,13 @@
 
     --primary: var(--brand-accent);
     --primary-foreground: #FFFFFF;
+
+    /* Text-safe link colour. `--primary` is a fill colour: it only has to clear 3:1
+       against its own background because it always carries white text on top. Used as
+       *text* on --card it measures 9.0:1 in light but 2.98:1 in dark, so dark mode needs
+       a lighter blue. Anything blue and readable belongs to a link or an active state —
+       plain information uses --foreground / --muted-foreground. */
+    --link: var(--brand-accent);
 
     --background: var(--bg);
     --foreground: var(--text-1);
@@ -134,6 +142,9 @@
     --primary: var(--brand-accent);
     --primary-foreground: #FFFFFF;
 
+    /* #93b0ff — 6.99:1 on --card (#252730), vs 2.98:1 for --brand-accent. See :root. */
+    --link: #93b0ff;
+
     --background: var(--bg);
     --foreground: var(--text-1);
     --card: var(--surface);
@@ -177,6 +188,95 @@
   }
   table, [data-metric], [data-timer] {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Table vertical rhythm ───────────────────────────────────────────────────────
+     No table in this app declared a row height, so row pitch was whatever the tallest
+     cell content happened to be: a row with a 40px thumbnail was 64px, the text-only
+     row under it was 44px, and the eye reads that as broken spacing rather than as
+     variable content.
+
+     Height on a table cell behaves as a minimum, not a fixed value, so these rules set
+     a floor and let a genuinely taller row grow. They are keyed off `data-table` rather
+     than the element so the grid-based pseudo-tables (the launch history list) can opt
+     in with the same attribute, and so a table that forgets the attribute looks wrong
+     instead of looking subtly different.
+
+     Nothing in the app sets a height utility on a tr or td, so there is no specificity
+     fight here — unlike padding, which is per-cell and therefore stays in classes.
+     The scale itself is documented in components/shared/table-tokens.ts. */
+
+  [data-table="comfortable"] > thead > tr > th,
+  [data-table="comfortable"] thead tr th {
+    height: 40px;
+    padding-block: 0.625rem; /* py-2.5 */
+  }
+  [data-table="comfortable"] > tbody > tr > td,
+  [data-table="comfortable"] tbody tr td {
+    height: 44px;
+    padding-block: 0.75rem; /* py-3 */
+  }
+
+  [data-table="compact"] > thead > tr > th,
+  [data-table="compact"] thead tr th {
+    height: 34px;
+    padding-block: 0.5rem; /* py-2 */
+  }
+  [data-table="compact"] > tbody > tr > td,
+  [data-table="compact"] tbody tr td {
+    height: 36px;
+    padding-block: 0.5rem; /* py-2 */
+  }
+
+  /* Cells are middle-aligned by default in HTML, but a cell whose only child is a block
+     or flex wrapper loses that, which is the other half of the "not vertically balanced"
+     report. Restated here so it survives however the cell is filled. */
+  [data-table] th,
+  [data-table] td {
+    vertical-align: middle;
+  }
+
+  /* An empty-state or loading cell spans the table and must not be held to the row floor. */
+  [data-table] td[colspan] {
+    height: auto;
+  }
+
+  /* Grid pseudo-tables: the row floor applies to the row itself, there being no cells. */
+  [data-table="comfortable"] [data-table-row] {
+    min-height: 44px;
+  }
+  [data-table="compact"] [data-table-row] {
+    min-height: 36px;
+  }
+
+  /* Tailwind v3's preflight shipped `button, [role="button"] { cursor: pointer }`.
+     v4 dropped it to match the browser default, so every button in this app — including
+     every shadcn <Button>, which has no cursor class of its own — silently went back to an
+     arrow cursor on upgrade. That is the whole reason the interaction audit found pointer
+     states missing "everywhere": one removed preflight rule, not N unstyled components.
+     Restoring it here fixes the app in one place; elements that are not buttons (table
+     rows, cards, thumbnails, fake checkboxes) still need `cursor-pointer` explicitly.
+
+     Disabled controls are covered by the second rule, but note that anything carrying
+     `disabled:pointer-events-none` (the shadcn Button base) receives no cursor at all and
+     shows the ambient one — that is the standard behaviour, not a gap. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"],
+  [role="checkbox"],
+  [role="switch"],
+  [role="menuitem"],
+  [role="option"],
+  label[for],
+  summary,
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  [aria-disabled="true"],
+  select:disabled {
+    cursor: not-allowed;
   }
   button,
   input,

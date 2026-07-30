@@ -442,8 +442,8 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-black/40">
-      <div className="m-4 flex flex-1 animate-in flex-col overflow-hidden rounded-lg border border-[#e4e6eb] bg-[#f5f6f7] shadow-2xl duration-200 fade-in zoom-in-95 dark:border-gray-800 dark:bg-background">
+    <div className="fixed inset-0 z-50 flex justify-center bg-black/40">
+      <div className="m-4 flex w-full max-w-[1250px] animate-in flex-col overflow-hidden rounded-lg border border-[#e4e6eb] bg-[#f5f6f7] shadow-2xl duration-200 fade-in zoom-in-95 dark:border-gray-800 dark:bg-background">
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#e4e6eb] bg-white px-4 dark:border-gray-800 dark:bg-card">
           <div className="flex min-w-0 items-center gap-3">
             <button

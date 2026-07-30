@@ -195,7 +195,7 @@ export function AdLevel({
         />
       )}
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl space-y-6 px-6 py-8 pb-20">
+        <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 pb-20">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-[#1c2b33] dark:text-gray-100">Ad</h1>
           </div>

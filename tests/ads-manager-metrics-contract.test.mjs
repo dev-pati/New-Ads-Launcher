@@ -11,7 +11,12 @@ describe("Ads Manager metrics contract", () => {
     const facebook = read("lib/facebook.ts")
     const breakdown = read("app/api/facebook/breakdown-insights/route.ts")
 
-    assert.match(facebook, /actions,action_values,cost_per_action_type/)
+    // lib/facebook.ts used to inline the joined field string. The fields are now declared as
+    // an array that is `.join(",")`-ed, so the guarantee is unchanged (the request URL still
+    // carries actions,action_values,cost_per_action_type) but the literal is no longer in the
+    // source. Assert the array form — same three fields, current shape.
+    assert.match(facebook, /"actions", "action_values", "cost_per_action_type"/)
+    assert.match(facebook, /\]\.join\(","\)/)
     assert.match(breakdown, /"actions", "action_values", "cost_per_action_type"/)
   })
 

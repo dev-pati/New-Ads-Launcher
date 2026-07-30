@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -686,19 +687,19 @@ function TableView({
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs">
+      <table data-table="compact" className="w-full text-xs">
         <thead>
           <tr className="border-b">
-            <th className="text-left py-2 px-3 font-medium text-muted-foreground w-10">
+            <th className="text-left px-2 font-medium text-muted-foreground w-10">
               {selectable
                 ? <input ref={headerRef} type="checkbox" className="size-3.5 rounded cursor-pointer"
                     checked={allChecked}
                     onChange={e => onToggleAll?.(ads.map(a => a.adId), e.target.checked)} />
                 : "#"}
             </th>
-            <th className="text-left py-2 px-3 font-medium text-muted-foreground min-w-[200px]">Ad Name</th>
+            <th className="text-left px-3 font-medium text-muted-foreground min-w-[200px]">Ad Name</th>
             {defs.map((d, i) => (
-              <th key={d.key} className="py-2 px-3 font-medium text-muted-foreground whitespace-nowrap cursor-pointer select-none"
+              <th key={d.key} className="px-3 font-medium text-muted-foreground whitespace-nowrap cursor-pointer select-none"
                 onClick={() => onSort(d.key)}>
                 <div className="flex items-center justify-end gap-1">
                   <span className="size-4 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0"
@@ -721,7 +722,7 @@ function TableView({
                 isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "hover:bg-muted/20")}
               onClick={selectable ? () => onToggle?.(ad.adId) : undefined}
               style={selectable ? { cursor: "pointer" } : undefined}>
-              <td className="py-2 px-3 text-muted-foreground" onClick={e => e.stopPropagation()}>
+              <td className="px-3 text-muted-foreground" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center gap-1">
                   {selectable
                     ? <input type="checkbox" className="size-3.5 rounded cursor-pointer"
@@ -731,7 +732,7 @@ function TableView({
                   <span className={selectable ? "ml-1" : ""}>{ad.rank}</span>
                 </div>
               </td>
-              <td className="py-2 px-3">
+              <td className="px-3">
                 <div className="flex items-center gap-2">
                   <div className="size-8 rounded bg-muted shrink-0 overflow-hidden">
                     {ad.thumbnail
@@ -756,7 +757,7 @@ function TableView({
                   ? (ad.createdTime ? new Date(ad.createdTime).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—")
                   : (typeof raw === "number" ? d.fmt(raw, raw) : "—")
                 return (
-                  <td key={d.key} className="py-2 px-3 text-right whitespace-nowrap font-medium tabular-nums"
+                  <td key={d.key} className="px-3 text-right whitespace-nowrap font-medium tabular-nums"
                     style={bg ? { backgroundColor: bg } : undefined}>
                     {display}
                   </td>
@@ -767,10 +768,10 @@ function TableView({
         </tbody>
         <tfoot>
           <tr className="border-t bg-muted/20 font-semibold">
-            <td className="py-2 px-3 text-muted-foreground/60">
+            <td className="px-3 text-muted-foreground/60">
               {selectable && <span className="size-3.5 inline-block" />}
             </td>
-            <td className="py-2 px-3 text-muted-foreground text-xs">
+            <td className="px-3 text-muted-foreground text-xs">
               {selectable && someChecked
                 ? <span className="text-primary font-semibold">{ads.filter(a => selectedIds!.has(a.adId)).length} of {ads.length} selected</span>
                 : `Total: ${ads.length} ads`}
@@ -781,7 +782,7 @@ function TableView({
                 ? (d.key === "createdTime" ? "—" : d.fmt(tv, tv))
                 : "—"
               return (
-                <td key={d.key} className="py-2 px-3 text-right whitespace-nowrap tabular-nums text-xs">
+                <td key={d.key} className="px-3 text-right whitespace-nowrap tabular-nums text-xs">
                   {display}
                 </td>
               )
@@ -796,7 +797,7 @@ function TableView({
 // ─── Standard Report View ─────────────────────────────────────────────────────
 
 function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" | "admanage-ads"> }) {
-  const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
+  const { selectedAccountId } = useAdAccount()
   const config = REPORT_CONFIGS[type]
 
   const [ads, setAds]           = useState<ReportAd[]>([])
@@ -832,17 +833,11 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
   const groupRef  = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
   const metricRef = useRef<HTMLDivElement>(null)
-  const acctRef   = useRef<HTMLDivElement>(null)
-  const [acctOpen, setAcctOpen] = useState(false)
-
-  const accountName = adAccounts?.find((a: any) => a.id === selectedAccountId)?.name || selectedAccountId || "—"
-
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (dateRef.current   && !dateRef.current.contains(e.target as Node))   setDateOpen(false)
       if (groupRef.current  && !groupRef.current.contains(e.target as Node))  setGroupOpen(false)
       if (metricRef.current && !metricRef.current.contains(e.target as Node)) setMetricOpen(false)
-      if (acctRef.current   && !acctRef.current.contains(e.target as Node))   setAcctOpen(false)
       if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
         setFilterOpen(false); setPendingField(null); setPendingValue(""); setFilterSearch(""); setValueSearch("")
       }
@@ -1050,26 +1045,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {/* Account picker */}
-          <div className="relative" ref={acctRef}>
-            <button onClick={() => setAcctOpen(v => !v)}
-              className="flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border bg-background hover:bg-muted/50 transition-colors">
-              <span className="size-2 rounded-full bg-blue-500 shrink-0" />
-              <span className="max-w-[140px] truncate">{accountName}</span>
-              <IconChevronDown className="size-3.5 text-muted-foreground" />
-            </button>
-            {acctOpen && adAccounts.length > 0 && (
-              <div className="absolute top-full right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl py-1 min-w-[200px] max-h-60 overflow-y-auto">
-                {adAccounts.map((acc: any) => (
-                  <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setAcctOpen(false) }}
-                    className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2",
-                      acc.id === selectedAccountId && "text-primary font-medium")}>
-                    <span className="truncate">{acc.name}</span>
-                    {acc.id === selectedAccountId && <IconCheck className="size-3.5 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <AdAccountPill className="py-0 h-8" labelClassName="max-w-[140px]" />
           {loadTime !== null && !loading && (
             <span className="text-xs text-muted-foreground/60 tabular-nums">{loadTime}s</span>
           )}
@@ -1666,7 +1642,7 @@ function FilterDropdown({
 }
 
 function VSModeView() {
-  const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
+  const { selectedAccountId } = useAdAccount()
 
   const [allAds, setAllAds]     = useState<ReportAd[]>([])
   const [loading, setLoading]   = useState(false)
@@ -1700,14 +1676,9 @@ function VSModeView() {
   const [f2Search, setF2Search]       = useState("")
   const f2Ref = useRef<HTMLDivElement>(null)
 
-  const acctRef = useRef<HTMLDivElement>(null)
-  const [acctOpen, setAcctOpen] = useState(false)
-  const accountName = adAccounts?.find((a: any) => a.id === selectedAccountId)?.name || "—"
-
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (dateRef.current   && !dateRef.current.contains(e.target as Node))   setDateOpen(false)
-      if (acctRef.current   && !acctRef.current.contains(e.target as Node))   setAcctOpen(false)
       if (metricRef.current && !metricRef.current.contains(e.target as Node)) setMetricOpen(false)
       if (f1Ref.current && !f1Ref.current.contains(e.target as Node)) {
         setF1Open(false); setP1Field(null); setP1Value(""); setF1Search("")
@@ -1804,26 +1775,7 @@ function VSModeView() {
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <div className="relative" ref={acctRef}>
-            <button onClick={() => setAcctOpen(v => !v)}
-              className="flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border bg-background hover:bg-muted/50 transition-colors">
-              <span className="size-2 rounded-full bg-blue-500 shrink-0" />
-              <span className="max-w-[140px] truncate">{accountName}</span>
-              <IconChevronDown className="size-3.5 text-muted-foreground" />
-            </button>
-            {acctOpen && adAccounts.length > 0 && (
-              <div className="absolute top-full right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl py-1 min-w-[200px] max-h-60 overflow-y-auto">
-                {adAccounts.map((acc: any) => (
-                  <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setAcctOpen(false) }}
-                    className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2",
-                      acc.id === selectedAccountId && "text-primary font-medium")}>
-                    <span className="truncate">{acc.name}</span>
-                    {acc.id === selectedAccountId && <IconCheck className="size-3.5 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <AdAccountPill className="py-0 h-8" labelClassName="max-w-[140px]" />
           {loadTime !== null && !loading && <span className="text-xs text-muted-foreground/60">{loadTime}s</span>}
           <Button size="sm" variant="ghost" className="h-8 gap-1.5" onClick={load} disabled={loading}>
             <IconRefresh className={cn("size-3.5", loading && "animate-spin")} />
@@ -2066,21 +2018,18 @@ const PLATFORM_COLORS: Record<string, string> = {
 }
 
 function AdManageAdsView() {
-  const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
+  const { selectedAccountId, adAccounts } = useAdAccount()
   const [creatives, setCreatives] = useState<any[]>([])
   const [loading, setLoading]     = useState(false)
   const [platform, setPlatform]   = useState("Facebook")
   const [datePreset, setDatePreset] = useState("last_30d")
   const [dateOpen, setDateOpen]     = useState(false)
-  const [acctOpen, setAcctOpen]     = useState(false)
   const dateRef = useRef<HTMLDivElement>(null)
-  const acctRef = useRef<HTMLDivElement>(null)
   const accountName = adAccounts?.find((a: any) => a.id === selectedAccountId)?.name || "—"
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (dateRef.current && !dateRef.current.contains(e.target as Node)) setDateOpen(false)
-      if (acctRef.current && !acctRef.current.contains(e.target as Node)) setAcctOpen(false)
     }
     document.addEventListener("mousedown", h)
     return () => document.removeEventListener("mousedown", h)
@@ -2134,26 +2083,7 @@ function AdManageAdsView() {
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <div className="relative" ref={acctRef}>
-            <button onClick={() => setAcctOpen(v => !v)}
-              className="flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border bg-background hover:bg-muted/50 transition-colors">
-              <span className="size-2 rounded-full bg-blue-500 shrink-0" />
-              <span className="max-w-[140px] truncate">{accountName}</span>
-              <IconChevronDown className="size-3.5 text-muted-foreground" />
-            </button>
-            {acctOpen && adAccounts.length > 0 && (
-              <div className="absolute top-full right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl py-1 min-w-[200px] max-h-60 overflow-y-auto">
-                {adAccounts.map((acc: any) => (
-                  <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setAcctOpen(false) }}
-                    className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2",
-                      acc.id === selectedAccountId && "text-primary font-medium")}>
-                    <span className="truncate">{acc.name}</span>
-                    {acc.id === selectedAccountId && <IconCheck className="size-3.5 shrink-0" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <AdAccountPill className="py-0 h-8" labelClassName="max-w-[140px]" />
           <div className="relative" ref={dateRef}>
             <button onClick={() => setDateOpen(v => !v)}
               className="flex items-center gap-1.5 h-8 px-3 text-sm rounded-lg border bg-background hover:bg-muted/50 transition-colors">

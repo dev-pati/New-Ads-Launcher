@@ -969,10 +969,10 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                     onMouseUp={onMouseUp}
                     onMouseLeave={onMouseUp}
                   >
-                    <table className="text-xs border-collapse" style={{ minWidth: "max-content" }}>
+                    <table data-table="compact" className="text-xs border-collapse" style={{ minWidth: "max-content" }}>
                       <thead>
                         <tr className="border-b bg-muted/50">
-                          <th className="sticky left-0 z-10 bg-muted/50 w-8 px-3 py-2.5 text-left border-r border-border/40">
+                          <th className="sticky left-0 z-10 bg-muted/50 w-8 px-2 text-left border-r border-border/40">
                             <input
                               type="checkbox"
                               checked={selectedRows.size === rawRows.length && rawRows.length > 0}
@@ -981,7 +981,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
                               className="rounded"
                             />
                           </th>
-                          <th className="sticky left-8 z-10 bg-muted/50 px-2 py-2.5 text-left font-semibold text-muted-foreground border-r border-border/40 w-8">#</th>
+                          <th className="sticky left-8 z-10 bg-muted/50 px-2 text-left font-semibold text-muted-foreground border-r border-border/40 w-8">#</th>
                           {previewCols.map(f => (
                             <th
                               key={f.key}

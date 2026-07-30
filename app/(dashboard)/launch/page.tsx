@@ -9160,32 +9160,32 @@ function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
   return (
     <>
       <tr className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer select-none", expanded && "bg-muted/30")} onClick={onToggle}>
-        <td className="px-2 py-1.5 text-muted-foreground w-8">
+        <td className="px-2 text-muted-foreground w-8">
           <div className="flex items-center gap-0.5 text-xs">{expanded ? <IconChevronDown className="size-3" /> : <IconChevronRight className="size-3" />}{index}</div>
         </td>
-        <td className="px-1 py-1.5 w-10">
+        <td className="px-2 w-10">
           {ad.thumbnailUrl
             ? <img src={ad.thumbnailUrl} className="size-8 rounded object-cover" onError={e => e.currentTarget.style.display="none"} />
             : <div className="size-8 rounded bg-muted flex items-center justify-center">{ad.mediaType === "video" ? <IconVideo className="size-3 text-muted-foreground" /> : <IconPhoto className="size-3 text-muted-foreground" />}</div>}
         </td>
-        <td className="px-2 py-1.5 text-xs font-medium max-w-[140px] truncate" title={displayName}>{displayName}</td>
-        <td className="px-2 py-1.5 w-28">
+        <td className="px-2 text-xs font-medium max-w-[140px] truncate" title={displayName}>{displayName}</td>
+        <td className="px-2 w-28">
           {status
             ? <span className={cn("px-1.5 py-0.5 rounded text-xs font-semibold uppercase", status === "ACTIVE" ? "bg-green-100 text-green-700" : status === "PAUSED" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500")}>{status}</span>
             : <span className="flex items-center gap-1 text-green-600 text-xs font-medium"><IconCircleCheck className="size-3" />Success</span>}
         </td>
-        <td className="px-2 py-1.5 w-40">
+        <td className="px-2 w-40">
           <div className="flex items-center gap-1">
             <span className="font-mono text-xs text-muted-foreground">{ad.adId.slice(0, 15)}…</span>
             <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(ad.adId) }} className="text-muted-foreground hover:text-foreground"><IconCopy className="size-3" /></button>
             <a href={metaUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary"><IconExternalLink className="size-3" /></a>
           </div>
         </td>
-        <td className="px-2 py-1.5 text-xs text-muted-foreground truncate max-w-[120px]" title={ad.adSetName}>{ad.adSetName}</td>
+        <td className="px-2 text-xs text-muted-foreground truncate max-w-[120px]" title={ad.adSetName}>{ad.adSetName}</td>
       </tr>
       {expanded && (
         <tr className="bg-muted/10 border-b">
-          <td colSpan={6} className="px-5 py-2.5">
+          <td colSpan={6} className="px-5">
             <div className="grid grid-cols-2 gap-x-8 gap-y-1">
               {launchMeta?.adAccountName && <DetailItem label="Account" value={launchMeta.adAccountName} />}
               <DetailItem label="Ad Set" value={ad.adSetName} />
@@ -9325,15 +9325,15 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                 </div>
               </div>
               <div className="border rounded-lg overflow-hidden">
-                <table className="w-full">
+                <table data-table="compact" className="w-full">
                   <thead className="bg-muted/50 border-b">
                     <tr className="text-xs text-muted-foreground">
-                      <th className="text-left px-2 py-2 w-8">#</th>
-                      <th className="text-left px-1 py-2 w-10">Thumb</th>
-                      <th className="text-left px-2 py-2">Name</th>
-                      <th className="text-left px-2 py-2 w-28">Status</th>
-                      <th className="text-left px-2 py-2 w-40">Ad ID</th>
-                      <th className="text-left px-2 py-2 w-32">Ad Set</th>
+                      <th className="text-left px-2 w-8">#</th>
+                      <th className="text-left px-2 w-10">Thumb</th>
+                      <th className="text-left px-3">Name</th>
+                      <th className="text-left px-3 w-28">Status</th>
+                      <th className="text-left px-3 w-40">Ad ID</th>
+                      <th className="text-left px-3 w-32">Ad Set</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -9425,22 +9425,22 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                 </div>
               ) : (
                 <div className="border rounded-lg overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table data-table="compact" className="w-full text-xs">
                     <thead className="bg-muted/50 border-b text-muted-foreground">
                       <tr>
-                        <th className="text-left px-2 py-2 w-8">#</th>
-                        <th className="text-left px-1 py-2 w-10">Thumb</th>
-                        <th className="text-left px-2 py-2">Ad Name</th>
-                        <th className="text-left px-2 py-2 w-24">Status</th>
-                        <th className="text-right px-2 py-2 w-20">Spend</th>
-                        <th className="text-right px-2 py-2 w-20">Cost/Act.</th>
-                        <th className="text-right px-2 py-2 w-16">Actions</th>
-                        <th className="text-right px-2 py-2 w-16">CTR</th>
-                        <th className="text-right px-2 py-2 w-16">Impr.</th>
-                        <th className="text-right px-2 py-2 w-16">Clicks</th>
-                        <th className="text-right px-2 py-2 w-16">CPC</th>
-                        <th className="text-right px-2 py-2 w-16">CPM</th>
-                        <th className="text-right px-2 py-2 w-16">Reach</th>
+                        <th className="text-left px-2 w-8">#</th>
+                        <th className="text-left px-2 w-10">Thumb</th>
+                        <th className="text-left px-3">Ad Name</th>
+                        <th className="text-left px-3 w-24">Status</th>
+                        <th className="text-right px-3 w-20">Spend</th>
+                        <th className="text-right px-3 w-20">Cost/Act.</th>
+                        <th className="text-right px-3 w-16">Actions</th>
+                        <th className="text-right px-3 w-16">CTR</th>
+                        <th className="text-right px-3 w-16">Impr.</th>
+                        <th className="text-right px-3 w-16">Clicks</th>
+                        <th className="text-right px-3 w-16">CPC</th>
+                        <th className="text-right px-3 w-16">CPM</th>
+                        <th className="text-right px-3 w-16">Reach</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -9449,27 +9449,27 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                         const ctrGood = row.ctr >= 3, ctrBad = row.ctr < 2 && row.impressions > 100
                         return (
                           <tr key={row.adId} className="border-b last:border-0 hover:bg-muted/20">
-                            <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
-                            <td className="px-1 py-1.5">
+                            <td className="px-3 text-muted-foreground">{i + 1}</td>
+                            <td className="px-2">
                               {createdAd?.thumbnailUrl
                                 ? <img src={createdAd.thumbnailUrl} className="size-8 rounded object-cover" onError={e => e.currentTarget.style.display="none"} />
                                 : <div className="size-8 rounded bg-muted" />}
                             </td>
-                            <td className="px-2 py-1.5 font-medium max-w-[140px] truncate" title={row.name}>{row.name}</td>
-                            <td className="px-2 py-1.5">
+                            <td className="px-3 font-medium max-w-[140px] truncate" title={row.name}>{row.name}</td>
+                            <td className="px-3">
                               <span className={cn("px-1.5 py-0.5 rounded text-xs font-semibold uppercase", row.effectiveStatus === "ACTIVE" ? "bg-green-100 text-green-700" : row.effectiveStatus === "PAUSED" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-500")}>{row.effectiveStatus}</span>
                             </td>
-                            <td className="px-2 py-1.5 text-right">${row.spend.toFixed(2)}</td>
-                            <td className="px-2 py-1.5 text-right">{row.costPerAction > 0 ? `$${row.costPerAction.toFixed(2)}` : "—"}</td>
-                            <td className="px-2 py-1.5 text-right">{row.actions || 0}</td>
-                            <td className={cn("px-2 py-1.5 text-right font-medium", ctrGood ? "text-green-600 bg-green-50 dark:bg-green-900/20" : ctrBad ? "text-red-600 bg-red-50 dark:bg-red-900/20" : "")}>
+                            <td className="px-3 text-right">${row.spend.toFixed(2)}</td>
+                            <td className="px-3 text-right">{row.costPerAction > 0 ? `$${row.costPerAction.toFixed(2)}` : "—"}</td>
+                            <td className="px-3 text-right">{row.actions || 0}</td>
+                            <td className={cn("px-2 text-right font-medium", ctrGood ? "text-green-600 bg-green-50 dark:bg-green-900/20" : ctrBad ? "text-red-600 bg-red-50 dark:bg-red-900/20" : "")}>
                               {row.impressions > 0 ? `${row.ctr.toFixed(2)}%` : "—"}
                             </td>
-                            <td className="px-2 py-1.5 text-right">{row.impressions.toLocaleString()}</td>
-                            <td className="px-2 py-1.5 text-right">{row.clicks}</td>
-                            <td className="px-2 py-1.5 text-right">{row.cpc > 0 ? `$${row.cpc.toFixed(2)}` : "—"}</td>
-                            <td className={cn("px-2 py-1.5 text-right", row.cpm > 80 ? "text-red-500" : row.cpm > 0 && row.cpm < 40 ? "text-green-600" : "")}>{row.cpm > 0 ? `$${row.cpm.toFixed(2)}` : "—"}</td>
-                            <td className="px-2 py-1.5 text-right">{row.reach.toLocaleString()}</td>
+                            <td className="px-3 text-right">{row.impressions.toLocaleString()}</td>
+                            <td className="px-3 text-right">{row.clicks}</td>
+                            <td className="px-3 text-right">{row.cpc > 0 ? `$${row.cpc.toFixed(2)}` : "—"}</td>
+                            <td className={cn("px-2 text-right", row.cpm > 80 ? "text-red-500" : row.cpm > 0 && row.cpm < 40 ? "text-green-600" : "")}>{row.cpm > 0 ? `$${row.cpm.toFixed(2)}` : "—"}</td>
+                            <td className="px-3 text-right">{row.reach.toLocaleString()}</td>
                           </tr>
                         )
                       })}
@@ -9705,6 +9705,72 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
 
 interface DraftRecord { id: string; name: string; ad_account_id: string; ad_account_name: string; row_count: number; creative_thumbs: string[]; user_name: string; created_at: string }
 
+/**
+ * The full setup state a draft restores, stored in `launch_drafts.data.snapshot`.
+ *
+ * Every field is optional on read because drafts written before this shape existed have no
+ * `snapshot` at all, and a future field must not make an older draft unreadable. `version`
+ * exists so a later shape change can migrate rather than guess.
+ *
+ * Ad sets and creatives are stored as ids and re-resolved on load — the copy of an ad set or
+ * a creative that a draft was saved with may be stale or gone by the time it is reopened.
+ */
+interface DraftSnapshot {
+  version: 1
+  mode?: "gallery" | "table"
+  adAccountId?: string | null
+  pageId?: string
+  igPageId?: string
+  // Stored whole rather than as ids: the launch payload only ever sends adSetIds, so a
+  // stale name or status here is cosmetic, and re-resolving would mean waiting on the
+  // per-account ad set fetch before the draft could finish restoring.
+  adSets?: AdSet[]
+  primaryTexts?: string[]
+  headlines?: string[]
+  descriptions?: string[]
+  cta?: string
+  webLink?: string
+  utmParams?: string
+  displayLink?: string
+  launchAsActive?: boolean
+  adSourceMode?: AdSourceMode
+  adSourceIds?: Record<string, string>
+  selectedCreativeIds?: string[]
+  adNameOverrides?: Record<string, string>
+  tableViewMode?: "single" | "stacked" | "grid" | "side-by-side"
+  adFormat?: AdFormatState
+  partnership?: PartnershipState
+  multilanguage?: MultilanguageState
+  collectionAds?: CollectionAdsState
+  catalogAds?: CatalogAdsState
+  carouselAds?: CarouselAdsState
+  flexibleAds?: FlexibleAdsState
+  multiPlacementAds?: MultiPlacementAdsState
+}
+
+/**
+ * Column templates for the launch-history and drafts lists.
+ *
+ * Both are CSS grids rather than table elements, so their columns come from a `gridTemplateColumns`
+ * string instead of from widths on cells. Each string was written inline twice — once on the
+ * header, once on the row — so an edit to one silently misaligned it from the other. One
+ * definition per list, consumed by both.
+ *
+ * The launch template is also rebalanced. It gave DATE `1.4fr`, the largest flexible share in the
+ * row, to a short fixed-length date string, while ACCOUNT and the ad-set names — the two columns
+ * that actually hold long text — were squeezed into `1.2fr` and `1fr` and truncated. That is the
+ * wide empty gap sitting next to clipped names in the report. ACCOUNT is fixed-width now — account
+ * names are uniformly short, so flexing that column only ever produced dead space after the text.
+ * The ad-set names column keeps the row's sole flexible share: names genuinely vary in length, so
+ * it is the one column where growing to fill the leftover width shows more real content instead of
+ * leaving it empty.
+ */
+const HISTORY_COLS = "140px 1fr 140px 50px 64px 110px 110px 80px 84px 100px"
+const historyGrid = (withCheckbox: boolean) => ({
+  gridTemplateColumns: withCheckbox ? `30px ${HISTORY_COLS}` : HISTORY_COLS,
+})
+const DRAFT_COLS = "120px 1fr 140px 70px 120px 90px 100px"
+
 function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverride, pages = [] }: {
   reloadTrigger: number
   onRelaunch: (b: LaunchBatch) => void
@@ -9807,10 +9873,14 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
     )
   })
 
+  // Labels name the record's state, not the surface — "Launched" is a thing that happened to
+  // a batch, the same way "Draft" and "Scheduled" are. The keys are separate on purpose: they
+  // are the `tabOverride` discriminant the launcher passes in (see setHistoryTabOverride) and
+  // drive the `trash=1` query param, so renaming a key is a behaviour change, not a copy edit.
   const TABS = [
-    { key: "launches" as const, label: "Ad Launches", Icon: IconClock },
-    { key: "drafts" as const, label: "Launch Drafts", Icon: IconPencil },
-    { key: "scheduled" as const, label: "Scheduled Ads", Icon: IconCalendar },
+    { key: "launches" as const, label: "Launched", Icon: IconClock },
+    { key: "drafts" as const, label: "Draft", Icon: IconPencil },
+    { key: "scheduled" as const, label: "Scheduled", Icon: IconCalendar },
     { key: "deleted" as const, label: "Trash", Icon: IconTrash },
   ]
 
@@ -9920,17 +9990,19 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
               </div>
               {/* Drafts header */}
               <div className="grid text-xs font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
-                style={{ gridTemplateColumns: "120px 1fr 140px 70px 120px 90px 100px" }}>
+                style={{ gridTemplateColumns: DRAFT_COLS }}>
                 <span>Creatives</span><span>Title</span><span>Account</span>
                 <span>Rows</span><span>Created</span><span>User</span><span>Actions</span>
               </div>
-              {/* Drafts list */}
-              <div className="overflow-y-auto flex-1">
+              {/* Drafts list. `data-table` is what the row floor in globals.css keys off — the
+                  CSS matches the attribute, not the element, so a grid list opts in the same way
+                  a real table does. */}
+              <div data-table="comfortable" className="overflow-y-auto flex-1">
                 {drafts
                   .filter(d => !draftSearch || d.name.toLowerCase().includes(draftSearch.toLowerCase()) || d.ad_account_name?.toLowerCase().includes(draftSearch.toLowerCase()))
                   .map(d => (
-                    <div key={d.id} className="grid items-center px-4 py-2 border-b text-sm hover:bg-muted/20 transition-colors"
-                      style={{ gridTemplateColumns: "120px 1fr 140px 70px 120px 90px 100px" }}>
+                    <div key={d.id} data-table-row className="grid items-center px-4 py-2 border-b text-sm hover:bg-muted/20 transition-colors"
+                      style={{ gridTemplateColumns: DRAFT_COLS }}>
                       {/* Thumbnails */}
                       <ThumbStack thumbs={d.creative_thumbs || []} count={d.row_count} />
                       {/* Name */}
@@ -9975,7 +10047,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
       {tab !== "drafts" && <>
       {/* Table header */}
       <div className="grid text-xs font-semibold text-muted-foreground/55 uppercase tracking-wide border-b px-4 py-1.5 shrink-0"
-        style={{ gridTemplateColumns: selectedIds.size > 0 ? "30px 140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" : "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+        style={historyGrid(selectedIds.size > 0)}>
         {selectedIds.size > 0 && (
           <input type="checkbox" className="rounded border-muted-foreground/30 text-primary focus:ring-primary w-3.5 h-3.5"
             checked={filtered.length > 0 && selectedIds.size === filtered.length}
@@ -9996,7 +10068,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
         <span>ACTIONS</span>
       </div>
 
-      <div>
+      <div data-table="comfortable">
         {tab !== "launches" && tab !== "deleted" ? (
           <div className="flex items-center justify-center py-10 text-xs text-muted-foreground/50">
             No scheduled ads
@@ -10021,10 +10093,11 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
                 else s.add(b.id)
                 setSelectedIds(s)
               }}
+              data-table-row
               className={cn("grid items-center px-4 py-2 border-b text-sm cursor-pointer transition-colors",
                 selectedIds.has(b.id) ? "bg-primary/5 hover:bg-primary/10" : "hover:bg-muted/20"
               )}
-              style={{ gridTemplateColumns: selectedIds.size > 0 ? "30px 140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" : "140px 1fr 1.2fr 50px 60px 1.4fr 100px 80px 80px 100px" }}>
+              style={historyGrid(selectedIds.size > 0)}>
 
               {selectedIds.size > 0 && (
                 <input type="checkbox" className="rounded border-muted-foreground/30 text-primary focus:ring-primary w-3.5 h-3.5"
@@ -10806,14 +10879,14 @@ function TableMode({
         onMouseUp={onTableMouseUp}
         onMouseLeave={onTableMouseUp}
       >
-        <table className="w-full text-sm border-collapse" style={{ minWidth: 2700 }}>
+        <table data-table="compact" className="w-full text-sm border-collapse" style={{ minWidth: 2700 }}>
           <thead className="sticky top-0 z-10 bg-background">
             <tr className="border-b">
-              <th className="w-10 px-3 py-2.5 text-left">
+              <th className="w-10 px-2 text-left">
                 <input type="checkbox" className="rounded size-3.5 accent-primary" checked={allSelected} onChange={toggleAll} />
               </th>
-              <th className="w-7 px-1 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">#</th>
-              <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
+              <th className="w-7 px-2 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">#</th>
+              <th className="w-32 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Creative</th>
               <th
                 className="w-72 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide cursor-pointer select-none hover:text-foreground"
                 onClick={() => toggleSort("adName")}
@@ -10838,28 +10911,28 @@ function TableMode({
               >
                 <span className="flex items-center gap-0.5">Description <SortIcon field="description" /></span>
               </th>
-              <th className="w-48 px-3 py-2.5 text-left">
+              <th className="w-48 px-3 text-left">
                 <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Ad Sets <span className="text-xs font-medium text-amber-500 normal-case tracking-normal">required</span>
                   <IconArrowsUpDown className="size-3 opacity-30 ml-0.5" />
                 </span>
               </th>
-              <th className="w-40 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
-              <th className="w-28 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
-              <th className="w-48 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
-              <th className="w-44 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
-              <th className="w-36 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sitelinks</th>
-              <th className="w-36 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Partnership Ads</th>
-              <th className="w-36 px-3 py-2.5 text-left">
+              <th className="w-40 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ad Profiles</th>
+              <th className="w-28 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">CTA</th>
+              <th className="w-48 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Link</th>
+              <th className="w-44 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">URL Tags</th>
+              <th className="w-36 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sitelinks</th>
+              <th className="w-36 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Partnership Ads</th>
+              <th className="w-36 px-3 text-left">
                 <span className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   <IconSparkles className="size-3 text-blue-400" />Multi-Language
                 </span>
               </th>
-              <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Catalog</th>
-              <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Meta Schedule</th>
-              <th className="w-32 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Promo Code</th>
-              <th className="w-28 px-3 py-2.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Launch Status</th>
-              <th className="w-14 px-3 py-2.5" />
+              <th className="w-32 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Catalog</th>
+              <th className="w-32 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Meta Schedule</th>
+              <th className="w-32 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Promo Code</th>
+              <th className="w-28 px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">Launch Status</th>
+              <th className="w-14 px-3" />
             </tr>
           </thead>
           <tbody>
@@ -10878,15 +10951,15 @@ function TableMode({
                   )}
                 >
                   {/* Checkbox */}
-                  <td className="px-3 pt-3 pb-2">
+                  <td className="px-3">
                     <input type="checkbox" className="rounded size-3.5 accent-primary" checked={isSelected} onChange={() => toggleRow(row.id)} />
                   </td>
 
                   {/* # */}
-                  <td className="px-1 pt-3 pb-2 text-xs text-muted-foreground">{i + 1}</td>
+                  <td className="px-2 text-xs text-muted-foreground">{i + 1}</td>
 
                   {/* CREATIVE */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <div className="flex flex-col items-start gap-1">
                       <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5 rounded font-semibold leading-none dark:bg-green-900/30 dark:text-green-400 dark:border-green-800">
                         SINGLE
@@ -10959,7 +11032,7 @@ function TableMode({
                   </td>
 
                   {/* AD NAME (separate column) */}
-                  <td className="px-3 py-2 align-top">
+                  <td className="px-3 align-top">
                     <textarea
                       value={row.adName}
                       onChange={e => onUpdateRow(row.id, "adName", e.target.value)}
@@ -10970,7 +11043,7 @@ function TableMode({
                   </td>
 
                   {/* PRIMARY TEXT */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <div className="flex flex-col gap-1">
                       <textarea
                         value={row.primaryText}
@@ -11017,7 +11090,7 @@ function TableMode({
                   </td>
 
                   {/* HEADLINE */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <div className="flex flex-col gap-1">
                       <textarea
                         value={row.headline}
@@ -11063,7 +11136,7 @@ function TableMode({
                   </td>
 
                   {/* DESCRIPTION */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <div className="flex flex-col gap-1">
                       <textarea
                         value={row.description}
@@ -11109,7 +11182,7 @@ function TableMode({
                   </td>
 
                   {/* AD SETS */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <AdSetPickerCell
                       selectedIds={row.adSetIds}
                       adSets={adSets}
@@ -11118,7 +11191,7 @@ function TableMode({
                   </td>
 
                   {/* AD PROFILE — per-row selectable */}
-                  <td className="px-3 pt-2 pb-2">
+                  <td className="px-3">
                     {(() => {
                       const rowPageId = row.pageId || selectedPage?.id
                       const rowPage = pages.find(p => p.id === rowPageId) || selectedPage
@@ -11255,7 +11328,7 @@ function TableMode({
                   </td>
 
                   {/* CTA */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <CtaPickerCell
                       value={row.cta}
                       onChange={v => onUpdateRow(row.id, "cta", v)}
@@ -11263,7 +11336,7 @@ function TableMode({
                   </td>
 
                   {/* LINK */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <textarea
                       value={row.webLink || ""}
                       onChange={e => onUpdateRow(row.id, "webLink", e.target.value)}
@@ -11274,7 +11347,7 @@ function TableMode({
                   </td>
 
                   {/* URL TAGS */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <textarea
                       value={row.urlTags || ""}
                       onChange={e => onUpdateRow(row.id, "urlTags", e.target.value)}
@@ -11285,7 +11358,7 @@ function TableMode({
                   </td>
 
                   {/* SITELINKS */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     {row.sitelinks && row.sitelinks.length > 0
                       ? <button
                           onClick={() => setRowModal({ type: "sitelinks", rowId: row.id })}
@@ -11304,7 +11377,7 @@ function TableMode({
                   </td>
 
                   {/* PARTNERSHIP ADS */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     {row.partnership?.enabled && row.partnership.partnerPageId
                       ? <button
                           onClick={() => setRowModal({ type: "partnership", rowId: row.id })}
@@ -11323,7 +11396,7 @@ function TableMode({
                   </td>
 
                   {/* MULTI-LANGUAGE */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     {row.multilanguage?.enabled && row.multilanguage.translations.length > 0
                       ? <button
                           onClick={() => setRowModal({ type: "multilanguage", rowId: row.id })}
@@ -11342,7 +11415,7 @@ function TableMode({
                   </td>
 
                   {/* CATALOG */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     {row.catalog?.enabled && row.catalog.catalogId
                       ? <button
                           onClick={() => setRowModal({ type: "catalog", rowId: row.id })}
@@ -11361,7 +11434,7 @@ function TableMode({
                   </td>
 
                   {/* META SCHEDULE */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     {row.schedule?.start
                       ? <button
                           onClick={() => setRowModal({ type: "schedule", rowId: row.id })}
@@ -11380,7 +11453,7 @@ function TableMode({
                   </td>
 
                   {/* PROMO CODE */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <input
                       type="text"
                       value={row.promoCode || ""}
@@ -11391,7 +11464,7 @@ function TableMode({
                   </td>
 
                   {/* LAUNCH STATUS */}
-                  <td className="px-3 py-2">
+                  <td className="px-3">
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => onUpdateRow(row.id, "launchAsActive", row.launchAsActive === false ? true : row.launchAsActive === true ? false : !launchAsActive)}
@@ -11413,7 +11486,7 @@ function TableMode({
                   </td>
 
                   {/* ACTIONS */}
-                  <td className="px-3 pt-3 pb-2">
+                  <td className="px-3">
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => onDuplicateRow(row.id)} className="text-muted-foreground hover:text-foreground" title="Duplicate row">
                         <IconCopy className="size-3.5" />
@@ -11671,6 +11744,15 @@ function LaunchPageContent() {
   const [adNameOverrides, setAdNameOverrides] = useState<Record<string, string>>({})
   const thumbRetryCounts = useRef<Map<string, number>>(new Map())
 
+  /**
+   * True while a draft is being restored. Two effects below run whenever selectedAccountId
+   * changes and write into the same state a restore is writing: one re-reads the saved
+   * creative selection from localStorage, the other applies that account's Default Ad
+   * Settings over empty copy fields. Restoring a draft changes the account, so without this
+   * guard the draft's own selection and copy lose the race against them.
+   */
+  const restoringDraft = useRef(false)
+
   // ─── Prefill from URL (?template=<id> or ?from_ad=<id>&ad_account_id=<id>) ───
   // Read once on mount: the params are consumed and stripped, so later renders
   // must not see them again and re-run the prefill over the user's edits.
@@ -11687,8 +11769,9 @@ function LaunchPageContent() {
   // Restore selection when ad account is set / changed
   useEffect(() => {
     // A URL prefill owns the creative selection; don't let the saved selection
-    // race in and overwrite the creatives the template/ad brought with it.
-    if (hasUrlPrefill) return
+    // race in and overwrite the creatives the template/ad brought with it. A draft being
+    // restored owns it for the same reason.
+    if (hasUrlPrefill || restoringDraft.current) return
     if (!selectedAccountId) return
     try {
       const all = JSON.parse(localStorage.getItem(SELECTION_KEY) || "{}")
@@ -11716,6 +11799,9 @@ function LaunchPageContent() {
   // Load Default Ad Settings when account changes → pre-fill empty form fields
   useEffect(() => {
     if (!selectedAccountId) return
+    // A draft carries its own copy, links and launch flag; account defaults must not
+    // overwrite them just because restoring changed the account.
+    if (restoringDraft.current) return
     try {
       const raw = localStorage.getItem(`default_ad_settings_${selectedAccountId}`)
       if (!raw) return
@@ -12896,11 +12982,74 @@ function LaunchPageContent() {
     return true
   }
 
-  // ── Draft: save lean rows to DB, load draft back into Table Mode ────────────
+  /**
+   * "No ad has been configured yet" — the same emptiness test Preview uses, per mode.
+   *
+   * Gallery mode has no rows, so the selected creatives are the unit of work (this is
+   * exactly Preview's `selectedCreatives.length === 0`). Table mode's unit is the row, and
+   * a row can exist before its creative is picked, so rows are the test there. Save Draft
+   * and Preview now agree in both modes instead of Save Draft being enabled on an empty
+   * Gallery — where it did nothing at all, because it had no onClick.
+   */
+  const nothingConfigured = mode === "table"
+    ? tableRows.length === 0
+    : selectedCreatives.length === 0
+
+  // ── Draft: snapshot the whole setup, restore it exactly ─────────────────────
+  //
+  // A draft used to carry the Table-mode rows plus five global fields (account, page, IG
+  // page, CTA, link). Everything else the user had set up — the ad copy variations, the ad
+  // set selection, the ad format and its per-format config, UTM/display link, launch-as-
+  // active, the Gallery creative selection and its ad-name overrides — was dropped, and
+  // loading always forced Table mode. Reopening a Gallery-mode setup therefore restored
+  // something the user had never configured, and in Gallery mode the draft could not be
+  // saved at all (`Save` had no onClick, and the API rejected an empty `rows`).
+  //
+  // The snapshot below is the full setup state at click time. `data` is a JSONB column, so
+  // this needs no migration; `rows` is still written unchanged so drafts saved by the old
+  // build keep loading, and a draft written by this build stays readable by the old one
+  // (it just ignores `snapshot`).
+  //
+  // Transient state is deliberately excluded: open modals, in-flight/launching flags,
+  // errors, banners, panel width, and anything fetched per account (pages, ad set lists).
+  // A draft restores what the user *decided*, not what the app was displaying.
+
+  const buildDraftSnapshot = (): DraftSnapshot => ({
+    version: 1,
+    mode,
+    adAccountId: selectedAccountId || null,
+    pageId: selectedPageId,
+    igPageId: selectedIgPageId,
+    adSets: selectedAdSets,
+    primaryTexts,
+    headlines,
+    descriptions,
+    cta,
+    webLink,
+    utmParams,
+    displayLink,
+    launchAsActive,
+    adSourceMode,
+    adSourceIds,
+    // Creatives are stored by id and re-fetched on load: a creative may have been deleted,
+    // or re-uploaded to Meta with a new fb_video_id, between saving and reopening.
+    selectedCreativeIds: selectedCreatives.map(c => c.id),
+    adNameOverrides,
+    tableViewMode,
+    adFormat,
+    partnership,
+    multilanguage,
+    collectionAds,
+    catalogAds,
+    carouselAds,
+    flexibleAds,
+    multiPlacementAds,
+  })
 
   const saveDraft = async () => {
-    if (!tableRows.length) return
+    if (nothingConfigured) return
     setSavingDraft(true)
+    setError("")
     try {
       // Convert TableRow → lean row (strip creative object, keep only creativeId)
       const leanRows = tableRows.map(({ creative, ...rest }) => ({
@@ -12908,14 +13057,20 @@ function LaunchPageContent() {
         creativeId: creative?.id || null,
       }))
 
-      // Collect thumbnails for list preview (first 5)
-      const thumbs = tableRows
-        .map(r => r.creative?.fb_thumbnail_url || r.creative?.fb_image_url || null)
+      // Thumbnails for the drafts list. In Gallery mode there are no rows, so the selected
+      // creatives are what the list has to preview.
+      const thumbSource = tableRows.length
+        ? tableRows.map(r => r.creative)
+        : selectedCreatives
+      const thumbs = thumbSource
+        .map(c => c?.fb_thumbnail_url || c?.fb_image_url || null)
         .filter(Boolean)
         .slice(0, 5) as string[]
 
       const adAccount = adAccounts.find(a => a.id === selectedAccountId)
-      const name = `${tableRows.length} Ads — ${new Date().toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+      const unitCount = tableRows.length || selectedCreatives.length
+      const stamp = new Date().toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+      const name = `${unitCount} Ads — ${stamp}`
 
       const res = await fetch("/api/launch-drafts", {
         method: "POST",
@@ -12925,12 +13080,14 @@ function LaunchPageContent() {
           adAccountId: selectedAccountId,
           adAccountName: adAccount?.name || selectedAccountId,
           rows: leanRows,
+          // Kept for drafts read by the previous build, which knows only these five fields.
           globalSettings: { adAccountId: selectedAccountId, pageId: selectedPageId, igPageId: selectedIgPageId, cta, webLink },
+          snapshot: buildDraftSnapshot(),
           creativeThumbs: thumbs,
         }),
       })
       if (!res.ok) {
-        const d = await res.json()
+        const d = await res.json().catch(() => ({}))
         setError(d.error || "Failed to save draft")
         return
       }
@@ -12938,25 +13095,83 @@ function LaunchPageContent() {
       // Switch history tab to drafts
       setHistoryTabOverride("drafts")
       setTimeout(() => setHistoryTabOverride(null), 100)
+    } catch {
+      setError("Failed to save draft")
     } finally {
       setSavingDraft(false)
     }
   }
 
   const handleLoadDraft = async (draftId: string) => {
+    setError("")
     const res = await fetch(`/api/launch-drafts?id=${draftId}`)
-    if (!res.ok) return
+    if (!res.ok) { setError("Could not open that draft"); return }
     const { draft } = await res.json()
-    if (!draft?.data?.rows) return
+    const data = draft?.data
+    if (!data) { setError("That draft has no saved setup"); return }
 
-    setMode("table")
-    setTableRows(draft.data.rows)
-    const gs = draft.data.globalSettings || {}
-    if (gs.adAccountId) setSelectedAccountId(gs.adAccountId)
-    if (gs.cta) setCta(gs.cta)
-    if (gs.webLink) setWebLink(gs.webLink)
-    if (gs.pageId) setSelectedPageId(gs.pageId)
-    if (gs.igPageId) setSelectedIgPageId(gs.igPageId)
+    const rows: TableRow[] = data.rows || []
+    const snap: DraftSnapshot | undefined = data.snapshot
+
+    // The account has to be applied first: several effects on this page keyed to
+    // selectedAccountId re-read per-account defaults and the saved creative selection, and
+    // they must not land on top of the values the draft is restoring.
+    const accountId = snap?.adAccountId ?? data.globalSettings?.adAccountId
+    if (accountId) setSelectedAccountId(accountId)
+
+    setTableRows(rows)
+
+    if (snap) {
+      restoringDraft.current = true
+      setMode(snap.mode ?? (rows.length ? "table" : "gallery"))
+      setSelectedPageId(snap.pageId || "")
+      setSelectedIgPageId(snap.igPageId || "")
+      setSelectedAdSets(snap.adSets || [])
+      if (snap.primaryTexts?.length) setPrimaryTexts(snap.primaryTexts)
+      if (snap.headlines?.length) setHeadlines(snap.headlines)
+      if (snap.descriptions?.length) setDescriptions(snap.descriptions)
+      setCta(snap.cta || "LEARN_MORE")
+      setWebLink(snap.webLink || "")
+      setUtmParams(snap.utmParams || "")
+      setDisplayLink(snap.displayLink || "")
+      setLaunchAsActive(!!snap.launchAsActive)
+      setAdSourceMode(snap.adSourceMode || "new_ad")
+      setAdSourceIds(snap.adSourceIds || {})
+      setAdNameOverrides(snap.adNameOverrides || {})
+      if (snap.tableViewMode) setTableViewMode(snap.tableViewMode)
+      if (snap.adFormat) setAdFormat(snap.adFormat)
+      if (snap.partnership) setPartnership(snap.partnership)
+      if (snap.multilanguage) setMultilanguage(snap.multilanguage)
+      if (snap.collectionAds) setCollectionAds(snap.collectionAds)
+      if (snap.catalogAds) setCatalogAds(snap.catalogAds)
+      if (snap.carouselAds) setCarouselAds(snap.carouselAds)
+      if (snap.flexibleAds) setFlexibleAds(snap.flexibleAds)
+      if (snap.multiPlacementAds) setMultiPlacementAds(snap.multiPlacementAds)
+
+      // The API resolves selectedCreativeIds against `creatives` and returns what still
+      // exists, so a creative deleted since the save silently drops out of the selection
+      // rather than restoring a row that cannot launch.
+      const restored: Creative[] = data.selectedCreatives || []
+      setSelectedCreatives(restored)
+      setSelectedMediaIds(new Set(restored.map(c => c.id)))
+
+      const missing = (snap.selectedCreativeIds?.length || 0) - restored.length
+      if (missing > 0) {
+        setRelaunchBanner(`Draft restored. ${missing} creative${missing === 1 ? " is" : "s are"} no longer in your library and were skipped.`)
+        setTimeout(() => setRelaunchBanner(""), 10000)
+      }
+      // Release the guard after this render's effects have run.
+      setTimeout(() => { restoringDraft.current = false }, 0)
+    } else {
+      // Pre-snapshot draft: rows + five global fields is all it has.
+      setMode("table")
+      const gs = data.globalSettings || {}
+      if (gs.cta) setCta(gs.cta)
+      if (gs.webLink) setWebLink(gs.webLink)
+      if (gs.pageId) setSelectedPageId(gs.pageId)
+      if (gs.igPageId) setSelectedIgPageId(gs.igPageId)
+    }
+
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
@@ -14046,8 +14261,16 @@ function LaunchPageContent() {
                 <Tip text="Preview the ads, then confirm to launch.">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={() => openPreview(() => doLaunch())} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview</Button>
                 </Tip>
-                <Tip text="Save this launch setup as a draft.">
-                  <Button variant="outline" size="sm" className="gap-1.5 text-xs"><IconBookmark className="size-3.5" />Save</Button>
+                <Tip text={nothingConfigured ? "Select media first — there is no setup to save yet." : "Save this launch setup as a draft."}>
+                  <Button
+                    variant="outline" size="sm"
+                    className="gap-1.5 text-xs"
+                    onClick={saveDraft}
+                    disabled={savingDraft || nothingConfigured}
+                  >
+                    {savingDraft ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBookmark className="size-3.5" />}
+                    {savingDraft ? "Saving..." : "Save Draft"}
+                  </Button>
                 </Tip>
                 <Tip text="Schedule ads to activate later.">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs"
@@ -14350,12 +14573,12 @@ function LaunchPageContent() {
                   hasRowCreatives ? doTableLaunch() : doLaunch()
                 })} disabled={selectedCreatives.length === 0}><IconEye className="size-3.5" />Preview Ads</Button>
               </Tip>
-              <Tip text="Save this launch setup as a draft.">
+              <Tip text={nothingConfigured ? "Add a row first — there is no setup to save yet." : "Save this launch setup as a draft."}>
                 <Button
                   variant="outline" size="sm"
                   className="gap-1.5 text-xs"
                   onClick={saveDraft}
-                  disabled={savingDraft || tableRows.length === 0}
+                  disabled={savingDraft || nothingConfigured}
                 >
                   {savingDraft ? <IconLoader2 className="size-3.5 animate-spin" /> : <IconBookmark className="size-3.5" />}
                   {savingDraft ? "Saving..." : "Save Draft"}

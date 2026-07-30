@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
+import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { TopPerformingTab } from "@/components/templates/TopPerformingTab"
 import { AINamingTab } from "@/components/templates/AINamingTab"
 
@@ -69,6 +70,24 @@ const CTA_OPTIONS = [
   "SUBSCRIBE", "WATCH_MORE", "APPLY_NOW", "BUY_NOW", "CALL_NOW",
 ]
 
+// ─── Shared chip styles ─────────────────────────────────────────────────────────
+//
+// The card and the spreadsheet render the same three chips (CTA, tag, media kind) and used
+// to style them separately with light-only classes — `bg-white`, `bg-slate-50`,
+// `text-slate-900`, `bg-blue-50 text-blue-600`. None of those respond to `.dark`, so the
+// whole Ad Setup surface stayed a light panel on a dark page.
+//
+// Colour pairs follow the pattern already verified elsewhere in the app: a 100/700 fill in
+// light, a 900/30 + 400 fill in dark. On the dark `--card` (#252730) the 400-weight text
+// measures ~5.9:1, over the 4.5:1 AA threshold; the 600-weight it replaced measured ~3:1.
+// Neutral information uses `--muted-foreground`, so blue is left to mean "action".
+
+const CHIP = "px-2 py-0.5 rounded-full text-[11px] font-semibold whitespace-nowrap"
+const CHIP_CTA = "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+const CHIP_TAG = "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+const CHIP_MEDIA = "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+const CHIP_METRIC = "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+
 // ─── Empty Template Form ────────────────────────────────────────────────────────
 //push
 
@@ -96,7 +115,7 @@ function TemplateCard({
   const thumb = t.media?.thumb_url
   const roas = t.metrics?.roas
   return (
-    <div className="group bg-white border rounded-xl p-4 hover:border-blue-200 hover:shadow-sm transition-all flex flex-col">
+    <div className="group bg-card text-card-foreground border rounded-xl p-4 hover:border-primary/40 hover:shadow-sm transition-all flex flex-col">
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-3 min-w-0">
           {thumb ? (
@@ -107,18 +126,26 @@ function TemplateCard({
               )}
             </div>
           ) : (
-            <div className="size-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0 mt-0.5">
-              <IconTemplate className="size-4 text-blue-500" />
+            <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+              {/* An icon is a graphic, not text — 3:1 is the bar it has to clear, and
+                  --primary does on both themes. Only *text* needs --link. */}
+              <IconTemplate className="size-4 text-primary" />
             </div>
           )}
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-900 truncate">{t.name}</p>
-            <p className="text-xs text-slate-400 mt-0.5">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
+            <p className="text-sm font-semibold truncate">{t.name}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{new Date(t.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p>
           </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="opacity-0 group-hover:opacity-100 size-7 rounded-lg flex items-center justify-center hover:bg-muted transition-all shrink-0 text-muted-foreground">
+            {/* opacity-0 alone leaves an invisible but focusable target; the focus-visible
+                pair brings it back for keyboard users. */}
+            <button
+              type="button"
+              aria-label={`Actions for ${t.name}`}
+              className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 size-7 rounded-lg flex items-center justify-center hover:bg-muted transition-all shrink-0 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <IconDotsVertical className="size-3.5" />
             </button>
           </DropdownMenuTrigger>
@@ -139,21 +166,16 @@ function TemplateCard({
 
       {/* What this template carries: media+copy or copy only, and how the source ad did */}
       <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-        <span className={cn(
-          "px-2 py-0.5 rounded-full text-[11px] font-semibold",
-          t.media && !t.media.needs_media ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"
-        )}>
+        <span className={cn(CHIP, t.media && !t.media.needs_media ? CHIP_MEDIA : "bg-muted text-muted-foreground")}>
           {t.media && !t.media.needs_media
             ? `${t.media.media_type === "video" ? "Video" : "Image"} + Copy`
             : "Copy Only"}
         </span>
         {typeof roas === "number" && roas > 0 && (
-          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700">
-            ROAS {roas.toFixed(1)}x
-          </span>
+          <span className={cn(CHIP, CHIP_METRIC)}>ROAS {roas.toFixed(1)}x</span>
         )}
         {t.media?.needs_media && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-slate-400">
+          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
             <IconPhotoPlus className="size-3" />Cần upload media
           </span>
         )}
@@ -161,27 +183,27 @@ function TemplateCard({
 
       <div className="mt-3 space-y-1.5">
         {t.primary_text && (
-          <div className="text-xs bg-slate-50 rounded-lg px-3 py-2">
-            <span className="text-slate-400 font-medium">Primary Text · </span>
-            <span className="text-slate-700 line-clamp-2">{t.primary_text}</span>
+          <div className="text-xs bg-muted/40 rounded-lg px-3 py-2">
+            <span className="text-muted-foreground font-medium">Primary Text · </span>
+            <span className="line-clamp-2">{t.primary_text}</span>
           </div>
         )}
         {t.headline && (
-          <div className="text-xs bg-slate-50 rounded-lg px-3 py-2">
-            <span className="text-slate-400 font-medium">Headline · </span>
-            <span className="text-slate-700 font-semibold">{t.headline}</span>
+          <div className="text-xs bg-muted/40 rounded-lg px-3 py-2">
+            <span className="text-muted-foreground font-medium">Headline · </span>
+            <span className="font-semibold">{t.headline}</span>
           </div>
         )}
         {(t.cta || t.link) && (
-          <div className="flex items-center gap-2 text-xs">
-            {t.cta && <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-medium">{t.cta.replace(/_/g, " ")}</span>}
-            {t.link && <span className="text-slate-400 truncate">{t.link}</span>}
+          <div className="flex items-center gap-2 text-xs min-w-0">
+            {t.cta && <span className={cn(CHIP, CHIP_CTA)}>{t.cta.replace(/_/g, " ")}</span>}
+            {t.link && <span className="text-muted-foreground truncate" title={t.link}>{t.link}</span>}
           </div>
         )}
         {t.tags?.length > 0 && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {t.tags.map(tag => (
-              <span key={tag} className="px-2 py-0.5 bg-violet-50 text-violet-600 rounded-full text-xs font-medium">{tag}</span>
+              <span key={tag} className={cn(CHIP, CHIP_TAG)}>{tag}</span>
             ))}
           </div>
         )}
@@ -191,7 +213,7 @@ function TemplateCard({
         <Button size="sm" className="flex-1 h-8 gap-1.5 text-xs" onClick={() => onLaunch(t)}>
           <IconRocket className="size-3.5" />Launch
         </Button>
-        <Button size="sm" variant="outline" className="h-8 px-2.5" onClick={() => onEdit(t)} title="Edit">
+        <Button size="sm" variant="outline" className="h-8 px-2.5" onClick={() => onEdit(t)} title="Edit" aria-label={`Edit ${t.name}`}>
           <IconPencil className="size-3.5" />
         </Button>
       </div>
@@ -238,24 +260,24 @@ function TemplateFormDialog({
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-slate-600">Template Name <span className="text-red-500">*</span></Label>
+            <Label className="text-xs font-semibold text-muted-foreground">Template Name <span className="text-destructive">*</span></Label>
             <Input placeholder="e.g. Summer Sale Copy" value={form.name} onChange={e => set("name", e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-slate-600">Primary Text</Label>
+            <Label className="text-xs font-semibold text-muted-foreground">Primary Text</Label>
             <Textarea placeholder="Write your ad copy here..." rows={4} value={form.primary_text} onChange={e => set("primary_text", e.target.value)} className="resize-none text-sm" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-slate-600">Headline</Label>
+            <Label className="text-xs font-semibold text-muted-foreground">Headline</Label>
             <Input placeholder="Short punchy headline..." value={form.headline} onChange={e => set("headline", e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-slate-600">Description</Label>
+            <Label className="text-xs font-semibold text-muted-foreground">Description</Label>
             <Input placeholder="Optional description..." value={form.description} onChange={e => set("description", e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-slate-600">CTA</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">CTA</Label>
               <select
                 value={form.cta}
                 onChange={e => set("cta", e.target.value)}
@@ -265,19 +287,19 @@ function TemplateFormDialog({
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-slate-600">Web Link</Label>
+              <Label className="text-xs font-semibold text-muted-foreground">Web Link</Label>
               <Input placeholder="https://..." value={form.link} onChange={e => set("link", e.target.value)} />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-slate-600 font-medium">Tags (Folders) <span className="text-xs text-slate-400 font-normal">(comma-separated)</span></Label>
+            <Label className="text-xs font-semibold text-muted-foreground font-medium">Tags (Folders) <span className="text-xs text-muted-foreground font-normal">(comma-separated)</span></Label>
             <Input placeholder="e.g. Summer, Promo, Brand" value={form.tags} onChange={e => set("tags", e.target.value)} />
           </div>
         </div>
 
         <DialogFooter className="px-5 py-3 border-t shrink-0">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={() => onSave(form)} disabled={saving || !form.name.trim()} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button onClick={() => onSave(form)} disabled={saving || !form.name.trim()}>
             {saving && <IconLoader2 className="size-3.5 mr-1.5 animate-spin" />}
             {initial ? "Save Changes" : "Create Template"}
           </Button>
@@ -299,47 +321,51 @@ function TemplatesSpreadsheet({
   onLaunch: (t: AdCopyTemplate) => void
 }) {
   return (
-    <div className="border rounded-lg overflow-hidden bg-white">
+    <div className="border rounded-lg overflow-hidden bg-card text-card-foreground">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
-          <thead className="text-xs text-slate-500 bg-slate-50 border-b">
+        <table data-table="comfortable" className="w-full text-sm text-left">
+          <thead className="text-xs text-muted-foreground bg-muted/50 border-b">
             <tr>
-              <th className="px-4 py-3 font-medium whitespace-nowrap">Name</th>
-              <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[200px]">Primary Text</th>
-              <th className="px-4 py-3 font-medium whitespace-nowrap min-w-[150px]">Headline</th>
-              <th className="px-4 py-3 font-medium whitespace-nowrap">CTA</th>
-              <th className="px-4 py-3 font-medium whitespace-nowrap">Link</th>
-              <th className="px-4 py-3 font-medium whitespace-nowrap">Tags</th>
-              <th className="px-4 py-3 font-medium whitespace-nowrap text-right">Actions</th>
+              <th className="px-3 font-medium whitespace-nowrap">Name</th>
+              <th className="px-3 font-medium whitespace-nowrap min-w-[200px]">Primary Text</th>
+              <th className="px-3 font-medium whitespace-nowrap min-w-[150px]">Headline</th>
+              <th className="px-3 font-medium whitespace-nowrap">CTA</th>
+              <th className="px-3 font-medium whitespace-nowrap">Link</th>
+              <th className="px-3 font-medium whitespace-nowrap">Tags</th>
+              <th className="px-3 font-medium whitespace-nowrap text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-border">
             {templates.map(t => (
-              <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-4 py-3 font-medium text-slate-900 truncate max-w-[200px]" title={t.name}>{t.name}</td>
-                <td className="px-4 py-3 text-slate-600 truncate max-w-[300px]" title={t.primary_text}>{t.primary_text || "-"}</td>
-                <td className="px-4 py-3 text-slate-700 truncate max-w-[200px]" title={t.headline}>{t.headline || "-"}</td>
-                <td className="px-4 py-3">
-                  {t.cta ? <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-xs font-medium whitespace-nowrap">{t.cta.replace(/_/g, " ")}</span> : "-"}
+              <tr key={t.id} className="hover:bg-muted/40 transition-colors">
+                <td className="px-3 font-medium truncate max-w-[200px]" title={t.name}>{t.name}</td>
+                <td className="px-3 text-muted-foreground truncate max-w-[300px]" title={t.primary_text}>{t.primary_text || "—"}</td>
+                <td className="px-3 truncate max-w-[200px]" title={t.headline}>{t.headline || "—"}</td>
+                <td className="px-3">
+                  {t.cta ? <span className={cn(CHIP, CHIP_CTA)}>{t.cta.replace(/_/g, " ")}</span> : "—"}
                 </td>
-                <td className="px-4 py-3 text-slate-500 truncate max-w-[200px]" title={t.link}>{t.link || "-"}</td>
-                <td className="px-4 py-3">
+                <td className="px-3 text-muted-foreground truncate max-w-[200px]" title={t.link}>{t.link || "—"}</td>
+                <td className="px-3">
                   {t.tags?.length > 0 ? (
                     <div className="flex flex-wrap gap-1">
                       {t.tags.map(tag => (
-                        <span key={tag} className="px-1.5 py-0.5 bg-violet-50 text-violet-600 rounded whitespace-nowrap text-[10px] font-medium">{tag}</span>
+                        <span key={tag} className={cn(CHIP, CHIP_TAG)}>{tag}</span>
                       ))}
                     </div>
-                  ) : "-"}
+                  ) : "—"}
                 </td>
-                <td className="px-4 py-2 text-right">
+                <td className="px-3 text-right">
                   <div className="flex items-center justify-end gap-1">
                   <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => onLaunch(t)}>
                     <IconRocket className="size-3.5" />Launch
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button className="size-7 rounded-md inline-flex items-center justify-center hover:bg-slate-200 transition-colors text-muted-foreground ml-auto">
+                      <button
+                        type="button"
+                        aria-label={`Actions for ${t.name}`}
+                        className="size-7 rounded-md inline-flex items-center justify-center hover:bg-muted transition-colors text-muted-foreground ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
                         <IconDotsVertical className="size-3.5" />
                       </button>
                     </DropdownMenuTrigger>
@@ -373,7 +399,7 @@ type Tab = "ad-setup" | "tags" | "top-performing" | "ai-naming"
 type SortOption = "newest" | "oldest" | "name-az" | "name-za"
 
 export default function TemplatesPage() {
-  const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
+  const { selectedAccountId } = useAdAccount()
 
   const router = useRouter()
   const [tab, setTab] = useState<Tab>("ad-setup")
@@ -392,7 +418,6 @@ export default function TemplatesPage() {
   const [saving, setSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [accountDropOpen, setAccountDropOpen] = useState(false)
   const [activeFolder, setActiveFolder] = useState<string | null>(null) // null = All, "__uncategorized__" = no tags, else tag name
 
   const openCreateFromCopy = useCallback((copy: { headline: string; primaryText: string }) => {
@@ -618,30 +643,9 @@ export default function TemplatesPage() {
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-2xl font-bold tracking-tight">Templates</h1>
 
-            {/* Account selector */}
-            <DropdownMenu open={accountDropOpen} onOpenChange={setAccountDropOpen}>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-2 px-3 py-1.5 border rounded-full text-sm font-medium hover:bg-muted/50 transition-colors">
-                  <div className="size-5 rounded-full bg-[#1877F2] flex items-center justify-center shrink-0">
-                    <svg className="size-3 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-                  </div>
-                  <span className="max-w-[140px] truncate">{selectedAccount?.name || "Select account"}</span>
-                  <IconChevronDown className="size-3.5 text-muted-foreground shrink-0" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                {adAccounts.map(a => (
-                  <DropdownMenuItem
-                    key={a.id}
-                    onClick={() => { setSelectedAccountId(a.id); setAccountDropOpen(false) }}
-                    className={cn("gap-2 text-xs", selectedAccountId === a.id && "font-semibold text-primary")}
-                  >
-                    {selectedAccountId === a.id && <IconCheck className="size-3 shrink-0" />}
-                    <span className="truncate">{a.name}</span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* This pill used to live here inline. It is now components/shared/ad-account-pill.tsx
+                and this page is one of its consumers like any other. */}
+            <AdAccountPill labelClassName="max-w-[140px]" />
           </div>
 
           {/* Tabs */}
@@ -653,7 +657,9 @@ export default function TemplatesPage() {
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors -mb-px",
                   tab === t.value
-                    ? "border-primary text-primary"
+                    // The 2px underline is the active signal; blue *text* on --card measures
+                    // 2.99:1. Same pair insights/_comments.tsx already uses.
+                    ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -701,7 +707,7 @@ export default function TemplatesPage() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   {(Object.entries(SORT_LABELS) as [SortOption, string][]).map(([v, l]) => (
-                    <DropdownMenuItem key={v} onClick={() => setSort(v)} className={cn("text-xs gap-2", sort === v && "font-semibold text-primary")}>
+                    <DropdownMenuItem key={v} onClick={() => setSort(v)} className={cn("text-xs gap-2", sort === v && "font-semibold text-link")}>
                       {sort === v && <IconCheck className="size-3" />}{l}
                     </DropdownMenuItem>
                   ))}
@@ -726,7 +732,7 @@ export default function TemplatesPage() {
 
               <Button
                 size="sm"
-                className="h-8 gap-1.5 text-xs rounded-full px-4 ml-auto bg-blue-600 hover:bg-blue-700 text-white whitespace-nowrap"
+                className="h-8 gap-1.5 text-xs rounded-full px-4 ml-auto whitespace-nowrap"
                 onClick={openCreate}
               >
                 <IconPlus className="size-3.5" />Create Ad Copy Template
@@ -741,10 +747,10 @@ export default function TemplatesPage() {
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-                  <div className="size-16 rounded-2xl bg-blue-600 flex items-center justify-center mb-5 shadow-lg shadow-blue-500/30">
+                  <div className="size-16 rounded-2xl bg-primary text-primary-foreground flex items-center justify-center mb-5 shadow-lg shadow-primary/30">
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                      <path d="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
-                      <path d="M7 7H17M7 12H17M7 17H13" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
+                      <path d="M19 3H5C3.89543 3 3 3.89543 3 5V19C3 20.1046 3.89543 21 5 21H19C20.1046 21 21 20.1046 21 19V5C21 3.89543 20.1046 3 19 3Z" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                      <path d="M7 7H17M7 12H17M7 17H13" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
                     </svg>
                   </div>
                   <h3 className="text-lg font-bold mb-2">
@@ -756,7 +762,7 @@ export default function TemplatesPage() {
                       : "Create templates to reuse your best ad copy across campaigns."}
                   </p>
                   {!search && (
-                    <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700 text-white gap-2 rounded-full px-6">
+                    <Button onClick={openCreate} className="gap-2 rounded-full px-6">
                       <IconPlus className="size-4" />Create Ad Copy Template
                     </Button>
                   )}

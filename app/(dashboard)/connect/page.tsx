@@ -504,21 +504,21 @@ function McpTab() {
             <p className="text-sm text-muted-foreground">Chưa có API key. Generate key nếu muốn dùng Claude Desktop.</p>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <table data-table="comfortable" className="w-full text-sm">
             <thead className="bg-muted/30">
               <tr>
-                <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Name</th>
-                <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Key</th>
-                <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Last Used</th>
-                <th className="text-left px-5 py-2.5 text-xs font-medium text-muted-foreground">Created</th>
-                <th className="px-5 py-2.5" />
+                <th className="text-left px-5 text-xs font-medium text-muted-foreground">Name</th>
+                <th className="text-left px-3 text-xs font-medium text-muted-foreground">Key</th>
+                <th className="text-left px-3 text-xs font-medium text-muted-foreground">Last Used</th>
+                <th className="text-left px-3 text-xs font-medium text-muted-foreground">Created</th>
+                <th className="px-5" />
               </tr>
             </thead>
             <tbody className="divide-y">
               {keys.map(k => (
                 <tr key={k.id} className="hover:bg-muted/20">
-                  <td className="px-5 py-3 font-medium">{k.name}</td>
-                  <td className="px-5 py-3 font-mono text-xs text-muted-foreground">
+                  <td className="px-5 font-medium">{k.name}</td>
+                  <td className="px-3 font-mono text-xs text-muted-foreground">
                     <div className="flex items-center gap-2">
                       <span className="break-all">
                         {k.api_key
@@ -547,13 +547,13 @@ function McpTab() {
                       )}
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-muted-foreground text-xs">
+                  <td className="px-3 text-muted-foreground text-xs">
                     {k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : "Never"}
                   </td>
-                  <td className="px-5 py-3 text-muted-foreground text-xs">
+                  <td className="px-3 text-muted-foreground text-xs">
                     {new Date(k.created_at).toLocaleDateString()}
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-5 text-right">
                     <button onClick={() => deleteKey(k.id)} disabled={deletingId === k.id} className="text-muted-foreground hover:text-destructive transition-colors">
                       {deletingId === k.id ? <IconLoader2 className="size-4 animate-spin" /> : <IconTrash className="size-4" />}
                     </button>
@@ -705,14 +705,14 @@ export default function ConnectPage() {
               <div className="px-5 py-3.5 border-b bg-muted/20">
                 <h3 className="text-sm font-semibold">Ad Channels</h3>
               </div>
-              <table className="w-full">
+              <table data-table="comfortable" className="w-full">
                 <thead>
                   <tr className="border-b">
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-16">LOGO</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">NAME</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">DESCRIPTION</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">STATUS</th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-36">ACTION</th>
+                    <th className="px-5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-16">LOGO</th>
+                    <th className="px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">NAME</th>
+                    <th className="px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide">DESCRIPTION</th>
+                    <th className="px-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-28">STATUS</th>
+                    <th className="px-5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wide w-36">ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -720,12 +720,12 @@ export default function ConnectPage() {
                     const Icon = channel.icon
                     return (
                       <tr key={channel.id} className={cn("border-b last:border-0 hover:bg-muted/20 transition-colors", i === 0 && "bg-muted/5")}>
-                        <td className="px-5 py-4">
+                        <td className="px-5">
                           <div className={cn("size-10 rounded-xl flex items-center justify-center", channel.iconBg)}>
                             <Icon className="size-5" style={{ color: channel.iconColor }} />
                           </div>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-3">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{channel.name}</span>
                             {channel.beta && (
@@ -733,10 +733,10 @@ export default function ConnectPage() {
                             )}
                           </div>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-3">
                           <p className="text-sm text-muted-foreground">{channel.description}</p>
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-3">
                           {channel.connected ? (
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-1 rounded-full">
                               <IconCheck className="size-3" />
@@ -748,7 +748,7 @@ export default function ConnectPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-5 py-4">
+                        <td className="px-5">
                           {channel.connected ? (
                             <Button
                               variant="outline"

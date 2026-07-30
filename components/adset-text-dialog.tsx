@@ -96,28 +96,28 @@ export function AdSetTextDialog({ open, onClose, adsetNames, initial, onApply }:
         </div>
 
         <div className="flex-1 overflow-auto min-h-0">
-          <table className="border-collapse min-w-max w-full text-sm">
+          <table data-table="comfortable" className="border-collapse min-w-max w-full text-sm">
             <thead className="sticky top-0 z-10 bg-background">
               <tr className="border-b">
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[180px] border-r">Ad Set Name</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[240px] border-r">Headline</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[320px] border-r">Primary Text</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[200px] border-r">Link Description</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[160px] border-r">Call to Action</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[220px] border-r">Website URL</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[180px]">Display URL</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[180px] border-r">Ad Set Name</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[240px] border-r">Headline</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[320px] border-r">Primary Text</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[200px] border-r">Link Description</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[160px] border-r">Call to Action</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[220px] border-r">Website URL</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[180px]">Display URL</th>
               </tr>
             </thead>
             <tbody>
               {configs.map((cfg, i) => (
                 <tr key={i} className="border-b align-top hover:bg-muted/20">
                   {/* Ad Set Name */}
-                  <td className="px-4 py-3 border-r">
+                  <td className="px-3 border-r">
                     <p className="text-xs font-medium break-words leading-snug text-muted-foreground">{cfg.adsetName}</p>
                   </td>
 
                   {/* Headlines */}
-                  <td className="px-4 py-3 border-r">
+                  <td className="px-3 border-r">
                     <div className="space-y-1.5">
                       {cfg.headlines.map((h, hi) => (
                         <div key={hi} className="flex gap-1">
@@ -146,7 +146,7 @@ export function AdSetTextDialog({ open, onClose, adsetNames, initial, onApply }:
                   </td>
 
                   {/* Primary Texts */}
-                  <td className="px-4 py-3 border-r">
+                  <td className="px-3 border-r">
                     <div className="space-y-1.5">
                       {cfg.primaryTexts.map((pt, pi) => (
                         <div key={pi} className="flex gap-1 items-start">
@@ -175,7 +175,7 @@ export function AdSetTextDialog({ open, onClose, adsetNames, initial, onApply }:
                   </td>
 
                   {/* Link Description */}
-                  <td className="px-4 py-3 border-r">
+                  <td className="px-3 border-r">
                     <Input
                       value={cfg.description}
                       onChange={e => update(i, { description: e.target.value })}
@@ -185,7 +185,7 @@ export function AdSetTextDialog({ open, onClose, adsetNames, initial, onApply }:
                   </td>
 
                   {/* CTA */}
-                  <td className="px-4 py-3 border-r">
+                  <td className="px-3 border-r">
                     <select
                       value={cfg.cta}
                       onChange={e => update(i, { cta: e.target.value })}
@@ -198,7 +198,7 @@ export function AdSetTextDialog({ open, onClose, adsetNames, initial, onApply }:
                   </td>
 
                   {/* Website URL */}
-                  <td className="px-4 py-3 border-r">
+                  <td className="px-3 border-r">
                     <Input
                       value={cfg.websiteUrl}
                       onChange={e => update(i, { websiteUrl: e.target.value })}
@@ -208,7 +208,7 @@ export function AdSetTextDialog({ open, onClose, adsetNames, initial, onApply }:
                   </td>
 
                   {/* Display URL */}
-                  <td className="px-4 py-3">
+                  <td className="px-3">
                     <Input
                       value={cfg.displayUrl}
                       onChange={e => update(i, { displayUrl: e.target.value })}

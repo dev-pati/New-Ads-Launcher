@@ -108,16 +108,16 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
         </div>
 
         <div className="flex-1 overflow-auto min-h-0">
-          <table className="border-collapse min-w-max w-full text-sm">
+          <table data-table="comfortable" className="border-collapse min-w-max w-full text-sm">
             <thead className="sticky top-0 z-10 bg-background">
               <tr className="border-b">
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[180px] border-r">Ad</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[240px] border-r">Headline</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[320px] border-r">Primary Text</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[200px] border-r">Link Description</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[160px] border-r">Call to Action</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[220px] border-r">Website URL</th>
-                <th className="text-left px-4 py-2.5 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[180px]">Display URL</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[180px] border-r">Ad</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[240px] border-r">Headline</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[320px] border-r">Primary Text</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[200px] border-r">Link Description</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[160px] border-r">Call to Action</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[220px] border-r">Website URL</th>
+                <th className="text-left px-3 font-medium text-xs text-muted-foreground uppercase tracking-wide w-[180px]">Display URL</th>
               </tr>
             </thead>
             <tbody>
@@ -127,7 +127,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                 return (
                   <tr key={cr.id} className="border-b align-top hover:bg-muted/20">
                     {/* Creative thumbnail + name */}
-                    <td className="px-4 py-3 border-r">
+                    <td className="px-3 border-r">
                       <div className="flex flex-col items-center gap-1.5">
                         {cr.file_url ? (
                           <img src={cr.file_url} alt={cr.file_name} className="w-16 h-16 object-cover rounded border" />
@@ -141,7 +141,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                     </td>
 
                     {/* Headlines */}
-                    <td className="px-4 py-3 border-r">
+                    <td className="px-3 border-r">
                       <div className="space-y-1.5">
                         {cfg.headlines.map((h, hi) => (
                           <div key={hi} className="flex gap-1">
@@ -170,7 +170,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                     </td>
 
                     {/* Primary Texts */}
-                    <td className="px-4 py-3 border-r">
+                    <td className="px-3 border-r">
                       <div className="space-y-1.5">
                         {cfg.primaryTexts.map((pt, pi) => (
                           <div key={pi} className="flex gap-1 items-start">
@@ -199,7 +199,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                     </td>
 
                     {/* Link Description */}
-                    <td className="px-4 py-3 border-r">
+                    <td className="px-3 border-r">
                       <Input
                         value={cfg.description}
                         onChange={e => update(i, { description: e.target.value })}
@@ -209,7 +209,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                     </td>
 
                     {/* CTA */}
-                    <td className="px-4 py-3 border-r">
+                    <td className="px-3 border-r">
                       <div className="space-y-1">
                         <select
                           value={cfg.cta}
@@ -227,7 +227,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                     </td>
 
                     {/* Website URL */}
-                    <td className="px-4 py-3 border-r">
+                    <td className="px-3 border-r">
                       <Input
                         value={cfg.websiteUrl}
                         onChange={e => update(i, { websiteUrl: e.target.value })}
@@ -237,7 +237,7 @@ export function AdPerCreativeTextDialog({ open, onClose, creatives, initial, onA
                     </td>
 
                     {/* Display URL */}
-                    <td className="px-4 py-3">
+                    <td className="px-3">
                       <Input
                         value={cfg.displayUrl}
                         onChange={e => update(i, { displayUrl: e.target.value })}

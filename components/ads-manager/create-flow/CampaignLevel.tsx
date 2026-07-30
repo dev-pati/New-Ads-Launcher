@@ -86,7 +86,7 @@ export function CampaignLevel({ state, update, currency }: Props) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-6 py-8">
+    <div className="mx-auto max-w-4xl space-y-6 px-6 py-8">
       <div className="flex items-center gap-2">
         <h1 className="text-xl font-bold text-[#1c2b33] dark:text-gray-100">Campaign</h1>
       </div>

@@ -87,10 +87,10 @@ export function AdCopiesTab({ copies, emptyLabel = "No ad copies found." }: Prop
       />
 
       <div className="bg-card border border-border/60 rounded-2xl overflow-hidden">
-        <table className="w-full text-sm">
+        <table data-table="comfortable" className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/50 text-muted-foreground text-xs uppercase tracking-wide">
-              <th className="text-left px-5 py-3 font-semibold w-[40%]">Ad Copy</th>
+              <th className="text-left px-3 font-semibold w-[40%]">Ad Copy</th>
               {(["adsCount", "longestRunning", "totalRunningDays", "totalReach", "score"] as SortKey[]).map(k => (
                 <SortHeader key={k} label={LABELS[k]} sortKey={k} current={sortKey} asc={sortAsc} onSort={toggleSort} />
               ))}
@@ -102,7 +102,7 @@ export function AdCopiesTab({ copies, emptyLabel = "No ad copies found." }: Prop
               const isExpanded = expanded.has(row.text)
               return (
                 <tr key={i} className="hover:bg-muted/20 transition-colors align-top">
-                  <td className="px-5 py-3">
+                  <td className="px-5">
                     <div className="flex items-start gap-2">
                       {row.firstAd?.mediaUrl && (
                         <img src={row.firstAd.mediaUrl} alt="" className="size-10 rounded-lg object-cover shrink-0 mt-0.5" />
@@ -122,12 +122,12 @@ export function AdCopiesTab({ copies, emptyLabel = "No ad copies found." }: Prop
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-right tabular-nums font-medium">{row.adsCount}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{row.longestRunning}d</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{row.totalRunningDays}d</td>
-                  <td className="px-5 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-medium">{formatViews(row.totalReach)}</td>
-                  <td className="px-5 py-3 min-w-[80px]"><ScoreBar score={row.score} /></td>
-                  <td className="px-3 py-3"><CopyBtn text={row.text} /></td>
+                  <td className="px-3 text-right tabular-nums font-medium">{row.adsCount}</td>
+                  <td className="px-3 text-right tabular-nums">{row.longestRunning}d</td>
+                  <td className="px-3 text-right tabular-nums">{row.totalRunningDays}d</td>
+                  <td className="px-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-medium">{formatViews(row.totalReach)}</td>
+                  <td className="px-3 min-w-[80px]"><ScoreBar score={row.score} /></td>
+                  <td className="px-3"><CopyBtn text={row.text} /></td>
                 </tr>
               )
             })}
@@ -163,7 +163,7 @@ function SortHeader({ label, sortKey, current, asc, onSort }: {
 }) {
   const active = current === sortKey
   return (
-    <th className="px-5 py-3 text-right cursor-pointer select-none" onClick={() => onSort(sortKey)}>
+    <th className="px-3 text-right cursor-pointer select-none" onClick={() => onSort(sortKey)}>
       <span className="flex items-center justify-end gap-1 font-semibold">
         {label}
         {active

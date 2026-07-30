@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo, Fragment, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import {
@@ -96,6 +97,8 @@ interface Campaign {
   start_time?: string
   stop_time?: string
   bid_strategy?: string
+  /** Optional because the DB-snapshot fallback in the API route may not carry it. */
+  created_time?: string
   insights?: { data: Insight[] }
 }
 
@@ -125,6 +128,7 @@ interface AdSet {
   learning_stage_info?: LearningStageInfo
   start_time?: string
   end_time?: string
+  created_time?: string
   insights?: { data: Insight[] }
 }
 
@@ -142,7 +146,35 @@ interface Ad {
   }
   creative?: { id: string; title?: string; body?: string; image_url?: string; thumbnail_url?: string }
   creative_variations?: { bodies: string[]; titles: string[]; descriptions: string[] }
+  created_time?: string
   insights?: { data: Insight[] }
+}
+
+/**
+ * The default row order for all three hierarchy levels: newest created first.
+ *
+ * Meta returns objects in its own order — effectively oldest first — so the campaign, ad set or
+ * ad the user launched a minute ago arrived at the bottom of the list. Sorting by name instead
+ * is worse than it looks: it groups rows by whatever naming convention the account happens to
+ * use and still buries new work.
+ *
+ * `created_time` is already requested by lib/facebook.ts at all three levels, so this needed no
+ * API change. It is optional on the interfaces because those routes have a DB-snapshot fallback
+ * that may not carry it — a row without one sorts last rather than jumping to the top, and the
+ * numeric id tie-break keeps the order stable across re-renders (Meta ids increase over time,
+ * so it is a reasonable recency proxy on its own).
+ */
+const byNewestFirst = (
+  a: { created_time?: string; id: string },
+  b: { created_time?: string; id: string },
+) => {
+  const at = a.created_time ? Date.parse(a.created_time) : NaN
+  const bt = b.created_time ? Date.parse(b.created_time) : NaN
+  const aOk = !Number.isNaN(at)
+  const bOk = !Number.isNaN(bt)
+  if (aOk && bOk && at !== bt) return bt - at
+  if (aOk !== bOk) return aOk ? -1 : 1
+  return b.id.localeCompare(a.id, undefined, { numeric: true })
 }
 
 interface BreakdownRow {
@@ -390,6 +422,42 @@ function DeliveryBadge({ effective_status, learning }: { effective_status: strin
 
 // ─── Sort Header ──────────────────────────────────────────────────────────────
 
+/**
+ * The three frozen columns — checkbox, Off/On, name.
+ *
+ * Two things were wrong here. The body pinned these columns but the header did not pin
+ * anything (only `thead` was `sticky top-0`), so any horizontal scroll slid the header labels
+ * out from over the columns they name and left blank gaps above the frozen cells. And the
+ * offsets did not add up: column 1 is `w-10` (40px) and column 2 is `w-16` (64px), so column 3
+ * has to pin at 104px. It pinned at 100px and overlapped column 2 by 4px.
+ *
+ * Defining the offsets once means header and body cannot drift apart again, and the arithmetic
+ * lives next to the widths it is derived from. If a width changes, the offset below it must
+ * change with it — that is the whole invariant, asserted in
+ * tests/table-spacing-contract.test.mjs.
+ */
+const FROZEN_W = { check: "w-10", toggle: "w-16" } as const   // 40px, 64px
+const FROZEN_LEFT = {
+  check: "left-0",
+  toggle: "left-10",        // 40
+  name: "left-[104px]",     // 40 + 64
+} as const
+/**
+ * Frozen cells must be opaque. Every dark-mode background here was written with an alpha
+ * channel, which is invisible while nothing is pinned and shows the scrolling columns straight
+ * through the frozen ones the moment something is. The replacements are the same colours
+ * flattened, not new ones:
+ *   · thead      bg-muted/80  → bg-muted
+ *   · group band bg-muted/10  → bg-background  (#1b1d23 at 10% over #1f2127 = #1e2027; the tint
+ *                               was already below the perceptual threshold in dark mode)
+ *   · selected   bg-blue-950/30 → #1d2235      (#172554 at 30% over #1f2127, computed)
+ */
+const FROZEN_HEAD_BG = "bg-[#f5f6f7] dark:bg-muted"
+const FROZEN_BODY_BG = "bg-white dark:bg-background"
+const FROZEN_BODY_SEL = "bg-[#e3f0fe] dark:bg-[#1d2235]"
+const FROZEN_BAND_BG = "bg-[#f5f6f7] dark:bg-background"
+const FROZEN_DIVIDER = "border-r border-[#e4e6eb] dark:border-gray-800"
+
 function SortTh({ label, field, sortField, sortDir, onSort, width, onResize, className }: {
   label: string; field: string; sortField: string | null; sortDir: SortDir
   onSort: (f: string) => void; width?: number; onResize?: (w: number) => void; className?: string
@@ -409,7 +477,7 @@ function SortTh({ label, field, sortField, sortDir, onSort, width, onResize, cla
   return (
     <th
       style={{ width: width ? `${width}px` : undefined, minWidth: width ? `${width}px` : undefined, maxWidth: width ? `${width}px` : undefined }}
-      className={cn("relative px-3 py-2 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground cursor-pointer select-none whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5", className)}
+      className={cn("relative px-3 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground cursor-pointer select-none whitespace-nowrap hover:bg-black/5 dark:hover:bg-white/5", className)}
       onClick={() => onSort(field)}
     >
       <span className="flex items-center gap-1 overflow-hidden">
@@ -499,7 +567,7 @@ function HeaderCellMenu({ colId, label, onSortAsc, onSortDesc, onMoveLeft, onMov
 }
 
 function AdsManagerContent() {
-  const { selectedAccountId, selectedAccount, adAccounts, setSelectedAccountId } = useAdAccount()
+  const { selectedAccountId, selectedAccount } = useAdAccount()
 
   const [tab, setTab] = useState<Tab>("campaigns")
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
@@ -528,8 +596,9 @@ function AdsManagerContent() {
   const colsDropRef = useRef<HTMLDivElement>(null)
 
   // Sort
+  /** `sortField === null` is the third sort state: the table's default newest-first order. */
   const [sortField, setSortField] = useState<string | null>(null)
-  const [sortDir, setSortDir] = useState<SortDir>("desc")
+  const [sortDir, setSortDir] = useState<SortDir>("asc")
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -1103,9 +1172,18 @@ function AdsManagerContent() {
 
   // ─── Sort ────────────────────────────────────────────────────────────────────
 
+  /**
+   * Three states per column: ascending → descending → default.
+   *
+   * The old version cycled asc ↔ desc forever, so once a column was clicked there was no way
+   * back to the table's own order short of a reload. Clearing `sortField` is what "default"
+   * means — the currentData memo falls through to `byNewestFirst`.
+   */
   const handleSort = (field: string) => {
-    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc")
-    else { setSortField(field); setSortDir("desc") }
+    if (sortField !== field) { setSortField(field); setSortDir("asc"); return }
+    if (sortDir === "asc") { setSortDir("desc"); return }
+    setSortField(null)
+    setSortDir("asc")
   }
 
   // ─── Filtered + sorted data ──────────────────────────────────────────────────
@@ -1186,6 +1264,14 @@ function AdsManagerContent() {
         }
         return sortDir === "asc" ? av - bv : bv - av
       })
+    } else {
+      // Default order = newest created first, at all three levels. Meta returns campaigns,
+      // ad sets and ads in its own order (roughly oldest first), which put the thing the user
+      // just launched at the bottom of the list. `created_time` is already requested by
+      // lib/facebook.ts for all three levels, so this needs no API change — but the DB-snapshot
+      // fallback path may omit it, so a missing value sorts last rather than crashing the
+      // comparator or jumping to the top.
+      list = [...list].sort(byNewestFirst)
     }
     return list
   }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, statusFilter, sortField, sortDir, campaignNameById, adSetNameById, activeLaunchFilter, launchAdIds])
@@ -2052,18 +2138,7 @@ function AdsManagerContent() {
       <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
         <h1 className="text-base font-bold">Campaigns</h1>
         {/* Account selector */}
-        <div className="relative">
-          <select
-            value={selectedAccountId}
-            onChange={e => setSelectedAccountId(e.target.value)}
-            className="h-8 pl-2 pr-7 text-xs bg-muted/40 border rounded-lg outline-none appearance-none cursor-pointer focus:ring-1 focus:ring-ring"
-          >
-            {adAccounts.map(a => (
-              <option key={a.id} value={a.id}>{a.name}</option>
-            ))}
-          </select>
-          <IconChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 size-3 text-muted-foreground pointer-events-none" />
-        </div>
+        <AdAccountPill className="h-8 py-0 text-xs" labelClassName="max-w-[180px]" />
         {selectedAccount && (
           <span className="text-xs text-muted-foreground">{selectedAccount.id}</span>
         )}
@@ -2453,13 +2528,16 @@ function AdsManagerContent() {
             <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <table className={cn("w-full text-sm border-collapse", loading && "opacity-60 transition-opacity")} style={{ minWidth: 1100, tableLayout: "fixed" }}>
-            <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted/80 border-b border-[#e4e6eb] dark:border-gray-800">
+          <table data-table="compact" className={cn("w-full text-sm border-collapse", loading && "opacity-60 transition-opacity")} style={{ minWidth: 1100, tableLayout: "fixed" }}>
+            {/* `dark:bg-muted/80` was translucent, which is invisible while nothing is pinned
+                horizontally but shows the scrolling columns through the frozen header cells the
+                moment they are. Opaque here and on the three frozen cells below. */}
+            <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted border-b border-[#e4e6eb] dark:border-gray-800">
               <tr>
-                <th className="w-10 px-3 py-2.5">
+                <th className={cn(FROZEN_W.check, "px-2 sticky z-20", FROZEN_LEFT.check, FROZEN_HEAD_BG)}>
                   <input ref={headerCheckRef} type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
                 </th>
-                <th className="w-16 px-2 py-2.5 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground resize-x overflow-auto">Off/On</th>
+                <th className={cn(FROZEN_W.toggle, "px-3 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground resize-x overflow-auto sticky z-20", FROZEN_LEFT.toggle, FROZEN_HEAD_BG)}>Off/On</th>
                 <SortTh
                   label={tab === "ads" ? "Ad name" : tab === "adsets" ? "Ad set" : "Campaign"}
                   field="name"
@@ -2468,9 +2546,10 @@ function AdsManagerContent() {
                   onSort={handleSort}
                   width={columnWidths.__name || 320}
                   onResize={w => setColWidth("__name", w)}
+                  className={cn("sticky z-20 border-r border-[#e4e6eb] dark:border-gray-800", FROZEN_LEFT.name, FROZEN_HEAD_BG)}
                 />
                 {tab === "ads" && (
-                  <th className="w-20 px-3 py-2.5 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground resize-x overflow-auto">Preview</th>
+                  <th className="w-20 px-3 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground resize-x overflow-auto">Preview</th>
                 )}
                                 {columnOrder.map((colId, i) => {
                   const col = customColumnMap[colId]
@@ -2483,7 +2562,7 @@ function AdsManagerContent() {
                   const colWidth = getColWidth(colId)
 
                   return (
-                    <th key={colId} style={{ width: colWidth, minWidth: colWidth, maxWidth: colWidth }} className="group/header relative px-2 py-1.5 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground">
+                    <th key={colId} style={{ width: colWidth, minWidth: colWidth, maxWidth: colWidth }} className="group/header relative px-3 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground">
                       <div className="flex items-start gap-1">
                         <div className="cursor-pointer hover:text-foreground transition-colors flex items-start gap-0.5 min-w-0" onClick={() => handleSort(sortFieldObj)}>
                           <span className="line-clamp-2 break-words leading-tight">{col.headerLabel}</span>
@@ -2551,14 +2630,14 @@ function AdsManagerContent() {
                   return (
                     <Fragment key={c.id}>
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(c.id) : s.add(c.id); return s })} />
                         </td>
-                        <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(c.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell overflow-hidden", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === c.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(c.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -2579,16 +2658,16 @@ function AdsManagerContent() {
                             </div>
                           )}
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, c)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, c)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
-                          <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
-                          <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
-                          <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
+                          <td className={cn("sticky z-10 px-2", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BAND_BG)} />
+                          <td className={cn("sticky z-10 px-3", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BAND_BG)} />
+                          <td className={cn("px-3 sticky z-10", FROZEN_LEFT.name, FROZEN_BAND_BG, FROZEN_DIVIDER)}>
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -2602,14 +2681,14 @@ function AdsManagerContent() {
                   return (
                     <Fragment key={a.id}>
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
                         </td>
-                        <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell overflow-hidden", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -2630,16 +2709,16 @@ function AdsManagerContent() {
                             </div>
                           )}
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, a)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, a)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
-                          <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
-                          <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
-                          <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
+                          <td className={cn("sticky z-10 px-2", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BAND_BG)} />
+                          <td className={cn("sticky z-10 px-3", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BAND_BG)} />
+                          <td className={cn("px-3 sticky z-10", FROZEN_LEFT.name, FROZEN_BAND_BG, FROZEN_DIVIDER)}>
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -2655,14 +2734,14 @@ function AdsManagerContent() {
                   return (
                     <Fragment key={a.id}>
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-3 py-2.5 sticky left-0 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
                         </td>
-                        <td className={cn("px-2 py-2.5 sticky left-10 z-10 bg-white dark:bg-background transition-colors", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 py-2.5 sticky left-[100px] z-10 bg-white dark:bg-background border-r border-[#e4e6eb] dark:border-gray-800 transition-colors group/cell overflow-hidden", isSel ? "bg-[#e3f0fe] dark:bg-blue-950/30 group-hover/row:bg-[#d8e9fc]" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -2694,7 +2773,7 @@ function AdsManagerContent() {
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-2.5">
+                        <td className="px-3">
                           <div className="relative inline-block">
                             {thumb ? <img src={thumb} alt="" className="size-12 rounded object-cover border" loading="lazy" /> : <div className="size-12 rounded bg-muted border flex items-center justify-center text-xs text-muted-foreground">No img</div>}
                             {a.creative_variations && (
@@ -2704,17 +2783,17 @@ function AdsManagerContent() {
                             )}
                           </div>
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, a)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, a)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
-                          <td className="sticky left-0 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-10 px-3 py-2" />
-                          <td className="sticky left-10 z-10 bg-[#f5f6f7] dark:bg-muted/10 w-16 px-2 py-2" />
-                          <td className="px-3 py-2 sticky left-[100px] z-10 bg-[#f5f6f7] dark:bg-muted/10 border-r border-[#e4e6eb] dark:border-gray-800">
+                          <td className={cn("sticky z-10 px-2", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BAND_BG)} />
+                          <td className={cn("sticky z-10 px-3", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BAND_BG)} />
+                          <td className={cn("px-3 sticky z-10", FROZEN_LEFT.name, FROZEN_BAND_BG, FROZEN_DIVIDER)}>
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          <td className="px-3 py-2 bg-[#f5f6f7] dark:bg-muted/10" />
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 py-1.5 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                          <td className="px-3 bg-[#f5f6f7] dark:bg-muted/10" />
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -2727,11 +2806,11 @@ function AdsManagerContent() {
             {pagedData.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 border-[#e4e6eb] dark:border-gray-800 bg-[#f7f8fa] dark:bg-muted/20">
-                  <td colSpan={tab === "ads" ? 4 : 3} className="px-3 py-2.5 text-xs text-muted-foreground font-medium">
+                  <td colSpan={tab === "ads" ? 4 : 3} className="px-3 text-xs text-muted-foreground font-medium">
                     Results from {currentData.length} {tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"}
                   </td>
                   {columnOrder.map(colId => (
-                    <td key={colId} className={cn("px-2 py-1.5 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", isTextCol(colId) ? "text-right" : "text-left")}>
+                    <td key={colId} className={cn("px-2 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", isTextCol(colId) ? "text-right" : "text-left")}>
                       {renderTotalCell(colId)}
                     </td>
                   ))}

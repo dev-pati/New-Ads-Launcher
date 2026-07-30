@@ -7,6 +7,20 @@ import { createAdminClient } from "@/lib/supabase/admin"
 // ── POST /api/launch-drafts           → save draft (lean data)
 // ── DELETE /api/launch-drafts?id=xxx  → delete draft
 
+/**
+ * This route reaches into exactly two fields of a saved draft — `creativeId` on each row and
+ * `selectedCreativeIds` on the snapshot. Everything else is stored and handed back untouched,
+ * so it stays opaque here rather than being restated: `launch/page.tsx` owns the real TableRow
+ * and settings shapes, and a second copy of them in this file would be a copy that drifts.
+ */
+type DraftRow = { creativeId?: string | null } & Record<string, unknown>
+type DraftSnapshot = { selectedCreativeIds?: string[] } & Record<string, unknown>
+type DraftData = {
+  rows?: DraftRow[]
+  globalSettings?: Record<string, unknown>
+  snapshot?: DraftSnapshot
+}
+
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
@@ -26,29 +40,42 @@ export async function GET(request: NextRequest) {
 
       if (error || !draft) return NextResponse.json({ error: "Draft not found" }, { status: 404 })
 
-      const draftData = draft.data as { rows?: any[]; globalSettings?: any }
+      const draftData = draft.data as DraftData
       const rows = draftData.rows || []
+      const snapshotIds: string[] = draftData.snapshot?.selectedCreativeIds || []
 
-      // Collect unique creative IDs from lean rows
-      const creativeIds = [...new Set(rows.map((r: any) => r.creativeId).filter(Boolean))]
+      // Every creative the draft references: Table-mode rows plus the Gallery-mode
+      // selection. Resolved in one query, then handed back to whichever needs it.
+      const creativeIds = [...new Set([
+        ...rows.map(r => r.creativeId),
+        ...snapshotIds,
+      ].filter((id): id is string => Boolean(id)))]
 
-      // Fetch creatives fresh from DB
-      let creativeMap: Record<string, any> = {}
+      // Fetch creatives fresh from DB — a creative may have been deleted, or re-uploaded to
+      // Meta with a new fb_video_id, since the draft was saved.
+      const creativeMap: Record<string, Record<string, unknown>> = {}
       if (creativeIds.length > 0) {
         const { data: creatives } = await db
           .from("creatives")
           .select("id, file_name, file_url, media_type, headline, primary_text, cta, link_url, fb_image_url, fb_thumbnail_url, fb_image_hash, fb_video_id, status")
+          .eq("org_id", ctx.orgId)
           .in("id", creativeIds)
         for (const c of creatives || []) creativeMap[c.id] = c
       }
 
       // Rebuild full TableRow[] by merging creative objects back in
-      const fullRows = rows.map((r: any) => ({
+      const fullRows = rows.map(r => ({
         ...r,
         creative: r.creativeId ? (creativeMap[r.creativeId] || null) : null,
       }))
 
-      return NextResponse.json({ draft: { ...draft, data: { ...draftData, rows: fullRows } } })
+      // Order follows the snapshot, not the query: the user's selection order is what the
+      // gallery shows. Ids that no longer resolve drop out, and the client reports how many.
+      const selectedCreatives = snapshotIds.map(id => creativeMap[id]).filter(Boolean)
+
+      return NextResponse.json({
+        draft: { ...draft, data: { ...draftData, rows: fullRows, selectedCreatives } },
+      })
     }
 
     // List drafts — no data JSONB for performance
@@ -77,13 +104,26 @@ export async function POST(request: NextRequest) {
 
     const db = createAdminClient()
     const body = await request.json()
-    const { name, adAccountId, adAccountName, rows, globalSettings, creativeThumbs } = body
+    const { name, adAccountId, adAccountName, rows, globalSettings, snapshot, creativeThumbs } = body
 
-    if (!rows?.length) return NextResponse.json({ error: "No rows to save" }, { status: 400 })
+    const rowList: DraftRow[] = Array.isArray(rows) ? rows : []
+    const snapshotIds: string[] = snapshot?.selectedCreativeIds || []
+
+    // A Gallery-mode draft has no Table rows — its unit of work is the selected creatives.
+    // Requiring rows is what made "Save Draft" impossible outside Table mode.
+    if (!rowList.length && !snapshotIds.length) {
+      return NextResponse.json({ error: "Nothing to save — configure an ad first" }, { status: 400 })
+    }
 
     // Collect creative IDs and thumbnails for list preview
-    const creativeIds = [...new Set(rows.map((r: any) => r.creativeId).filter(Boolean))]
+    const creativeIds = [...new Set([
+      ...rowList.map(r => r.creativeId),
+      ...snapshotIds,
+    ].filter((id): id is string => Boolean(id)))]
     const thumbs = creativeThumbs || []
+    // The drafts list shows this as "Rows"; for a Gallery draft the comparable count is the
+    // number of ads the selection will produce.
+    const unitCount = rowList.length || snapshotIds.length
 
     const { data, error } = await db
       .from("launch_drafts")
@@ -91,13 +131,19 @@ export async function POST(request: NextRequest) {
         org_id: ctx.orgId,
         user_id: ctx.user.id,
         user_name: ctx.user.full_name || ctx.user.email?.split("@")[0] || "Unknown",
-        name: name || `${rows.length} Ads — ${new Date().toLocaleString("vi-VN")}`,
+        name: name || `${unitCount} Ads — ${new Date().toLocaleString("vi-VN")}`,
         ad_account_id: adAccountId || null,
         ad_account_name: adAccountName || null,
-        row_count: rows.length,
+        row_count: unitCount,
         creative_ids: creativeIds,
         creative_thumbs: thumbs,
-        data: { rows, globalSettings: globalSettings || {} },
+        // `data` is JSONB, so `snapshot` needs no migration. It is stored only when sent, so
+        // drafts written by the previous build stay exactly as they were.
+        data: {
+          rows: rowList,
+          globalSettings: globalSettings || {},
+          ...(snapshot ? { snapshot } : {}),
+        },
       })
       .select("id, name, created_at")
       .single()

@@ -83,12 +83,12 @@ export function HeadlinesTab({ headlines }: Props) {
       />
 
       <div className="bg-card border border-border/60 rounded-2xl overflow-hidden">
-        <table className="w-full text-sm">
+        <table data-table="comfortable" className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/50 text-muted-foreground text-xs uppercase tracking-wide">
-              <th className="text-left px-5 py-3 font-semibold w-[45%]">Headline</th>
+              <th className="text-left px-3 font-semibold w-[45%]">Headline</th>
               {(["adsCount", "longestRunning", "totalRunningDays", "totalReach", "score"] as SortKey[]).map(k => (
-                <th key={k} className="px-5 py-3 text-right cursor-pointer select-none" onClick={() => toggleSort(k)}>
+                <th key={k} className="px-3 text-right cursor-pointer select-none" onClick={() => toggleSort(k)}>
                   <span className="flex items-center justify-end gap-1 font-semibold">
                     {LABELS[k]}
                     {sortKey === k
@@ -104,15 +104,15 @@ export function HeadlinesTab({ headlines }: Props) {
           <tbody className="divide-y divide-border/30">
             {paged.map((row, i) => (
               <tr key={i} className="hover:bg-muted/20 transition-colors">
-                <td className="px-5 py-3">
+                <td className="px-5">
                   <p className="text-xs font-medium text-foreground">{row.text}</p>
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums font-medium">{row.adsCount}</td>
-                <td className="px-5 py-3 text-right tabular-nums">{row.longestRunning}d</td>
-                <td className="px-5 py-3 text-right tabular-nums">{row.totalRunningDays}d</td>
-                <td className="px-5 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-medium">{formatViews(row.totalReach)}</td>
-                <td className="px-5 py-3 min-w-[80px]"><ScoreBar score={row.score} /></td>
-                <td className="px-3 py-3"><CopyBtn text={row.text} /></td>
+                <td className="px-3 text-right tabular-nums font-medium">{row.adsCount}</td>
+                <td className="px-3 text-right tabular-nums">{row.longestRunning}d</td>
+                <td className="px-3 text-right tabular-nums">{row.totalRunningDays}d</td>
+                <td className="px-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400 font-medium">{formatViews(row.totalReach)}</td>
+                <td className="px-3 min-w-[80px]"><ScoreBar score={row.score} /></td>
+                <td className="px-3"><CopyBtn text={row.text} /></td>
               </tr>
             ))}
           </tbody>

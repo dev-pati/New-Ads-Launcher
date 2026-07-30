@@ -630,14 +630,14 @@ export default function RulesPage() {
               </div>
             ) : (
               <div className="border rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+                <table data-table="comfortable" className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Rule Name</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Schedule</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Action</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Created</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Rule Name</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Status</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Schedule</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Action</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Created</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -648,18 +648,18 @@ export default function RulesPage() {
                       const actionLabel = FB_ACTIONS.find(a => a.value === ruleActions[0]?.type)?.label || ruleActions[0]?.type || "—"
                       return (
                         <tr key={rule.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-4 py-3">
+                          <td className="px-3">
                             <div className="font-medium">{rule.name}</div>
                             <div className="text-xs text-muted-foreground font-mono">{rule.id}</div>
                           </td>
-                          <td className="px-4 py-3">
+                          <td className="px-3">
                             <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium", ruleBadge(rule.status))}>
                               {rule.status}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-muted-foreground">{schedLabel}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{actionLabel}</td>
-                          <td className="px-4 py-3 text-muted-foreground">{fmtDate(rule.created_time)}</td>
+                          <td className="px-3 text-muted-foreground">{schedLabel}</td>
+                          <td className="px-3 text-muted-foreground">{actionLabel}</td>
+                          <td className="px-3 text-muted-foreground">{fmtDate(rule.created_time)}</td>
                         </tr>
                       )
                     })}
@@ -717,34 +717,34 @@ export default function RulesPage() {
               </div>
             ) : (
               <div className="border rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+                <table data-table="comfortable" className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Rule</th>
-                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">Entities Affected</th>
-                      <th className="text-right px-4 py-3 font-medium text-muted-foreground">API Calls</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Result</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Applicable</th>
-                      <th className="text-left px-4 py-3 font-medium text-muted-foreground">Executed</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Rule</th>
+                      <th className="text-right px-3 font-medium text-muted-foreground">Entities Affected</th>
+                      <th className="text-right px-3 font-medium text-muted-foreground">API Calls</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Result</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Applicable</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Executed</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {filteredHistory.map((h, idx) => (
                       <tr key={`${h.rule_id}-${idx}`} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3">
+                        <td className="px-3">
                           <div className="font-medium">{h.rule_name}</div>
                           <div className="text-xs text-muted-foreground font-mono">{h.rule_id}</div>
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums">{h.num_entity_affected ?? "—"}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{h.num_api_call ?? "—"}</td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 text-right tabular-nums">{h.num_entity_affected ?? "—"}</td>
+                        <td className="px-3 text-right tabular-nums">{h.num_api_call ?? "—"}</td>
+                        <td className="px-3">
                           {h.error_code ? (
                             <span className="text-red-600 dark:text-red-400 text-xs">Error {h.error_code}</span>
                           ) : (
                             <span className="text-xs text-muted-foreground">{h.results || "—"}</span>
                           )}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3">
                           {h.is_applicable === true ? (
                             <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs">
                               <IconCheck className="size-3.5" /> Yes
@@ -755,7 +755,7 @@ export default function RulesPage() {
                             </span>
                           ) : "—"}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground text-xs">{fmtDate(h.timestamp_stop)}</td>
+                        <td className="px-3 text-muted-foreground text-xs">{fmtDate(h.timestamp_stop)}</td>
                       </tr>
                     ))}
                   </tbody>

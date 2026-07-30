@@ -15,6 +15,7 @@ import {
   IconDeviceDesktop, IconDeviceTv, IconDeviceUnknown,
 } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
+import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { useAdAccount } from "@/lib/ad-account-context"
 
 // ─── Shared Helpers ───────────────────────────────────────────────────────────
@@ -125,60 +126,13 @@ function downloadCSV(filename: string, rows: (string | number)[][]) {
 
 // ─── Account Picker (shared) ──────────────────────────────────────────────────
 
+/**
+ * Kept as a named local so the eight render sites below do not all need editing, but the body is
+ * now the one shared pill. The search box this component used to own moved into the pill, where
+ * every other page gets it too.
+ */
 function AccountPicker() {
-  const { selectedAccountId, adAccounts, setSelectedAccountId } = useAdAccount()
-  const [open, setOpen]     = useState(false)
-  const [search, setSearch] = useState("")
-  const ref = useRef<HTMLDivElement>(null)
-  const accountName = (adAccounts as any[]).find(a => a.id === selectedAccountId)?.name || selectedAccountId || "—"
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch("") }
-    }
-    document.addEventListener("mousedown", h)
-    return () => document.removeEventListener("mousedown", h)
-  }, [])
-
-  const filtered = (adAccounts as any[]).filter(a => a.name.toLowerCase().includes(search.toLowerCase()))
-
-  return (
-    <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(v => !v)}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-muted/50 transition-colors">
-        <span className="size-2 rounded-full bg-blue-500 shrink-0" />
-        <span className="max-w-[180px] truncate">{accountName}</span>
-        <IconChevronDown className="size-3.5 text-muted-foreground" />
-      </button>
-      {open && filtered.length > 0 && (
-        <div className="absolute top-full right-0 mt-1 z-50 bg-popover border rounded-xl shadow-xl overflow-hidden min-w-[220px]">
-          <div className="p-2 border-b">
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-muted/40">
-              <IconSearch className="size-3.5 text-muted-foreground/50 shrink-0" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search accounts..." autoFocus
-                className="flex-1 text-sm bg-transparent outline-none placeholder:text-muted-foreground/40" />
-            </div>
-          </div>
-          <div className="py-1 max-h-64 overflow-y-auto">
-            <p className="px-3 pt-1 pb-0.5 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">Ad Accounts</p>
-            {filtered.map((acc: any) => (
-              <button key={acc.id} onClick={() => { setSelectedAccountId(acc.id); setOpen(false); setSearch("") }}
-                className={cn("w-full text-left px-3 py-2 text-sm hover:bg-muted/50 flex items-center justify-between gap-2 transition-colors",
-                  acc.id === selectedAccountId && "text-primary font-medium"
-                )}>
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={cn("size-2 rounded-full shrink-0", acc.id === selectedAccountId ? "bg-primary" : "bg-muted-foreground/30")} />
-                  <span className="truncate">{acc.name}</span>
-                </div>
-                {acc.id === selectedAccountId && <IconCheck className="size-3.5 shrink-0" />}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
+  return <AdAccountPill labelClassName="max-w-[180px]" />
 }
 
 // ─── ALL ACCOUNTS ─────────────────────────────────────────────────────────────
@@ -326,42 +280,42 @@ export function AllAccountsView({ adAccounts }: { adAccounts: { id: string; name
               <h2 className="text-sm font-semibold">Account Breakdown</h2>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table data-table="comfortable" className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/20">
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Account</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">Platform</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Spend ↓</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">%</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Clicks</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Impressions</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CTR</th>
-                    <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground">CPM</th>
+                    <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Account</th>
+                    <th className="text-left px-3 text-xs font-semibold text-muted-foreground">Platform</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Spend ↓</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">%</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Clicks</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Impressions</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CTR</th>
+                    <th className="text-right px-5 text-xs font-semibold text-muted-foreground">CPM</th>
                   </tr>
                 </thead>
                 <tbody>
                   {accounts.map(acc => (
                     <tr key={acc.id} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3 font-medium">{acc.name}</td>
-                      <td className="px-3 py-3 text-muted-foreground">Meta</td>
-                      <td className="px-3 py-3 text-right font-semibold">{fmt$(acc.spend)}</td>
-                      <td className="px-3 py-3 text-right text-muted-foreground">{totals.spend > 0 ? ((acc.spend / totals.spend) * 100).toFixed(1) + "%" : "—"}</td>
-                      <td className="px-3 py-3 text-right">{fmtK(acc.linkClicks)}</td>
-                      <td className="px-3 py-3 text-right">{fmtK(acc.impressions)}</td>
-                      <td className="px-3 py-3 text-right">{fmtPct(acc.ctr)}</td>
-                      <td className="px-5 py-3 text-right">{fmt$(acc.cpm)}</td>
+                      <td className="px-5 font-medium">{acc.name}</td>
+                      <td className="px-3 text-muted-foreground">Meta</td>
+                      <td className="px-3 text-right font-semibold">{fmt$(acc.spend)}</td>
+                      <td className="px-3 text-right text-muted-foreground">{totals.spend > 0 ? ((acc.spend / totals.spend) * 100).toFixed(1) + "%" : "—"}</td>
+                      <td className="px-3 text-right">{fmtK(acc.linkClicks)}</td>
+                      <td className="px-3 text-right">{fmtK(acc.impressions)}</td>
+                      <td className="px-3 text-right">{fmtPct(acc.ctr)}</td>
+                      <td className="px-5 text-right">{fmt$(acc.cpm)}</td>
                     </tr>
                   ))}
                   {/* Total row */}
                   <tr className="bg-muted/10 font-semibold">
-                    <td className="px-5 py-3">Total ({accounts.length} accounts)</td>
-                    <td className="px-3 py-3" />
-                    <td className="px-3 py-3 text-right">{fmt$(totals.spend || 0)}</td>
-                    <td className="px-3 py-3 text-right">100%</td>
-                    <td className="px-3 py-3 text-right">{fmtK(totals.clicks || 0)}</td>
-                    <td className="px-3 py-3 text-right">{fmtK(totals.impressions || 0)}</td>
-                    <td className="px-3 py-3 text-right">{fmtPct(totals.ctr || 0)}</td>
-                    <td className="px-5 py-3 text-right">{fmt$(totals.cpm || 0)}</td>
+                    <td className="px-5">Total ({accounts.length} accounts)</td>
+                    <td className="px-3" />
+                    <td className="px-3 text-right">{fmt$(totals.spend || 0)}</td>
+                    <td className="px-3 text-right">100%</td>
+                    <td className="px-3 text-right">{fmtK(totals.clicks || 0)}</td>
+                    <td className="px-3 text-right">{fmtK(totals.impressions || 0)}</td>
+                    <td className="px-3 text-right">{fmtPct(totals.ctr || 0)}</td>
+                    <td className="px-5 text-right">{fmt$(totals.cpm || 0)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -496,15 +450,15 @@ export function SpendView() {
           {/* Campaign / Adset tree table */}
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table data-table="comfortable" className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/20">
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Campaign / Ad Set</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">Objective</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">Status</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Spend ↓</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Results</th>
-                    <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground">CPA</th>
+                    <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Campaign / Ad Set</th>
+                    <th className="text-left px-3 text-xs font-semibold text-muted-foreground">Objective</th>
+                    <th className="text-left px-3 text-xs font-semibold text-muted-foreground">Status</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Spend ↓</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Results</th>
+                    <th className="text-right px-5 text-xs font-semibold text-muted-foreground">CPA</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -512,7 +466,7 @@ export function SpendView() {
                     <React.Fragment key={c.id}>
                       <tr className="border-b hover:bg-muted/20 transition-colors cursor-pointer"
                         onClick={() => toggleExpand(c.id)}>
-                        <td className="px-5 py-3">
+                        <td className="px-5">
                           <div className="flex items-center gap-2">
                             {c.adsets.length > 0
                               ? expanded.has(c.id)
@@ -523,19 +477,19 @@ export function SpendView() {
                             <span className="font-medium max-w-xs truncate">{c.name}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-muted-foreground text-xs capitalize">{c.objective?.replace(/_/g, " ") || "—"}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 text-muted-foreground text-xs capitalize">{c.objective?.replace(/_/g, " ") || "—"}</td>
+                        <td className="px-3">
                           <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full capitalize", statusBadge(c.status))}>
                             {c.status?.toLowerCase().replace(/_/g, " ") || "—"}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-right font-semibold">{fmt$(c.spend)}</td>
-                        <td className="px-3 py-3 text-right">{c.results || "—"}</td>
-                        <td className="px-5 py-3 text-right text-muted-foreground">{c.cpa > 0 ? fmt$(c.cpa) : "—"}</td>
+                        <td className="px-3 text-right font-semibold">{fmt$(c.spend)}</td>
+                        <td className="px-3 text-right">{c.results || "—"}</td>
+                        <td className="px-5 text-right text-muted-foreground">{c.cpa > 0 ? fmt$(c.cpa) : "—"}</td>
                       </tr>
                       {expanded.has(c.id) && c.adsets.map((a: any) => (
                         <tr key={a.id} className="border-b bg-muted/5 hover:bg-muted/10 transition-colors">
-                          <td className="px-5 py-2.5">
+                          <td className="px-5">
                             <div className="flex items-center gap-2 pl-6">
                               <span className="w-1 h-1 rounded-full bg-muted-foreground/40 shrink-0" />
                               <span className="text-xs text-muted-foreground max-w-xs truncate">{a.name}</span>
@@ -543,9 +497,9 @@ export function SpendView() {
                             </div>
                           </td>
                           <td colSpan={2} />
-                          <td className="px-3 py-2.5 text-right text-xs">{fmt$(a.spend)}</td>
-                          <td className="px-3 py-2.5 text-right text-xs">{a.results || "—"}</td>
-                          <td className="px-5 py-2.5 text-right text-xs text-muted-foreground">
+                          <td className="px-3 text-right text-xs">{fmt$(a.spend)}</td>
+                          <td className="px-3 text-right text-xs">{a.results || "—"}</td>
+                          <td className="px-5 text-right text-xs text-muted-foreground">
                             {a.results > 0 ? fmt$(a.spend / a.results) : "—"}
                           </td>
                         </tr>
@@ -912,24 +866,24 @@ export function DemographicView() {
                 <p className="text-xs text-muted-foreground">Top performing campaigns by spend</p>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table data-table="comfortable" className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/20">
-                      <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Campaign</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Spend</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Impressions</th>
-                      <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Top Demographics</th>
+                      <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Campaign</th>
+                      <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Spend</th>
+                      <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Impressions</th>
+                      <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Top Demographics</th>
                     </tr>
                   </thead>
                   <tbody>
                     {campaigns.map((c: any, i: number) => (
                       <tr key={`${c.name}-${i}`} className="border-b hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3">
+                        <td className="px-3">
                           <p className="font-medium max-w-xs truncate">{c.name}</p>
                         </td>
-                        <td className="px-3 py-3 text-right font-semibold">{fmt$(c.spend)}</td>
-                        <td className="px-3 py-3 text-right text-muted-foreground">{fmtK(c.impressions)}</td>
-                        <td className="px-5 py-3">
+                        <td className="px-3 text-right font-semibold">{fmt$(c.spend)}</td>
+                        <td className="px-3 text-right text-muted-foreground">{fmtK(c.impressions)}</td>
+                        <td className="px-3">
                           <div className="flex flex-wrap gap-1.5">
                             {c.topDemographics?.map((d: string) => (
                               <span key={d} className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{d}</span>
@@ -1272,10 +1226,10 @@ export function CountryView() {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table data-table="comfortable" className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/20">
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Country</th>
+                    <th className="text-left px-3 text-xs font-semibold text-muted-foreground">Country</th>
                     {[
                       { key: "spend",       label: "Spend" },
                       { key: "impressions", label: "Impressions" },
@@ -1296,21 +1250,21 @@ export function CountryView() {
                 <tbody>
                   {sortedCountries.map((c: any, i: number) => (
                     <tr key={c.code} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3">
+                      <td className="px-5">
                         <div className="flex items-center gap-2">
                           <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: COUNTRY_COLORS[i % COUNTRY_COLORS.length] }} />
                           <span className="font-medium">{c.label}</span>
                           <span className="text-xs text-muted-foreground/50">{c.code}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-right font-semibold">{fmt$(c.spend)}</td>
-                      <td className="px-3 py-3 text-right text-muted-foreground">{fmtK(c.impressions)}</td>
-                      <td className="px-3 py-3 text-right">{fmtK(c.linkClicks)}</td>
-                      <td className="px-3 py-3 text-right">{fmtPct(c.ctr)}</td>
-                      <td className="px-3 py-3 text-right">{fmt$(c.cpm)}</td>
-                      <td className="px-3 py-3 text-right">{fmt$(c.cpc)}</td>
-                      <td className="px-3 py-3 text-right">{c.purchases > 0 ? Math.round(c.purchases) : "—"}</td>
-                      <td className="px-3 py-3 text-right text-muted-foreground">{c.cpa > 0 ? fmt$(c.cpa) : "—"}</td>
+                      <td className="px-3 text-right font-semibold">{fmt$(c.spend)}</td>
+                      <td className="px-3 text-right text-muted-foreground">{fmtK(c.impressions)}</td>
+                      <td className="px-3 text-right">{fmtK(c.linkClicks)}</td>
+                      <td className="px-3 text-right">{fmtPct(c.ctr)}</td>
+                      <td className="px-3 text-right">{fmt$(c.cpm)}</td>
+                      <td className="px-3 text-right">{fmt$(c.cpc)}</td>
+                      <td className="px-3 text-right">{c.purchases > 0 ? Math.round(c.purchases) : "—"}</td>
+                      <td className="px-3 text-right text-muted-foreground">{c.cpa > 0 ? fmt$(c.cpa) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1949,35 +1903,35 @@ export function PlacementsView() {
                   <h2 className="text-sm font-semibold">Placement Details</h2>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table data-table="comfortable" className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/20">
-                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Platform</th>
-                        <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">Placement</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Spend</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">%</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Impressions</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Clicks</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CTR</th>
-                        <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground">CPC</th>
+                        <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Platform</th>
+                        <th className="text-left px-3 text-xs font-semibold text-muted-foreground">Placement</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Spend</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">%</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Impressions</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Clicks</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CTR</th>
+                        <th className="text-right px-5 text-xs font-semibold text-muted-foreground">CPC</th>
                       </tr>
                     </thead>
                     <tbody>
                       {placements.map((p: any) => (
                         <tr key={p.label} className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-5 py-3">
+                          <td className="px-5">
                             <div className="flex items-center gap-2">
                               <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: platformColor(p.platform) }} />
                               <span className="font-medium">{p.platform}</span>
                             </div>
                           </td>
-                          <td className="px-3 py-3 text-muted-foreground capitalize">{p.position?.replace(/_/g, " ")}</td>
-                          <td className="px-3 py-3 text-right font-semibold">{fmt$(p.spend)}</td>
-                          <td className="px-3 py-3 text-right text-muted-foreground">{totalSpend > 0 ? ((p.spend / totalSpend) * 100).toFixed(1) + "%" : "—"}</td>
-                          <td className="px-3 py-3 text-right">{fmtK(p.impressions)}</td>
-                          <td className="px-3 py-3 text-right">{fmtK(p.linkClicks)}</td>
-                          <td className="px-3 py-3 text-right">{fmtPct(p.ctr)}</td>
-                          <td className="px-5 py-3 text-right">{p.cpc > 0 ? fmt$(p.cpc) : "—"}</td>
+                          <td className="px-3 text-muted-foreground capitalize">{p.position?.replace(/_/g, " ")}</td>
+                          <td className="px-3 text-right font-semibold">{fmt$(p.spend)}</td>
+                          <td className="px-3 text-right text-muted-foreground">{totalSpend > 0 ? ((p.spend / totalSpend) * 100).toFixed(1) + "%" : "—"}</td>
+                          <td className="px-3 text-right">{fmtK(p.impressions)}</td>
+                          <td className="px-3 text-right">{fmtK(p.linkClicks)}</td>
+                          <td className="px-3 text-right">{fmtPct(p.ctr)}</td>
+                          <td className="px-5 text-right">{p.cpc > 0 ? fmt$(p.cpc) : "—"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -2032,49 +1986,49 @@ export function PlacementsView() {
                   <h2 className="text-sm font-semibold">Platform Summary</h2>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table data-table="comfortable" className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/20">
-                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Platform</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Spend</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">%</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Impressions</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Link Clicks</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CTR</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CPM</th>
-                        <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CPC</th>
-                        <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground">CPA</th>
+                        <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Platform</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Spend</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">%</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Impressions</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Link Clicks</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CTR</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CPM</th>
+                        <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CPC</th>
+                        <th className="text-right px-5 text-xs font-semibold text-muted-foreground">CPA</th>
                       </tr>
                     </thead>
                     <tbody>
                       {platforms.map((p: any) => (
                         <tr key={p.platform} className="border-b hover:bg-muted/20 transition-colors">
-                          <td className="px-5 py-3">
+                          <td className="px-5">
                             <div className="flex items-center gap-2">
                               <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: platformColor(p.platform) }} />
                               <span className="font-semibold">{p.platform}</span>
                             </div>
                           </td>
-                          <td className="px-3 py-3 text-right font-semibold">{fmt$(p.spend)}</td>
-                          <td className="px-3 py-3 text-right text-muted-foreground">{totalSpend > 0 ? ((p.spend / totalSpend) * 100).toFixed(1) + "%" : "—"}</td>
-                          <td className="px-3 py-3 text-right">{fmtK(p.impressions)}</td>
-                          <td className="px-3 py-3 text-right">{fmtK(p.linkClicks)}</td>
-                          <td className="px-3 py-3 text-right">{fmtPct(p.ctr)}</td>
-                          <td className="px-3 py-3 text-right">{fmt$(p.cpm)}</td>
-                          <td className="px-3 py-3 text-right">{p.cpc > 0 ? fmt$(p.cpc) : "—"}</td>
-                          <td className="px-5 py-3 text-right text-muted-foreground">{p.cpa > 0 ? fmt$(p.cpa) : "—"}</td>
+                          <td className="px-3 text-right font-semibold">{fmt$(p.spend)}</td>
+                          <td className="px-3 text-right text-muted-foreground">{totalSpend > 0 ? ((p.spend / totalSpend) * 100).toFixed(1) + "%" : "—"}</td>
+                          <td className="px-3 text-right">{fmtK(p.impressions)}</td>
+                          <td className="px-3 text-right">{fmtK(p.linkClicks)}</td>
+                          <td className="px-3 text-right">{fmtPct(p.ctr)}</td>
+                          <td className="px-3 text-right">{fmt$(p.cpm)}</td>
+                          <td className="px-3 text-right">{p.cpc > 0 ? fmt$(p.cpc) : "—"}</td>
+                          <td className="px-5 text-right text-muted-foreground">{p.cpa > 0 ? fmt$(p.cpa) : "—"}</td>
                         </tr>
                       ))}
                       {/* Total row */}
                       <tr className="bg-muted/10 font-semibold">
-                        <td className="px-5 py-3">Total ({platforms.length} platforms)</td>
-                        <td className="px-3 py-3 text-right">{fmt$(totalSpend)}</td>
-                        <td className="px-3 py-3 text-right">100%</td>
-                        <td className="px-3 py-3 text-right">{fmtK(platforms.reduce((sum: number, p: any) => sum + p.impressions, 0))}</td>
-                        <td className="px-3 py-3 text-right">{fmtK(platforms.reduce((sum: number, p: any) => sum + p.linkClicks, 0))}</td>
-                        <td className="px-3 py-3 text-right">{fmtPct(s.avgCtr || 0)}</td>
-                        <td colSpan={2} className="px-3 py-3 text-right text-muted-foreground/50">—</td>
-                        <td className="px-5 py-3 text-right text-muted-foreground">{s.avgCpa > 0 ? fmt$(s.avgCpa) : "—"}</td>
+                        <td className="px-5">Total ({platforms.length} platforms)</td>
+                        <td className="px-3 text-right">{fmt$(totalSpend)}</td>
+                        <td className="px-3 text-right">100%</td>
+                        <td className="px-3 text-right">{fmtK(platforms.reduce((sum: number, p: any) => sum + p.impressions, 0))}</td>
+                        <td className="px-3 text-right">{fmtK(platforms.reduce((sum: number, p: any) => sum + p.linkClicks, 0))}</td>
+                        <td className="px-3 text-right">{fmtPct(s.avgCtr || 0)}</td>
+                        <td colSpan={2} className="px-3 text-right text-muted-foreground/50">—</td>
+                        <td className="px-5 text-right text-muted-foreground">{s.avgCpa > 0 ? fmt$(s.avgCpa) : "—"}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -2307,24 +2261,24 @@ export function DeviceView() {
               )}
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table data-table="comfortable" className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/20">
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Device</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Spend</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">%</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Impressions</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CTR</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CPC</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CPM</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">CPA</th>
-                    {data?.hasPrevious && <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground">Δ Spend</th>}
+                    <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Device</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Spend</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">%</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Impressions</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CTR</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CPC</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CPM</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">CPA</th>
+                    {data?.hasPrevious && <th className="text-right px-5 text-xs font-semibold text-muted-foreground">Δ Spend</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {devices.map((d: any, i: number) => (
                     <tr key={d.device} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3">
+                      <td className="px-5">
                         <div className="flex items-center gap-2">
                           <span className="size-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: DEVICE_COLORS[d.label] || ACCOUNT_COLORS[i % ACCOUNT_COLORS.length] }} />
@@ -2332,15 +2286,15 @@ export function DeviceView() {
                           <span className="font-medium">{d.label}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-right font-semibold">{fmt$(d.spend)}</td>
-                      <td className="px-3 py-3 text-right text-muted-foreground">{totalSpend > 0 ? ((d.spend / totalSpend) * 100).toFixed(1) + "%" : "—"}</td>
-                      <td className="px-3 py-3 text-right">{fmtK(d.impressions)}</td>
-                      <td className="px-3 py-3 text-right">{fmtPct(d.ctr)}</td>
-                      <td className="px-3 py-3 text-right">{d.cpc > 0 ? fmt$(d.cpc) : "—"}</td>
-                      <td className="px-3 py-3 text-right">{d.cpm > 0 ? fmt$(d.cpm) : "—"}</td>
-                      <td className="px-3 py-3 text-right">{d.cpa > 0 ? fmt$(d.cpa) : "—"}</td>
+                      <td className="px-3 text-right font-semibold">{fmt$(d.spend)}</td>
+                      <td className="px-3 text-right text-muted-foreground">{totalSpend > 0 ? ((d.spend / totalSpend) * 100).toFixed(1) + "%" : "—"}</td>
+                      <td className="px-3 text-right">{fmtK(d.impressions)}</td>
+                      <td className="px-3 text-right">{fmtPct(d.ctr)}</td>
+                      <td className="px-3 text-right">{d.cpc > 0 ? fmt$(d.cpc) : "—"}</td>
+                      <td className="px-3 text-right">{d.cpm > 0 ? fmt$(d.cpm) : "—"}</td>
+                      <td className="px-3 text-right">{d.cpa > 0 ? fmt$(d.cpa) : "—"}</td>
                       {data?.hasPrevious && (
-                        <td className="px-5 py-3 text-right">
+                        <td className="px-5 text-right">
                           {d.spendDelta !== null ? (
                             <span className={cn("text-xs font-semibold", d.spendDelta >= 0 ? "text-emerald-500" : "text-rose-500")}>
                               {d.spendDelta >= 0 ? "+" : ""}{d.spendDelta.toFixed(1)}%
@@ -2523,31 +2477,31 @@ export function ReachView() {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table data-table="comfortable" className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/20">
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Month</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Reach</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Impressions</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Frequency</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Spend</th>
-                    <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground">Cumulative Reach</th>
+                    <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Month</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Reach</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Impressions</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Frequency</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Spend</th>
+                    <th className="text-right px-5 text-xs font-semibold text-muted-foreground">Cumulative Reach</th>
                   </tr>
                 </thead>
                 <tbody>
                   {[...months].reverse().map((m: any) => (
                     <tr key={m.key} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3 font-medium">{m.label}</td>
-                      <td className="px-3 py-3 text-right">{fmtK(m.reach)}</td>
-                      <td className="px-3 py-3 text-right text-muted-foreground">{fmtK(m.impressions)}</td>
-                      <td className="px-3 py-3 text-right">
+                      <td className="px-5 font-medium">{m.label}</td>
+                      <td className="px-3 text-right">{fmtK(m.reach)}</td>
+                      <td className="px-3 text-right text-muted-foreground">{fmtK(m.impressions)}</td>
+                      <td className="px-3 text-right">
                         <span className="inline-flex items-center gap-1">
                           <span className="size-1.5 rounded-full" style={{ backgroundColor: FREQ_COLOR(m.frequency) }} />
                           <span style={{ color: FREQ_COLOR(m.frequency) }} className="font-semibold">{m.frequency.toFixed(2)}x</span>
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-right">{fmt$(m.spend)}</td>
-                      <td className="px-5 py-3 text-right text-muted-foreground">{fmtK(m.cumulativeReach)}</td>
+                      <td className="px-3 text-right">{fmt$(m.spend)}</td>
+                      <td className="px-5 text-right text-muted-foreground">{fmtK(m.cumulativeReach)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -3175,30 +3129,30 @@ export function UploadStatsView() {
                 <h2 className="text-sm font-semibold">Team Leaderboard</h2>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table data-table="comfortable" className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/20">
-                      <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">#</th>
-                      <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">Launcher</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Ads Launched</th>
-                      <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Batches</th>
-                      <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground">Last Launch</th>
+                      <th className="text-left px-5 text-xs font-semibold text-muted-foreground">#</th>
+                      <th className="text-left px-3 text-xs font-semibold text-muted-foreground">Launcher</th>
+                      <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Ads Launched</th>
+                      <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Batches</th>
+                      <th className="text-right px-5 text-xs font-semibold text-muted-foreground">Last Launch</th>
                     </tr>
                   </thead>
                   <tbody>
                     {leaderboard.map((u: any, i: number) => (
                       <tr key={u.userId} className="border-b hover:bg-muted/20 transition-colors">
-                        <td className="px-5 py-3">
+                        <td className="px-5">
                           <span className={cn("text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center",
                             i === 0 ? "bg-amber-400/20 text-amber-500" :
                             i === 1 ? "bg-slate-400/20 text-slate-500" :
                             i === 2 ? "bg-orange-400/20 text-orange-500" : "text-muted-foreground"
                           )}>{i + 1}</span>
                         </td>
-                        <td className="px-3 py-3 font-medium">{u.userName}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-blue-500">{u.ads}</td>
-                        <td className="px-3 py-3 text-right text-muted-foreground">{u.batches}</td>
-                        <td className="px-5 py-3 text-right text-muted-foreground text-xs">{u.lastLaunch || "—"}</td>
+                        <td className="px-3 font-medium">{u.userName}</td>
+                        <td className="px-3 text-right font-semibold text-blue-500">{u.ads}</td>
+                        <td className="px-3 text-right text-muted-foreground">{u.batches}</td>
+                        <td className="px-5 text-right text-muted-foreground text-xs">{u.lastLaunch || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -3219,16 +3173,16 @@ export function UploadStatsView() {
               </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table data-table="comfortable" className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/20">
-                    <th className="text-left px-5 py-2.5 text-xs font-semibold text-muted-foreground">Date</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">Launched by</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-semibold text-muted-foreground">Account</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Ads</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Failed</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-semibold text-muted-foreground">Duration</th>
-                    <th className="text-right px-5 py-2.5 text-xs font-semibold text-muted-foreground">Status</th>
+                    <th className="text-left px-5 text-xs font-semibold text-muted-foreground">Date</th>
+                    <th className="text-left px-3 text-xs font-semibold text-muted-foreground">Launched by</th>
+                    <th className="text-left px-3 text-xs font-semibold text-muted-foreground">Account</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Ads</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Failed</th>
+                    <th className="text-right px-3 text-xs font-semibold text-muted-foreground">Duration</th>
+                    <th className="text-right px-5 text-xs font-semibold text-muted-foreground">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3237,21 +3191,21 @@ export function UploadStatsView() {
                   )}
                   {filteredBatches.map((b: any) => (
                     <tr key={b.id} className="border-b hover:bg-muted/20 transition-colors">
-                      <td className="px-5 py-3 text-xs text-muted-foreground whitespace-nowrap">
+                      <td className="px-5 text-xs text-muted-foreground whitespace-nowrap">
                         {new Date(b.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </td>
-                      <td className="px-3 py-3 font-medium">{b.userName}</td>
-                      <td className="px-3 py-3 text-muted-foreground max-w-[180px] truncate">{b.adAccountName}</td>
-                      <td className="px-3 py-3 text-right font-semibold text-blue-500">{b.totalAds}</td>
-                      <td className="px-3 py-3 text-right">
+                      <td className="px-3 font-medium">{b.userName}</td>
+                      <td className="px-3 text-muted-foreground max-w-[180px] truncate">{b.adAccountName}</td>
+                      <td className="px-3 text-right font-semibold text-blue-500">{b.totalAds}</td>
+                      <td className="px-3 text-right">
                         {b.failedAds > 0
                           ? <span className="text-rose-500 font-medium">{b.failedAds}</span>
                           : <span className="text-muted-foreground/30">—</span>}
                       </td>
-                      <td className="px-3 py-3 text-right text-muted-foreground text-xs">
+                      <td className="px-3 text-right text-muted-foreground text-xs">
                         {b.durationMs > 0 ? (b.durationMs < 60000 ? (b.durationMs / 1000).toFixed(0) + "s" : (b.durationMs / 60000).toFixed(1) + "m") : "—"}
                       </td>
-                      <td className="px-5 py-3 text-right">
+                      <td className="px-5 text-right">
                         <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full",
                           b.status === "success" ? "bg-emerald-500/10 text-emerald-600" :
                           b.status === "partial"  ? "bg-amber-500/10 text-amber-600" :
@@ -3522,25 +3476,25 @@ export function PageInsightsView() {
           )}
 
           <div className="rounded-xl border bg-card overflow-hidden">
-            <table className="w-full text-sm">
+            <table data-table="comfortable" className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
                   {["Date","Fans","New Fans","Reach","Impressions","Engaged","Engagements","Page Views"].map(h => (
-                    <th key={h} className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">{h}</th>
+                    <th key={h} className="text-left px-3 text-xs font-medium text-muted-foreground">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {[...daily].reverse().map((d: any) => (
                   <tr key={d.date} className="border-t hover:bg-muted/30 transition-colors">
-                    <td className="px-3 py-2 text-muted-foreground">{fmtDay(d.date)}</td>
-                    <td className="px-3 py-2 font-medium">{fmtK(d.fans || 0)}</td>
-                    <td className="px-3 py-2 text-green-600">+{fmtK(d.new_fans || d.page_fan_adds || 0)}</td>
-                    <td className="px-3 py-2">{fmtK(d.reach || d.page_impressions_unique || 0)}</td>
-                    <td className="px-3 py-2">{fmtK(d.impressions || d.page_impressions || 0)}</td>
-                    <td className="px-3 py-2">{fmtK(d.engaged_users || d.page_engaged_users || 0)}</td>
-                    <td className="px-3 py-2">{fmtK(d.post_engagements || d.page_post_engagements || 0)}</td>
-                    <td className="px-3 py-2">{fmtK(d.page_views || d.page_views_total || 0)}</td>
+                    <td className="px-3 text-muted-foreground">{fmtDay(d.date)}</td>
+                    <td className="px-3 font-medium">{fmtK(d.fans || 0)}</td>
+                    <td className="px-3 text-green-600">+{fmtK(d.new_fans || d.page_fan_adds || 0)}</td>
+                    <td className="px-3">{fmtK(d.reach || d.page_impressions_unique || 0)}</td>
+                    <td className="px-3">{fmtK(d.impressions || d.page_impressions || 0)}</td>
+                    <td className="px-3">{fmtK(d.engaged_users || d.page_engaged_users || 0)}</td>
+                    <td className="px-3">{fmtK(d.post_engagements || d.page_post_engagements || 0)}</td>
+                    <td className="px-3">{fmtK(d.page_views || d.page_views_total || 0)}</td>
                   </tr>
                 ))}
               </tbody>

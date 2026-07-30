@@ -751,18 +751,18 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                   </button>
                 </div>
                 <div className="rounded border overflow-auto max-h-56">
-                  <table className="w-full text-xs">
+                  <table data-table="compact" className="w-full text-xs">
                     <thead className="sticky top-0 bg-muted/80 border-b">
                       <tr>
-                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ad Name</th>
-                        <th className="text-left px-3 py-2 font-medium text-muted-foreground w-40">Ad ID</th>
+                        <th className="text-left px-3 font-medium text-muted-foreground">Ad Name</th>
+                        <th className="text-left px-3 font-medium text-muted-foreground w-40">Ad ID</th>
                       </tr>
                     </thead>
                     <tbody>
                       {result.created.map((item: any, i: number) => (
                         <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
-                          <td className="px-3 py-2 max-w-xs truncate" title={item.adName}>{item.adName || item.name}</td>
-                          <td className="px-3 py-2 font-mono text-muted-foreground">{item.adId}</td>
+                          <td className="px-3 max-w-xs truncate" title={item.adName}>{item.adName || item.name}</td>
+                          <td className="px-3 font-mono text-muted-foreground">{item.adId}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1206,32 +1206,32 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                         <p className="text-xs text-muted-foreground">{rows.length} ad{rows.length !== 1 ? "s" : ""} will be created</p>
                       </div>
                       <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
+                        <table data-table="compact" className="w-full text-xs">
                           <thead>
                             <tr className="border-b bg-muted/30">
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">CAMPAIGN ID</th>
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">CAMPAIGN NAME</th>
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">AD SET ID</th>
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">AD SET NAME</th>
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">AD NAME</th>
+                              <th className="text-left px-3 font-medium text-muted-foreground">CAMPAIGN ID</th>
+                              <th className="text-left px-3 font-medium text-muted-foreground">CAMPAIGN NAME</th>
+                              <th className="text-left px-3 font-medium text-muted-foreground">AD SET ID</th>
+                              <th className="text-left px-3 font-medium text-muted-foreground">AD SET NAME</th>
+                              <th className="text-left px-3 font-medium text-muted-foreground">AD NAME</th>
                             </tr>
                           </thead>
                           <tbody>
                             {rows.map((row, i) => {
                               const idCell = (val: string) => {
                                 if (val === "(new)" || val === "(new each)")
-                                  return <td className="px-3 py-2 text-xs italic text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{val}</td>
+                                  return <td className="px-3 text-xs italic text-emerald-600 dark:text-emerald-400 whitespace-nowrap">{val}</td>
                                 if (val === "—")
-                                  return <td className="px-3 py-2 text-muted-foreground">—</td>
-                                return <td className="px-3 py-2 font-mono text-muted-foreground text-xs whitespace-nowrap">{val}</td>
+                                  return <td className="px-3 text-muted-foreground">—</td>
+                                return <td className="px-3 font-mono text-muted-foreground text-xs whitespace-nowrap">{val}</td>
                               }
                               return (
                                 <tr key={i} className="border-b last:border-0 hover:bg-muted/20">
                                   {idCell(row.campId)}
-                                  <td className="px-3 py-2 max-w-[180px] truncate" title={row.campName}>{row.campName}</td>
+                                  <td className="px-3 max-w-[180px] truncate" title={row.campName}>{row.campName}</td>
                                   {idCell(row.adsetId)}
-                                  <td className="px-3 py-2 max-w-[180px] truncate" title={row.adsetName}>{row.adsetName}</td>
-                                  <td className="px-3 py-2 max-w-[180px] truncate" title={row.adName}>{row.adName}</td>
+                                  <td className="px-3 max-w-[180px] truncate" title={row.adsetName}>{row.adsetName}</td>
+                                  <td className="px-3 max-w-[180px] truncate" title={row.adName}>{row.adName}</td>
                                 </tr>
                               )
                             })}

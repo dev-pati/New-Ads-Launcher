@@ -2372,14 +2372,14 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
               {search && <button onClick={() => setSearch("")} className="text-primary hover:underline text-xs">Clear search</button>}
             </div>
           ) : (
-            <table className="w-full text-xs">
+            <table data-table="compact" className="w-full text-xs">
               <thead className="sticky top-0 bg-muted/70 backdrop-blur-sm">
                 <tr className="border-b border-border">
-                  <th className="text-left px-4 py-2.5 font-semibold text-foreground/70">Name</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-foreground/70">Ads</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-foreground/70">Spend</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-foreground/70">Status</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-foreground/70">Objective</th>
+                  <th className="text-left px-3 font-semibold text-foreground/70">Name</th>
+                  <th className="text-right px-3 font-semibold text-foreground/70">Ads</th>
+                  <th className="text-right px-3 font-semibold text-foreground/70">Spend</th>
+                  <th className="text-center px-3 font-semibold text-foreground/70">Status</th>
+                  <th className="text-left px-3 font-semibold text-foreground/70">Objective</th>
                 </tr>
               </thead>
               <tbody>
@@ -2389,7 +2389,7 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
                     onClick={() => { onSelect(c.id, c.name); onClose() }}
                     className="border-b border-border/50 hover:bg-muted/40 cursor-pointer transition-colors"
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-3">
                       <div className="flex items-center gap-2">
                         <div className={cn("size-2 rounded-full shrink-0 mt-px",
                           c.status === "ACTIVE" ? "bg-green-500" : "bg-amber-400"
@@ -2397,11 +2397,11 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
                         <span className="font-medium truncate max-w-[230px]">{c.name}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-right text-muted-foreground">{c.ads_count ?? "—"}</td>
-                    <td className="px-3 py-3 text-right text-muted-foreground">
+                    <td className="px-3 text-right text-muted-foreground">{c.ads_count ?? "—"}</td>
+                    <td className="px-3 text-right text-muted-foreground">
                       {c.spend ? `$${Number(c.spend).toLocaleString()}` : "—"}
                     </td>
-                    <td className="px-3 py-3 text-center">
+                    <td className="px-3 text-center">
                       <span className={cn("px-1.5 py-0.5 rounded text-xs font-semibold",
                         c.status === "ACTIVE"
                           ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
@@ -2410,7 +2410,7 @@ function CampaignPickerModal({ adAccountId, onSelect, onClose }: {
                         {c.status === "ACTIVE" ? "Active" : c.status === "PAUSED" ? "Paused" : c.status}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-muted-foreground">{c.objective?.replace(/_/g, " ") ?? "—"}</td>
+                    <td className="px-3 text-muted-foreground">{c.objective?.replace(/_/g, " ") ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

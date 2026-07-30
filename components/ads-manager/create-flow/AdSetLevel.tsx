@@ -122,7 +122,7 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 pb-20">
+    <div className="mx-auto max-w-4xl space-y-6 px-6 py-8 pb-20">
       <div className="flex items-center gap-2">
         <h1 className="text-xl font-bold text-[#1c2b33] dark:text-gray-100">Ad Set</h1>
       </div>

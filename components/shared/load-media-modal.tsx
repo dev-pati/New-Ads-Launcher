@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import {
   Select,
   SelectContent,
@@ -17,14 +16,20 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  IconSearch, IconX, IconPlus, IconUpload, IconFolder, IconFolderOpen,
+  IconSearch, IconX, IconUpload, IconFolder, IconFolderOpen,
   IconRefresh, IconLayoutGrid, IconTable, IconTrash, IconSettings, IconStack2,
   IconLoader2, IconPhoto, IconVideo, IconMinus, IconPlayerPlay,
   IconChevronDown, IconChevronUp, IconCheck, IconCircleCheck, IconClipboard, IconDots,
-  IconArrowsUpDown, IconSelector, IconCalendar, IconExternalLink,
+  IconCalendar,
   IconBrandGoogleDrive, IconBrandMeta as IconMetaBadge,
-  IconClock, IconArrowsSort, IconAlertCircle, IconCopy
+  IconArrowsSort
 } from "@tabler/icons-react"
+import {
+  MediaDetailSheet,
+  formatMediaDuration,
+  type MediaDetailFile,
+} from "@/components/shared/media-detail-sheet"
+import type { FolderNode } from "@/lib/portal-media/tree"
 import { Creative } from "@/types/creative"
 import { DynamicMediaToggle } from "@/components/ui/dynamic-media-toggle"
 import { CreativeCardMedia } from "@/components/creative-card-media"
@@ -198,49 +203,18 @@ interface FbMediaItem { id: string; fb_id: string; name: string; media_type: "im
 interface DriveFileItem { id: string; name: string; mimeType: string; thumbnailLink?: string; iconLink?: string; size?: string; modifiedTime?: string }
 interface AdAccountItem { id: string; name: string; account_id?: string }
 
-// Portal catalog shapes — mirrors lib/portal-media/tree.ts MediaNode/FolderNode.
-// Duplicated here (not imported) because this is a client component bundle and the
-// source lives under lib/portal-media which pulls in server-only Supabase clients.
-interface PortalMediaFile {
-  kind: "file"
-  assetId: string
-  objectKey: string
-  name: string
-  brandId: string | null
-  brandName: string | null
-  productId: string | null
-  productName: string | null
-  language: string | null
-  width: number | null
-  height: number | null
-  durationSeconds: number | null
-  pdpUrl: string | null
-  salesPageUrl: string | null
-  landingUrl: string | null
-  checkoutFunnelUrl: string | null
-  brandSlug: string | null
-  briefType: string | null
-  voiceVariant: string | null
-  mimeType: string | null
-  sizeBytes: number | null
-  createdAt: string | null
-  fileUrl: string | null
-}
-interface PortalFolder {
-  kind: "folder"
-  path: string
-  label: string
-  fileCount: number
-  folders: PortalFolder[]
-  files: PortalMediaFile[]
-}
+// Portal catalog shapes, straight from lib/portal-media/tree.ts. `import type` erases at
+// compile time, so nothing from that module — including its server-only Supabase import —
+// reaches this client bundle. These used to be hand-copied structural clones and had
+// already drifted: the copy was missing `mediaType`.
+type PortalMediaFile = MediaDetailFile
+type PortalFolder = FolderNode
 
 // ─── Load Media Modal ─────────────────────────────────────────────────────────
 
 type MediaTab = "library" | "vault" | "existing" | "gdrive" | "drive_browser" | "drive_link" | "integrations"
 type SortField = "name" | "ad_id" | "brand" | "product" | "language" | "dimensions" | "duration" | "date" | "status" | "user" | "workspace"
 type SortDir = "asc" | "desc"
-const PORTAL_MEDIA_RESOLVER = `${process.env.NEXT_PUBLIC_CREATIVE_MEDIA_API_ORIGIN || "https://creative.patigroup.com"}/api/media`
 
 interface ExistingAdRow {
   id: string
@@ -320,6 +294,13 @@ export function LoadMediaModal({
   const [existingAccountId, setExistingAccountId] = useState(adAccountId)
   const [existingAccountOpen, setExistingAccountOpen] = useState(false)
   const [existingFilterOpen, setExistingFilterOpen] = useState(false)
+  /**
+   * Open-state for the footer's Include picker (Creatives only / Full ad config / Ad settings
+   * only), which is a real control. The Existing Ads toolbar used to hold a *second* dropdown
+   * also labelled "Include" — three checkboxes with no handler — sharing this same state. That
+   * one is gone; two controls with one label and one of them inert is not a labelling problem
+   * worth keeping.
+   */
   const [existingIncludeOpen, setExistingIncludeOpen] = useState(false)
   const [existingIncludeMode, setExistingIncludeMode] = useState<"creatives" | "full" | "ad_settings">("creatives")
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(
@@ -347,14 +328,16 @@ export function LoadMediaModal({
   const [fbMediaSort, setFbMediaSort] = useState<{ field: string; dir: "asc" | "desc" }>({ field: "date", dir: "desc" })
   const FB_MEDIA_PAGE = 20
   const [selected, setSelected] = useState<Set<string>>(new Set(alreadySelected))
-  // Filter chip values
+  /**
+   * Filter chip values. `uploader`, `channels`, `workspace` and `source` used to sit here too;
+   * they had no options and no predicate, so the keys went with the chips — leaving them would
+   * leave `ClearFiltersButton` resetting fields nothing can set.
+   */
   const [filters, setFilters] = useState<{
-    uploader: string; status: string; channels: string; fileType: string
-    dimensions: string; workspace: string; source: string; dateAdded: string
+    status: string; fileType: string; dimensions: string; dateAdded: string
     brand: string; product: string; language: string
   }>({
-    uploader: "all", status: "all", channels: "all", fileType: "all",
-    dimensions: "all", workspace: "all", source: "all", dateAdded: "all",
+    status: "all", fileType: "all", dimensions: "all", dateAdded: "all",
     brand: "all", product: "all", language: "all",
   })
   // Portal catalog, flattened by object key — joined against fbMedia/allCreatives via
@@ -365,7 +348,6 @@ export function LoadMediaModal({
   const [sortDir, setSortDir] = useState<SortDir>("desc")
   const [pasteOpen, setPasteOpen] = useState(false)
   const [pasteText, setPasteText] = useState("")
-  const [includeOpen, setIncludeOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null)
@@ -972,9 +954,7 @@ export function LoadMediaModal({
   // Build dynamic chip options from data
   const uniq = (arr: any[]) => Array.from(new Set(arr.filter(Boolean)))
   const filterOptions = {
-    uploader:   [] as string[],
     status:     uniq(fbMedia.map(m => typeof m.status === "object" ? (m.status as any)?.value : m.status)) as string[],
-    channels:   [] as string[],
     fileType:   ["image", "video"],
     dimensions: uniq(fbMedia.map(m => {
       if (m.dimensions) return m.dimensions
@@ -985,8 +965,6 @@ export function LoadMediaModal({
       }
       return null
     })) as string[],
-    workspace:  [] as string[],
-    source:     [] as string[],
     dateAdded:  ["today", "week", "month", "year"],
     brand:      uniq(allCreatives.map(c => resolveCreativePortal(c)?.brandName)) as string[],
     product:    uniq(allCreatives.map(c => resolveCreativePortal(c)?.productName)) as string[],
@@ -994,22 +972,9 @@ export function LoadMediaModal({
   }
 
   // Media Library uses fbMedia (from Facebook ad account)
-  const fmtDuration = (sec?: number | null) => {
-    if (!sec) return "—"
-    const total = Math.round(sec * 100) / 100
-    const m = Math.floor(total / 60)
-    const s = total - m * 60
-    return `${m}:${s.toFixed(2).padStart(5, "0")}`
-  }
-  const formatBytes = (bytes?: number | null) => {
-    if (bytes === null || bytes === undefined) return "—"
-    if (bytes < 1024) return `${bytes} B`
-    const units = ["KB", "MB", "GB"]
-    let value = bytes / 1024
-    let unit = 0
-    while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++ }
-    return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[unit]}`
-  }
+  // Duration/size formatting lives with the shared Media Detail sheet — three copies of
+  // formatBytes across two files is how "1.5 MB" here and "2 MB" there happens.
+  const fmtDuration = formatMediaDuration
   const fmtDims = (m: FbMediaItem) => {
     if (m.dimensions) return m.dimensions
     if (m.width && m.height) {
@@ -1396,12 +1361,69 @@ export function LoadMediaModal({
   ]
   const TABS = tabs ? ALL_TABS.filter(t => tabs.includes(t.id)) : ALL_TABS
 
+  // `text-link`, not `text-primary`: --primary is a fill colour and only clears 3:1 against
+  // its own background. As a foreground it measures 2.98:1 on --card in dark mode. Every
+  // blue *mark* in this file goes through --link for that reason; blue *fills* keep --primary.
   const SortIcon = ({ field }: { field: SortField }) => (
     <span className="inline-flex flex-col -space-y-1 ml-0.5 opacity-60">
-      <IconChevronUp className={cn("size-2.5", sortField === field && sortDir === "asc" && "text-primary opacity-100")} />
-      <IconChevronDown className={cn("size-2.5", sortField === field && sortDir === "desc" && "text-primary opacity-100")} />
+      <IconChevronUp className={cn("size-2.5", sortField === field && sortDir === "asc" && "text-link opacity-100")} />
+      <IconChevronDown className={cn("size-2.5", sortField === field && sortDir === "desc" && "text-link opacity-100")} />
     </span>
   )
+
+  /**
+   * Date and Clear were written out twice — once in the Library row, once in the Vault row —
+   * and the two copies had already drifted (the Library copy lacked the cursor and focus-ring
+   * classes every other chip carries). One definition, two call sites.
+   */
+  const DateChip = () => (
+    <div className="relative">
+      <button
+        type="button"
+        aria-expanded={openFilter === "dateAdded"}
+        onClick={() => setOpenFilter(openFilter === "dateAdded" ? null : "dateAdded")}
+        className={cn("flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          filters.dateAdded !== "all" ? "border-primary bg-primary/5 text-link" : "hover:bg-muted/30")}
+      >
+        <IconCalendar className="size-3" />
+        <span className="font-medium">Date assigned{filters.dateAdded !== "all" && ` · ${filters.dateAdded}`}</span>
+        <IconChevronDown className={cn("size-3 transition-transform", openFilter === "dateAdded" && "rotate-180")} />
+      </button>
+      {openFilter === "dateAdded" && (
+        <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[140px] py-1">
+          {[["all", "All time"], ["today", "Today"], ["week", "This week"], ["month", "This month"], ["year", "This year"]].map(([v, l]) => (
+            <button key={v} type="button" onClick={() => { setFilters(f => ({ ...f, dateAdded: v })); setOpenFilter(null) }}
+              className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent cursor-pointer focus-visible:outline-none focus-visible:bg-accent", filters.dateAdded === v && "font-semibold text-link")}>
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  /**
+   * `keys` is the set of filters that belong to the calling tab. Both rows previously tested
+   * *every* key, so setting Brand in the Vault tab made "Clear filters" appear in the Library
+   * tab, where no Brand filter exists. The reset itself still clears everything, as before.
+   */
+  const ClearFiltersButton = ({ keys }: { keys: (keyof typeof filters)[] }) => {
+    if (!keys.some(k => filters[k] !== "all")) return null
+    return (
+      <button
+        type="button"
+        onClick={() => setFilters({
+          status: "all", fileType: "all", dimensions: "all", dateAdded: "all",
+          brand: "all", product: "all", language: "all",
+        })}
+        className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 rounded-lg border border-dashed transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <IconX className="size-3" />
+        Clear filters
+      </button>
+    )
+  }
 
   const FilterChip = ({ id, label }: { id: keyof typeof filters; label: string }) => {
     const opts = filterOptions[id] as string[]
@@ -1410,29 +1432,34 @@ export function LoadMediaModal({
     return (
       <div className="relative">
         <button
+          type="button"
+          aria-expanded={openFilter === id}
           onClick={() => setOpenFilter(openFilter === id ? null : id)}
           className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg transition-colors",
-            isActive ? "border-primary bg-primary/5 text-primary" : "hover:bg-muted/30"
+            "flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg transition-colors cursor-pointer",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            isActive ? "border-primary bg-primary/5 text-link" : "hover:bg-muted/30"
           )}
         >
           <span className="font-medium">{label}</span>
           {isActive && <span className={cn("bg-primary/10 px-1 rounded text-xs", id === "language" && "uppercase")}>{value}</span>}
-          <IconChevronDown className="size-3" />
+          <IconChevronDown className={cn("size-3 transition-transform", openFilter === id && "rotate-180")} />
         </button>
         {openFilter === id && (
           <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[160px] py-1 max-h-60 overflow-y-auto">
             <button
+              type="button"
               onClick={() => { setFilters(f => ({ ...f, [id]: "all" })); setOpenFilter(null) }}
-              className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent", value === "all" && "font-semibold")}
+              className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent cursor-pointer focus-visible:outline-none focus-visible:bg-accent", value === "all" && "font-semibold text-link")}
             >
               All
             </button>
             {opts.map(o => (
               <button
+                type="button"
                 key={o}
                 onClick={() => { setFilters(f => ({ ...f, [id]: o })); setOpenFilter(null) }}
-                className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent", id === "language" ? "uppercase" : "capitalize", value === o && "font-semibold")}
+                className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent cursor-pointer focus-visible:outline-none focus-visible:bg-accent", id === "language" ? "uppercase" : "capitalize", value === o && "font-semibold text-link")}
               >
                 {o}
               </button>
@@ -1457,14 +1484,20 @@ export function LoadMediaModal({
             return (
               <button
                 key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={mediaTab === t.id}
                 onClick={() => setMediaTab(t.id)}
                 className={cn(
-                  "flex items-center gap-1.5 py-2.5 mr-6 text-sm border-b-2 transition-colors whitespace-nowrap shrink-0",
+                  "flex items-center gap-1.5 py-2.5 mr-6 text-sm border-b-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
                   mediaTab === t.id ? "border-foreground font-medium" : "border-transparent text-muted-foreground hover:text-foreground"
                 )}
               >
                 <Icon className="size-4" />{t.label}
-                {t.beta && <span className="text-xs px-1 py-0.5 rounded-full bg-blue-100 text-primary/90 font-bold">Beta</span>}
+                {/* Was bg-blue-100 + text-primary/90: a fixed light-blue pill that stayed
+                    light in dark mode. "Beta" is a label, not a link or an active state. */}
+                {t.beta && <span className="text-xs px-1 py-0.5 rounded-full bg-muted text-muted-foreground border border-border font-bold">Beta</span>}
               </button>
             )
           })}
@@ -1472,78 +1505,30 @@ export function LoadMediaModal({
 
         {mediaTab === "library" ? (
           <>
-            {/* Search row */}
-            <div className="flex items-center gap-2 px-6 py-3 border-b shrink-0">
-              <div className="relative flex-1">
+            {/*
+              One toolbar, not three rows. Search, the media actions and the overflow menu were
+              spread over a search row, a filter row and a right-aligned action row, each with its
+              own border — ~112px of chrome above a table in a 94vh modal. The actions row was the
+              cheapest to fold in: it was already right-aligned, so it becomes the right cluster of
+              the search row and the row itself disappears. Nothing was dropped except the two
+              controls that did nothing (see below).
+
+              `flex-wrap` plus `min-w-[220px]` on the input is what keeps this honest at narrow
+              widths: the action cluster wraps beneath the input instead of crushing it, and the
+              labels collapse to icons under `sm`.
+            */}
+            <div className="flex flex-wrap items-center gap-2 px-6 py-2.5 border-b shrink-0">
+              <div className="relative flex-1 min-w-[220px]">
                 <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+                {/* The Search button next to this input had no onClick at all — `onChange` here
+                    already filters `fbMedia` on every keystroke, so the button was decoration
+                    that implied the results were stale until you pressed it. */}
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or ID..."
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50" />
+                  className="w-full pl-9 pr-3 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50" />
               </div>
-              <div className="relative">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setIncludeOpen(o => !o)}>
-                  <IconPlus className="size-3.5" />Include<IconChevronDown className="size-3" />
-                </Button>
-                {includeOpen && (
-                  <div className="absolute top-full right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[180px] py-1">
-                    {["Archived", "Deleted", "Other workspaces"].map(o => (
-                      <label key={o} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent cursor-pointer">
-                        <input type="checkbox" className="rounded size-3" />{o}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <Button size="sm">Search</Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setPasteOpen(true)}>
-                <IconClipboard className="size-3.5" />Paste list
-              </Button>
-            </div>
 
-            {/* Filter chips */}
-            <div className="flex flex-wrap items-center gap-2 px-6 py-2 border-b shrink-0">
-              <FilterChip id="uploader" label="Uploader" />
-              <FilterChip id="status" label="Status" />
-              <FilterChip id="channels" label="Channels" />
-              <FilterChip id="fileType" label="File Type" />
-              <FilterChip id="dimensions" label="Dimensions" />
-              <FilterChip id="workspace" label="Workspace" />
-              <FilterChip id="source" label="Source" />
-              <div className="relative">
-                <button
-                  onClick={() => setOpenFilter(openFilter === "dateAdded" ? null : "dateAdded")}
-                  className={cn("flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg",
-                    filters.dateAdded !== "all" ? "border-primary bg-primary/5 text-primary" : "hover:bg-muted/30")}
-                >
-                  <IconCalendar className="size-3" />
-                  <span className="font-medium">Date assigned{filters.dateAdded !== "all" && ` · ${filters.dateAdded}`}</span>
-                  <IconChevronDown className="size-3" />
-                </button>
-                {openFilter === "dateAdded" && (
-                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[140px] py-1">
-                    {[["all", "All time"], ["today", "Today"], ["week", "This week"], ["month", "This month"], ["year", "This year"]].map(([v, l]) => (
-                      <button key={v} onClick={() => { setFilters(f => ({ ...f, dateAdded: v })); setOpenFilter(null) }}
-                        className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent", filters.dateAdded === v && "font-semibold")}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {Object.entries(filters).some(([k, v]) => v !== "all") && (
-                <button
-                  onClick={() => setFilters({ uploader: "all", status: "all", channels: "all", fileType: "all", dimensions: "all", workspace: "all", source: "all", dateAdded: "all", brand: "all", product: "all", language: "all" })}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 rounded-lg border border-dashed transition-colors"
-                >
-                  <IconX className="size-3" />
-                  Clear filters
-                </button>
-              )}
-            </div>
-
-            {/* Toolbar actions */}
-            <div className="flex items-center justify-end gap-2 px-6 py-2 border-b shrink-0">
               {uploadPauseMsg && (
-                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1 mr-1">
+                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
                   {uploading
                     ? <IconLoader2 className="size-3 animate-spin" />
                     : <IconCheck className="size-3" />
@@ -1551,36 +1536,61 @@ export function LoadMediaModal({
                   {uploadPauseMsg}
                 </span>
               )}
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => uploadFileRef.current?.click()} disabled={uploading}>
-                {uploading && uploadProgress
-                  ? <><IconLoader2 className="size-3.5 animate-spin" />{uploadProgress.current}/{uploadProgress.total}</>
-                  : <><IconUpload className="size-3.5" />Upload New Media</>
-                }
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => uploadFolderRef.current?.click()} disabled={uploading}>
-                <IconFolder className="size-3.5" />Upload Folder
-              </Button>
-              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => fetchFbMedia()} disabled={fbMediaLoading}>
-                <IconRefresh className={cn("size-3.5", fbMediaLoading && "animate-spin")} />Refresh list
-              </Button>
-              <div className="relative">
-                <Button variant="outline" size="icon" className="size-8" onClick={() => setMoreOpen(o => !o)}>
-                  <IconDots className="size-3.5" />
+
+              <div className="flex items-center gap-2 shrink-0">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setPasteOpen(true)}>
+                  <IconClipboard className="size-3.5" /><span className="hidden sm:inline">Paste list</span>
                 </Button>
-                {moreOpen && (
-                  <div className="absolute top-full right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[160px] py-1">
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">Export selected</button>
-                    <button
-                      className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent text-destructive disabled:opacity-40"
-                      disabled={selected.size === 0}
-                      onClick={() => { setMoreOpen(false); deleteFbMedia(Array.from(selected)) }}
-                    >
-                      Bulk delete{selected.size > 0 ? ` (${selected.size})` : ""}
-                    </button>
-                    <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">Settings</button>
-                  </div>
-                )}
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => uploadFileRef.current?.click()} disabled={uploading}>
+                  {uploading && uploadProgress
+                    ? <><IconLoader2 className="size-3.5 animate-spin" />{uploadProgress.current}/{uploadProgress.total}</>
+                    : <><IconUpload className="size-3.5" /><span className="hidden sm:inline">Upload New Media</span></>
+                  }
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => uploadFolderRef.current?.click()} disabled={uploading}>
+                  <IconFolder className="size-3.5" /><span className="hidden sm:inline">Upload Folder</span>
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => fetchFbMedia()} disabled={fbMediaLoading}>
+                  <IconRefresh className={cn("size-3.5", fbMediaLoading && "animate-spin")} /><span className="hidden sm:inline">Refresh list</span>
+                </Button>
+                <div className="relative">
+                  <Button variant="outline" size="icon" className="size-8" onClick={() => setMoreOpen(o => !o)} aria-label="More actions">
+                    <IconDots className="size-3.5" />
+                  </Button>
+                  {moreOpen && (
+                    <div className="absolute top-full right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[160px] py-1">
+                      <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">Export selected</button>
+                      <button
+                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent text-destructive disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                        disabled={selected.size === 0}
+                        onClick={() => { setMoreOpen(false); deleteFbMedia(Array.from(selected)) }}
+                      >
+                        Bulk delete{selected.size > 0 ? ` (${selected.size})` : ""}
+                      </button>
+                      <button className="w-full text-left px-3 py-1.5 text-xs hover:bg-accent">Settings</button>
+                    </div>
+                  )}
+                </div>
               </div>
+            </div>
+
+            {/*
+              Four of the eight chips here were inert, not merely unpopular: `uploader`,
+              `channels`, `workspace` and `source` are hardcoded to `[] as string[]` in
+              filterOptions — so the dropdown opened on "All" and nothing else — and none of the
+              four is read by the `filtered` predicate above. Clicking them could not change the
+              result set under any data. They are gone.
+
+              The four that remain are each derived from the loaded media and applied in
+              `filtered`: File Type (image/video), Status (Meta's own values), Dimensions (the
+              aspect ratio, which is how you find a 9:16 for Reels), Date assigned.
+            */}
+            <div className="flex flex-wrap items-center gap-2 px-6 py-2 border-b shrink-0">
+              <FilterChip id="fileType" label="File Type" />
+              <FilterChip id="status" label="Status" />
+              <FilterChip id="dimensions" label="Dimensions" />
+              <DateChip />
+              <ClearFiltersButton keys={["fileType", "status", "dimensions", "dateAdded"]} />
             </div>
 
             {/* Table header */}
@@ -1628,7 +1638,9 @@ export function LoadMediaModal({
                     : statusRaw.includes("disapprove") || statusRaw.includes("reject")
                     ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
                     : statusRaw.includes("process") || statusRaw.includes("pending")
-                    ? "bg-primary/10 text-primary/90 dark:bg-primary/20 dark:text-primary"
+                    // text-link, not text-primary: the other four states use a readable
+                    // 700/400 pair, and text-primary was the odd one out at 2.98:1 in dark.
+                    ? "bg-primary/10 text-link dark:bg-primary/15"
                     : "bg-muted/60 text-muted-foreground"
                   return (
                     <div key={m.id} onClick={() => toggle(m.id)}
@@ -1718,36 +1730,8 @@ export function LoadMediaModal({
               {filterOptions.brand.length > 0 && <FilterChip id="brand" label="Brand" />}
               {filterOptions.product.length > 0 && <FilterChip id="product" label="Product" />}
               {filterOptions.language.length > 0 && <FilterChip id="language" label="Language" />}
-              <div className="relative">
-                <button
-                  onClick={() => setOpenFilter(openFilter === "dateAdded" ? null : "dateAdded")}
-                  className={cn("flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg",
-                    filters.dateAdded !== "all" ? "border-primary bg-primary/5 text-primary" : "hover:bg-muted/30")}
-                >
-                  <IconCalendar className="size-3" />
-                  <span className="font-medium">Date assigned{filters.dateAdded !== "all" && ` · ${filters.dateAdded}`}</span>
-                  <IconChevronDown className="size-3" />
-                </button>
-                {openFilter === "dateAdded" && (
-                  <div className="absolute top-full left-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[140px] py-1">
-                    {[["all", "All time"], ["today", "Today"], ["week", "This week"], ["month", "This month"], ["year", "This year"]].map(([v, l]) => (
-                      <button key={v} onClick={() => { setFilters(f => ({ ...f, dateAdded: v })); setOpenFilter(null) }}
-                        className={cn("w-full text-left px-3 py-1.5 text-xs hover:bg-accent", filters.dateAdded === v && "font-semibold")}>
-                        {l}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              {Object.entries(filters).some(([k, v]) => (k === "brand" || k === "product" || k === "language" || k === "dateAdded") && v !== "all") && (
-                <button
-                  onClick={() => setFilters({ uploader: "all", status: "all", channels: "all", fileType: "all", dimensions: "all", workspace: "all", source: "all", dateAdded: "all", brand: "all", product: "all", language: "all" })}
-                  className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 rounded-lg border border-dashed transition-colors"
-                >
-                  <IconX className="size-3" />
-                  Clear filters
-                </button>
-              )}
+              <DateChip />
+              <ClearFiltersButton keys={["brand", "product", "language", "dateAdded"]} />
             </div>
 
             {/* Table header — matches Assets table: Name/Brand/Product/Lang/Dims-Dur/Type/Status/Date Assigned */}
@@ -1825,9 +1809,13 @@ export function LoadMediaModal({
                       </span>
                       {pm ? (
                         <button
+                          type="button"
                           onClick={(e) => openPortalDetail(pm, e)}
                           title="View details"
-                          className="flex items-center justify-center size-7 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label={`View details for ${c.file_name}`}
+                          // opacity-0 alone leaves an invisible but focusable target: tabbing
+                          // to it moved focus nowhere a sighted keyboard user could see.
+                          className="flex items-center justify-center size-7 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-opacity"
                         >
                           <IconDots className="size-4" />
                         </button>
@@ -1859,29 +1847,24 @@ export function LoadMediaModal({
         ) : mediaTab === "existing" ? (
           <>
             {/* Search row + ad account picker (combined) */}
-            <div className="flex items-center gap-2 px-6 py-2 border-b shrink-0">
-              <div className="relative flex-1">
+            <div className="flex flex-wrap items-center gap-2 px-6 py-2 border-b shrink-0">
+              <div className="relative flex-1 min-w-[220px]">
                 <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+                {/*
+                  `filteredExisting` narrows this list on every keystroke, and `fetchExistingAds`
+                  never puts `existingSearch` in its params — so the Search button that used to sit
+                  in this row could not search, client-side or server-side. Its onClick was
+                  `fetchExistingAds(true)`, byte-for-byte the Refresh button's, and the `reset`
+                  path runs `setExistingSelected(new Set())`: pressing "Search" after choosing
+                  ads silently discarded the selection. Removed, not rewired — Refresh already
+                  provides the only behaviour it had, under the name that describes it.
+
+                  The "Include" dropdown next to it went the same way: three checkboxes
+                  (Archived / Deleted / Inactive ads) with no onChange and no request param.
+                */}
                 <input value={existingSearch} onChange={e => setExistingSearch(e.target.value)} placeholder="Search by ad name or ID..."
                   className="w-full pl-9 pr-3 py-1.5 text-sm bg-background border rounded-lg outline-none focus:ring-1 focus:ring-ring" />
               </div>
-              <div className="relative">
-                <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => setExistingIncludeOpen(o => !o)}>
-                  <IconPlus className="size-3.5" />Include<IconChevronDown className="size-3" />
-                </Button>
-                {existingIncludeOpen && (
-                  <div className="absolute top-full right-0 mt-1 bg-popover border rounded-lg shadow-lg z-50 min-w-[180px] py-1">
-                    {["Archived ads", "Deleted ads", "Inactive ads"].map(o => (
-                      <label key={o} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent cursor-pointer">
-                        <input type="checkbox" className="rounded size-3" />{o}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <Button size="sm" className="gap-1.5 h-8" onClick={() => fetchExistingAds(true)}>
-                <IconSearch className="size-3.5" />Search
-              </Button>
               <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => setPasteOpen(true)}>
                 <IconClipboard className="size-3.5" />Paste list
               </Button>
@@ -1945,13 +1928,13 @@ export function LoadMediaModal({
 
               <button onClick={() => setExistingActiveOnly(v => !v)}
                 className={cn("flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg",
-                  existingActiveOnly ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/30")}>
+                  existingActiveOnly ? "bg-primary/10 border-primary text-link" : "hover:bg-muted/30")}>
                 <IconCircleCheck className="size-3" /><span className="font-medium">Active ads</span>
               </button>
 
               <button onClick={() => setExistingActiveAdSetOnly(v => !v)}
                 className={cn("flex items-center gap-1.5 px-3 py-1.5 text-xs border rounded-lg",
-                  existingActiveAdSetOnly ? "bg-primary/10 border-primary text-primary" : "hover:bg-muted/30")}>
+                  existingActiveAdSetOnly ? "bg-primary/10 border-primary text-link" : "hover:bg-muted/30")}>
                 <IconCircleCheck className="size-3" /><span className="font-medium">Active ad sets</span>
               </button>
 
@@ -2002,7 +1985,7 @@ export function LoadMediaModal({
                 {existingSelected.size > 0 && (
                   <>
                     <span>·</span>
-                    <span className="text-primary font-semibold">{existingSelected.size} selected</span>
+                    <span className="text-link font-semibold">{existingSelected.size} selected</span>
                   </>
                 )}
               </div>
@@ -2022,25 +2005,25 @@ export function LoadMediaModal({
                   <p className="text-sm">No ads found in this time range</p>
                 </div>
               ) : (
-                <table className="w-full text-sm">
+                <table data-table="compact" className="w-full text-sm">
                   <thead className="bg-background sticky top-0 z-10">
                     <tr className="border-b">
-                      <th className="w-10 px-3 py-2"></th>
-                      <th className="w-12 px-2 py-2"><IconPhoto className="size-3.5 text-muted-foreground inline" /></th>
-                      <th className="px-3 py-2 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("name")}>
+                      <th className="w-10 px-2"></th>
+                      <th className="w-12 px-3"><IconPhoto className="size-3.5 text-muted-foreground inline" /></th>
+                      <th className="px-3 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("name")}>
                         <span className="inline-flex items-center">Name {existingSortField === "name" && <IconChevronDown className={cn("size-3 ml-0.5 transition-transform", existingSortDir === "asc" && "rotate-180")} />}</span>
                       </th>
-                      {visibleColumns.has("page") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("page")}>Page</th>}
-                      {visibleColumns.has("date") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("date")}>Date Created</th>}
-                      {visibleColumns.has("post") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80">Post</th>}
-                      {visibleColumns.has("status") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("status")}>Status</th>}
-                      {visibleColumns.has("platform") && <th className="px-3 py-2 text-left font-bold text-muted-foreground/80">Platform</th>}
-                      {visibleColumns.has("spend") && <th className="px-3 py-2 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("spend")}>
+                      {visibleColumns.has("page") && <th className="px-3 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("page")}>Page</th>}
+                      {visibleColumns.has("date") && <th className="px-3 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("date")}>Date Created</th>}
+                      {visibleColumns.has("post") && <th className="px-3 text-left font-bold text-muted-foreground/80">Post</th>}
+                      {visibleColumns.has("status") && <th className="px-3 text-left font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("status")}>Status</th>}
+                      {visibleColumns.has("platform") && <th className="px-3 text-left font-bold text-muted-foreground/80">Platform</th>}
+                      {visibleColumns.has("spend") && <th className="px-3 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("spend")}>
                         <span className="inline-flex items-center">Spend <IconChevronDown className={cn("size-3 ml-0.5", existingSortField === "spend" && existingSortDir === "asc" && "rotate-180")} /></span>
                       </th>}
-                      {visibleColumns.has("roas") && <th className="px-3 py-2 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("roas")}>ROAS</th>}
-                      {visibleColumns.has("results") && <th className="px-3 py-2 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("results")}>Results</th>}
-                      {visibleColumns.has("impressions") && <th className="px-3 py-2 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("impressions")}>Impr.</th>}
+                      {visibleColumns.has("roas") && <th className="px-3 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("roas")}>ROAS</th>}
+                      {visibleColumns.has("results") && <th className="px-3 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("results")}>Results</th>}
+                      {visibleColumns.has("impressions") && <th className="px-3 text-right font-bold text-muted-foreground/80 cursor-pointer" onClick={() => toggleExistingSort("impressions")}>Impr.</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -2051,13 +2034,13 @@ export function LoadMediaModal({
                         <tr key={ad.id} onClick={() => toggleExisting(ad.id)}
                           className={cn("border-b cursor-pointer hover:bg-muted/20 transition-colors",
                             isSel && "bg-primary/5 hover:bg-primary/10")}>
-                          <td className="px-3 py-2">
+                          <td className="px-3">
                             <div className={cn("size-4 rounded border-2 flex items-center justify-center",
                               isSel ? "bg-primary border-primary" : "border-muted-foreground/30")}>
                               {isSel && <IconCheck className="size-2.5 text-primary-foreground" />}
                             </div>
                           </td>
-                          <td className="px-2 py-2">
+                          <td className="px-3">
                             <div className="relative size-9 rounded overflow-hidden bg-muted">
                               {ad.thumb_url ? <img src={ad.thumb_url} className="w-full h-full object-cover" alt="" loading="lazy" onError={e => e.currentTarget.style.display="none"} />
                                 : <div className="w-full h-full flex items-center justify-center">
@@ -2073,15 +2056,15 @@ export function LoadMediaModal({
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-2 max-w-[280px]">
+                          <td className="px-3 max-w-[280px]">
                             <span className="text-base truncate block" title={ad.name}>{ad.name}</span>
                           </td>
-                          {visibleColumns.has("page") && <td className="px-3 py-2 text-muted-foreground">{ad.page_name || "—"}</td>}
-                          {visibleColumns.has("date") && <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{new Date(ad.date_created).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>}
-                          {visibleColumns.has("post") && <td className="px-3 py-2">
-                            {ad.post_url ? <a href={ad.post_url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" onClick={e => e.stopPropagation()}>Post</a> : "—"}
+                          {visibleColumns.has("page") && <td className="px-3 text-muted-foreground">{ad.page_name || "—"}</td>}
+                          {visibleColumns.has("date") && <td className="px-3 text-muted-foreground whitespace-nowrap">{new Date(ad.date_created).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</td>}
+                          {visibleColumns.has("post") && <td className="px-3">
+                            {ad.post_url ? <a href={ad.post_url} target="_blank" rel="noopener noreferrer" className="text-link hover:underline" onClick={e => e.stopPropagation()}>Post</a> : "—"}
                           </td>}
-                          {visibleColumns.has("status") && <td className="px-3 py-2">
+                          {visibleColumns.has("status") && <td className="px-3">
                             <span className={cn("text-sm px-1.5 py-0.5 rounded font-bold whitespace-nowrap",
                               ad.effective_status === "ACTIVE" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
                               /PAUSED/.test(ad.effective_status) ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
@@ -2095,13 +2078,13 @@ export function LoadMediaModal({
                                ad.effective_status.replace(/_/g, " ").slice(0, 12)}
                             </span>
                           </td>}
-                          {visibleColumns.has("platform") && <td className="px-3 py-2">
+                          {visibleColumns.has("platform") && <td className="px-3">
                             <span className="text-sm px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 font-medium">{ad.platform}</span>
                           </td>}
-                          {visibleColumns.has("spend") && <td className="px-3 py-2 text-right font-medium">{formatCurrency(ad.spend)}</td>}
-                          {visibleColumns.has("roas") && <td className="px-3 py-2 text-right">{ad.roas > 0 ? ad.roas.toFixed(2) : "—"}</td>}
-                          {visibleColumns.has("results") && <td className="px-3 py-2 text-right">{ad.results > 0 ? ad.results : "—"}</td>}
-                          {visibleColumns.has("impressions") && <td className="px-3 py-2 text-right text-muted-foreground">{formatNumberShort(ad.impressions)}</td>}
+                          {visibleColumns.has("spend") && <td className="px-3 text-right font-medium">{formatCurrency(ad.spend)}</td>}
+                          {visibleColumns.has("roas") && <td className="px-3 text-right">{ad.roas > 0 ? ad.roas.toFixed(2) : "—"}</td>}
+                          {visibleColumns.has("results") && <td className="px-3 text-right">{ad.results > 0 ? ad.results : "—"}</td>}
+                          {visibleColumns.has("impressions") && <td className="px-3 text-right text-muted-foreground">{formatNumberShort(ad.impressions)}</td>}
                         </tr>
                       )
                     })}
@@ -2185,7 +2168,7 @@ export function LoadMediaModal({
                   </p>
                   {!gdriveImporting && (
                     <button onClick={() => { setGdriveQueue([]); setMediaTab("library") }}
-                      className="text-xs text-primary hover:underline">
+                      className="text-xs text-link hover:underline">
                       View in library
                     </button>
                   )}
@@ -2394,129 +2377,16 @@ export function LoadMediaModal({
         />
       </DialogContent>
 
-      {/* Detail Sheet — same pattern as Assets page */}
-      <Sheet open={portalDetailOpen} onOpenChange={setPortalDetailOpen}>
-        <SheetContent className="sm:max-w-md w-full overflow-y-auto p-0 flex flex-col gap-0 border-l border-border/40 shadow-xl bg-card">
-          <SheetHeader className="px-6 py-5 border-b border-border/40 bg-muted/20 shrink-0">
-            <SheetTitle className="text-base font-semibold">Media Details</SheetTitle>
-            <SheetDescription className="text-xs">
-              Metadata joined live from Creative Portal.
-            </SheetDescription>
-          </SheetHeader>
-
-          {portalDetailFile && (
-            <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              {/* No thumbnail/video player here by design — "View media" opens
-                  the resolver on demand instead. */}
-
-              {/* File Info */}
-              <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-[18px] tracking-tight text-foreground/90">File Information</h3>
-                <div className="rounded-lg border bg-muted/20 px-3 py-2 text-[17px] font-medium text-foreground/80 break-words leading-relaxed shadow-sm">
-                  {portalDetailFile.name}
-                </div>
-                <div className="grid grid-cols-[130px_1fr] gap-x-3 gap-y-3.5 text-[17px]">
-                  <span className="text-muted-foreground font-medium">Type</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.mimeType || (portalDetailFile.mimeType?.startsWith("video/") ? "Video" : "Image")}</span>
-                  <span className="text-muted-foreground font-medium">Size</span><span className="min-w-0 font-medium text-foreground/80">{formatBytes(portalDetailFile.sizeBytes)}</span>
-                  <span className="text-muted-foreground font-medium">Dimensions</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.width && portalDetailFile.height ? `${portalDetailFile.width}x${portalDetailFile.height}` : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Duration</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.durationSeconds ? fmtDuration(portalDetailFile.durationSeconds) : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Added</span><span className="min-w-0 font-medium text-foreground/80">{portalDetailFile.createdAt ? new Date(portalDetailFile.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}</span>
-                </div>
-                <div className="rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-[14px] font-mono text-muted-foreground break-all leading-relaxed">
-                  {portalDetailFile.objectKey}
-                </div>
-              </div>
-
-              {/* Brand & Product */}
-              <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-[18px] tracking-tight text-foreground/90">Product & Context</h3>
-                <div className="grid grid-cols-[130px_1fr] gap-x-3 gap-y-3.5 text-[17px] p-3 rounded-lg border bg-muted/10 shadow-sm">
-                  <span className="text-muted-foreground font-medium">Brand</span><span className="font-medium min-w-0 break-words text-foreground/90">{portalDetailFile.brandName || "—"} {portalDetailFile.brandSlug ? <span className="text-muted-foreground font-normal text-[15px]">({portalDetailFile.brandSlug})</span> : ""}</span>
-                  <span className="text-muted-foreground font-medium">Product</span><span className="min-w-0 break-words font-medium text-foreground/80 leading-snug">{portalDetailFile.productName || "—"}</span>
-                  <span className="text-muted-foreground font-medium flex items-center">Language</span><span className="min-w-0 flex items-center">{portalDetailFile.language ? <span className="uppercase text-[13px] font-bold bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded shadow-sm">{portalDetailFile.language}</span> : "—"}</span>
-                  <span className="text-muted-foreground font-medium">Brief Type</span><span className="min-w-0 break-words font-medium text-foreground/80">{portalDetailFile.briefType || "—"}</span>
-                  <span className="text-muted-foreground font-medium">Voice</span><span className="min-w-0 break-words font-medium text-foreground/80">{portalDetailFile.voiceVariant || "—"}</span>
-                </div>
-              </div>
-
-              {/* Links */}
-              <div className="space-y-4 min-w-0">
-                <h3 className="font-semibold text-[18px] tracking-tight text-foreground/90">Links</h3>
-                <div className="flex flex-col gap-3 text-[17px] p-3 rounded-lg border bg-muted/10 shadow-sm">
-                  {portalDetailFile.pdpUrl ? (
-                    <a href={portalDetailFile.pdpUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Product Detail Page (PDP) <IconExternalLink className="size-4" />
-                    </a>
-                  ) : <span className="text-muted-foreground italic">No PDP URL</span>}
-                  {portalDetailFile.salesPageUrl && (
-                    <a href={portalDetailFile.salesPageUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Sales Page <IconExternalLink className="size-4" />
-                    </a>
-                  )}
-                  {portalDetailFile.landingUrl && (
-                    <a href={portalDetailFile.landingUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Landing Page <IconExternalLink className="size-4" />
-                    </a>
-                  )}
-                  {portalDetailFile.checkoutFunnelUrl && (
-                    <a href={portalDetailFile.checkoutFunnelUrl} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary/80 font-medium hover:underline flex items-center gap-1.5 w-fit transition-colors">
-                      Checkout Funnel <IconExternalLink className="size-4" />
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              {/* Identifiers */}
-              <div className="space-y-4 min-w-0 pb-6">
-                <h3 className="font-semibold text-[18px] tracking-tight text-foreground/90">Identifiers</h3>
-                <div className="flex flex-col gap-3.5 p-3 rounded-lg border bg-muted/10 shadow-sm text-[16px]">
-                  {[
-                    { label: "Asset ID", value: portalDetailFile.assetId },
-                    { label: "Brand ID", value: portalDetailFile.brandId },
-                    { label: "Product ID", value: portalDetailFile.productId },
-                  ].map((row) => (
-                    <div key={row.label} className="flex items-center justify-between gap-3 min-w-0">
-                      <span className="text-muted-foreground font-medium shrink-0 w-[90px]">{row.label}</span>
-                      <div className="flex items-center gap-2 min-w-0 bg-muted/20 rounded px-2.5 py-1 border border-border/50 max-w-full">
-                        <span className="font-mono text-muted-foreground truncate text-[14px]">{row.value || "—"}</span>
-                        {row.value && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              navigator.clipboard.writeText(row.value!)
-                              const btn = e.currentTarget
-                              const originalHtml = btn.innerHTML
-                              btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-500"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-                              setTimeout(() => { btn.innerHTML = originalHtml }, 1500)
-                            }}
-                            className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground shrink-0 transition-colors"
-                            title={`Copy ${row.label}`}
-                          >
-                            <IconCopy className="size-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="p-4 border-t border-border/40">
-            <a
-              href={portalDetailFile ? `${PORTAL_MEDIA_RESOLVER}/${portalDetailFile.assetId}` : "#"}
-              target="_blank"
-              rel="noreferrer"
-              onClick={e => e.stopPropagation()}
-              className="flex w-full items-center justify-center h-10 bg-primary text-primary-foreground font-medium text-sm rounded-lg hover:bg-primary/90 transition-colors"
-            >
-              View media
-            </a>
-          </div>
-        </SheetContent>
-      </Sheet>
+      {/* Detail Sheet — this markup moved to components/shared/media-detail-sheet.tsx
+          verbatim and is now rendered by all three surfaces (Portal Vault here, All
+          Assets and Portal Media on the assets page). Portal Vault passes no
+          `assignedTo`, which hides that section, and no `viewMediaHref`, so the URL is
+          derived from `assetId` exactly as it was here. */}
+      <MediaDetailSheet
+        open={portalDetailOpen}
+        onOpenChange={setPortalDetailOpen}
+        file={portalDetailFile}
+      />
     </Dialog>
   )
 }
-

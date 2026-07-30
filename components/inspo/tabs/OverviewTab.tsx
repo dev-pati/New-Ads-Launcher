@@ -179,26 +179,26 @@ export function OverviewTab({ analytics }: Props) {
       {/* ── Top Landing Pages ── */}
       <Section title="Top Landing Pages">
         <div className="bg-card border border-border/60 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+          <table data-table="comfortable" className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/50 text-muted-foreground text-xs uppercase tracking-wide">
-                <th className="text-left px-5 py-3 font-semibold">URL</th>
-                <th className="text-right px-5 py-3 font-semibold">Ads</th>
-                <th className="text-right px-5 py-3 font-semibold">Share</th>
+                <th className="text-left px-5 font-semibold">URL</th>
+                <th className="text-right px-3 font-semibold">Ads</th>
+                <th className="text-right px-5 font-semibold">Share</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/30">
               {analytics.landingPages.map((lp, i) => (
                 <tr key={i} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-5 py-3">
+                  <td className="px-5">
                     <a href={lp.url} target="_blank" rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
                       className="text-primary hover:underline text-xs font-mono truncate block max-w-[320px]">
                       {lp.url}
                     </a>
                   </td>
-                  <td className="px-5 py-3 text-right font-semibold tabular-nums">{lp.adsCount}</td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-3 text-right font-semibold tabular-nums">{lp.adsCount}</td>
+                  <td className="px-5 text-right">
                     <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">{lp.distribution}%</span>
                   </td>
                 </tr>
