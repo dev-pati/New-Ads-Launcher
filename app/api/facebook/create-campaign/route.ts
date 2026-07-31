@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import {
   createAdSet,
   createCampaign,
+  copyAdSet,
   getAdAccountPages,
   getPageInstagramAccounts,
   getPixels,
@@ -66,6 +67,10 @@ interface CreateCampaignState {
   conversionLocation: "website"
   performanceGoal: PerformanceGoal
   pixelId: string
+  conversionEvent: string
+  costPerResultGoal: string
+  attributionClickDays: "1" | "7"
+  attributionViewDays: "0" | "1"
   dailyBudget: string
   scheduleStart: string
   scheduleEnd: string
@@ -79,6 +84,7 @@ interface CreateCampaignState {
   instagramId: string
   creativeId: string
   creativeIds: string[]
+  oneAdPerAdset: boolean
   mediaUrl: string
   mediaType: MediaType
   primaryText: string
@@ -197,6 +203,12 @@ function parseState(rawState: unknown): CreateCampaignState {
 
   const gender = asString(rawState.gender) as Gender
   if (!["ALL", "MALE", "FEMALE"].includes(gender)) fail(400, "Unsupported gender targeting")
+  const conversionEvent = asString(rawState.conversionEvent) || "PURCHASE"
+  if (!["PURCHASE", "ADD_TO_CART", "INITIATED_CHECKOUT", "LEAD", "COMPLETE_REGISTRATION", "VIEW_CONTENT"].includes(conversionEvent)) {
+    fail(400, "Unsupported conversion event")
+  }
+  const attributionClickDays = rawState.attributionClickDays === "1" ? "1" : "7"
+  const attributionViewDays = rawState.attributionViewDays === "1" ? "1" : "0"
 
   const specialAdCategories = Array.isArray(rawState.specialAdCategories)
     ? rawState.specialAdCategories.filter((v): v is SpecialAdCategory =>
@@ -219,6 +231,10 @@ function parseState(rawState: unknown): CreateCampaignState {
     conversionLocation: "website",
     performanceGoal,
     pixelId: asString(rawState.pixelId),
+    conversionEvent,
+    costPerResultGoal: asString(rawState.costPerResultGoal),
+    attributionClickDays,
+    attributionViewDays,
     dailyBudget: asString(rawState.dailyBudget),
     scheduleStart: asString(rawState.scheduleStart),
     scheduleEnd: asString(rawState.scheduleEnd),
@@ -232,6 +248,7 @@ function parseState(rawState: unknown): CreateCampaignState {
     instagramId: asString(rawState.instagramId),
     creativeId: asString(rawState.creativeId),
     creativeIds: asStringList(rawState.creativeIds),
+    oneAdPerAdset: rawState.oneAdPerAdset === true,
     mediaUrl: asString(rawState.mediaUrl),
     mediaType,
     primaryText: asString(rawState.primaryText),
@@ -263,6 +280,7 @@ function parseState(rawState: unknown): CreateCampaignState {
   if (!hasCreative) parseHttpUrl(state.mediaUrl, "Media URL")
   parseHttpUrl(state.destinationUrl, "Website URL")
   parseMoney(state.advantageCampaignBudget ? state.campaignBudget : state.dailyBudget, "Budget")
+  if (state.costPerResultGoal) parseMoney(state.costPerResultGoal, "Cost per result goal")
 
   return state
 }
@@ -280,7 +298,7 @@ function resolveDelivery(state: CreateCampaignState): {
     return {
       optimizationGoal: "OFFSITE_CONVERSIONS",
       billingEvent: "IMPRESSIONS",
-      promotedObject: { pixel_id: state.pixelId, custom_event_type: "PURCHASE" },
+      promotedObject: { pixel_id: state.pixelId, custom_event_type: state.conversionEvent },
     }
   }
 
@@ -702,6 +720,13 @@ export async function POST(request: NextRequest) {
     const adSetBudget = state.advantageCampaignBudget
       ? undefined
       : budgetMinorUnits(state.dailyBudget, "Ad set budget", currency)
+    const costPerResultGoal = state.costPerResultGoal
+      ? budgetMinorUnits(state.costPerResultGoal, "Cost per result goal", currency)
+      : undefined
+    const attributionSpec = [
+      { event_type: "CLICK_THROUGH", window_days: Number(state.attributionClickDays) },
+      ...(state.attributionViewDays === "1" ? [{ event_type: "VIEW_THROUGH", window_days: 1 }] : []),
+    ]
 
     const accountTimeZone = account.timezoneName || "UTC"
     const useUtc = state.scheduleTimeBasis === "utc"
@@ -731,25 +756,39 @@ export async function POST(request: NextRequest) {
       targeting: buildTargeting(state),
       optimization_goal: delivery.optimizationGoal,
       billing_event: delivery.billingEvent,
+      bid_amount: costPerResultGoal,
       daily_budget: adSetBudget,
-      bid_strategy: adSetBudget ? "LOWEST_COST_WITHOUT_CAP" : undefined,
+      bid_strategy: costPerResultGoal ? "COST_CAP" : adSetBudget ? "LOWEST_COST_WITHOUT_CAP" : undefined,
       status: "PAUSED",
       start_time: startTime,
+      destination_type: "WEBSITE",
       promoted_object: delivery.promotedObject,
+      attribution_spec: attributionSpec,
     }, tokenOpts)
     await patchAdSetEndTime(adSet.id, token, endTime)
 
     // ── Multi-creative branch: N ads, one per media, sharing the new ad set ──
     if (state.creativeIds.length > 0) {
-      const created: Array<{ adId: string; creativeId: string; fileName: string }> = []
+      const created: Array<{ adId: string; adSetId: string; creativeId: string; fileName: string }> = []
       const errors: Array<{ creativeId: string; fileName: string; error: string }> = []
+      const actualAdSetIds = [adSet.id]
 
-      for (const creativeId of state.creativeIds) {
+      for (const [creativeIndex, creativeId] of state.creativeIds.entries()) {
         try {
+          let targetAdSetId = adSet.id
+          if (state.oneAdPerAdset && creativeIndex > 0) {
+            const copy = await copyAdSet(token, adSet.id, {
+              campaign_id: campaign.id,
+              name: state.adSetName,
+              status: "PAUSED",
+            }, tokenOpts)
+            targetAdSetId = copy.id
+            actualAdSetIds.push(copy.id)
+          }
           const media = await resolveStoredCreativeMedia(ctx.orgId, adAccountId, token, creativeId, tokenOpts)
           const ad = await createSingleMediaAd(adAccountId, token, {
             adName: state.adName,
-            adSetId: adSet.id,
+            adSetId: targetAdSetId,
             pageId: state.pageId,
             imageHash: media.imageHash,
             videoId: media.videoId,
@@ -765,7 +804,7 @@ export async function POST(request: NextRequest) {
             instagramId: state.instagramId || undefined,
             urlTags: state.urlParameters || undefined,
           })
-          created.push({ adId: ad.id, creativeId, fileName: "" })
+          created.push({ adId: ad.id, adSetId: targetAdSetId, creativeId, fileName: "" })
         } catch (err: any) {
           errors.push({
             creativeId,
@@ -789,14 +828,14 @@ export async function POST(request: NextRequest) {
       // Record the launch batch — required for every launch route (CONTEXT.md).
       const batchStatus = errors.length === 0 ? "success" : "partial"
       const supabase = createAdminClient()
-      await supabase.from("launch_batches").insert({
+      const { data: batch } = await supabase.from("launch_batches").insert({
         org_id: ctx.orgId,
         user_id: ctx.user.id,
         user_name: ctx.user.full_name || ctx.user.email?.split("@")[0] || "Unknown",
         ad_account_id: adAccountId,
         ad_account_name: adAccountId,
-        adset_ids: [adSet.id],
-        adset_names: [state.adSetName],
+        adset_ids: actualAdSetIds,
+        adset_names: actualAdSetIds.map(() => state.adSetName),
         creative_ids: state.creativeIds,
         primary_text: state.primaryText || null,
         headline: state.headline || null,
@@ -808,7 +847,7 @@ export async function POST(request: NextRequest) {
         failed_ads: errors.length,
         errors,
         created_ads: created,
-      })
+      }).select("id").single()
 
       return NextResponse.json({
         success: true,
@@ -817,6 +856,7 @@ export async function POST(request: NextRequest) {
         createdAds: created,
         errors,
         batchStatus,
+        batchId: batch?.id || null,
       })
     }
 
@@ -841,11 +881,34 @@ export async function POST(request: NextRequest) {
       urlTags: state.urlParameters || undefined,
     })
 
+    const supabase = createAdminClient()
+    const { data: batch } = await supabase.from("launch_batches").insert({
+      org_id: ctx.orgId,
+      user_id: ctx.user.id,
+      user_name: ctx.user.full_name || ctx.user.email?.split("@")[0] || "Unknown",
+      ad_account_id: adAccountId,
+      ad_account_name: adAccountId,
+      adset_ids: [adSet.id],
+      adset_names: [state.adSetName],
+      creative_ids: state.creativeId ? [state.creativeId] : [],
+      primary_text: state.primaryText || null,
+      headline: state.headline || null,
+      cta: state.callToAction || null,
+      web_link: state.destinationUrl || null,
+      page_id: state.pageId || null,
+      status: "success",
+      total_ads: 1,
+      failed_ads: 0,
+      errors: [],
+      created_ads: [{ adId: ad.id, adSetId: adSet.id, creativeId: state.creativeId || null }],
+    }).select("id").single()
+
     return NextResponse.json({
       success: true,
       campaignId: campaign.id,
       adSetId: adSet.id,
       adId: ad.id,
+      batchId: batch?.id || null,
     })
   } catch (err) {
     if (campaignId && rollbackToken) await rollbackCampaign(campaignId, rollbackToken)

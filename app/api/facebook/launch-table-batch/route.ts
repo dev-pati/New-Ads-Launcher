@@ -160,11 +160,11 @@ export async function POST(request: NextRequest) {
             try {
               const copy = await copyAdSet(token, adSetId, {
                 campaign_id: adSetInfo.campaign_id,
-                name: `${adSetInfo.name} - ${creative.file_name}`,
+                name: adSetInfo.name,
                 status: adStatus,
               }, tokenOpts)
               targetAdSetId = copy.id
-              adSetNameMap.set(targetAdSetId, `${adSetInfo.name} - ${creative.file_name}`)
+              adSetNameMap.set(targetAdSetId, adSetInfo.name)
             } catch (err: any) {
               errors.push({ adSetId, creativeId: creative.id, fileName: creative.file_name, error: `Failed to duplicate ad set: ${err.message || "Unknown error"}` })
               continue

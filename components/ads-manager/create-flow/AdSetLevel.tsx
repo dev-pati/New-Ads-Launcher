@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { getUtcOffsetLabel, wallClockToUtcDate } from "@/lib/timezone"
-import { CampaignFormState, PerformanceGoal, PixelOption } from "./types"
+import { CampaignFormState, ConversionEvent, PerformanceGoal, PixelOption } from "./types"
 
 interface Props {
   state: CampaignFormState
@@ -148,12 +148,16 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
           <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
             Conversion location
           </label>
-          <div className="mt-2 rounded-lg border border-[#1877f2] bg-[#e3f0fe]/30 p-3 dark:bg-blue-900/20">
-            <span className="block text-xs font-semibold text-[#1877f2]">Website</span>
-            <span className="mt-0.5 block text-xs text-[#65676b]">
-              Ads will send people to your selected website URL.
-            </span>
-          </div>
+          <select
+            value={state.conversionLocation}
+            onChange={(event) => update({ conversionLocation: event.target.value as "website" })}
+            className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+          >
+            <option value="website">Website</option>
+          </select>
+          <p className="mt-1 text-[11px] text-[#65676b]">
+            App, messaging and calls require a different destination contract and are not available in this flow.
+          </p>
         </div>
 
         <div>
@@ -174,25 +178,93 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
         </div>
 
         {state.objective === "OUTCOME_SALES" && (
-          <div>
-            <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-              Pixel
-            </label>
-            <select
-              value={state.pixelId}
-              onChange={(event) => update({ pixelId: event.target.value })}
-              className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
-              disabled={pixelsLoading}
-            >
-              <option value="">{pixelsLoading ? "Loading Pixels..." : "Select a Pixel"}</option>
-              {pixels.map((pixel) => (
-                <option key={pixel.id} value={pixel.id}>
-                  {pixel.name} ({pixel.id})
-                </option>
-              ))}
-            </select>
-          </div>
+          <>
+            <div>
+              <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
+                Pixel
+              </label>
+              <select
+                value={state.pixelId}
+                onChange={(event) => update({ pixelId: event.target.value })}
+                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+                disabled={pixelsLoading}
+              >
+                <option value="">{pixelsLoading ? "Loading Pixels..." : "Select a Pixel"}</option>
+                {pixels.map((pixel) => (
+                  <option key={pixel.id} value={pixel.id}>
+                    {pixel.name} ({pixel.id})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
+                Conversion event
+              </label>
+              <select
+                value={state.conversionEvent}
+                onChange={(event) => update({ conversionEvent: event.target.value as ConversionEvent })}
+                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+              >
+                <option value="PURCHASE">Purchase</option>
+                <option value="ADD_TO_CART">Add to cart</option>
+                <option value="INITIATED_CHECKOUT">Initiate checkout</option>
+                <option value="LEAD">Lead</option>
+                <option value="COMPLETE_REGISTRATION">Complete registration</option>
+                <option value="VIEW_CONTENT">View content</option>
+              </select>
+            </div>
+          </>
         )}
+
+        <div>
+          <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
+            Cost per result goal
+          </label>
+          <div className="relative mt-1.5 max-w-[260px]">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#65676b]">
+              {currency}
+            </span>
+            <input
+              type="number"
+              min="0"
+              step={budgetStep}
+              value={state.costPerResultGoal}
+              onChange={(event) => update({ costPerResultGoal: event.target.value })}
+              placeholder="Optional"
+              className="h-9 w-full rounded border border-[#ccd0d5] bg-white pl-14 pr-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+            />
+          </div>
+          <p className="mt-1 text-[11px] text-[#65676b]">Uses Meta COST_CAP when set.</p>
+        </div>
+
+        <div className="rounded-lg border border-[#e4e6eb] p-4 dark:border-gray-800">
+          <h4 className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">Attribution setting</h4>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-[#65676b]">
+              Click-through
+              <select
+                value={state.attributionClickDays}
+                onChange={(event) => update({ attributionClickDays: event.target.value as "1" | "7" })}
+                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs text-[#1c2b33] outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background dark:text-gray-200"
+              >
+                <option value="1">1-day click</option>
+                <option value="7">7-day click</option>
+              </select>
+            </label>
+            <label className="text-xs text-[#65676b]">
+              View-through
+              <select
+                value={state.attributionViewDays}
+                onChange={(event) => update({ attributionViewDays: event.target.value as "0" | "1" })}
+                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs text-[#1c2b33] outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background dark:text-gray-200"
+              >
+                <option value="0">Off</option>
+                <option value="1">1-day view</option>
+              </select>
+            </label>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">

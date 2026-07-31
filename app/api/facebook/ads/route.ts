@@ -14,6 +14,9 @@ export async function GET(request: NextRequest) {
     const datePreset   = sp.get("date_preset") || "last_7d"
     const timeRange    = sp.get("time_range") || ""
     const forceRefresh = sp.get("refresh") === "true"
+    const requestedLimit = Number.parseInt(sp.get("limit") || "", 10)
+    const maxRows = Number.isFinite(requestedLimit) ? Math.min(20, Math.max(1, requestedLimit)) : undefined
+    const activeOnly = sp.get("active_only") === "true"
 
     if (!adAccountId) return NextResponse.json({ error: "ad_account_id is required" }, { status: 400 })
 
@@ -35,7 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     const dateKey  = timeRange ? `tr:${timeRange}` : `dp:${datePreset}`
-    const cacheKey = `ads:v6:${adAccountId}:${adSetId || "all"}:${dateKey}`
+    const cacheKey = `ads:v6:${adAccountId}:${adSetId || "all"}:${dateKey}:limit:${maxRows || "all"}:active:${activeOnly}`
 
     if (forceRefresh) clearCachedFacebookMetadata(cacheKey)
 
@@ -45,7 +48,7 @@ export async function GET(request: NextRequest) {
       ads = await getCachedFacebookMetadata(
         cacheKey,
         CACHE_TTL,
-        () => getAds(adAccountId, connection.access_token, adSetId || undefined, datePreset, timeRange || undefined)
+        () => getAds(adAccountId, connection.access_token, adSetId || undefined, datePreset, timeRange || undefined, maxRows, activeOnly)
       )
     } catch (err) {
       const snapshotRes = await fallback(err instanceof Error ? err.message : "meta_unavailable")

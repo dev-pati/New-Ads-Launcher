@@ -207,18 +207,11 @@ function NodeActionMenu({ level, id, onDuplicate, onDelete, onEdit, onViewHistor
           <div className="border-t my-1" />
           <Item label="Duplicate" shortcut="Ctrl+Shift+D" disabled={!onDuplicate} onClick={() => onDuplicate?.(id)} />
           <Item label="Quickly duplicate" shortcut="Ctrl+D" disabled={!onDuplicate} onClick={() => onDuplicate?.(id)} />
-          <Item label="Copy" shortcut="Ctrl+C" disabled onClick={() => {}} />
-          <Item label="Paste" shortcut="Ctrl+V" disabled onClick={() => {}} />
           <Item label="Delete" shortcut="Ctrl+Del" disabled={!onDelete} onClick={() => onDelete?.(id)} />
           <div className="border-t my-1" />
           <Item label="Edit" disabled={!onEdit} onClick={() => onEdit?.(id)} />
           <Item label="See history" disabled={!onSeeHistory} onClick={() => onSeeHistory?.(id, level)} />
-          <Item label="Edit ad sequence" disabled onClick={() => {}} />
-          <Item label="Create ad" disabled onClick={() => {}} />
-          <Item label="Create multiple ads" disabled onClick={() => {}} />
-          <Item label="Create rule" disabled onClick={() => {}} />
           <div className="border-t my-1" />
-          <Item label={`ID: ${id}`} onClick={() => {}} />
           <Item label="Copy ID" onClick={copyId} />
         </div>
       )}

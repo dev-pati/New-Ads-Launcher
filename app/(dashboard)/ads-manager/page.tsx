@@ -151,7 +151,7 @@ interface Ad {
 }
 
 /**
- * The default row order for all three hierarchy levels: newest created first.
+ * The default row order for all three hierarchy levels: active first, then newest created.
  *
  * Meta returns objects in its own order — effectively oldest first — so the campaign, ad set or
  * ad the user launched a minute ago arrived at the bottom of the list. Sorting by name instead
@@ -165,9 +165,12 @@ interface Ad {
  * so it is a reasonable recency proxy on its own).
  */
 const byNewestFirst = (
-  a: { created_time?: string; id: string },
-  b: { created_time?: string; id: string },
+  a: { created_time?: string; effective_status: string; id: string },
+  b: { created_time?: string; effective_status: string; id: string },
 ) => {
+  const aActive = a.effective_status === "ACTIVE"
+  const bActive = b.effective_status === "ACTIVE"
+  if (aActive !== bActive) return aActive ? -1 : 1
   const at = a.created_time ? Date.parse(a.created_time) : NaN
   const bt = b.created_time ? Date.parse(b.created_time) : NaN
   const aOk = !Number.isNaN(at)
@@ -368,19 +371,36 @@ function StatusToggle({ id, status, onToggle }: { id: string; status: string; on
 // ─── Delivery Badge ───────────────────────────────────────────────────────────
 
 // Meta attribution_spec entries — single-click entries carry event_type+window_days.
-const CLICK_WINDOW_LABEL: Record<number, string> = { 1: "1d-click", 7: "7d-click", 28: "28d-click" }
+const CLICK_WINDOW_LABEL: Record<number, string> = { 1: "1-day click", 7: "7-day click", 28: "28-day click" }
 function formatAttributionSpec(spec: AttributionSpecEntry[] | string | undefined | null): string {
-  if (!spec) return "All conversions"
+  if (!spec) return "7-day click or 1-day view" // Facebook's default for missing/empty
   if (typeof spec === "string") {
     const s = spec.trim()
-    if (!s) return "All conversions"
+    if (!s) return "7-day click or 1-day view"
     if (s.toLowerCase().includes("incremental")) return "Incremental attribution"
     return s
   }
-  if (!Array.isArray(spec) || !spec.length) return "All conversions"
+  if (!Array.isArray(spec) || !spec.length) return "7-day click or 1-day view"
+
+  // If there are exactly two entries for CLICK and VIEW, we combine them with "or"
+  const clickEntry = spec.find(e => (e.event_type || "").toLowerCase().includes("click"))
+  const viewEntry = spec.find(e => (e.event_type || "").toLowerCase().includes("view"))
+  const evEntry = spec.find(e => (e.event_type || "").toLowerCase().includes("engag"))
+
+  if (clickEntry && viewEntry && !evEntry && spec.length === 2) {
+    const clickW = clickEntry.window_days || 7
+    const viewW = viewEntry.window_days || 1
+    return `${clickW}-day click or ${viewW}-day view`
+  }
+
+  if (clickEntry && viewEntry && evEntry && spec.length === 3) {
+    const clickW = clickEntry.window_days || 7
+    const viewW = viewEntry.window_days || 1
+    return `${clickW}-day click or ${viewW}-day view (engaged view)`
+  }
+
   const parts = spec.map(e => {
     const etRaw = (e.event_type || "").toLowerCase()
-    // Meta returns CLICK_THROUGH / VIEW_THROUGH / ENGAGED_VIEW; normalize all spellings.
     const et = etRaw.includes("increment") ? "incremental"
       : etRaw.includes("click") ? "click"
       : etRaw.includes("view") ? "view"
@@ -388,12 +408,12 @@ function formatAttributionSpec(spec: AttributionSpecEntry[] | string | undefined
       : etRaw
     const w = e.window_days
     if (et === "incremental") return "Incremental attribution"
-    if (et === "click") return (w != null ? CLICK_WINDOW_LABEL[w] : undefined) ?? `${w ?? 0}d-click`
-    if (et === "view") return w === 1 ? "1d-view" : `${w ?? 1}d-view`
-    if (et === "engagement") return `${w ?? 1}d-engagement`
-    return `${et}${w ? `-${w}d` : ""}`
+    if (et === "click") return (w != null ? CLICK_WINDOW_LABEL[w] : undefined) ?? `${w ?? 0}-day click`
+    if (et === "view") return `${w ?? 1}-day view`
+    if (et === "engagement") return `${w ?? 1}-day engagement`
+    return `${w ? `${w}-day ` : ""}${et}`
   }).filter(Boolean)
-  return parts.length ? Array.from(new Set(parts)).join(", ") : "All conversions"
+  return parts.length ? Array.from(new Set(parts)).join(" or ") : "7-day click or 1-day view"
 }
 
 function formatBidStrategy(raw: string | null | undefined): string {
@@ -819,11 +839,11 @@ function AdsManagerContent() {
   const clientCache = useRef<Map<string, { campaigns?: Campaign[]; adSets?: AdSet[]; ads?: Ad[] }>>(new Map())
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const fetchMainData = useCallback(async (forceRefresh = false) => {
+  const fetchMainData = useCallback(async (forceRefresh = false, rowLimit?: number) => {
     if (!selectedAccountId) return
 
     const dateParam = buildDateParam()
-    const refreshParam = forceRefresh ? "&refresh=true" : ""
+    const refreshParam = `${forceRefresh ? "&refresh=true" : ""}${rowLimit ? `&limit=${rowLimit}&active_only=true` : ""}`
     const cacheKey = `${selectedAccountId}:${datePreset}:${customDateRange ? 'custom' : 'preset'}:${tab}`
 
     const cached = forceRefresh ? undefined : clientCache.current.get(cacheKey)
@@ -857,19 +877,19 @@ function AdsManagerContent() {
         if (!ar.ok) throw new Error(ad.error || "Failed")
         setCampaigns(d.campaigns || [])
         setAdSets(ad.adSets || [])
-        clientCache.current.set(cacheKey, { campaigns: d.campaigns || [], adSets: ad.adSets || [] })
+        if (!rowLimit) clientCache.current.set(cacheKey, { campaigns: d.campaigns || [], adSets: ad.adSets || [] })
       } else if (tab === "adsets") {
         const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
-        clientCache.current.set(cacheKey, { adSets: d.adSets || [] })
+        if (!rowLimit) clientCache.current.set(cacheKey, { adSets: d.adSets || [] })
       } else {
         const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
-        clientCache.current.set(cacheKey, { ads: d.ads || [] })
+        if (!rowLimit) clientCache.current.set(cacheKey, { ads: d.ads || [] })
       }
       setLoadedMs(Date.now() - t0)
     } catch (e: any) {
@@ -941,7 +961,20 @@ function AdsManagerContent() {
   const breakdownDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Main data: account / tab / date change → immediate refetch
-  useEffect(() => { fetchMainData() }, [fetchMainData])
+  useEffect(() => { fetchMainData(true, 20) }, [fetchMainData])
+
+  useEffect(() => {
+    if (!selectedAccountId) return
+    const refreshVisibleData = () => {
+      if (document.visibilityState === "visible") fetchMainData(true, 20)
+    }
+    const interval = setInterval(refreshVisibleData, 60_000)
+    window.addEventListener("focus", refreshVisibleData)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("focus", refreshVisibleData)
+    }
+  }, [selectedAccountId, fetchMainData])
 
   // Account-level summary for footer metrics that Meta dedupes across the whole ad account.
   // Do not derive these by summing campaign/ad set/ad rows; reach/unique users overlap.
@@ -1040,7 +1073,7 @@ function AdsManagerContent() {
       if (!r.ok) throw new Error("Failed to update name")
     } catch (err) {
       console.error(err)
-      fetchMainData() // revert on fail
+      fetchMainData(true, 20) // revert on fail
     }
   }
 
@@ -1067,7 +1100,7 @@ function AdsManagerContent() {
       }
       setDuplicateDialogOpen(false)
       setSelectedIds(new Set())
-      await fetchMainData()
+      await fetchMainData(true, 20)
     } catch (err) {
       console.error(err)
     } finally {
@@ -1138,7 +1171,7 @@ function AdsManagerContent() {
       if (!r.ok) throw new Error("Failed to update")
     } catch (err) {
       console.error(err)
-      fetchMainData() // revert on fail
+      fetchMainData(true, 20) // revert on fail
     }
   }
 
@@ -1606,7 +1639,7 @@ function AdsManagerContent() {
             if (tab === "campaigns") {
               const kids = adSets.filter(a => a.campaign_id === item.id)
               const labels = Array.from(new Set(kids.map(k => formatAttributionSpec(k.attribution_spec))))
-              val = labels.length ? labels.join(" · ") : "All conversions"
+              val = labels.length === 1 ? labels[0] : labels.length > 1 ? "Multiple" : "7-day click or 1-day view"
             } else {
               const spec = (item as any).attribution_spec ?? (item as Ad).adset?.attribution_spec ?? (item as any).attributionSetting ?? (item as any).metrics?.attributionSetting
               val = formatAttributionSpec(spec)
@@ -1956,14 +1989,14 @@ function AdsManagerContent() {
 
       case "attribution_setting": {
         // Ad sets expose attribution_spec; ads inherit via adset{attribution_spec}.
-        // Campaigns have no attribution_spec → derive from ALL child ad sets, join unique labels.
-        // Empty / missing → "All conversions" (Meta default). Incremental → "Incremental attribution".
+        // Campaigns have no attribution_spec → derive from ALL child ad sets.
+        // Multiple distinct → "Multiple" (Meta shows mixed parent as "Multiple").
         const anyRow = row as any
         let label: string | null = null
         if (tab === "campaigns") {
           const kids = adSets.filter(a => a.campaign_id === (row as Campaign).id)
           const labels = Array.from(new Set(kids.map(k => formatAttributionSpec(k.attribution_spec))))
-          label = labels.length ? labels.join(" · ") : "All conversions"
+          label = labels.length === 1 ? labels[0] : labels.length > 1 ? "Multiple" : "7-day click or 1-day view"
         } else {
           const spec: AttributionSpecEntry[] | string | undefined =
             anyRow.attribution_spec
@@ -2139,7 +2172,7 @@ function AdsManagerContent() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
-      <CreateCampaignModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={fetchMainData} />
+      <CreateCampaignModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={() => fetchMainData(true, 20)} />
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
@@ -2162,7 +2195,7 @@ function AdsManagerContent() {
 
           <span className="text-xs text-muted-foreground">Updated just now</span>
           <button
-            onClick={() => fetchMainData(true)}
+            onClick={() => fetchMainData(true, 20)}
             disabled={loading}
             className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors"
           >
@@ -2466,10 +2499,6 @@ function AdsManagerContent() {
                       {presetButton("delivery")}
 
                       <div className="border-t my-1.5" />
-                      <button className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs text-left">
-                        <span>Discover more column presets</span>
-                        <IconDrillRight className="size-3.5 text-muted-foreground" />
-                      </button>
                       <button
                         onClick={() => { setColsOpen(false); setCustomizeColsOpen(true) }}
                         className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs text-left"
@@ -2484,9 +2513,6 @@ function AdsManagerContent() {
                         className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-muted/50 transition-colors text-xs text-left"
                       >
                         <IconAdjustments className="size-3.5 text-muted-foreground" /> Compare attribution settings
-                      </button>
-                      <button disabled className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left opacity-50 cursor-not-allowed">
-                        Conditional formatting
                       </button>
                       <button
                         onClick={() => { setColumnWidths({}); setColsOpen(false) }}
@@ -2997,13 +3023,12 @@ function AdsManagerContent() {
             </div>
 
             <div className="border-t pt-4">
-              <button type="button" className="w-full flex items-center justify-between text-left hover:bg-muted/30 p-2 rounded-lg transition-colors">
+              <div className="w-full flex items-center justify-between text-left p-2">
                 <span>
                   <span className="block">Apple SKAdNetwork</span>
                   <span className="block text-xs text-muted-foreground">App ads only</span>
                 </span>
-                <IconChevronDown className="size-4" />
-              </button>
+              </div>
               <div className="mt-3 space-y-3">
                 {SKAN_ATTR.map(a => (
                   <label key={a.key} className="flex items-center gap-3 cursor-pointer">

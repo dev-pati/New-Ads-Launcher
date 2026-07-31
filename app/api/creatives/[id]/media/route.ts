@@ -29,6 +29,12 @@ function noStoreRedirect(url: string) {
   return response
 }
 
+function cachedRedirect(url: string) {
+  const response = NextResponse.redirect(url, 307)
+  response.headers.set("Cache-Control", "private, max-age=86400")
+  return response
+}
+
 function sanitizeFileName(fileName: string) {
   return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-")
 }
@@ -313,7 +319,7 @@ export async function GET(
 
     if (variant === "thumbnail") {
       const stableThumbnailUrl = stablePublicUrl(creative.fb_thumbnail_url)
-      if (stableThumbnailUrl) return noStoreRedirect(stableThumbnailUrl)
+      if (stableThumbnailUrl) return cachedRedirect(stableThumbnailUrl)
 
       // Try FFmpeg extraction from Supabase storage — zero Meta API calls.
       // Falls back to Meta API only if FFmpeg is unavailable or fails.
@@ -341,7 +347,7 @@ export async function GET(
                 .update({ fb_thumbnail_url: cached.publicUrl })
                 .eq("id", creative.id)
                 .eq("org_id", ctx.orgId)
-              return noStoreRedirect(cached.publicUrl)
+              return cachedRedirect(cached.publicUrl)
             } catch {
               // Cache failed — return the JPEG directly without redirect
               return new NextResponse(thumbBuffer.buffer as ArrayBuffer, {
@@ -378,7 +384,7 @@ export async function GET(
           .eq("id", creative.id)
           .eq("org_id", ctx.orgId)
 
-        return noStoreRedirect(cached.publicUrl)
+        return cachedRedirect(cached.publicUrl)
       } catch {
         await admin
           .from("creatives")

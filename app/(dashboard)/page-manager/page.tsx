@@ -2302,11 +2302,6 @@ export default function PageManagerPage() {
                     <IconCheck className="mr-2 size-3.5" />
                     Close conversation
                   </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem disabled className="opacity-50">
-                    <IconExternalLink className="mr-2 size-3.5" />
-                    View profile
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -5887,21 +5882,6 @@ export default function PageManagerPage() {
                             <span className="text-[11px] text-muted-foreground">No labels yet</span>
                           )}
                         </div>
-                        <p className="text-[11px] font-semibold text-[#65676B] dark:text-muted-foreground pt-1">Suggested labels</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {pageManagerSettings.tags.availableTags
-                            .filter(t => !(selectedThread.tags || []).includes(t))
-                            .slice(0, 4)
-                            .map(tag => (
-                              <button
-                                key={tag}
-                                type="button"
-                                className="rounded-full border border-dashed border-[#E4E6EB] dark:border-border px-2 py-0.5 text-[11px] text-[#65676B] dark:text-muted-foreground hover:bg-[#F0F2F5] dark:bg-muted/50"
-                              >
-                                + {tag}
-                              </button>
-                            ))}
-                        </div>
                       </div>
 
                       {/* Notes */}
@@ -6890,9 +6870,6 @@ export default function PageManagerPage() {
                         onChange={e => setOrderForm(p => ({ ...p, productQuery: e.target.value }))}
                         className="text-sm h-9"
                       />
-                      <button type="button" className="text-xs font-semibold text-[#0084FF] dark:text-primary hover:underline">
-                        Or enter details manually
-                      </button>
                     </div>
 
                     <div className="space-y-1">

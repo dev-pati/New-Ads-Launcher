@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { findRoadmapOnlyAutomationApp } from "@/lib/automation-capabilities"
 import { getAuthContext, requireRole }            from "@/lib/auth"
 import { createAdminClient }         from "@/lib/supabase/admin"
 
@@ -41,6 +42,13 @@ export async function PATCH(
     const { id } = await params
     const body = await request.json()
     const { name, trigger_type, trigger_config, conditions, actions, ad_account_ids, status, notif_config, steps } = body
+    const roadmapOnlyApp = findRoadmapOnlyAutomationApp(steps)
+    if (roadmapOnlyApp) {
+      return NextResponse.json(
+        { error: `${roadmapOnlyApp} automation is coming soon` },
+        { status: 400 },
+      )
+    }
 
     const supabase = createAdminClient()
     const updates: Record<string, any> = {}

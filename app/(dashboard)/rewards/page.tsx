@@ -5,10 +5,9 @@ import { createClient } from "@/lib/supabase/client"
 import { useOrg } from "@/lib/org-context"
 import { cn } from "@/lib/utils"
 import {
-  IconGift, IconCopy, IconCheck, IconRocket, IconPhoto,
+  IconGift, IconCheck, IconRocket, IconPhoto,
   IconFileDescription, IconUsers, IconSparkles, IconStar,
   IconTrophy, IconBolt, IconShare,
-  IconBrandTwitter, IconMail,
 } from "@tabler/icons-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -128,23 +127,6 @@ function MilestoneCard({ m }: { m: Milestone }) {
   )
 }
 
-function CopyButton({ text, label }: { text: string; label: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-  return (
-    <button
-      onClick={copy}
-      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all hover:bg-muted"
-    >
-      {copied ? <><IconCheck className="size-3.5 text-primary" />Copied!</> : <><IconCopy className="size-3.5" />{label}</>}
-    </button>
-  )
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RewardsPage() {
@@ -177,10 +159,6 @@ export default function RewardsPage() {
   const earned = milestones.filter(m => m.current >= m.threshold).reduce((s, m) => s + m.points, 0)
   const total = milestones.reduce((s, m) => s + m.points, 0)
 
-  const referralLink = typeof window !== "undefined"
-    ? `${window.location.origin}/auth/signup?ref=${activeOrg?.slug || activeOrg?.id?.slice(0, 8) || "org"}`
-    : ""
-
   return (
     <div className="flex-1 overflow-y-auto bg-background">
       <div className="max-w-3xl mx-auto px-6 py-8 space-y-8">
@@ -192,7 +170,7 @@ export default function RewardsPage() {
             Rewards
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Earn points by using AdLauncher and referring teammates.
+            Earn points by using AdLauncher.
           </p>
         </div>
 
@@ -242,31 +220,14 @@ export default function RewardsPage() {
             <div>
               <h2 className="font-semibold">Refer a teammate</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Invite someone to AdLauncher and earn <strong className="text-foreground">200 points</strong> when they join your org.
+                Referral rewards are on the roadmap.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 p-3 rounded-xl bg-muted/50 border mb-4">
-            <p className="flex-1 text-sm font-mono text-muted-foreground truncate">{referralLink || "Loading…"}</p>
-            <CopyButton text={referralLink} label="Copy link" />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-muted-foreground">Share via:</p>
-            <button
-              onClick={() => window.open(`mailto:?subject=Join me on AdLauncher&body=Hey! I've been using AdLauncher to launch Meta ads faster. Join here: ${referralLink}`, "_blank")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted transition-colors"
-            >
-              <IconMail className="size-3.5" />Email
-            </button>
-            <button
-              onClick={() => window.open(`https://twitter.com/intent/tweet?text=I'm launching Meta ads way faster with @AdLauncher 🚀 Try it: ${referralLink}`, "_blank")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium hover:bg-muted transition-colors"
-            >
-              <IconBrandTwitter className="size-3.5" />Twitter
-            </button>
-          </div>
+          <button disabled className="rounded-lg border px-3 py-1.5 text-xs text-muted-foreground opacity-60">
+            Coming soon
+          </button>
         </div>
 
         {/* How to earn */}
@@ -280,7 +241,6 @@ export default function RewardsPage() {
               { label: "Launch your first batch", pts: 50, icon: IconRocket },
               { label: "Upload 10 creatives", pts: 100, icon: IconPhoto },
               { label: "Reach 10 launches", pts: 150, icon: IconBolt },
-              { label: "Invite a team member", pts: 200, icon: IconUsers },
               { label: "Save 5 templates", pts: 75, icon: IconFileDescription },
               { label: "Launch 50 batches", pts: 500, icon: IconTrophy },
             ].map(({ label, pts, icon: Icon }) => (

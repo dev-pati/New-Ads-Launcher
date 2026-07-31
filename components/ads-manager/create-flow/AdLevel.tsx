@@ -213,6 +213,27 @@ export function AdLevel({
                 placeholder="Enter an ad name"
               />
             </div>
+            <div className="flex items-center justify-between gap-4 border-t border-[#e4e6eb] pt-4 dark:border-gray-800">
+              <div>
+                <p className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">1 ad per ad set</p>
+                <p className="mt-1 text-[11px] text-[#65676b]">
+                  Duplicate the configured ad set for each additional media item.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={state.oneAdPerAdset}
+                onClick={() => update({ oneAdPerAdset: !state.oneAdPerAdset })}
+                className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                  state.oneAdPerAdset ? "bg-[#1877f2]" : "bg-[#c9ccd1] dark:bg-gray-600"
+                }`}
+              >
+                <span className={`size-5 rounded-full bg-white shadow-sm transition-transform ${
+                  state.oneAdPerAdset ? "translate-x-5" : "translate-x-0.5"
+                }`} />
+              </button>
+            </div>
           </div>
 
           <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">

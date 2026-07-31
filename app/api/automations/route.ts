@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { findRoadmapOnlyAutomationApp } from "@/lib/automation-capabilities"
 import { getAuthContext, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
@@ -45,6 +46,13 @@ export async function POST(request: NextRequest) {
     const { name, description, trigger_type, trigger_config, conditions, actions, ad_account_ids, requires_approval, template_id, notif_config, steps } = body
 
     if (!name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 })
+    const roadmapOnlyApp = findRoadmapOnlyAutomationApp(steps)
+    if (roadmapOnlyApp) {
+      return NextResponse.json(
+        { error: `${roadmapOnlyApp} automation is coming soon` },
+        { status: 400 },
+      )
+    }
 
     const supabase = createAdminClient()
     const { data, error } = await supabase

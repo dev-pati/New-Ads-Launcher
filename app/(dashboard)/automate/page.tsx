@@ -9,7 +9,7 @@ import {
   IconBolt, IconPlus, IconSearch, IconRefresh, IconLoader2, IconX,
   IconCheck, IconChevronDown, IconPlayerPause, IconPlayerPlay,
   IconTrash, IconEdit, IconBell, IconHistory, IconTemplate,
-  IconSettings, IconCopy, IconAlertCircle, IconTarget, IconRocket,
+  IconCopy, IconAlertCircle, IconTarget, IconRocket,
   IconMoneybag, IconCalendar, IconBrandTiktok, IconBrandSnapchat,
   IconBrandPinterest, IconFileSpreadsheet, IconChartBar, IconToggleLeft,
   IconStar, IconCircleCheck, IconClockHour4, IconMinus,
@@ -990,9 +990,6 @@ export default function AutomatePage() {
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => navigator.clipboard?.writeText(JSON.stringify(automations, null, 2))}>
                   <IconCopy className="size-3.5" />Copy JSON
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <IconSettings className="size-3.5" />View settings
-                </Button>
                 <Button size="sm" className="gap-1.5" onClick={() => router.push("/automate/new")}>
                   <IconPlus className="size-3.5" />Create
                 </Button>
@@ -1140,7 +1137,15 @@ export default function AutomatePage() {
                 const isLive = !!(t as any).fbLive
                 const isSoon = !!(t as any).comingSoon
                 return (
-                  <div key={t.id} className="border rounded-xl p-4 bg-card hover:shadow-sm transition-shadow relative cursor-pointer" onClick={() => useTemplate(t)}>
+                  <div
+                    key={t.id}
+                    aria-disabled={isSoon}
+                    className={cn(
+                      "border rounded-xl p-4 bg-card transition-shadow relative",
+                      isSoon ? "opacity-70 cursor-not-allowed" : "hover:shadow-sm cursor-pointer",
+                    )}
+                    onClick={() => { if (!isSoon) useTemplate(t) }}
+                  >
                     <div className="flex items-start gap-3 mb-3">
                       <div className={cn("size-9 rounded-lg flex items-center justify-center shrink-0", t.iconBg)}>
                         <Icon className={cn("size-4.5", t.iconColor)} />
@@ -1158,8 +1163,14 @@ export default function AutomatePage() {
                     <p className="text-xs text-muted-foreground leading-relaxed mb-3">{t.description}</p>
                     <div className="flex items-center justify-between">
                       <AppChain chain={(t as any).appChain ?? ["meta", "meta"]} steps={t.steps} />
-                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={e => { e.stopPropagation(); useTemplate(t) }}>
-                        Use
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        disabled={isSoon}
+                        onClick={e => { e.stopPropagation(); useTemplate(t) }}
+                      >
+                        {isSoon ? "Coming soon" : "Use"}
                       </Button>
                     </div>
                   </div>
@@ -1291,9 +1302,6 @@ export default function AutomatePage() {
                     placeholder="Search by name, event, recipient..."
                     className="pl-9 pr-3 py-1.5 text-sm border rounded-lg bg-background outline-none focus:ring-1 focus:ring-ring" />
                 </div>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <IconRefresh className="size-3.5" />Refresh
-                </Button>
               </div>
             </div>
             <div className="border rounded-2xl p-12 flex flex-col items-center text-center">

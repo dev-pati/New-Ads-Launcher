@@ -187,7 +187,7 @@ export interface FacebookPage {
 
 function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)) }
 
-async function fetchAllMetaPages<T>(initialUrl: string, fallbackMessage: string): Promise<T[]> {
+async function fetchAllMetaPages<T>(initialUrl: string, fallbackMessage: string, maxRows?: number): Promise<T[]> {
   const rows: T[] = []
   let url: string | null = initialUrl
 
@@ -196,6 +196,7 @@ async function fetchAllMetaPages<T>(initialUrl: string, fallbackMessage: string)
     const data: any = await res.json()
     if (data?.error || !res.ok) throwMetaError(data, fallbackMessage)
     rows.push(...(data.data || []))
+    if (maxRows && rows.length >= maxRows) return rows.slice(0, maxRows)
     url = data.paging?.next || null
   }
 
@@ -428,8 +429,12 @@ export async function getCampaigns(
   adAccountId: string,
   accessToken: string,
   datePreset: string = "last_7d",
-  timeRange?: string
+  timeRange?: string,
+  maxRows?: number,
+  activeOnly = false
 ): Promise<Campaign[]> {
+  const pageLimit = maxRows ? Math.min(25, maxRows) : 25
+  const statusFilter = activeOnly ? `&effective_status=${encodeURIComponent(JSON.stringify(["ACTIVE"]))}` : ""
   const insightsParam = timeRange
     ? `insights.time_range(${timeRange}){${ADS_MANAGER_INSIGHT_FIELDS}}`
     : `insights.date_preset(${datePreset}){${ADS_MANAGER_INSIGHT_FIELDS}}`
@@ -442,8 +447,9 @@ export async function getCampaigns(
   ].join(",")
 
   return fetchAllMetaPages<Campaign>(
-    `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`,
-    "Failed to get campaigns"
+    `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${encodeURIComponent(fields)}&limit=${pageLimit}${statusFilter}&access_token=${accessToken}`,
+    "Failed to get campaigns",
+    maxRows
   )
 }
 
@@ -493,8 +499,12 @@ export async function getAdSets(
   accessToken: string,
   campaignId?: string,
   datePreset: string = "last_7d",
-  timeRange?: string
+  timeRange?: string,
+  maxRows?: number,
+  activeOnly = false
 ): Promise<AdSet[]> {
+  const pageLimit = maxRows ? Math.min(25, maxRows) : 25
+  const statusFilter = activeOnly ? `&effective_status=${encodeURIComponent(JSON.stringify(["ACTIVE"]))}` : ""
   const insightsParam = timeRange
     ? `insights.time_range(${timeRange}){${ADS_MANAGER_INSIGHT_FIELDS}}`
     : `insights.date_preset(${datePreset}){${ADS_MANAGER_INSIGHT_FIELDS}}`
@@ -507,12 +517,12 @@ export async function getAdSets(
     insightsParam,
   ].join(",")
 
-  let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`
+  let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${encodeURIComponent(fields)}&limit=${pageLimit}${statusFilter}&access_token=${accessToken}`
   if (campaignId) {
-    url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`
+    url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${encodeURIComponent(fields)}&limit=${pageLimit}${statusFilter}&access_token=${accessToken}`
   }
 
-  const data = await fetchAllMetaPages<any>(url, "Failed to get ad sets")
+  const data = await fetchAllMetaPages<any>(url, "Failed to get ad sets", maxRows)
 
   // Flatten campaign.name → campaign_name for convenience
   return data.map((a: any) => ({
@@ -565,8 +575,12 @@ export async function getAds(
   accessToken: string,
   adSetId?: string,
   datePreset: string = "last_7d",
-  timeRange?: string
+  timeRange?: string,
+  maxRows?: number,
+  activeOnly = false
 ): Promise<Ad[]> {
+  const pageLimit = maxRows ? Math.min(25, maxRows) : 25
+  const statusFilter = activeOnly ? `&effective_status=${encodeURIComponent(JSON.stringify(["ACTIVE"]))}` : ""
   // Ads path is the heaviest: many rows × creative × insights. Keep slim creative
   // + small page size; unique_* scalars are cheap and needed by ECOM columns.
   const adsInsightFields = [
@@ -588,12 +602,12 @@ export async function getAds(
 
   // Page size 25 — Meta rejects large multi-edge ads payloads with
   // "Please reduce the amount of data you're asking for".
-  let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`
+  let url = `${GRAPH_API_BASE}/${adAccountId}/ads?fields=${encodeURIComponent(fields)}&limit=${pageLimit}${statusFilter}&access_token=${accessToken}`
   if (adSetId) {
-    url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`
+    url = `${GRAPH_API_BASE}/${adSetId}/ads?fields=${encodeURIComponent(fields)}&limit=${pageLimit}${statusFilter}&access_token=${accessToken}`
   }
 
-  const ads = await fetchAllMetaPages<Ad & { creative?: any }>(url, "Failed to get ads")
+  const ads = await fetchAllMetaPages<Ad & { creative?: any }>(url, "Failed to get ads", maxRows)
   return ads.map((ad) => {
     const creative = ad.creative
     const creative_variations = normalizeVariations(creative?.asset_feed_spec)

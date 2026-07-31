@@ -33,14 +33,6 @@ export function LaunchProgressDialog({
   error,
   result
 }: LaunchProgressDialogProps) {
-  // Prevent closing during active launch
-  const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen && (phase === "validating" || phase === "preparing" || phase === "launching")) {
-      return
-    }
-    onOpenChange(newOpen)
-  }
-
   const getStatusContent = () => {
     switch (phase) {
       case "idle":
@@ -106,8 +98,33 @@ export function LaunchProgressDialog({
     }
   }
 
+  if (!open && phase !== "idle") {
+    const active = phase === "validating" || phase === "preparing" || phase === "launching"
+    return (
+      <button
+        type="button"
+        role="status"
+        aria-live="polite"
+        onClick={() => onOpenChange(true)}
+        className="fixed bottom-4 left-4 z-40 flex min-w-56 items-center gap-3 rounded-xl border bg-background px-4 py-3 text-left shadow-lg hover:bg-muted/40"
+      >
+        {active && <IconLoader2 className="size-5 shrink-0 animate-spin text-blue-500" />}
+        {phase === "success" && <IconCheck className="size-5 shrink-0 text-green-600" />}
+        {phase === "error" && <IconX className="size-5 shrink-0 text-red-600" />}
+        <span className="min-w-0">
+          <span className="block text-sm font-medium">
+            {active ? "Launching ads..." : phase === "success" ? "Launch complete" : "Launch failed"}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {result ? `${result.success}/${result.total} succeeded` : "Click to view progress"}
+          </span>
+        </span>
+      </button>
+    )
+  }
+
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>

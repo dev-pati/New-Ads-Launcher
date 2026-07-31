@@ -43,7 +43,7 @@ import {
   IconExternalLink, IconBrandFacebook, IconBrandInstagram,
   IconUsers, IconLanguage, IconStack2, IconStack3, IconLayout,
   IconClock, IconPencil, IconInfoCircle, IconArrowsUpDown,
-  IconSelector, IconChevronUp, IconFolderOpen, IconDeviceFloppy,
+  IconSelector, IconChevronUp,
   IconFileDescription, IconBuildingStore, IconShoppingBag, IconBox,
   IconBrandGoogleDrive, IconClipboard, IconDots, IconBrandMeta as IconMetaBadge,
   IconArrowsSort,
@@ -54,7 +54,7 @@ import {
   IconHome, IconUser, IconBrandFacebook as IconFb,
   IconVolumeOff, IconMaximize, IconPlayerPause, IconPlus as IconPlusFollow,
   IconCurrencyDollar, IconTarget, IconTrendingUp,
-  IconFilter, IconWorldPin,
+  IconFilter,
   IconChevronLeft, IconChevronRight,
   IconSparkles,
 } from "@tabler/icons-react"
@@ -574,13 +574,11 @@ function AdProfilesModal({
             These pages will be used as the profiles to launch your ads under. Missing pages or Instagram accounts?
           </p>
           <div className="flex items-center gap-2 mt-1 text-xs">
-            <a href="#" className="text-primary hover:underline">Help</a>
-            <span className="text-muted-foreground">|</span>
-            <a href="#" className="text-primary hover:underline flex items-center gap-0.5">
+            <a href="/connect" className="text-primary hover:underline flex items-center gap-0.5">
               Re-authenticate <IconExternalLink className="size-3 ml-0.5" />
             </a>
             <span className="text-muted-foreground">|</span>
-            <a href="#" className="text-primary hover:underline flex items-center gap-0.5">
+            <a href="/connect" className="text-primary hover:underline flex items-center gap-0.5">
               <IconBrandMeta className="size-3 mr-0.5" /> See granted permissions
             </a>
           </div>
@@ -833,7 +831,7 @@ function PartnershipAdsModal({
     { value: "first" as const, title: "First identity only in the header.", desc: "Displaying the first identity leverages your partner's voice" },
   ]
 
-  const renderIdentityCell = (id: typeof identityA, label: "Facebook" | "Instagram", showFbActions: boolean) => (
+  const renderIdentityCell = (id: typeof identityA, label: "Facebook" | "Instagram") => (
     <div className="p-3">
       <div className="flex items-center justify-between mb-2 min-h-[20px]">
         <div className="flex items-center gap-1.5">
@@ -842,19 +840,9 @@ function PartnershipAdsModal({
             : <IconBrandInstagram className="size-3.5 text-[#E1306C]" />}
           <span className="text-sm font-medium">{label}</span>
         </div>
-        {label === "Facebook" && showFbActions && (
-          <div className="flex items-center gap-3 text-xs">
-            <button className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground">
-              <IconExternalLink className="size-3" />View
-            </button>
-            <button className="flex items-center gap-0.5 text-muted-foreground hover:text-foreground">
-              <IconSearch className="size-3" />Search custom
-            </button>
-          </div>
-        )}
       </div>
       {label === "Facebook" ? (
-        <button className="w-full flex items-center gap-2 px-2.5 py-2 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
+        <div className="w-full flex items-center gap-2 px-2.5 py-2 border rounded-lg bg-background">
           {id.page?.picture?.data?.url ? (
             <img src={id.page.picture.data.url} className="size-5 rounded-full shrink-0 object-cover" alt="" />
           ) : (
@@ -865,10 +853,9 @@ function PartnershipAdsModal({
           <span className="flex-1 text-sm truncate text-left">
             {id.page?.name || (id.isManual ? `Page ${id.igId}` : "—")}
           </span>
-          <IconSelector className="size-3.5 text-muted-foreground shrink-0" />
-        </button>
+        </div>
       ) : (
-        <button className="w-full flex items-center gap-2 px-2.5 py-2 border rounded-lg bg-background hover:bg-muted/30 transition-colors">
+        <div className="w-full flex items-center gap-2 px-2.5 py-2 border rounded-lg bg-background">
           {id.ig?.profile_pic && !id.isFb ? (
             <img src={id.ig.profile_pic} className="size-5 rounded-full shrink-0 object-cover" alt="" />
           ) : (
@@ -879,8 +866,7 @@ function PartnershipAdsModal({
           <span className="flex-1 text-sm truncate text-left">
             {id.isFb ? `Use ${id.page?.name || "Facebook Page"}` : (id.ig?.username ? `@${id.ig.username}` : id.igId || "—")}
           </span>
-          <IconSelector className="size-3.5 text-muted-foreground shrink-0" />
-        </button>
+        </div>
       )}
     </div>
   )
@@ -908,14 +894,6 @@ function PartnershipAdsModal({
             </div>
           </div>
 
-          {/* Select Identity row */}
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-7 text-xs px-3">Select Identity</Button>
-            <button className="text-muted-foreground hover:text-foreground" title="Refresh identities">
-              <IconRefresh className="size-3.5" />
-            </button>
-          </div>
-
           {/* First Identity */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
@@ -923,8 +901,8 @@ function PartnershipAdsModal({
             </div>
             <div className="border rounded-xl overflow-hidden">
               <div className="grid grid-cols-2 divide-x">
-                {renderIdentityCell(identityA, "Facebook", true)}
-                {renderIdentityCell(identityA, "Instagram", false)}
+                {renderIdentityCell(identityA, "Facebook")}
+                {renderIdentityCell(identityA, "Instagram")}
               </div>
             </div>
           </div>
@@ -960,8 +938,8 @@ function PartnershipAdsModal({
             {hasPartner ? (
               <div className="border rounded-xl overflow-hidden">
                 <div className="grid grid-cols-2 divide-x">
-                  {renderIdentityCell(identityB, "Facebook", false)}
-                  {renderIdentityCell(identityB, "Instagram", false)}
+                {renderIdentityCell(identityB, "Facebook")}
+                {renderIdentityCell(identityB, "Instagram")}
                 </div>
               </div>
             ) : !partnerSearchOpen ? (
@@ -1207,14 +1185,6 @@ function MultilanguageAdsModal({
                   <div className="flex items-center gap-2">
                     <IconFileDescription className="size-4 text-muted-foreground" />
                     <span className="text-sm font-medium">Language Templates</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
-                      <IconFolderOpen className="size-3.5" />Load Template
-                    </Button>
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
-                      <IconDeviceFloppy className="size-3.5" />Save Template
-                    </Button>
                   </div>
                 </div>
 
@@ -1586,14 +1556,6 @@ function CollectionAdsModal({
                 {/* Presets */}
                 <div className="bg-muted/20 border-t px-4 py-2.5 flex items-center justify-between">
                   <span className="text-sm">Collection ad presets</span>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
-                      <IconFolderOpen className="size-3.5" />Templates<IconChevronDown className="size-3" />
-                    </Button>
-                    <Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
-                      <IconDeviceFloppy className="size-3.5" />Save
-                    </Button>
-                  </div>
                 </div>
 
                 {/* Body content */}
@@ -2568,13 +2530,7 @@ function CarouselAdsModal({
                   <span className="text-sm font-semibold">Available Media</span>
                   <span className="text-xs text-primary">({totalSelected} selected)</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button className="flex items-center gap-1 text-xs px-2 py-1 border rounded-full hover:bg-muted/30" title="Auto-group with AI (coming soon)">
-                    <span>AI Group</span>
-                    <svg className="size-3.5 text-purple-500" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4" /></svg>
-                  </button>
-                  <IconInfoCircle className="size-3.5 text-muted-foreground" />
-                </div>
+                <IconInfoCircle className="size-3.5 text-muted-foreground" />
               </div>
               <div className="relative">
                 <IconSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
@@ -3396,10 +3352,6 @@ function MultiPlacementAdsModal({
                     <IconTable className="size-3.5" />
                   </button>
                 </div>
-                <button className="flex items-center gap-1 text-xs px-2 py-1 border rounded-full hover:bg-muted/30" title="Auto-group with AI (coming soon)">
-                  <span>AI Group</span>
-                  <svg className="size-3.5 text-purple-500" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="4" /></svg>
-                </button>
                 <IconInfoCircle className="size-3.5 text-muted-foreground" />
               </div>
             </div>
@@ -5949,37 +5901,6 @@ function DuplicateCampaignModal({
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-sm font-bold">Choose Ad Sets ({selectedAdSetIds.size}/{sourceAdSets.length}) To Duplicate</p>
               <div className="flex items-center gap-3 text-xs">
-                {selectedAdSetIds.size > 0 && (
-                  <>
-                    <button
-                      onClick={() => {
-                        setAdSetConfigs(prev => {
-                          const next = { ...prev }
-                          selectedAdSetIds.forEach(id => { if (next[id]) next[id] = { ...next[id], statusActive: true } })
-                          return next
-                        })
-                      }}
-                      className="px-2 py-1 rounded-md text-emerald-700 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 font-semibold border border-emerald-200 dark:border-emerald-900"
-                      title={`Set all ${selectedAdSetIds.size} selected to ACTIVE`}
-                    >
-                      Activate All
-                    </button>
-                    <button
-                      onClick={() => {
-                        setAdSetConfigs(prev => {
-                          const next = { ...prev }
-                          selectedAdSetIds.forEach(id => { if (next[id]) next[id] = { ...next[id], statusActive: false } })
-                          return next
-                        })
-                      }}
-                      className="px-2 py-1 rounded-md text-muted-foreground bg-muted hover:bg-muted/70 font-semibold border"
-                      title={`Set all ${selectedAdSetIds.size} selected to PAUSED`}
-                    >
-                      Pause All
-                    </button>
-                    <span className="w-px h-4 bg-border" />
-                  </>
-                )}
                 <button onClick={() => setSelectedAdSetIds(selectedAdSetIds.size === sourceAdSets.length ? new Set() : new Set(sourceAdSets.map(a => a.id)))}
                   className="text-primary hover:underline">
                   {selectedAdSetIds.size === sourceAdSets.length ? "Deselect All" : "Select All"}
@@ -6414,7 +6335,14 @@ function DuplicateCampaignModal({
                       <span className="size-1.5 rounded-full bg-emerald-500" />
                       <span className="font-medium truncate flex-1">{a.name}</span>
                       <span className="text-muted-foreground font-mono">ID: {a.id}</span>
-                      <a href="#" className="text-primary hover:underline flex items-center gap-0.5">View <IconExternalLink className="size-2.5" /></a>
+                      <a
+                        href={`https://www.facebook.com/adsmanager/manage/adsets?act=${adAccountId}&selected_adset_ids=${a.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline flex items-center gap-0.5"
+                      >
+                        View <IconExternalLink className="size-2.5" />
+                      </a>
                     </div>
                   ))}
                 </div>
@@ -6473,10 +6401,11 @@ function DuplicateCampaignModal({
 
 // ─── Ad Sets Panel ────────────────────────────────────────────────────────────
 
-function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove, invalid }: {
+function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove, invalid, refreshKey }: {
   adAccountId: string; selectedAdSets: AdSet[]
   onSelect: (a: AdSet) => void; onRemove: (id: string) => void
   invalid?: boolean
+  refreshKey?: number
 }) {
   const [search, setSearch] = useState("")
   const [allAdSets, setAllAdSets] = useState<AdSet[]>([])
@@ -6499,6 +6428,9 @@ function AdSetsPanel({ adAccountId, selectedAdSets, onSelect, onRemove, invalid 
   }, [adAccountId])
 
   useEffect(() => { fetchAdSets() }, [fetchAdSets])
+  useEffect(() => {
+    if (refreshKey) fetchAdSets(true)
+  }, [refreshKey, fetchAdSets])
 
   useEffect(() => {
     const q = search.toLowerCase()
@@ -9270,6 +9202,18 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
     } finally { setLoadingStatus(false) }
   }
 
+  useEffect(() => {
+    if (!hasAdIds || !result.launchMeta?.adAccountId) return
+    loadStatus()
+    const interval = setInterval(loadStatus, 5000)
+    const timeout = setTimeout(() => clearInterval(interval), 60_000)
+    return () => {
+      clearInterval(interval)
+      clearTimeout(timeout)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result.batchId])
+
   const loadInsights = async () => {
     if (!hasAdIds || !result.launchMeta?.adAccountId) return
     setLoadingInsights(true)
@@ -11721,6 +11665,7 @@ function LaunchPageContent() {
 
   const [mode, setMode] = useState<"gallery" | "table">("gallery")
   const [createCampaignOpen, setCreateCampaignOpen] = useState(false)
+  const [adSetsRefreshKey, setAdSetsRefreshKey] = useState(0)
 
   const [pages, setPages] = useState<FacebookPage[]>([])
   const [selectedPageId, setSelectedPageId] = useState("")
@@ -13848,7 +13793,11 @@ function LaunchPageContent() {
         }} />
       <ScheduleModal open={scheduleModalOpen} onClose={() => setScheduleModalOpen(false)}
         onConfirm={(start, end) => mode === "table" ? doTableLaunch(start, end) : doLaunch(start, end)} />
-      <CreateCampaignModal open={createCampaignOpen} onClose={() => setCreateCampaignOpen(false)} onSuccess={() => {}} />
+      <CreateCampaignModal
+        open={createCampaignOpen}
+        onClose={() => setCreateCampaignOpen(false)}
+        onSuccess={() => setAdSetsRefreshKey(key => key + 1)}
+      />
       <LaunchProgressDialog
         phase={launchPhase}
         open={launchProgressOpen}
@@ -14136,6 +14085,7 @@ function LaunchPageContent() {
                 onSelect={a => setSelectedAdSets(prev => [...prev, a])}
                 onRemove={id => setSelectedAdSets(prev => prev.filter(a => a.id !== id))}
                 invalid={validationErrors.adsets}
+                refreshKey={adSetsRefreshKey}
               />
               <div className="border-t border-border/60 pt-5">
                 <AdSetupPanel
@@ -14433,15 +14383,6 @@ function LaunchPageContent() {
 
               {/* Right section */}
               <div className="ml-auto flex items-center gap-1">
-                {/* AI Group */}
-                <button
-                  onClick={() => { setToolbarNotice("AI Group is coming soon."); setTimeout(() => setToolbarNotice(""), 3000) }}
-                  className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-                  title="AI Group"
-                >
-                  <IconWorldPin className="size-3.5" />AI Group
-                </button>
-
                 {/* Column view buttons */}
                 <button
                   onClick={() => setTableViewMode("single")}

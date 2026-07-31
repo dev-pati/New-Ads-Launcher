@@ -21,6 +21,6 @@ describe("Duplicate campaign contract", () => {
     )
 
     assert.doesNotMatch(hierarchyReads, /limit=500/)
-    assert.match(hierarchyReads, /limit=25/g)
+    assert.match(hierarchyReads, /const pageLimit = maxRows \? Math\.min\(25, maxRows\) : 25/g)
   })
 })

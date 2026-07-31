@@ -3,7 +3,7 @@
 import { useState } from "react"
 import {
   IconCopy, IconCheck, IconDownload, IconSparkles,
-  IconPhoto, IconChevronDown, IconChevronUp, IconExternalLink,
+  IconChevronDown, IconChevronUp, IconExternalLink,
 } from "@tabler/icons-react"
 import type { DiscoveryAd, InspoBoard } from "@/types/inspo"
 import { formatViews, formatSpend, timeAgo } from "@/lib/inspo-mock-data"
@@ -224,11 +224,6 @@ export function AdDetailLeftPanel({
           </button>
         </div>
 
-        {/* Thumbnail */}
-        <button className="flex items-center justify-center gap-1.5 w-full h-9 text-xs border border-border rounded-xl hover:bg-muted transition-colors text-foreground/80">
-          <IconPhoto className="size-3.5" />
-          Thumbnail
-        </button>
       </div>
     </div>
   )

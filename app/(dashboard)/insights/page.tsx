@@ -10,7 +10,7 @@ import {
   IconLoader2, IconChevronDown, IconRefresh, IconPlus, IconAlertCircle,
   IconPlayerPlay, IconPhoto, IconFilter, IconX, IconMoodEmpty,
   IconArrowDown, IconArrowUp, IconArrowsUpDown, IconSearch,
-  IconGripVertical, IconPencil, IconTrophy, IconFlag, IconBolt,
+  IconGripVertical, IconTrophy, IconFlag, IconBolt,
   IconDeviceAnalytics, IconGauge, IconListNumbers, IconBulb,
   IconLayoutGridAdd, IconCheck,
 } from "@tabler/icons-react"
@@ -1049,9 +1049,6 @@ export default function InsightsPage() {
                     <div className="flex items-center gap-2 px-4 py-2.5 border-b">
                       <IconGripVertical className="size-4 text-muted-foreground/40 cursor-grab shrink-0" />
                       <span className="flex-1 text-sm font-medium">{WIDGET_DEFS.find(d => d.type === w.type)?.label || w.type}</span>
-                      <button className="text-muted-foreground/40 hover:text-muted-foreground transition-colors">
-                        <IconPencil className="size-3.5" />
-                      </button>
                       <button onClick={() => removeWidget(w.id)} className="text-muted-foreground/40 hover:text-destructive transition-colors">
                         <IconX className="size-3.5" />
                       </button>

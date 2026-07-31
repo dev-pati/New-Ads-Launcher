@@ -26,6 +26,7 @@ import {
 } from "./types"
 
 type Step = "campaign" | "adset" | "ad"
+type PublishStatus = "idle" | "publishing" | "success" | "error"
 
 interface Props {
   open: boolean
@@ -39,6 +40,7 @@ interface CreateCampaignResponse {
   campaignId?: string
   adSetId?: string
   adId?: string
+  batchId?: string | null
 }
 
 const ZERO_DECIMAL_CURRENCIES = new Set([
@@ -83,11 +85,20 @@ function positiveMoney(value: string, currency: string) {
   return Number.isFinite(amount) && amount > 0
 }
 
-function validateState(state: CampaignFormState, selectedAccountId: string, currency: string) {
+function validateState(
+  state: CampaignFormState,
+  selectedAccountId: string,
+  currency: string,
+  through: Step = "ad"
+) {
   if (!selectedAccountId) return { step: "campaign" as Step, message: "Select an ad account first." }
   if (!state.campaignName.trim()) return { step: "campaign" as Step, message: "Campaign name is required." }
+  if (state.advantageCampaignBudget && !positiveMoney(state.campaignBudget, currency)) {
+    return { step: "campaign" as Step, message: `Budget must be a valid ${currency} amount greater than 0.` }
+  }
+  if (through === "campaign") return null
+
   if (!state.adSetName.trim()) return { step: "adset" as Step, message: "Ad set name is required." }
-  if (!state.adName.trim()) return { step: "ad" as Step, message: "Ad name is required." }
   if (!state.locations.length) return { step: "adset" as Step, message: "Select at least one country." }
   if (state.ageMin < 18 || state.ageMax < state.ageMin || state.ageMax > 65) {
     return { step: "adset" as Step, message: "Age range must be between 18 and 65+." }
@@ -95,15 +106,18 @@ function validateState(state: CampaignFormState, selectedAccountId: string, curr
   if (state.objective === "OUTCOME_SALES" && !state.pixelId) {
     return { step: "adset" as Step, message: "Select a Pixel for Sales conversion campaigns." }
   }
-  if (!positiveMoney(state.advantageCampaignBudget ? state.campaignBudget : state.dailyBudget, currency)) {
-    return {
-      step: state.advantageCampaignBudget ? "campaign" as Step : "adset" as Step,
-      message: `Budget must be a valid ${currency.toUpperCase()} amount greater than 0.`,
-    }
+  if (!state.advantageCampaignBudget && !positiveMoney(state.dailyBudget, currency)) {
+    return { step: "adset" as Step, message: `Budget must be a valid ${currency} amount greater than 0.` }
+  }
+  if (state.costPerResultGoal && !positiveMoney(state.costPerResultGoal, currency)) {
+    return { step: "adset" as Step, message: `Cost goal must be a valid ${currency} amount greater than 0.` }
   }
   if (state.scheduleStart && state.scheduleEnd && new Date(state.scheduleEnd) <= new Date(state.scheduleStart)) {
     return { step: "adset" as Step, message: "End date must be after start date." }
   }
+  if (through === "adset") return null
+
+  if (!state.adName.trim()) return { step: "ad" as Step, message: "Ad name is required." }
   if (!state.pageId) return { step: "ad" as Step, message: "Select a Facebook Page." }
   const hasCreative = state.creativeIds.length > 0 || Boolean(state.creativeId)
   if (!hasCreative && !state.mediaUrl.trim()) {
@@ -127,6 +141,8 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
   const [formError, setFormError] = useState("")
   const [loadError, setLoadError] = useState("")
   const [createdIds, setCreatedIds] = useState<CreateCampaignResponse | null>(null)
+  const [publishStatus, setPublishStatus] = useState<PublishStatus>("idle")
+  const [publishMessage, setPublishMessage] = useState("")
 
   const [pages, setPages] = useState<FacebookPageOption[]>([])
   const [pagesLoading, setPagesLoading] = useState(false)
@@ -397,6 +413,18 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
     if (activeStep === "adset") return state.adSetName || "New Ad Set"
     return state.adName || "New Ad"
   }, [activeStep, state.adName, state.adSetName, state.campaignName])
+  const publishValidation = validateState(state, selectedAccountId, currency)
+
+  const handleSaveAndContinue = () => {
+    const validation = validateState(state, selectedAccountId, currency, activeStep)
+    if (validation) {
+      setFormError(validation.message)
+      return
+    }
+    setFormError("")
+    if (activeStep === "campaign") setActiveStep("adset")
+    else if (activeStep === "adset") setActiveStep("ad")
+  }
 
   const handlePublish = async () => {
     if (loadError) {
@@ -416,8 +444,11 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
     }
 
     setIsPublishing(true)
+    setPublishStatus("publishing")
+    setPublishMessage("Creating campaign, ad set and ads in Meta...")
     setFormError("")
     setCreatedIds(null)
+    onClose()
 
     try {
       const res = await fetch("/api/facebook/create-campaign", {
@@ -429,20 +460,38 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
       if (!res.ok || data.error) throw new Error(data.error || "Failed to publish campaign")
 
       setCreatedIds(data)
+      setPublishStatus("success")
+      setPublishMessage("Campaign published successfully.")
       onSuccess?.()
       setState(defaultCampaignState)
-      onClose()
+      setTimeout(() => setPublishStatus("idle"), 3000)
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Failed to publish campaign")
+      const message = error instanceof Error ? error.message : "Failed to publish campaign"
+      setFormError(message)
+      setPublishStatus("error")
+      setPublishMessage(message)
     } finally {
       setIsPublishing(false)
     }
   }
 
-  if (!open) return null
+  const publishDisabled =
+    isPublishing ||
+    isUploadingMedia ||
+    pagesLoading ||
+    pixelsLoading ||
+    !selectedAccountId ||
+    Boolean(loadError) ||
+    Boolean(publishValidation)
+
+  if (!open) {
+    return <CampaignPublishToast status={publishStatus} message={publishMessage} />
+  }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-black/40">
+    <>
+      <CampaignPublishToast status={publishStatus} message={publishMessage} />
+      <div className="fixed inset-0 z-50 flex justify-center bg-black/40">
       <div className="m-4 flex w-full max-w-[1250px] animate-in flex-col overflow-hidden rounded-lg border border-[#e4e6eb] bg-[#f5f6f7] shadow-2xl duration-200 fade-in zoom-in-95 dark:border-gray-800 dark:bg-background">
         <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#e4e6eb] bg-white px-4 dark:border-gray-800 dark:bg-card">
           <div className="flex min-w-0 items-center gap-3">
@@ -470,27 +519,6 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
               className="h-8 border-[#ccd0d5] text-xs font-semibold text-[#4b4f56]"
             >
               Close
-            </Button>
-            <Button
-              size="sm"
-              onClick={handlePublish}
-              disabled={
-                isPublishing ||
-                isUploadingMedia ||
-                pagesLoading ||
-                pixelsLoading ||
-                !selectedAccountId ||
-                Boolean(loadError)
-              }
-              className="h-8 bg-[#31a24c] px-4 text-xs font-semibold text-white shadow-sm hover:bg-[#2b9244]"
-            >
-              {isPublishing ? (
-                <>
-                  <IconLoader2 className="mr-1.5 size-4 animate-spin" /> Publishing...
-                </>
-              ) : (
-                "Publish"
-              )}
             </Button>
           </div>
         </div>
@@ -543,37 +571,89 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto bg-white dark:bg-card">
-            {activeStep === "campaign" && (
-              <CampaignLevel state={state} update={update} currency={currency} />
-            )}
-            {activeStep === "adset" && (
-              <AdSetLevel
-                state={state}
-                update={update}
-                pixels={pixels}
-                pixelsLoading={pixelsLoading}
-                currency={currency}
-                timezoneName={selectedAccount?.timezone_name}
-              />
-            )}
-            {activeStep === "ad" && (
-              <AdLevel
-                state={state}
-                update={update}
-                pages={pages}
-                pagesLoading={pagesLoading}
-                instagramAccounts={instagramAccounts}
-                instagramLoading={instagramLoading}
-                mediaUploading={isUploadingMedia}
-                mediaUploadError={mediaUploadError}
-                onSelectMediaFile={handleMediaFileSelected}
-                onClearUploadedCreative={clearUploadedCreative}
-                adAccountId={selectedAccountId}
-              />
-            )}
+          <div className="flex min-w-0 flex-1 flex-col bg-white dark:bg-card">
+            <div className="flex-1 overflow-y-auto">
+              {activeStep === "campaign" && (
+                <CampaignLevel state={state} update={update} currency={currency} />
+              )}
+              {activeStep === "adset" && (
+                <AdSetLevel
+                  state={state}
+                  update={update}
+                  pixels={pixels}
+                  pixelsLoading={pixelsLoading}
+                  currency={currency}
+                  timezoneName={selectedAccount?.timezone_name}
+                />
+              )}
+              {activeStep === "ad" && (
+                <AdLevel
+                  state={state}
+                  update={update}
+                  pages={pages}
+                  pagesLoading={pagesLoading}
+                  instagramAccounts={instagramAccounts}
+                  instagramLoading={instagramLoading}
+                  mediaUploading={isUploadingMedia}
+                  mediaUploadError={mediaUploadError}
+                  onSelectMediaFile={handleMediaFileSelected}
+                  onClearUploadedCreative={clearUploadedCreative}
+                  adAccountId={selectedAccountId}
+                />
+              )}
+            </div>
+            <div className="flex shrink-0 justify-end border-t border-[#e4e6eb] px-6 py-3 dark:border-gray-800">
+              {activeStep === "ad" ? (
+                <Button
+                  onClick={handlePublish}
+                  disabled={publishDisabled}
+                  className="bg-[#31a24c] px-5 font-semibold text-white hover:bg-[#2b9244]"
+                >
+                  Publish
+                </Button>
+              ) : (
+                <Button onClick={handleSaveAndContinue} className="bg-[#1877f2] px-5 font-semibold text-white hover:bg-[#166fe5]">
+                  Save and continue
+                </Button>
+              )}
+            </div>
           </div>
         </div>
+      </div>
+    </div>
+    </>
+  )
+}
+
+function CampaignPublishToast({
+  status,
+  message,
+}: {
+  status: PublishStatus
+  message: string
+}) {
+  if (status === "idle") return null
+
+  const Icon = status === "publishing" ? IconLoader2 : status === "success" ? IconCheck : IconAlertCircle
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-5 left-5 z-[60] flex max-w-sm animate-in items-center gap-3 rounded-xl border bg-white px-4 py-3 shadow-xl slide-in-from-bottom-3 dark:bg-card"
+    >
+      <Icon
+        className={cn(
+          "size-5 shrink-0",
+          status === "publishing" && "animate-spin text-blue-600",
+          status === "success" && "text-green-600",
+          status === "error" && "text-red-600"
+        )}
+      />
+      <div>
+        <p className="text-sm font-semibold">
+          {status === "publishing" ? "Publishing campaign" : status === "success" ? "Publish complete" : "Publish failed"}
+        </p>
+        <p className="text-xs text-muted-foreground">{message}</p>
       </div>
     </div>
   )

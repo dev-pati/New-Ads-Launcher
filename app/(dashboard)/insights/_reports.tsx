@@ -116,6 +116,15 @@ interface ReportAd {
 
 interface ActiveFilter { id: string; field: string; value: string; label: string }
 type SortDir  = "asc" | "desc"
+
+function sortReportAds(items: ReportAd[], sortKey: string, sortDir: SortDir) {
+  return [...items].sort((a, b) => {
+    const value = (ad: ReportAd) => sortKey === "createdTime"
+      ? (ad.createdTime ? new Date(ad.createdTime).getTime() : 0)
+      : Number((ad as any)[sortKey] ?? 0)
+    return sortDir === "desc" ? value(b) - value(a) : value(a) - value(b)
+  })
+}
 type ViewMode = "grid" | "table"
 
 // ─── Metric Definitions ───────────────────────────────────────────────────────
@@ -1988,9 +1997,9 @@ function VSModeView() {
                   </div>
                   {seg.ads.length > 0
                     ? <TableView
-                        ads={seg.ads.slice(0, 10)}
+                        ads={sortReportAds(seg.ads, sortKey, sortDir).slice(0, 10)}
                         metricKeys={metricKeys.slice(0, 4)}
-                        onSort={() => {}} sortKey={sortKey} sortDir={sortDir}
+                        onSort={handleSort} sortKey={sortKey} sortDir={sortDir}
                         selectedIds={seg.sel}
                         onToggle={seg.onToggle}
                         onToggleAll={seg.onToggleAll}

@@ -92,7 +92,7 @@ export function mapCreativeForClient<T extends ClientCreativeMedia>(creative: T)
     mapped.file_url = buildCreativeMediaRoute(creative.id, "source")
   }
 
-  if (creative.fb_video_id && (!creative.fb_thumbnail_url || isMetaCdnUrl(creative.fb_thumbnail_url))) {
+  if (creative.storage_path && (!creative.fb_thumbnail_url || isMetaCdnUrl(creative.fb_thumbnail_url))) {
     mapped.fb_thumbnail_url = buildCreativeMediaRoute(creative.id, "thumbnail")
   }
 

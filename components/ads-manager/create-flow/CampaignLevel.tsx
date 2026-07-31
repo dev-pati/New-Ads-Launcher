@@ -2,10 +2,12 @@
 
 import {
   IconChartArrowsVertical,
+  IconChevronDown,
   IconSpeakerphone,
   IconShoppingCart,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
+import { useState } from "react"
 import {
   CampaignFormState,
   CampaignObjective,
@@ -76,6 +78,7 @@ const ZERO_DECIMAL_CURRENCIES = new Set([
 
 export function CampaignLevel({ state, update, currency }: Props) {
   const budgetStep = ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase()) ? "1" : "0.01"
+  const [showSpecialCategories, setShowSpecialCategories] = useState(false)
 
   const toggleCategory = (category: SpecialAdCategory) => {
     update({
@@ -106,31 +109,45 @@ export function CampaignLevel({ state, update, currency }: Props) {
         </div>
       </div>
 
-      <div className="space-y-3 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
-        <div>
-          <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">
-            Special Ad Categories
-          </h3>
-          <p className="mt-1 text-xs text-[#65676b]">
-            Select only categories that apply. Leave all unchecked for no categories.
-          </p>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {SPECIAL_CATEGORIES.map((category) => (
-            <label
-              key={category.value}
-              className="flex cursor-pointer items-center gap-2 rounded border border-[#ccd0d5] px-3 py-2 text-xs dark:border-gray-700"
-            >
-              <input
-                type="checkbox"
-                className="size-4 accent-[#1877f2]"
-                checked={state.specialAdCategories.includes(category.value)}
-                onChange={() => toggleCategory(category.value)}
-              />
-              <span className="text-[#1c2b33] dark:text-gray-200">{category.label}</span>
-            </label>
-          ))}
-        </div>
+      <div className="rounded-lg border border-[#e4e6eb] shadow-sm dark:border-gray-800">
+        <button
+          type="button"
+          onClick={() => setShowSpecialCategories(value => !value)}
+          className="flex w-full items-center justify-between gap-4 p-5 text-left"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-[#1c2b33] dark:text-gray-100">
+              Advanced settings
+            </span>
+            <span className="mt-1 block text-xs text-[#65676b]">
+              Special Ad Categories{state.specialAdCategories.length ? ` · ${state.specialAdCategories.length} selected` : ""}
+            </span>
+          </span>
+          <IconChevronDown className={cn("size-4 text-[#65676b] transition-transform", showSpecialCategories && "rotate-180")} />
+        </button>
+        {showSpecialCategories && (
+          <div className="space-y-3 border-t border-[#e4e6eb] p-5 dark:border-gray-800">
+            <p className="text-xs text-[#65676b]">
+              Select only categories that apply. Leave all unchecked for no categories.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {SPECIAL_CATEGORIES.map((category) => (
+                <label
+                  key={category.value}
+                  className="flex cursor-pointer items-center gap-2 rounded border border-[#ccd0d5] px-3 py-2 text-xs dark:border-gray-700"
+                >
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[#1877f2]"
+                    checked={state.specialAdCategories.includes(category.value)}
+                    onChange={() => toggleCategory(category.value)}
+                  />
+                  <span className="text-[#1c2b33] dark:text-gray-200">{category.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">

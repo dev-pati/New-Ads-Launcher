@@ -14,6 +14,13 @@ export type PerformanceGoal =
 
 export type GenderTargeting = "ALL" | "MALE" | "FEMALE"
 export type MediaType = "image" | "video"
+export type ConversionEvent =
+  | "PURCHASE"
+  | "ADD_TO_CART"
+  | "INITIATED_CHECKOUT"
+  | "LEAD"
+  | "COMPLETE_REGISTRATION"
+  | "VIEW_CONTENT"
 
 export interface CreativeAssetOption {
   id: string
@@ -39,6 +46,10 @@ export interface CampaignFormState {
   conversionLocation: "website"
   performanceGoal: PerformanceGoal
   pixelId: string
+  conversionEvent: ConversionEvent
+  costPerResultGoal: string
+  attributionClickDays: "1" | "7"
+  attributionViewDays: "0" | "1"
   dailyBudget: string
   scheduleStart: string
   scheduleEnd: string
@@ -59,6 +70,7 @@ export interface CampaignFormState {
   mediaType: MediaType
   creativeIds: string[]
   selectedCreatives: SelectedCreative[]
+  oneAdPerAdset: boolean
   primaryText: string
   primaryTextVariations: string[]
   headline: string
@@ -105,6 +117,10 @@ export const defaultCampaignState: CampaignFormState = {
   conversionLocation: "website",
   performanceGoal: "OFFSITE_CONVERSIONS",
   pixelId: "",
+  conversionEvent: "PURCHASE",
+  costPerResultGoal: "",
+  attributionClickDays: "7",
+  attributionViewDays: "0",
   dailyBudget: "20",
   scheduleStart: "",
   scheduleEnd: "",
@@ -124,6 +140,7 @@ export const defaultCampaignState: CampaignFormState = {
   mediaType: "image",
   creativeIds: [],
   selectedCreatives: [],
+  oneAdPerAdset: false,
   primaryText: "",
   primaryTextVariations: [],
   headline: "",

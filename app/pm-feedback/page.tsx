@@ -385,22 +385,22 @@ export default function PmFeedbackDashboardPage() {
           dim && "opacity-60 grayscale-[50%]"
         )}
       >
-        <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
+        <td className="px-3 whitespace-nowrap text-xs text-muted-foreground">
           {fmtDate(r.created_at)}
         </td>
-        <td className="px-3 py-2 min-w-[140px]">
+        <td className="px-3 min-w-[140px]">
           <div className="font-medium truncate max-w-[180px]">{r.user_email || "—"}</div>
           <div className="text-xs text-muted-foreground truncate max-w-[180px]">
             {r.org_name || r.org_id.slice(0, 8)}
           </div>
         </td>
-        <td className="px-3 py-2 min-w-[140px]">
+        <td className="px-3 min-w-[140px]">
           <div className="truncate max-w-[180px]">{areaLabel(r.feature_area)}</div>
           <div className="text-xs text-muted-foreground truncate max-w-[180px]">
             {functionLabel(r.feature_area, r.feature_function)}
           </div>
         </td>
-        <td className="px-3 py-2 space-y-1">
+        <td className="px-3 space-y-1">
           <div>
             <Chip className="border-border bg-muted/40">{typeLabel(r.feedback_type)}</Chip>
           </div>
@@ -410,10 +410,10 @@ export default function PmFeedbackDashboardPage() {
             </Chip>
           </div>
         </td>
-        <td className="px-3 py-2 max-w-[260px]">
+        <td className="px-3 max-w-[260px]">
           <div className="line-clamp-2 text-foreground/90">{r.observed_evidence}</div>
         </td>
-        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+        <td className="px-3" onClick={(e) => e.stopPropagation()}>
           <Select
             value={r.status}
             onValueChange={(v) => updateStatus(r.id, v)}
@@ -434,7 +434,7 @@ export default function PmFeedbackDashboardPage() {
             </SelectContent>
           </Select>
         </td>
-        <td className="px-3 py-2">
+        <td className="px-3">
           {r.screenshot_url ? (
             <a
               href={r.screenshot_url}
@@ -567,16 +567,16 @@ export default function PmFeedbackDashboardPage() {
             {/* List */}
             <div className="rounded-xl border border-border overflow-hidden bg-card">
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table data-table="compact" className="w-full text-sm">
                   <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2 font-medium">When</th>
-                      <th className="px-3 py-2 font-medium">Who / Org</th>
-                      <th className="px-3 py-2 font-medium">Feature</th>
-                      <th className="px-3 py-2 font-medium">Type / Sev</th>
-                      <th className="px-3 py-2 font-medium">Observed</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                      <th className="px-3 py-2 font-medium">Proof</th>
+                      <th className="px-3 font-medium">When</th>
+                      <th className="px-3 font-medium">Who / Org</th>
+                      <th className="px-3 font-medium">Feature</th>
+                      <th className="px-3 font-medium">Type / Sev</th>
+                      <th className="px-3 font-medium">Observed</th>
+                      <th className="px-3 font-medium">Status</th>
+                      <th className="px-3 font-medium">Proof</th>
                     </tr>
                   </thead>
                   {activeRows.length > 0 && (
@@ -588,7 +588,7 @@ export default function PmFeedbackDashboardPage() {
                     <tbody>
                       {(activeRows.length > 0 || rejectedRows.length > 0) && (
                         <tr>
-                          <td colSpan={7} className="bg-muted/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground border-y border-border">
+                          <td colSpan={7} className="bg-muted/40 px-3 text-xs font-semibold text-muted-foreground border-y border-border">
                             Done ({doneRows.length})
                           </td>
                         </tr>
@@ -600,7 +600,7 @@ export default function PmFeedbackDashboardPage() {
                     <tbody>
                       {(activeRows.length > 0 || doneRows.length > 0) && (
                         <tr>
-                          <td colSpan={7} className="bg-muted/40 px-3 py-1.5 text-xs font-semibold text-muted-foreground border-y border-border">
+                          <td colSpan={7} className="bg-muted/40 px-3 text-xs font-semibold text-muted-foreground border-y border-border">
                             Rejected ({rejectedRows.length})
                           </td>
                         </tr>
