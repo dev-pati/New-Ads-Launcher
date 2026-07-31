@@ -6821,13 +6821,14 @@ const LAUNCH_SETTING_DEFS: { key: keyof LaunchSettings; label: string; desc: str
 ]
 
 function SettingsModal({
-  open, onClose, adAccountId, adAccountName, orgName,
+  open, onClose, adAccountId, adAccountName, orgName, onSettingsSaved,
 }: {
   open: boolean
   onClose: () => void
   adAccountId: string
   adAccountName: string
   orgName: string
+  onSettingsSaved?: (s: DefaultAdSettings) => void
 }) {
   const STORAGE_KEY = `default_ad_settings_${adAccountId}`
   const [activeTab, setActiveTab] = useState<"naming" | "enhancements" | "launch" | "adCopy" | "links">("naming")
@@ -6899,6 +6900,7 @@ function SettingsModal({
   const handleSave = () => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)) } catch {}
     setOriginalSettings(settings)
+    onSettingsSaved?.(settings)
     onClose()
   }
   const resetDefaults = () => {
@@ -8176,6 +8178,7 @@ function AdSetupPanel({
   adSourceMode, setAdSourceMode,
   adSourceIds, setAdSourceIds,
   validationErrors,
+  onSettingsSaved,
 }: {
   primaryTexts: string[]; setPrimaryTexts: (v: string[]) => void
   headlines: string[]; setHeadlines: (v: string[]) => void
@@ -8185,6 +8188,8 @@ function AdSetupPanel({
   utmParams: string; setUtmParams: (v: string) => void
   displayLink: string; setDisplayLink: (v: string) => void
   launchAsActive: boolean; setLaunchAsActive: (v: boolean) => void
+  // setOneAdPerAdset must also persist to `default_ad_settings_${adAccountId}` so it
+  // stays in sync with the Settings modal — see the wrapper built in LaunchPageContent.
   oneAdPerAdset: boolean; setOneAdPerAdset: (v: boolean) => void
   adAccountId: string
   adAccountName: string
@@ -8195,6 +8200,7 @@ function AdSetupPanel({
   adSourceIds: Record<string, string>
   setAdSourceIds: (v: Record<string, string>) => void
   validationErrors?: Record<string, boolean>
+  onSettingsSaved?: (s: DefaultAdSettings) => void
 }) {
   const [showDesc, setShowDesc] = useState(() => descriptions.some(d => d.trim()))
   useEffect(() => { if (descriptions.some(d => d.trim())) setShowDesc(true) }, [descriptions])
@@ -8319,6 +8325,7 @@ function AdSetupPanel({
         adAccountId={adAccountId}
         adAccountName={adAccountName}
         orgName={orgName}
+        onSettingsSaved={onSettingsSaved}
       />
       {/* AI Variations Modal */}
       <Dialog open={showAiVariations} onOpenChange={(open) => { setShowAiVariations(open); if (!open) { setAiVariations([]); setAiVariationsError(null) } }}>
@@ -11749,7 +11756,28 @@ function LaunchPageContent() {
   const [cta, setCta] = useState("LEARN_MORE")
   const [webLink, setWebLink] = useState("")
   const [launchAsActive, setLaunchAsActive] = useState(false)
-  const [oneAdPerAdset, setOneAdPerAdset] = useState(false)
+  const [oneAdPerAdset, _setOneAdPerAdset] = useState(false)
+
+  // Sync state both ways: when user toggles oneAdPerAdset outside, write it back
+  // into the Default Ad Settings stored in localStorage.
+  const setOneAdPerAdset = (val: boolean) => {
+    _setOneAdPerAdset(val)
+    if (!selectedAccountId) return
+    try {
+      const key = `default_ad_settings_${selectedAccountId}`
+      const raw = localStorage.getItem(key)
+      const current = raw ? JSON.parse(raw) : {}
+      const updated = {
+        ...DEFAULT_SETTINGS,
+        ...current,
+        launch: {
+          ...(current.launch || DEFAULT_SETTINGS.launch),
+          oneAdPerAdset: val
+        }
+      }
+      localStorage.setItem(key, JSON.stringify(updated))
+    } catch {}
+  }
   const [adSourceMode, setAdSourceMode] = useState<AdSourceMode>("new_ad")
   const [adSourceIds, setAdSourceIds] = useState<Record<string, string>>({})
   const [utmParams, setUtmParams] = useState("")
@@ -14127,6 +14155,10 @@ function LaunchPageContent() {
                   adSourceMode={adSourceMode} setAdSourceMode={setAdSourceMode}
                   adSourceIds={adSourceIds} setAdSourceIds={setAdSourceIds}
                   validationErrors={validationErrors}
+                  onSettingsSaved={(s) => {
+                    _setOneAdPerAdset(!!s.launch?.oneAdPerAdset)
+                    setLaunchAsActive(!s.launch?.launchAsPaused)
+                  }}
                 />
               </div>
             </div>

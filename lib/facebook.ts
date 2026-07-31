@@ -1205,14 +1205,14 @@ export async function getVideoReadyData(
   videoId: string,
   accessToken: string,
   opts?: MetaFetchOpts
-): Promise<{ ready: boolean; status: string; thumbnailUrl: string | null; sourceUrl: string | null; errorMsg?: string }> {
+): Promise<{ ready: boolean; status: string; thumbnailUrl: string | null; sourceUrl: string | null; processingProgress: number | null; errorMsg?: string }> {
   try {
     const res = await secureMetaFetch(
       `${GRAPH_API_BASE}/${videoId}?fields=status,thumbnails{uri,width,height,is_preferred},picture,source&access_token=${accessToken}`,
       undefined,
       opts
     )
-    if (!res.ok) return { ready: false, status: "unknown", thumbnailUrl: null, sourceUrl: null }
+    if (!res.ok) return { ready: false, status: "unknown", thumbnailUrl: null, sourceUrl: null, processingProgress: null }
     const data = await res.json()
     const vstatus = (data.status?.video_status as string | undefined) || "unknown"
     const ready = vstatus === "ready"
@@ -1235,9 +1235,13 @@ export async function getVideoReadyData(
           || "Video processing failed on Meta")
       : undefined
 
-    return { ready, status: vstatus, thumbnailUrl, sourceUrl: data.source || null, errorMsg }
+    const processingProgress = typeof data.status?.processing_progress === "number"
+      ? data.status.processing_progress
+      : null
+
+    return { ready, status: vstatus, thumbnailUrl, sourceUrl: data.source || null, processingProgress, errorMsg }
   } catch {
-    return { ready: false, status: "error", thumbnailUrl: null, sourceUrl: null }
+    return { ready: false, status: "error", thumbnailUrl: null, sourceUrl: null, processingProgress: null }
   }
 }
 

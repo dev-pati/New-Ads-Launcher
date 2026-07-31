@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { listApprovedAssets, listApprovedAssetsByKeys } from "@/lib/supabase/portal-registry"
+import { listApprovedAssets } from "@/lib/supabase/portal-registry"
 import { buildTree, collectKeysUnder } from "@/lib/portal-media/tree"
 import { claimPortalAsset, portalStoragePath } from "@/lib/portal-media/claim"
+import { createUploadJob } from "@/lib/media-upload-jobs"
 
 async function requireLaunchRole() {
   const ctx = await getAuthContext()
@@ -74,6 +75,7 @@ export async function PUT(request: NextRequest) {
 
   const supabase = createAdminClient()
   const assigned: string[] = []
+  const creativeIds: string[] = []
   const errors: { object_key: string; error: string }[] = []
 
   for (const asset of assets) {
@@ -99,12 +101,43 @@ export async function PUT(request: NextRequest) {
         )
       if (error) throw error
       assigned.push(asset.object_key)
+      creativeIds.push(creativeId)
     } catch (err) {
       errors.push({ object_key: asset.object_key, error: err instanceof Error ? err.message : String(err) })
     }
   }
 
-  return NextResponse.json({ ok: errors.length === 0, assigned: assigned.length, requested: assets.length, errors })
+  let jobId: string | null = null
+  if (creativeIds.length > 0) {
+    try {
+      jobId = await createUploadJob(ctx.orgId, adAccountId, creativeIds)
+
+      await supabase
+        .from("portal_media_assignments")
+        .update({ job_id: jobId })
+        .in("creative_id", creativeIds)
+        .eq("org_id", ctx.orgId)
+
+      // Fire & forget trigger worker to process immediately instead of waiting 5m.
+      // Next.js fetch without await doesn't block the response.
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+      fetch(`${appUrl}/api/cron/upload-to-facebook`, {
+        headers: { "Authorization": `Bearer ${process.env.CRON_SECRET}` }
+      }).catch(err => console.error("[assignments] trigger cron err:", err))
+    } catch (jobErr) {
+      console.error("[assignments] Failed to create upload job:", jobErr)
+      errors.push({ object_key: "job_creation", error: jobErr instanceof Error ? jobErr.message : String(jobErr) })
+    }
+  }
+
+  return NextResponse.json({
+    ok: errors.length === 0,
+    assigned: assigned.length,
+    requested: assets.length,
+    job_id: jobId,
+    total: creativeIds.length,
+    errors
+  })
 }
 
 /**

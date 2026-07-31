@@ -184,6 +184,7 @@ export default function AssetsPage() {
   const [portalError, setPortalError]     = useState("")
   const [portalErrorKind, setPortalErrorKind] = useState<"portal" | "adlauncher" | null>(null)
   const [mappingPortal, setMappingPortal] = useState(false)
+  const [assignJob, setAssignJob] = useState<{ jobId: string; status: string; done: number; total: number; failed: number } | null>(null)
   const [portalDetailOpen, setPortalDetailOpen] = useState(false)
   const [portalDetailFile, setPortalDetailFile] = useState<PortalMediaFile | null>(null)
 
@@ -446,6 +447,47 @@ export default function AssetsPage() {
     setCreativesHasMore(false)
     loadCreatives(null, true)
   }, [assetFilterAccounts, loadCreatives])
+
+  // Job Polling
+  useEffect(() => {
+    if (!assignJob || assignJob.status === "done" || assignJob.status === "error") return
+
+    let mounted = true
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/portal-media/jobs/${assignJob.jobId}`)
+        if (!res.ok) throw new Error("poll failed")
+        const data = await res.json()
+        if (!mounted) return
+        setAssignJob({
+          jobId: data.jobId,
+          status: data.status,
+          done: data.done,
+          total: data.total,
+          failed: data.failed
+        })
+        if (data.status === "done" || data.status === "error") {
+          // Job finished, refresh creatives immediately
+          setCreativesNextCursor(null)
+          setCreativesHasMore(false)
+          loadCreatives(null, true)
+          // Hide progress overlay after 2 seconds
+          setTimeout(() => { if (mounted) setAssignJob(null) }, 2000)
+        }
+      } catch {
+        // Ignore poll failures, retry next tick
+      }
+    }
+
+    const interval = setInterval(poll, 2000)
+    return () => {
+      mounted = false
+      clearInterval(interval)
+    }
+    // Intentionally scoped to jobId/status only — including the whole assignJob
+    // object would reset this interval on every poll tick (done/total change).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignJob?.jobId, assignJob?.status, loadCreatives])
 
   useEffect(() => { loadBoards() }, [loadBoards])
   useEffect(() => { loadPortalTree() }, [loadPortalTree])
@@ -792,6 +834,9 @@ export default function AssetsPage() {
       if (!res.ok || d.error) throw new Error(d.error || "Failed to assign Portal media")
       if (d.errors?.length) {
         setPortalError(`${d.assigned}/${d.requested} assigned — ${d.errors[0].error}`)
+      }
+      if (d.job_id) {
+        setAssignJob({ jobId: d.job_id, status: "pending", done: 0, total: d.total || 0, failed: 0 })
       }
       clearPortalSelected()
       loadPortalTree()
@@ -1343,19 +1388,23 @@ export default function AssetsPage() {
 
                   {portalFiles.length > 0 && (
                     <>
+                      {(mappingPortal || assignJob) && (
+                        <div className="sticky bottom-3 z-20 flex justify-center pointer-events-none">
+                          <div className="flex items-center gap-2 rounded-full bg-background border px-3 py-1.5 text-sm font-medium shadow-md pointer-events-auto">
+                            <IconLoader2 className="size-4 animate-spin text-primary" />
+                            {assignJob
+                              ? assignJob.total > 0
+                                ? `Syncing to Meta ${assignJob.done}/${assignJob.total} · ${Math.floor((assignJob.done / assignJob.total) * 100)}%${assignJob.failed > 0 ? ` (${assignJob.failed} failed)` : ""}`
+                                : "Đang khởi tạo…"
+                              : "Assigning to ad account…"}
+                          </div>
+                        </div>
+                      )}
                       {/* Spreadsheet. No <video>/<img> is mounted here on purpose: the
                           resolver allows 120 GET/HEAD per IP per minute and the office
                           shares one IP, so a 114-row folder rendering thumbnails would
                           burn the whole budget. Preview is one click, via Xem. */}
-                      <div className={cn("relative border rounded-xl overflow-hidden", mappingPortal && "pointer-events-none opacity-60")}>
-                        {mappingPortal && (
-                          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/40">
-                            <div className="flex items-center gap-2 rounded-full bg-background border px-3 py-1.5 text-sm font-medium shadow-sm">
-                              <IconLoader2 className="size-4 animate-spin text-primary" />
-                              Assigning to ad account…
-                            </div>
-                          </div>
-                        )}
+                      <div className="relative border rounded-xl overflow-hidden">
                         <table data-table="compact" className="w-full text-sm">
                           <thead>
                             <tr className="border-b bg-muted/30">
