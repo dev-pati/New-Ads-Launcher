@@ -24,6 +24,9 @@ export async function POST(request: NextRequest) {
     if (targetCampaignIds.length === 0) {
       return NextResponse.json({ error: "targetCampaignIds required" }, { status: 400 })
     }
+    if (adSetConfigs.length === 0) {
+      return NextResponse.json({ error: "Select at least one ad set to duplicate" }, { status: 400 })
+    }
     if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
 
     let connection
@@ -86,7 +89,10 @@ export async function POST(request: NextRequest) {
             continue
           }
           const newAdSetId = aData.copied_adset_id || aData.id
-          if (!newAdSetId) continue
+          if (!newAdSetId) {
+            errors.push(`Ad set ${cfg.id} → campaign ${targetCampaignId}: Meta returned no copied ad set ID`)
+            continue
+          }
 
           // PATCH name + schedule + attribution_spec
           // Wait briefly — Meta needs a moment after /copies before the new ad set is patchable
@@ -162,6 +168,16 @@ export async function POST(request: NextRequest) {
         }
       }
       results.push({ id: targetCampaignId, adSets })
+    }
+
+    const createdAdSetCount = results.reduce((count, campaign) => count + campaign.adSets.length, 0)
+    if (createdAdSetCount === 0 && errors.length > 0) {
+      return NextResponse.json({
+        error: errors[0],
+        errors,
+        warnings,
+        partialResults: results,
+      }, { status: 502 })
     }
 
     return NextResponse.json({ campaigns: results, errors, warnings })

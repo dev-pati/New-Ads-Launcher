@@ -442,7 +442,7 @@ export async function getCampaigns(
   ].join(",")
 
   return fetchAllMetaPages<Campaign>(
-    `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`,
+    `${GRAPH_API_BASE}/${adAccountId}/campaigns?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`,
     "Failed to get campaigns"
   )
 }
@@ -507,9 +507,9 @@ export async function getAdSets(
     insightsParam,
   ].join(",")
 
-  let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
+  let url = `${GRAPH_API_BASE}/${adAccountId}/adsets?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`
   if (campaignId) {
-    url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${encodeURIComponent(fields)}&limit=500&access_token=${accessToken}`
+    url = `${GRAPH_API_BASE}/${campaignId}/adsets?fields=${encodeURIComponent(fields)}&limit=25&access_token=${accessToken}`
   }
 
   const data = await fetchAllMetaPages<any>(url, "Failed to get ad sets")
