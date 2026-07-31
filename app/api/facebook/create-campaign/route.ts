@@ -732,6 +732,7 @@ export async function POST(request: NextRequest) {
       optimization_goal: delivery.optimizationGoal,
       billing_event: delivery.billingEvent,
       daily_budget: adSetBudget,
+      bid_strategy: adSetBudget ? "LOWEST_COST_WITHOUT_CAP" : undefined,
       status: "PAUSED",
       start_time: startTime,
       promoted_object: delivery.promotedObject,

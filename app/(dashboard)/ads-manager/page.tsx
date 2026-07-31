@@ -1057,6 +1057,7 @@ function AdsManagerContent() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id,
+            adAccountId: selectedAccountId,
             name: node ? `${node.name} - Copy` : undefined,
             deep_copy: tab === "campaigns" || tab === "adsets",
             status_option: "PAUSED",

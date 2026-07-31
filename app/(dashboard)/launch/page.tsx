@@ -5472,6 +5472,7 @@ function DuplicateCampaignModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          adAccountId,
           customName: campaignName,
           count: campaignCount,
           launchAsActive,
@@ -5552,6 +5553,7 @@ function DuplicateCampaignModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          adAccountId,
           targetCampaignIds: newCampaigns.map(c => c.id),
           adSetConfigs: adSetConfigsArr,
         }),
