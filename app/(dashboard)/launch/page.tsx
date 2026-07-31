@@ -63,7 +63,9 @@ import { SheetsImportDialog, type ImportedRow } from "@/components/sheets-import
 import { Creative } from "@/types/creative"
 import { DynamicMediaToggle } from "@/components/ui/dynamic-media-toggle"
 import { LoadMediaModal } from "@/components/shared/load-media-modal"
+import { LoadCopyModal } from "@/components/shared/load-copy-modal"
 import { formatNumberShort, formatCurrency } from "@/lib/format"
+import { useLaunchBatchesRealtime } from "@/hooks/use-launch-batches-realtime"
 
 const Tip = ({ text, children, className }: { text: string; children: ReactNode; className?: string }) => (
   <Tooltip>
@@ -8341,16 +8343,18 @@ function AdSetupPanel({
         </DialogContent>
       </Dialog>
 
-      <AdCopyTemplateModal
+      <LoadCopyModal
         open={copyTemplateOpen}
         onClose={() => setCopyTemplateOpen(false)}
         adAccountId={adAccountId}
         adAccountName={adAccountName}
-        currentPrimaryText={primaryTexts[0] || ""}
-        currentHeadline={headlines[0] || ""}
-        currentDescription={descriptions.find(d => d.trim()) || ""}
-        currentLink={webLink}
-        currentCta={cta}
+        current={{
+          primaryText: primaryTexts[0] || "",
+          headline: headlines[0] || "",
+          description: descriptions.find(d => d.trim()) || "",
+          link: webLink,
+          cta,
+        }}
         onApply={t => {
           if (t.primaryText) setPrimaryTexts([t.primaryText])
           if (t.headline) setHeadlines([t.headline])
@@ -9772,6 +9776,8 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [statusFilter, tab])
+
+  useLaunchBatchesRealtime(load)
 
   const loadDrafts = useCallback(() => {
     setDraftsLoading(true)

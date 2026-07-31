@@ -19,6 +19,7 @@ interface Props {
   state: CampaignFormState
   update: (updates: Partial<CampaignFormState>) => void
   currency: string
+  invalidFields: Set<string>
 }
 
 const OBJECTIVES: Array<{
@@ -76,7 +77,7 @@ const ZERO_DECIMAL_CURRENCIES = new Set([
   "XPF",
 ])
 
-export function CampaignLevel({ state, update, currency }: Props) {
+export function CampaignLevel({ state, update, currency, invalidFields }: Props) {
   const budgetStep = ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase()) ? "1" : "0.01"
   const [showSpecialCategories, setShowSpecialCategories] = useState(false)
 
@@ -101,7 +102,13 @@ export function CampaignLevel({ state, update, currency }: Props) {
           </label>
           <input
             type="text"
-            className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
+            aria-invalid={invalidFields.has("campaignName")}
+            className={cn(
+              "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none focus:ring-1 dark:bg-background",
+              invalidFields.has("campaignName")
+                ? "border-red-500 focus:border-red-500 focus:ring-red-200 dark:border-red-500"
+                : "border-[#ccd0d5] focus:border-[#1877f2] focus:ring-[#1877f2] dark:border-gray-700"
+            )}
             value={state.campaignName}
             onChange={(event) => update({ campaignName: event.target.value })}
             placeholder="Enter a campaign name"
@@ -247,7 +254,13 @@ export function CampaignLevel({ state, update, currency }: Props) {
                 step={budgetStep}
                 value={state.campaignBudget}
                 onChange={(event) => update({ campaignBudget: event.target.value })}
-                className="h-9 w-full rounded border border-[#ccd0d5] bg-white pl-14 pr-3 text-xs outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
+                aria-invalid={invalidFields.has("campaignBudget")}
+                className={cn(
+                  "h-9 w-full rounded border bg-white pl-14 pr-3 text-xs outline-none focus:ring-1 dark:bg-background",
+                  invalidFields.has("campaignBudget")
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-200 dark:border-red-500"
+                    : "border-[#ccd0d5] focus:border-[#1877f2] focus:ring-[#1877f2] dark:border-gray-700"
+                )}
               />
             </div>
           </div>

@@ -31,6 +31,7 @@ import { COLUMN_DEFS, COLUMN_MAP, DEFAULT_PRESETS, ColumnPreset, CustomMetricCon
 import { evalCustomMetric } from "@/lib/custom-metric-eval"
 import { BreakdownDropdown } from "@/components/ads-manager/BreakdownDropdown"
 import { BREAKDOWN_API_MAP } from "@/lib/breakdown-config"
+import { useLaunchBatchesRealtime } from "@/hooks/use-launch-batches-realtime"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
@@ -151,7 +152,7 @@ interface Ad {
 }
 
 /**
- * The default row order for all three hierarchy levels: active first, then newest created.
+ * The default row order for all three hierarchy levels: newest created first, then active.
  *
  * Meta returns objects in its own order — effectively oldest first — so the campaign, ad set or
  * ad the user launched a minute ago arrived at the bottom of the list. Sorting by name instead
@@ -168,15 +169,15 @@ const byNewestFirst = (
   a: { created_time?: string; effective_status: string; id: string },
   b: { created_time?: string; effective_status: string; id: string },
 ) => {
-  const aActive = a.effective_status === "ACTIVE"
-  const bActive = b.effective_status === "ACTIVE"
-  if (aActive !== bActive) return aActive ? -1 : 1
   const at = a.created_time ? Date.parse(a.created_time) : NaN
   const bt = b.created_time ? Date.parse(b.created_time) : NaN
   const aOk = !Number.isNaN(at)
   const bOk = !Number.isNaN(bt)
   if (aOk && bOk && at !== bt) return bt - at
   if (aOk !== bOk) return aOk ? -1 : 1
+  const aActive = a.effective_status === "ACTIVE"
+  const bActive = b.effective_status === "ACTIVE"
+  if (aActive !== bActive) return aActive ? -1 : 1
   return b.id.localeCompare(a.id, undefined, { numeric: true })
 }
 
@@ -209,7 +210,7 @@ const ACTION_ALIASES: Record<string, string[]> = {
   landing_page_view: ["landing_page_view", "omni_landing_page_view"],
 }
 
-const PAGE_SIZE_OPTIONS = [10, 20, 30, 50, 100]
+const PAGE_SIZE = 20
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -605,15 +606,20 @@ function AdsManagerContent() {
 
   // Filters & search
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "PAUSED">("all")
+  const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "PAUSED">("ACTIVE")
   const [datePreset,     setDatePreset]     = useState("last_7d")
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | null>(null)
 
   // Pagination
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState(30)
-  const pageSizeRef = useRef<HTMLDivElement>(null)
-  const [pageSizeOpen, setPageSizeOpen] = useState(false)
+  const [pageCursors, setPageCursors] = useState<Record<Tab, Array<string | undefined>>>({
+    campaigns: [undefined],
+    adsets: [undefined],
+    ads: [undefined],
+  })
+  const pageCursorsRef = useRef(pageCursors)
+  const [paging, setPaging] = useState<{ after?: string; hasNext: boolean }>({ hasNext: false })
+  useEffect(() => { pageCursorsRef.current = pageCursors }, [pageCursors])
   const colsDropRef = useRef<HTMLDivElement>(null)
 
   // Sort
@@ -761,14 +767,14 @@ function AdsManagerContent() {
     setDefaultLink("")
   }
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     setHistoryLoading(true)
     try {
       const r = await fetch("/api/launch-history?limit=30")
       const d = await r.json()
       setHistoryBatches(d.batches || [])
     } catch {} finally { setHistoryLoading(false) }
-  }
+  }, [])
 
   // Load / save column state from localStorage
   useEffect(() => {
@@ -816,7 +822,6 @@ function AdsManagerContent() {
   // Close dropdowns on outside click
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (pageSizeRef.current && !pageSizeRef.current.contains(e.target as Node)) setPageSizeOpen(false)
       if (colsDropRef.current && !colsDropRef.current.contains(e.target as Node)) setColsOpen(false)
     }
     document.addEventListener("mousedown", h)
@@ -836,27 +841,33 @@ function AdsManagerContent() {
 
   // Fetches campaigns/adsets/ads only — `breakdowns` intentionally excluded from
   // deps so that toggling a breakdown never triggers a redundant main-data refetch.
-  const clientCache = useRef<Map<string, { campaigns?: Campaign[]; adSets?: AdSet[]; ads?: Ad[] }>>(new Map())
+  const clientCache = useRef<Map<string, {
+    campaigns?: Campaign[]
+    adSets?: AdSet[]
+    ads?: Ad[]
+    paging?: { after?: string; hasNext: boolean }
+  }>>(new Map())
   const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const fetchMainData = useCallback(async (forceRefresh = false, rowLimit?: number) => {
+  const fetchMainData = useCallback(async (forceRefresh = false) => {
     if (!selectedAccountId) return
 
     const dateParam = buildDateParam()
-    const refreshParam = `${forceRefresh ? "&refresh=true" : ""}${rowLimit ? `&limit=${rowLimit}&active_only=true` : ""}`
-    const cacheKey = `${selectedAccountId}:${datePreset}:${customDateRange ? 'custom' : 'preset'}:${tab}`
+    const after = pageCursorsRef.current[tab][page - 1]
+    const paginationParam = `&limit=${PAGE_SIZE}${statusFilter === "ACTIVE" ? "&active_only=true" : ""}${after ? `&after=${encodeURIComponent(after)}` : ""}`
+    const refreshParam = `${forceRefresh ? "&refresh=true" : ""}${paginationParam}`
+    const cacheKey = `${selectedAccountId}:${datePreset}:${customDateRange ? "custom" : "preset"}:${tab}:${statusFilter}:page:${page}:after:${after || "first"}`
 
     const cached = forceRefresh ? undefined : clientCache.current.get(cacheKey)
     if (cached) {
-      // Paint stale data immediately from client cache; background fetch updates it below
       if (tab === "campaigns") {
         setCampaigns(cached.campaigns || [])
-        setAdSets(cached.adSets || [])
       } else if (tab === "adsets") {
         setAdSets(cached.adSets || [])
       } else {
         setAds(cached.ads || [])
       }
+      setPaging(cached.paging || { hasNext: false })
     } else {
       setLoading(true)
       setSlowLoad(false)
@@ -868,28 +879,41 @@ function AdsManagerContent() {
 
     try {
       if (tab === "campaigns") {
-        const [r, ar] = await Promise.all([
-          fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`),
-          fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`),
-        ])
-        const [d, ad] = await Promise.all([r.json(), ar.json()])
+        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
+        const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
-        if (!ar.ok) throw new Error(ad.error || "Failed")
         setCampaigns(d.campaigns || [])
-        setAdSets(ad.adSets || [])
-        if (!rowLimit) clientCache.current.set(cacheKey, { campaigns: d.campaigns || [], adSets: ad.adSets || [] })
+        setPaging(d.paging || { hasNext: false })
+        clientCache.current.set(cacheKey, { campaigns: d.campaigns || [], paging: d.paging })
+        if (d.paging?.after) {
+          setPageCursors(previous => previous.campaigns[page] === d.paging.after
+            ? previous
+            : { ...previous, campaigns: [...previous.campaigns.slice(0, page), d.paging.after] })
+        }
       } else if (tab === "adsets") {
         const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
-        if (!rowLimit) clientCache.current.set(cacheKey, { adSets: d.adSets || [] })
+        setPaging(d.paging || { hasNext: false })
+        clientCache.current.set(cacheKey, { adSets: d.adSets || [], paging: d.paging })
+        if (d.paging?.after) {
+          setPageCursors(previous => previous.adsets[page] === d.paging.after
+            ? previous
+            : { ...previous, adsets: [...previous.adsets.slice(0, page), d.paging.after] })
+        }
       } else {
         const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
-        if (!rowLimit) clientCache.current.set(cacheKey, { ads: d.ads || [] })
+        setPaging(d.paging || { hasNext: false })
+        clientCache.current.set(cacheKey, { ads: d.ads || [], paging: d.paging })
+        if (d.paging?.after) {
+          setPageCursors(previous => previous.ads[page] === d.paging.after
+            ? previous
+            : { ...previous, ads: [...previous.ads.slice(0, page), d.paging.after] })
+        }
       }
       setLoadedMs(Date.now() - t0)
     } catch (e: any) {
@@ -899,7 +923,14 @@ function AdsManagerContent() {
       setSlowLoad(false)
       if (slowTimer.current) clearTimeout(slowTimer.current)
     }
-  }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange])
+  }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange, page, statusFilter])
+
+  const handleLaunchBatchChange = useCallback((event: "INSERT" | "UPDATE" | "DELETE") => {
+    if (historyOpen) void fetchHistory()
+    if (event === "INSERT") void fetchMainData(true)
+  }, [fetchHistory, fetchMainData, historyOpen])
+
+  useLaunchBatchesRealtime(handleLaunchBatchChange)
 
   // Fetches breakdown-insights rows — only when breakdowns are selected.
   // Receives the current breakdown list as an arg so callers can pass the
@@ -961,12 +992,12 @@ function AdsManagerContent() {
   const breakdownDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Main data: account / tab / date change → immediate refetch
-  useEffect(() => { fetchMainData(true, 20) }, [fetchMainData])
+  useEffect(() => { fetchMainData(true) }, [fetchMainData])
 
   useEffect(() => {
     if (!selectedAccountId) return
     const refreshVisibleData = () => {
-      if (document.visibilityState === "visible") fetchMainData(true, 20)
+      if (document.visibilityState === "visible") fetchMainData(true)
     }
     const interval = setInterval(refreshVisibleData, 60_000)
     window.addEventListener("focus", refreshVisibleData)
@@ -1011,8 +1042,11 @@ function AdsManagerContent() {
     }
   }, [breakdowns, fetchBreakdownData])
 
-  // Reset page & row selection when tab/search/date/breakdown changes
+  // Local filters reset the visible page; server-backed inputs also reset the cursor chain.
   useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, statusFilter, datePreset, customDateRange, breakdowns])
+  useEffect(() => {
+    setPageCursors(previous => ({ ...previous, [tab]: [undefined] }))
+  }, [selectedAccountId, tab, statusFilter, datePreset, customDateRange])
 
   // ─── Tab switch: if items checked, capture as filter for the next level ─────
   // Badge appears only on the NEXT tab, not on all 3 at once
@@ -1073,7 +1107,7 @@ function AdsManagerContent() {
       if (!r.ok) throw new Error("Failed to update name")
     } catch (err) {
       console.error(err)
-      fetchMainData(true, 20) // revert on fail
+      fetchMainData(true) // revert on fail
     }
   }
 
@@ -1100,7 +1134,7 @@ function AdsManagerContent() {
       }
       setDuplicateDialogOpen(false)
       setSelectedIds(new Set())
-      await fetchMainData(true, 20)
+      await fetchMainData(true)
     } catch (err) {
       console.error(err)
     } finally {
@@ -1171,7 +1205,7 @@ function AdsManagerContent() {
       if (!r.ok) throw new Error("Failed to update")
     } catch (err) {
       console.error(err)
-      fetchMainData(true, 20) // revert on fail
+      fetchMainData(true) // revert on fail
     }
   }
 
@@ -1316,8 +1350,7 @@ function AdsManagerContent() {
     return list
   }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, statusFilter, sortField, sortDir, campaignNameById, adSetNameById, activeLaunchFilter, launchAdIds])
 
-  const totalPages = Math.max(1, Math.ceil(currentData.length / pageSize))
-  const pagedData = currentData.slice((page - 1) * pageSize, page * pageSize)
+  const pagedData = currentData
 
   // Totals
   const totalResultsCount = useMemo(() => currentData.reduce((sum, item) => {
@@ -2172,7 +2205,7 @@ function AdsManagerContent() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
-      <CreateCampaignModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={() => fetchMainData(true, 20)} />
+      <CreateCampaignModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={() => fetchMainData(true)} />
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
@@ -2195,7 +2228,7 @@ function AdsManagerContent() {
 
           <span className="text-xs text-muted-foreground">Updated just now</span>
           <button
-            onClick={() => fetchMainData(true, 20)}
+            onClick={() => fetchMainData(true)}
             disabled={loading}
             className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors"
           >
@@ -2241,7 +2274,11 @@ function AdsManagerContent() {
           {(["all", "ACTIVE", "PAUSED"] as const).map(s => (
             <button
               key={s}
-              onClick={() => setStatusFilter(s)}
+              onClick={() => {
+                setPage(1)
+                setPageCursors(previous => ({ ...previous, [tab]: [undefined] }))
+                setStatusFilter(s)
+              }}
               className={cn(
                 "px-2.5 py-1 text-xs rounded-full border font-medium transition-colors",
                 statusFilter === s
@@ -2320,31 +2357,16 @@ function AdsManagerContent() {
         <div className="ml-auto flex items-center gap-2 py-1.5">
           {/* Pagination count */}
           <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {currentData.length === 0 ? "0" : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, currentData.length)}`} of {currentData.length}
+            {currentData.length === 0
+              ? `Page ${page} · 0 rows`
+              : `${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + currentData.length} · Page ${page}`}
           </span>
           <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="size-6 flex items-center justify-center border rounded hover:bg-muted/50 disabled:opacity-30">
             <IconChevronLeft className="size-3.5" />
           </button>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="size-6 flex items-center justify-center border rounded hover:bg-muted/50 disabled:opacity-30">
+          <button onClick={() => setPage(p => p + 1)} disabled={!paging.hasNext} className="size-6 flex items-center justify-center border rounded hover:bg-muted/50 disabled:opacity-30">
             <IconChevronRight className="size-3.5" />
           </button>
-
-          {/* Page size */}
-          <div ref={pageSizeRef} className="relative">
-            <button onClick={() => setPageSizeOpen(o => !o)} className="flex items-center gap-1 h-6 px-2 text-xs border rounded hover:bg-muted/50">
-              {pageSize} / page <IconChevronDown className="size-3" />
-            </button>
-            {pageSizeOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-popover border rounded-lg shadow-lg z-50 py-1 w-24">
-                {PAGE_SIZE_OPTIONS.map(n => (
-                  <button key={n} onClick={() => { setPageSize(n); setPage(1); setPageSizeOpen(false) }}
-                    className={cn("w-full px-3 py-1.5 text-xs text-left hover:bg-accent", pageSize === n && "text-primary font-medium")}>
-                    {n} / page
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Date range */}
           <AdsDateRangePicker

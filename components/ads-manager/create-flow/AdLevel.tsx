@@ -5,6 +5,7 @@ import {
   IconBrandInstagram,
   IconPhoto,
   IconPlus,
+  IconTextCaption,
   IconTrash,
   IconVideo,
   IconX,
@@ -17,8 +18,10 @@ import {
   CreativeAssetOption,
 } from "./types"
 import { LoadMediaModal } from "@/components/shared/load-media-modal"
+import { LoadCopyModal } from "@/components/shared/load-copy-modal"
 import type { Creative } from "@/types/creative"
 import { useState } from "react"
+import { cn } from "@/lib/utils"
 
 interface Props {
   state: CampaignFormState
@@ -32,6 +35,8 @@ interface Props {
   onSelectMediaFile: (file: File | null) => Promise<CreativeAssetOption | null>
   onClearUploadedCreative: () => void
   adAccountId?: string
+  adAccountName: string
+  invalidFields: Set<string>
 }
 
 const CTA_OPTIONS = [
@@ -65,6 +70,7 @@ function TextFieldWithVariations({
   placeholder,
   onChange,
   onVariationsChange,
+  invalid = false,
 }: {
   label: string
   value: string
@@ -73,6 +79,7 @@ function TextFieldWithVariations({
   placeholder: string
   onChange: (value: string) => void
   onVariationsChange: (value: string[]) => void
+  invalid?: boolean
 }) {
   const add = () => onVariationsChange([...variations, ""])
   const updateAt = (index: number, next: string) => onVariationsChange(variations.map((v, i) => i === index ? next : v))
@@ -90,7 +97,8 @@ function TextFieldWithVariations({
       {multiline ? (
         <textarea
           rows={3}
-          className={`${inputClass} resize-none py-2`}
+          aria-invalid={invalid}
+          className={cn(`${inputClass} resize-none py-2`, invalid && "border-red-500 focus:border-red-500 dark:border-red-500")}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
@@ -98,7 +106,8 @@ function TextFieldWithVariations({
       ) : (
         <input
           type="text"
-          className={`${inputClass} h-9`}
+          aria-invalid={invalid}
+          className={cn(`${inputClass} h-9`, invalid && "border-red-500 focus:border-red-500 dark:border-red-500")}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
@@ -138,14 +147,25 @@ export function AdLevel({
   onSelectMediaFile,
   onClearUploadedCreative,
   adAccountId,
+  adAccountName,
+  invalidFields,
 }: Props) {
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [copyModalOpen, setCopyModalOpen] = useState(false)
   const selectedPage = pages.find((page) => page.id === state.pageId)
 
   // Use first creative for the legacy preview
   const firstCreative = state.selectedCreatives[0]
   const previewUrl = firstCreative?.preview_url || state.creativePreviewUrl || state.mediaUrl
   const previewType = firstCreative?.media_type || state.mediaType
+  const previewItems = state.selectedCreatives.length > 0
+    ? state.selectedCreatives
+    : [{
+        id: state.creativeId || "new-ad-preview",
+        file_name: state.creativeFileName,
+        preview_url: previewUrl,
+        media_type: previewType,
+      }]
 
   const handleConfirmMedia = (ids: string[], creatives: Creative[]) => {
     const selected = creatives.map(c => ({
@@ -194,6 +214,26 @@ export function AdLevel({
           tabs={["library", "vault", "gdrive", "drive_link"]}
         />
       )}
+      <LoadCopyModal
+        open={copyModalOpen}
+        onClose={() => setCopyModalOpen(false)}
+        adAccountId={adAccountId || ""}
+        adAccountName={adAccountName}
+        current={{
+          primaryText: state.primaryText,
+          headline: state.headline,
+          description: state.description,
+          link: state.destinationUrl,
+          cta: state.callToAction,
+        }}
+        onApply={copy => update({
+          primaryText: copy.primaryText,
+          headline: copy.headline,
+          description: copy.description || "",
+          destinationUrl: copy.link || state.destinationUrl,
+          callToAction: copy.cta,
+        })}
+      />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-6 px-6 py-8 pb-20">
           <div className="flex items-center gap-2">
@@ -207,7 +247,13 @@ export function AdLevel({
               </label>
               <input
                 type="text"
-                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
+                aria-invalid={invalidFields.has("adName")}
+                className={cn(
+                  "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none focus:ring-1 dark:bg-background",
+                  invalidFields.has("adName")
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-200 dark:border-red-500"
+                    : "border-[#ccd0d5] focus:border-[#1877f2] focus:ring-[#1877f2] dark:border-gray-700"
+                )}
                 value={state.adName}
                 onChange={(event) => update({ adName: event.target.value })}
                 placeholder="Enter an ad name"
@@ -246,7 +292,13 @@ export function AdLevel({
               <select
                 value={state.pageId}
                 onChange={(event) => update({ pageId: event.target.value, instagramId: "" })}
-                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+                aria-invalid={invalidFields.has("pageId")}
+                className={cn(
+                  "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none dark:bg-background",
+                  invalidFields.has("pageId")
+                    ? "border-red-500 focus:border-red-500 dark:border-red-500"
+                    : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
+                )}
                 disabled={pagesLoading}
               >
                 <option value="">{pagesLoading ? "Loading Pages..." : "Select a Page"}</option>
@@ -283,11 +335,21 @@ export function AdLevel({
           <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
             <div className="flex items-baseline justify-between gap-3">
               <h3 className="text-sm font-semibold text-[#1c2b33] dark:text-gray-100">Ad setup</h3>
-              <span className="text-[11px] text-[#65676b]">
-                {state.creativeIds.length > 0
-                  ? `${state.creativeIds.length} media selected → ${state.creativeIds.length} ads`
-                  : "Single image or video"}
-              </span>
+              <div className="flex items-center gap-3">
+                {state.creativeIds.length > 0 && (
+                  <span className="text-[11px] text-[#65676b]">
+                    {state.creativeIds.length} media selected → {state.creativeIds.length} ads
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setCopyModalOpen(true)}
+                  className="flex items-center gap-1 text-xs font-semibold text-[#1877f2] hover:underline"
+                >
+                  <IconTextCaption className="size-3.5" />
+                  Load copy
+                </button>
+              </div>
             </div>
 
             <div>
@@ -299,7 +361,13 @@ export function AdLevel({
                   type="button"
                   onClick={() => setPickerOpen(true)}
                   disabled={mediaUploading}
-                  className="flex h-9 items-center gap-2 rounded border border-[#1877f2] bg-white px-3 text-xs font-semibold text-[#1877f2] transition-colors hover:bg-[#1877f2]/10 disabled:opacity-50 dark:bg-background"
+                  data-invalid={invalidFields.has("media") || undefined}
+                  className={cn(
+                    "flex h-9 items-center gap-2 rounded border bg-white px-3 text-xs font-semibold transition-colors disabled:opacity-50 dark:bg-background",
+                    invalidFields.has("media")
+                      ? "border-red-500 text-red-600 hover:bg-red-50 dark:border-red-500"
+                      : "border-[#1877f2] text-[#1877f2] hover:bg-[#1877f2]/10"
+                  )}
                 >
                   <IconPhoto className="size-4" />
                   {mediaUploading ? "Uploading..." : "Load media"}
@@ -396,7 +464,13 @@ export function AdLevel({
                 </label>
                 <input
                   type="url"
-                  className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+                  aria-invalid={invalidFields.has("media")}
+                  className={cn(
+                    "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none dark:bg-background",
+                    invalidFields.has("media")
+                      ? "border-red-500 focus:border-red-500 dark:border-red-500"
+                      : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
+                  )}
                   value={state.mediaUrl}
                   onChange={(event) =>
                     update({
@@ -426,7 +500,13 @@ export function AdLevel({
                 <select
                   value={state.callToAction}
                   onChange={(event) => update({ callToAction: event.target.value })}
-                  className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+                  aria-invalid={invalidFields.has("destinationUrl")}
+                  className={cn(
+                    "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none dark:bg-background",
+                    invalidFields.has("destinationUrl")
+                      ? "border-red-500 focus:border-red-500 dark:border-red-500"
+                      : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
+                  )}
                 >
                   {CTA_OPTIONS.map((cta) => (
                     <option key={cta} value={cta}>
@@ -458,6 +538,7 @@ export function AdLevel({
                 variations={state.primaryTextVariations}
                 onChange={(v) => update({ primaryText: v })}
                 onVariationsChange={(v) => update({ primaryTextVariations: v })}
+                invalid={invalidFields.has("primaryText")}
               />
             </div>
 
@@ -469,6 +550,7 @@ export function AdLevel({
                 variations={state.headlineVariations}
                 onChange={(v) => update({ headline: v })}
                 onVariationsChange={(v) => update({ headlineVariations: v })}
+                invalid={invalidFields.has("headline")}
               />
               <TextFieldWithVariations
                 label="Description"
@@ -501,8 +583,9 @@ export function AdLevel({
           <h3 className="text-sm font-bold text-[#1c2b33] dark:text-gray-100">Ad Preview</h3>
           <span className="text-xs font-semibold text-[#1877f2]">Feed</span>
         </div>
-        <div className="flex flex-1 justify-center overflow-y-auto p-4">
-          <div className="mt-4 h-fit w-[300px] overflow-hidden rounded-lg border border-[#ccd0d5] bg-white text-black shadow-sm">
+        <div className="flex flex-1 flex-col items-center gap-4 overflow-y-auto p-4">
+          {previewItems.map((preview, index) => (
+          <div key={preview.id} className="mt-4 h-fit w-[300px] overflow-hidden rounded-lg border border-[#ccd0d5] bg-white text-black shadow-sm">
             <div className="flex items-center gap-2 p-3">
               <div className="flex size-10 items-center justify-center rounded-full bg-gray-200 text-xs font-semibold text-gray-600">
                 {(selectedPage?.name || "Page").slice(0, 1).toUpperCase()}
@@ -515,13 +598,26 @@ export function AdLevel({
             {state.primaryText && (
               <div className="whitespace-pre-wrap px-3 pb-2 text-xs">{state.primaryText}</div>
             )}
-            <div className="flex aspect-square w-full items-center justify-center border-y border-gray-200 bg-gray-100">
-              {previewUrl ? (
-                previewType === "video" ? (
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="Load or change ad media"
+              onClick={() => setPickerOpen(true)}
+              onKeyDown={event => {
+                if (event.key === "Enter" || event.key === " ") setPickerOpen(true)
+              }}
+              className={cn(
+                "flex aspect-square w-full cursor-pointer items-center justify-center border-y bg-gray-100 outline-none transition-colors hover:bg-blue-50 focus:ring-2 focus:ring-inset focus:ring-[#1877f2]",
+                invalidFields.has("media") ? "border-red-500" : "border-gray-200"
+              )}
+            >
+              {preview.preview_url ? (
+                preview.media_type === "video" ? (
                   <video
-                    src={previewUrl}
-                    className="h-full w-full object-cover"
-                    controls
+                    src={preview.preview_url}
+                    className="pointer-events-none h-full w-full object-cover"
+                    autoPlay
+                    loop
                     muted
                     playsInline
                     preload="metadata"
@@ -529,12 +625,12 @@ export function AdLevel({
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={previewUrl}
-                    alt={state.creativeFileName || state.headline || "Ad media preview"}
-                    className="h-full w-full object-cover"
+                    src={preview.preview_url}
+                    alt={preview.file_name || state.headline || `Ad ${index + 1} media preview`}
+                    className="pointer-events-none h-full w-full object-cover"
                   />
                 )
-              ) : previewType === "video" ? (
+              ) : preview.media_type === "video" ? (
                 <IconVideo className="size-10 text-gray-400" />
               ) : (
                 <IconPhoto className="size-10 text-gray-400" />
@@ -557,6 +653,7 @@ export function AdLevel({
               </button>
             </div>
           </div>
+          ))}
         </div>
       </div>
     </div>

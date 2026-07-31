@@ -1,7 +1,7 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { assertSupabaseBoundary, resolveSchema } from './boundary'
 
-function getClientToken() {
+export function getClientToken() {
   if (typeof document === "undefined") return undefined
   return document.cookie
     .split("; ")

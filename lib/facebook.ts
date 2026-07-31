@@ -203,6 +203,39 @@ async function fetchAllMetaPages<T>(initialUrl: string, fallbackMessage: string,
   return rows
 }
 
+export interface MetaPage<T> {
+  data: T[]
+  paging: {
+    after?: string
+    before?: string
+    hasNext: boolean
+    hasPrevious: boolean
+  }
+}
+
+async function fetchMetaPage<T>(url: string, fallbackMessage: string): Promise<MetaPage<T>> {
+  const response = await fetch(url)
+  const body = await response.json() as {
+    data?: T[]
+    error?: unknown
+    paging?: {
+      next?: string
+      previous?: string
+      cursors?: { after?: string; before?: string }
+    }
+  }
+  if (body?.error || !response.ok) throwMetaError(body, fallbackMessage)
+  return {
+    data: body.data || [],
+    paging: {
+      after: body.paging?.cursors?.after,
+      before: body.paging?.cursors?.before,
+      hasNext: Boolean(body.paging?.next),
+      hasPrevious: Boolean(body.paging?.previous),
+    },
+  }
+}
+
 export async function getFacebookPages(accessToken: string): Promise<FacebookPage[]> {
   const url = `${GRAPH_API_BASE}/me/accounts?fields=id,name,access_token,category,picture&access_token=${accessToken}`
   const MAX_RETRIES = 3
@@ -453,6 +486,38 @@ export async function getCampaigns(
   )
 }
 
+export async function getCampaignsPage(
+  adAccountId: string,
+  accessToken: string,
+  datePreset = "last_7d",
+  timeRange?: string,
+  limit = 20,
+  activeOnly = false,
+  after?: string
+): Promise<MetaPage<Campaign>> {
+  const insightsParam = timeRange
+    ? `insights.time_range(${timeRange}){${ADS_MANAGER_INSIGHT_FIELDS}}`
+    : `insights.date_preset(${datePreset}){${ADS_MANAGER_INSIGHT_FIELDS}}`
+  const fields = [
+    "id", "name", "status", "effective_status", "objective",
+    "daily_budget", "lifetime_budget", "budget_remaining", "spend_cap", "bid_strategy",
+    "start_time", "stop_time", "created_time", "updated_time",
+    insightsParam,
+    "adsets.limit(0).summary(true)",
+  ].join(",")
+  const params = new URLSearchParams({
+    fields,
+    limit: String(Math.min(20, Math.max(1, limit))),
+    access_token: accessToken,
+  })
+  if (activeOnly) params.set("effective_status", JSON.stringify(["ACTIVE"]))
+  if (after) params.set("after", after)
+  return fetchMetaPage<Campaign>(
+    `${GRAPH_API_BASE}/${adAccountId}/campaigns?${params}`,
+    "Failed to get campaigns"
+  )
+}
+
 // Ad Set interfaces and functions
 export interface LearningStageInfo {
   status?: "LEARNING" | "SUCCESS" | "LEARNING_LIMITED" | string
@@ -529,6 +594,48 @@ export async function getAdSets(
     ...a,
     campaign_name: a.campaign?.name ?? a.campaign_name ?? null,
   }))
+}
+
+export async function getAdSetsPage(
+  adAccountId: string,
+  accessToken: string,
+  campaignId?: string,
+  datePreset = "last_7d",
+  timeRange?: string,
+  limit = 20,
+  activeOnly = false,
+  after?: string
+): Promise<MetaPage<AdSet>> {
+  const insightsParam = timeRange
+    ? `insights.time_range(${timeRange}){${ADS_MANAGER_INSIGHT_FIELDS}}`
+    : `insights.date_preset(${datePreset}){${ADS_MANAGER_INSIGHT_FIELDS}}`
+  const fields = [
+    "id", "name", "status", "effective_status", "campaign_id", "campaign{name}",
+    "daily_budget", "lifetime_budget", "budget_remaining", "is_dynamic_creative",
+    "optimization_goal", "billing_event", "bid_strategy", "bid_amount",
+    "attribution_spec", "learning_stage_info{status,conversions}",
+    "start_time", "end_time", "created_time",
+    insightsParam,
+  ].join(",")
+  const params = new URLSearchParams({
+    fields,
+    limit: String(Math.min(20, Math.max(1, limit))),
+    access_token: accessToken,
+  })
+  if (activeOnly) params.set("effective_status", JSON.stringify(["ACTIVE"]))
+  if (after) params.set("after", after)
+  const ownerId = campaignId || adAccountId
+  const page = await fetchMetaPage<AdSet & { campaign?: { name?: string } }>(
+    `${GRAPH_API_BASE}/${ownerId}/adsets?${params}`,
+    "Failed to get ad sets"
+  )
+  return {
+    ...page,
+    data: page.data.map(adSet => ({
+      ...adSet,
+      campaign_name: adSet.campaign?.name ?? adSet.campaign_name,
+    })),
+  }
 }
 
 // Ad interfaces and functions
@@ -625,6 +732,52 @@ export async function getAds(
       creative_variations,
     }
   })
+}
+
+export async function getAdsPage(
+  adAccountId: string,
+  accessToken: string,
+  adSetId?: string,
+  datePreset = "last_7d",
+  timeRange?: string,
+  limit = 20,
+  activeOnly = false,
+  after?: string
+): Promise<MetaPage<Ad>> {
+  const adsInsightFields = [
+    "spend", "impressions", "clicks", "reach", "frequency", "cpm", "ctr",
+    "inline_link_clicks", "unique_clicks", "unique_inline_link_clicks", "unique_link_clicks_ctr",
+    "actions", "action_values", "cost_per_action_type", "video_avg_time_watched_actions",
+  ].join(",")
+  const insightsParam = timeRange
+    ? `insights.time_range(${timeRange}){${adsInsightFields}}`
+    : `insights.date_preset(${datePreset}){${adsInsightFields}}`
+  const fields = [
+    "id", "name", "status", "effective_status", "adset_id", "campaign_id",
+    "adset{attribution_spec,is_dynamic_creative,bid_strategy,learning_stage_info{status,conversions}}",
+    "creative{id,name,title,body,image_url,thumbnail_url,asset_feed_spec{bodies{text},titles{text},descriptions{text}}}",
+    "created_time",
+    insightsParam,
+  ].join(",")
+  const params = new URLSearchParams({
+    fields,
+    limit: String(Math.min(20, Math.max(1, limit))),
+    access_token: accessToken,
+  })
+  if (activeOnly) params.set("effective_status", JSON.stringify(["ACTIVE"]))
+  if (after) params.set("after", after)
+  const ownerId = adSetId || adAccountId
+  const page = await fetchMetaPage<Ad & { creative?: Ad["creative"] & { asset_feed_spec?: unknown } }>(
+    `${GRAPH_API_BASE}/${ownerId}/ads?${params}`,
+    "Failed to get ads"
+  )
+  return {
+    ...page,
+    data: page.data.map(ad => {
+      const creative_variations = normalizeVariations(ad.creative?.asset_feed_spec)
+      return creative_variations ? { ...ad, creative_variations } : ad
+    }),
+  }
 }
 
 // Business Manager interfaces and functions

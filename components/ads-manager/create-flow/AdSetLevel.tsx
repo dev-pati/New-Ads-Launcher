@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { getUtcOffsetLabel, wallClockToUtcDate } from "@/lib/timezone"
+import { cn } from "@/lib/utils"
 import { CampaignFormState, ConversionEvent, PerformanceGoal, PixelOption } from "./types"
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
   pixelsLoading: boolean
   currency: string
   timezoneName?: string
+  invalidFields: Set<string>
 }
 
 // Live clock in the ad account's timezone — schedule fields below are wall-clock
@@ -109,7 +111,7 @@ function performanceOptions(objective: CampaignFormState["objective"]): Array<{
   return [{ value: "REACH", label: "Maximize reach" }]
 }
 
-export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, timezoneName }: Props) {
+export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, timezoneName, invalidFields }: Props) {
   const options = performanceOptions(state.objective)
   const budgetStep = ZERO_DECIMAL_CURRENCIES.has(currency.toUpperCase()) ? "1" : "0.01"
 
@@ -134,7 +136,13 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
           </label>
           <input
             type="text"
-            className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
+            aria-invalid={invalidFields.has("adSetName")}
+            className={cn(
+              "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none focus:ring-1 dark:bg-background",
+              invalidFields.has("adSetName")
+                ? "border-red-500 focus:border-red-500 focus:ring-red-200 dark:border-red-500"
+                : "border-[#ccd0d5] focus:border-[#1877f2] focus:ring-[#1877f2] dark:border-gray-700"
+            )}
             value={state.adSetName}
             onChange={(event) => update({ adSetName: event.target.value })}
             placeholder="Enter an ad set name"
@@ -186,7 +194,13 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
               <select
                 value={state.pixelId}
                 onChange={(event) => update({ pixelId: event.target.value })}
-                className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+                aria-invalid={invalidFields.has("pixelId")}
+                className={cn(
+                  "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none dark:bg-background",
+                  invalidFields.has("pixelId")
+                    ? "border-red-500 focus:border-red-500 dark:border-red-500"
+                    : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
+                )}
                 disabled={pixelsLoading}
               >
                 <option value="">{pixelsLoading ? "Loading Pixels..." : "Select a Pixel"}</option>
@@ -232,7 +246,13 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
               value={state.costPerResultGoal}
               onChange={(event) => update({ costPerResultGoal: event.target.value })}
               placeholder="Optional"
-              className="h-9 w-full rounded border border-[#ccd0d5] bg-white pl-14 pr-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+              aria-invalid={invalidFields.has("costPerResultGoal")}
+              className={cn(
+                "h-9 w-full rounded border bg-white pl-14 pr-3 text-xs outline-none dark:bg-background",
+                invalidFields.has("costPerResultGoal")
+                  ? "border-red-500 focus:border-red-500 dark:border-red-500"
+                  : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
+              )}
             />
           </div>
           <p className="mt-1 text-[11px] text-[#65676b]">Uses Meta COST_CAP when set.</p>
@@ -287,7 +307,13 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
                 step={budgetStep}
                 value={state.dailyBudget}
                 onChange={(event) => update({ dailyBudget: event.target.value })}
-                className="h-9 w-full rounded border border-[#ccd0d5] bg-white pl-14 pr-3 text-xs outline-none focus:border-[#1877f2] focus:ring-1 focus:ring-[#1877f2] dark:border-gray-700 dark:bg-background"
+                aria-invalid={invalidFields.has("dailyBudget")}
+                className={cn(
+                  "h-9 w-full rounded border bg-white pl-14 pr-3 text-xs outline-none focus:ring-1 dark:bg-background",
+                  invalidFields.has("dailyBudget")
+                    ? "border-red-500 focus:border-red-500 focus:ring-red-200 dark:border-red-500"
+                    : "border-[#ccd0d5] focus:border-[#1877f2] focus:ring-[#1877f2] dark:border-gray-700"
+                )}
               />
             </div>
           </div>
@@ -330,7 +356,13 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
               type="datetime-local"
               value={state.scheduleEnd}
               onChange={(event) => update({ scheduleEnd: event.target.value })}
-              className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+              aria-invalid={invalidFields.has("scheduleEnd")}
+              className={cn(
+                "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none dark:bg-background",
+                invalidFields.has("scheduleEnd")
+                  ? "border-red-500 focus:border-red-500 dark:border-red-500"
+                  : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
+              )}
             />
             {timezoneName && state.scheduleEnd && state.scheduleTimeBasis === "account" && (
               <p className="mt-1 text-[11px] text-[#65676b]">
@@ -366,7 +398,13 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
           <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
             Countries
           </label>
-          <div className="mt-1.5 rounded border border-[#ccd0d5] bg-white p-2 dark:border-gray-700 dark:bg-background">
+          <div
+            aria-invalid={invalidFields.has("locations")}
+            className={cn(
+              "mt-1.5 rounded border bg-white p-2 dark:bg-background",
+              invalidFields.has("locations") ? "border-red-500 dark:border-red-500" : "border-[#ccd0d5] dark:border-gray-700"
+            )}
+          >
             <div className="mb-2 flex min-h-8 flex-wrap gap-2">
               {state.locations.map((countryCode) => (
                 <span
@@ -409,7 +447,11 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
               <select
                 value={state.ageMin}
                 onChange={(event) => update({ ageMin: Number(event.target.value) })}
-                className="h-9 flex-1 rounded border border-[#ccd0d5] bg-white px-2 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+                aria-invalid={invalidFields.has("ageRange")}
+                className={cn(
+                  "h-9 flex-1 rounded border bg-white px-2 text-xs outline-none dark:bg-background",
+                  invalidFields.has("ageRange") ? "border-red-500 dark:border-red-500" : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
+                )}
               >
                 {Array.from({ length: 48 }, (_, index) => index + 18).map((age) => (
                   <option key={age} value={age}>
@@ -421,7 +463,11 @@ export function AdSetLevel({ state, update, pixels, pixelsLoading, currency, tim
               <select
                 value={state.ageMax}
                 onChange={(event) => update({ ageMax: Number(event.target.value) })}
-                className="h-9 flex-1 rounded border border-[#ccd0d5] bg-white px-2 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+                aria-invalid={invalidFields.has("ageRange")}
+                className={cn(
+                  "h-9 flex-1 rounded border bg-white px-2 text-xs outline-none dark:bg-background",
+                  invalidFields.has("ageRange") ? "border-red-500 dark:border-red-500" : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
+                )}
               >
                 {Array.from({ length: 48 }, (_, index) => index + 18).map((age) => (
                   <option key={age} value={age}>

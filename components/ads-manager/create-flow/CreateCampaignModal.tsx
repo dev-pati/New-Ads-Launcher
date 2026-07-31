@@ -85,53 +85,68 @@ function positiveMoney(value: string, currency: string) {
   return Number.isFinite(amount) && amount > 0
 }
 
+interface ValidationIssue {
+  step: Step
+  field: string
+  message: string
+}
+
+function getValidationIssues(
+  state: CampaignFormState,
+  selectedAccountId: string,
+  currency: string
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = []
+  if (!selectedAccountId) issues.push({ step: "campaign", field: "adAccount", message: "Select an ad account first." })
+  if (!state.campaignName.trim()) issues.push({ step: "campaign", field: "campaignName", message: "Campaign name is required." })
+  if (state.advantageCampaignBudget && !positiveMoney(state.campaignBudget, currency)) {
+    issues.push({ step: "campaign", field: "campaignBudget", message: `Budget must be a valid ${currency} amount greater than 0.` })
+  }
+
+  if (!state.adSetName.trim()) issues.push({ step: "adset", field: "adSetName", message: "Ad set name is required." })
+  if (!state.locations.length) issues.push({ step: "adset", field: "locations", message: "Select at least one country." })
+  if (state.ageMin < 18 || state.ageMax < state.ageMin || state.ageMax > 65) {
+    issues.push({ step: "adset", field: "ageRange", message: "Age range must be between 18 and 65+." })
+  }
+  if (state.objective === "OUTCOME_SALES" && !state.pixelId) {
+    issues.push({ step: "adset", field: "pixelId", message: "Select a Pixel for Sales conversion campaigns." })
+  }
+  if (!state.advantageCampaignBudget && !positiveMoney(state.dailyBudget, currency)) {
+    issues.push({ step: "adset", field: "dailyBudget", message: `Budget must be a valid ${currency} amount greater than 0.` })
+  }
+  if (state.costPerResultGoal && !positiveMoney(state.costPerResultGoal, currency)) {
+    issues.push({ step: "adset", field: "costPerResultGoal", message: `Cost goal must be a valid ${currency} amount greater than 0.` })
+  }
+  if (state.scheduleStart && state.scheduleEnd && new Date(state.scheduleEnd) <= new Date(state.scheduleStart)) {
+    issues.push({ step: "adset", field: "scheduleEnd", message: "End date must be after start date." })
+  }
+
+  if (!state.adName.trim()) issues.push({ step: "ad", field: "adName", message: "Ad name is required." })
+  if (!state.pageId) issues.push({ step: "ad", field: "pageId", message: "Select a Facebook Page." })
+  const hasCreative = state.creativeIds.length > 0 || Boolean(state.creativeId)
+  if (!hasCreative && !state.mediaUrl.trim()) {
+    issues.push({ step: "ad", field: "media", message: "Upload a media file or enter a valid media URL." })
+  } else if (!hasCreative && !isValidHttpUrl(state.mediaUrl)) {
+    issues.push({ step: "ad", field: "media", message: "Enter a valid image or video URL." })
+  }
+  if (!state.primaryText.trim()) issues.push({ step: "ad", field: "primaryText", message: "Primary text is required." })
+  if (!state.headline.trim()) issues.push({ step: "ad", field: "headline", message: "Headline is required." })
+  if (!state.destinationUrl.trim() || !isValidHttpUrl(state.destinationUrl)) {
+    issues.push({ step: "ad", field: "destinationUrl", message: "Enter a valid website URL." })
+  }
+  return issues
+}
+
 function validateState(
   state: CampaignFormState,
   selectedAccountId: string,
   currency: string,
   through: Step = "ad"
 ) {
-  if (!selectedAccountId) return { step: "campaign" as Step, message: "Select an ad account first." }
-  if (!state.campaignName.trim()) return { step: "campaign" as Step, message: "Campaign name is required." }
-  if (state.advantageCampaignBudget && !positiveMoney(state.campaignBudget, currency)) {
-    return { step: "campaign" as Step, message: `Budget must be a valid ${currency} amount greater than 0.` }
-  }
-  if (through === "campaign") return null
-
-  if (!state.adSetName.trim()) return { step: "adset" as Step, message: "Ad set name is required." }
-  if (!state.locations.length) return { step: "adset" as Step, message: "Select at least one country." }
-  if (state.ageMin < 18 || state.ageMax < state.ageMin || state.ageMax > 65) {
-    return { step: "adset" as Step, message: "Age range must be between 18 and 65+." }
-  }
-  if (state.objective === "OUTCOME_SALES" && !state.pixelId) {
-    return { step: "adset" as Step, message: "Select a Pixel for Sales conversion campaigns." }
-  }
-  if (!state.advantageCampaignBudget && !positiveMoney(state.dailyBudget, currency)) {
-    return { step: "adset" as Step, message: `Budget must be a valid ${currency} amount greater than 0.` }
-  }
-  if (state.costPerResultGoal && !positiveMoney(state.costPerResultGoal, currency)) {
-    return { step: "adset" as Step, message: `Cost goal must be a valid ${currency} amount greater than 0.` }
-  }
-  if (state.scheduleStart && state.scheduleEnd && new Date(state.scheduleEnd) <= new Date(state.scheduleStart)) {
-    return { step: "adset" as Step, message: "End date must be after start date." }
-  }
-  if (through === "adset") return null
-
-  if (!state.adName.trim()) return { step: "ad" as Step, message: "Ad name is required." }
-  if (!state.pageId) return { step: "ad" as Step, message: "Select a Facebook Page." }
-  const hasCreative = state.creativeIds.length > 0 || Boolean(state.creativeId)
-  if (!hasCreative && !state.mediaUrl.trim()) {
-    return { step: "ad" as Step, message: "Upload a media file or enter a valid media URL." }
-  }
-  if (!hasCreative && (!state.mediaUrl.trim() || !isValidHttpUrl(state.mediaUrl))) {
-    return { step: "ad" as Step, message: "Enter a valid image or video URL." }
-  }
-  if (!state.primaryText.trim()) return { step: "ad" as Step, message: "Primary text is required." }
-  if (!state.headline.trim()) return { step: "ad" as Step, message: "Headline is required." }
-  if (!state.destinationUrl.trim() || !isValidHttpUrl(state.destinationUrl)) {
-    return { step: "ad" as Step, message: "Enter a valid website URL." }
-  }
-  return null
+  const stepOrder: Step[] = ["campaign", "adset", "ad"]
+  const lastStep = stepOrder.indexOf(through)
+  return getValidationIssues(state, selectedAccountId, currency)
+    .find(issue => stepOrder.indexOf(issue.step) <= lastStep) || null
 }
 
 export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
@@ -143,6 +158,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
   const [createdIds, setCreatedIds] = useState<CreateCampaignResponse | null>(null)
   const [publishStatus, setPublishStatus] = useState<PublishStatus>("idle")
   const [publishMessage, setPublishMessage] = useState("")
+  const [showValidation, setShowValidation] = useState(false)
 
   const [pages, setPages] = useState<FacebookPageOption[]>([])
   const [pagesLoading, setPagesLoading] = useState(false)
@@ -162,6 +178,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
     setFormError("")
     setMediaUploadError("")
     setCreatedIds(null)
+    setShowValidation(false)
   }
 
   const applyUploadedCreative = (creative: CreativeAssetOption) => {
@@ -413,14 +430,11 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
     if (activeStep === "adset") return state.adSetName || "New Ad Set"
     return state.adName || "New Ad"
   }, [activeStep, state.adName, state.adSetName, state.campaignName])
-  const publishValidation = validateState(state, selectedAccountId, currency)
+  const invalidFields = showValidation
+    ? new Set(getValidationIssues(state, selectedAccountId, currency).map(issue => issue.field))
+    : new Set<string>()
 
   const handleSaveAndContinue = () => {
-    const validation = validateState(state, selectedAccountId, currency, activeStep)
-    if (validation) {
-      setFormError(validation.message)
-      return
-    }
     setFormError("")
     if (activeStep === "campaign") setActiveStep("adset")
     else if (activeStep === "adset") setActiveStep("ad")
@@ -438,8 +452,8 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
 
     const validation = validateState(state, selectedAccountId, currency)
     if (validation) {
+      setShowValidation(true)
       setActiveStep(validation.step)
-      setFormError(validation.message)
       return
     }
 
@@ -481,8 +495,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
     pagesLoading ||
     pixelsLoading ||
     !selectedAccountId ||
-    Boolean(loadError) ||
-    Boolean(publishValidation)
+    Boolean(loadError)
 
   if (!open) {
     return <CampaignPublishToast status={publishStatus} message={publishMessage} />
@@ -574,7 +587,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
           <div className="flex min-w-0 flex-1 flex-col bg-white dark:bg-card">
             <div className="flex-1 overflow-y-auto">
               {activeStep === "campaign" && (
-                <CampaignLevel state={state} update={update} currency={currency} />
+              <CampaignLevel state={state} update={update} currency={currency} invalidFields={invalidFields} />
               )}
               {activeStep === "adset" && (
                 <AdSetLevel
@@ -584,6 +597,7 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
                   pixelsLoading={pixelsLoading}
                   currency={currency}
                   timezoneName={selectedAccount?.timezone_name}
+                  invalidFields={invalidFields}
                 />
               )}
               {activeStep === "ad" && (
@@ -599,6 +613,8 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
                   onSelectMediaFile={handleMediaFileSelected}
                   onClearUploadedCreative={clearUploadedCreative}
                   adAccountId={selectedAccountId}
+                  adAccountName={selectedAccount?.name || selectedAccountId}
+                  invalidFields={invalidFields}
                 />
               )}
             </div>

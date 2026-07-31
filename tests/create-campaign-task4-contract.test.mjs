@@ -17,11 +17,11 @@ describe("Task 4 Create Campaign contract", () => {
     assert.match(modal, /setActiveStep\("ad"\)/)
   })
 
-  it("gates Publish with the full required-field validator", () => {
+  it("validates Publish with the full required-field validator", () => {
     const modal = read("components/ads-manager/create-flow/CreateCampaignModal.tsx")
 
-    assert.match(modal, /const publishValidation = validateState/)
-    assert.match(modal, /Boolean\(publishValidation\)/)
+    assert.match(modal, /const validation = validateState\(state, selectedAccountId, currency\)/)
+    assert.match(modal, /setShowValidation\(true\)/)
   })
 
   it("closes into a non-blocking publish toast and clears success after three seconds", () => {

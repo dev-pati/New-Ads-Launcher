@@ -41,12 +41,12 @@ describe("Launch live progress contract", () => {
 
     assert.match(page, /document\.visibilityState === "visible"/)
     assert.match(page, /setInterval\(refreshVisibleData, 60_000\)/)
-    assert.match(page, /fetchMainData\(true, 20\)/)
+    assert.match(page, /fetchMainData\(true\)/)
     assert.match(page, /active_only=true/)
     assert.doesNotMatch(page, /fetchMainData\(\)/)
   })
 
-  it("sorts active rows first, then newest launch time", () => {
+  it("sorts newest launch time first, then active status", () => {
     const page = read("app/(dashboard)/ads-manager/page.tsx")
     const comparator = page.slice(
       page.indexOf("const byNewestFirst = ("),
@@ -55,6 +55,7 @@ describe("Launch live progress contract", () => {
 
     assert.match(comparator, /effective_status === "ACTIVE"/)
     assert.match(comparator, /return bt - at/)
+    assert.ok(comparator.indexOf("return bt - at") < comparator.indexOf('effective_status === "ACTIVE"'))
   })
 
   it("caps refresh API pagination at the requested row count", () => {

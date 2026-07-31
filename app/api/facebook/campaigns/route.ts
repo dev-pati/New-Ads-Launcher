@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
-import { getCampaigns } from "@/lib/facebook"
+import { getCampaigns, getCampaignsPage } from "@/lib/facebook"
 import { getCachedFacebookMetadata, clearCachedFacebookMetadata, isCachedFacebookMetadataFresh } from "../_cache"
 import { campaignManagerSnapshotFallback, datePresetToRange } from "@/lib/snapshot-fallback"
 
@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const requestedLimit = Number.parseInt(sp.get("limit") || "", 10)
     const maxRows = Number.isFinite(requestedLimit) ? Math.min(20, Math.max(1, requestedLimit)) : undefined
     const activeOnly = sp.get("active_only") === "true"
+    const after = sp.get("after") || undefined
 
     if (!adAccountId) return NextResponse.json({ error: "ad_account_id is required" }, { status: 400 })
 
@@ -37,17 +38,19 @@ export async function GET(request: NextRequest) {
     }
 
     const dateKey  = timeRange ? `tr:${timeRange}` : `dp:${datePreset}`
-    const cacheKey = `campaigns:v2:${adAccountId}:${dateKey}:limit:${maxRows || "all"}:active:${activeOnly}`
+    const cacheKey = `campaigns:v3:${adAccountId}:${dateKey}:limit:${maxRows || "all"}:active:${activeOnly}:after:${after || "first"}`
 
     if (forceRefresh) clearCachedFacebookMetadata(cacheKey)
 
     const isFresh = isCachedFacebookMetadataFresh(cacheKey)
-    let campaigns
+    let result: Awaited<ReturnType<typeof getCampaigns>> | Awaited<ReturnType<typeof getCampaignsPage>>
     try {
-      campaigns = await getCachedFacebookMetadata(
+      result = await getCachedFacebookMetadata<typeof result>(
         cacheKey,
         CACHE_TTL,
-        () => getCampaigns(adAccountId, connection.access_token, datePreset, timeRange || undefined, maxRows, activeOnly)
+        () => maxRows || after
+          ? getCampaignsPage(adAccountId, connection.access_token, datePreset, timeRange || undefined, maxRows || 20, activeOnly, after)
+          : getCampaigns(adAccountId, connection.access_token, datePreset, timeRange || undefined)
       )
     } catch (err) {
       const snapshotRes = await fallback(err instanceof Error ? err.message : "meta_unavailable")
@@ -55,7 +58,9 @@ export async function GET(request: NextRequest) {
       throw err
     }
 
-    return new NextResponse(JSON.stringify({ campaigns }), {
+    const campaigns = Array.isArray(result) ? result : result.data
+    const paging = Array.isArray(result) ? { hasNext: false, hasPrevious: false } : result.paging
+    return new NextResponse(JSON.stringify({ campaigns, paging }), {
       status: 200,
       headers: {
         "Content-Type": "application/json",
