@@ -3,7 +3,7 @@ import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, r
 import { assertLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail, getResourceAccountId } from "@/lib/facebook"
-import { normalizeAdAccountId } from "../_utils"
+import { adAccountBelongsToOrg, normalizeAdAccountId } from "../_utils"
 
 function applyPattern(pattern: string, ctx: { filename?: string; index?: number; date: string; shortDate: string }) {
   let r = pattern
@@ -244,20 +244,23 @@ export async function POST(request: NextRequest) {
     if (denied) return denied
     const authCtx = ctx
 
-    const supabase = createAdminClient()
-    const { data: adAccounts } = await supabase.from("ad_accounts").select("fb_ad_account_id").eq("org_id", ctx.orgId)
-    if (!adAccounts?.length) return NextResponse.json({ error: "No ad account found" }, { status: 400 })
-
     const body = await request.json()
-
     const requestedId = body.adAccountId
-    const matched = requestedId && adAccounts.find(
-      (a: any) => normalizeAdAccountId(a.fb_ad_account_id) === normalizeAdAccountId(requestedId)
-    )
-    if (requestedId && !matched) {
-      return NextResponse.json({ error: "Ad account not found in this workspace" }, { status: 400 })
+    const supabase = createAdminClient()
+    let adAccountId = requestedId
+
+    if (!adAccountId) {
+      const { data: firstAccount } = await supabase
+        .from("ad_accounts")
+        .select("fb_ad_account_id")
+        .eq("org_id", ctx.orgId)
+        .limit(1)
+        .maybeSingle()
+      if (!firstAccount?.fb_ad_account_id) {
+        return NextResponse.json({ error: "No ad account found" }, { status: 400 })
+      }
+      adAccountId = firstAccount.fb_ad_account_id
     }
-    const adAccountId = matched ? matched.fb_ad_account_id : adAccounts[0].fb_ad_account_id
 
     // Via MECE: launch = WRITE → via launch của account → OAuth → block (VIA-MASTER.md)
     let connection
@@ -270,6 +273,10 @@ export async function POST(request: NextRequest) {
       throw err
     }
     if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+
+    if (!(await adAccountBelongsToOrg(ctx.orgId, adAccountId, connection.access_token))) {
+      return NextResponse.json({ error: "Ad account not found or not authorized" }, { status: 403 })
+    }
 
     const token = connection.access_token
     const tokenOpts = { isManual: isManual(connection) }

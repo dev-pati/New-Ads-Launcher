@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, requireRole } from "@/lib/auth"
+import { getAuthContext, getFacebookConnection, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
 import { listApprovedAssets } from "@/lib/supabase/portal-registry"
 import { buildTree, collectKeysUnder } from "@/lib/portal-media/tree"
 import { claimPortalAsset, portalStoragePath } from "@/lib/portal-media/claim"
@@ -14,16 +15,9 @@ async function requireLaunchRole() {
   return { ctx }
 }
 
-async function assertAdAccountInOrg(orgId: string, adAccountId: string) {
-  const normId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-  const supabase = createAdminClient()
-  const { data } = await supabase
-    .from("ad_accounts")
-    .select("fb_ad_account_id")
-    .eq("org_id", orgId)
-    .eq("fb_ad_account_id", normId)
-    .maybeSingle()
-  return Boolean(data)
+async function resolveAdAccountInOrg(orgId: string, adAccountId: string) {
+  const oauth = await getFacebookConnection(orgId)
+  return getOrgAdAccountInfo(orgId, adAccountId, oauth?.access_token)
 }
 
 /**
@@ -39,7 +33,7 @@ export async function PUT(request: NextRequest) {
   const ctx = auth.ctx!
 
   const body = await request.json().catch(() => null)
-  const adAccountId = typeof body?.ad_account_id === "string" ? body.ad_account_id.trim() : ""
+  let adAccountId = typeof body?.ad_account_id === "string" ? body.ad_account_id.trim() : ""
   const folderPaths: string[] = Array.isArray(body?.folder_paths)
     ? body.folder_paths.filter((p: unknown) => typeof p === "string")
     : []
@@ -51,9 +45,11 @@ export async function PUT(request: NextRequest) {
   if (!folderPaths.length && !objectKeys.length) {
     return NextResponse.json({ error: "folder_paths or object_keys is required" }, { status: 400 })
   }
-  if (!(await assertAdAccountInOrg(ctx.orgId, adAccountId))) {
+  const account = await resolveAdAccountInOrg(ctx.orgId, adAccountId)
+  if (!account) {
     return NextResponse.json({ error: "Ad account not found in this workspace" }, { status: 400 })
   }
+  adAccountId = account.id
 
   let assets
   try {

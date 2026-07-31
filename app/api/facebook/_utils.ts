@@ -1,8 +1,6 @@
 import { getAdAccounts } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getCachedFacebookMetadata } from "./_cache"
-import { isPriorityAdAccount } from "@/lib/priority-ad-accounts"
-import { getAuthContext } from "@/lib/auth"
 
 
 interface OrgAdAccountRow {
@@ -26,27 +24,31 @@ export function normalizeAdAccountId(id: string) {
 export async function getOrgAdAccountInfo(
   orgId: string,
   adAccountId: string,
-  accessToken: string
+  accessToken?: string
 ) {
   const requested = normalizeAdAccountId(adAccountId)
   const supabase = createAdminClient()
-  const { data: orgAdAccounts } = await supabase
+  const { data: orgAdAccounts, error: orgAdAccountsError } = await supabase
     .from("ad_accounts")
     .select("fb_ad_account_id, currency, timezone_name")
     .eq("org_id", orgId)
+  if (orgAdAccountsError) throw orgAdAccountsError
 
   const dbAccount = ((orgAdAccounts || []) as OrgAdAccountRow[]).find((account) => {
     return normalizeAdAccountId(account.fb_ad_account_id || "") === requested
   })
 
-  const isPriority = isPriorityAdAccount(requested)
-
   if (dbAccount) {
-    return { id: adAccountId, currency: dbAccount.currency || undefined, timezoneName: dbAccount.timezone_name || undefined }
+    return {
+      id: dbAccount.fb_ad_account_id!,
+      currency: dbAccount.currency || undefined,
+      timezoneName: dbAccount.timezone_name || undefined,
+    }
   }
 
-  // If this is a priority account but missing from DB, we want to allow it and try to upsert it
-  // But we still need its currency/live details, so we continue to the live check first.
+  // Via-only accounts must already be org-owned in DB. OAuth can additionally prove
+  // live access to a newly granted account without a source-code allowlist.
+  if (!accessToken) return null
 
   const liveAccounts = await getCachedFacebookMetadata(
     `fb:ad-accounts:${orgId}:live`,
@@ -59,42 +61,7 @@ export async function getOrgAdAccountInfo(
       normalizeAdAccountId(account.account_id) === requested
     )
   })
-  if (!liveAccount) {
-    if (isPriority) {
-      return { id: adAccountId, currency: "USD" } 
-    }
-    return null
-  }
-
-  if (isPriority) {
-    const auth = await getAuthContext().catch(() => null)
-    if (auth && liveAccount.business?.id) {
-      // We need a business manager ID for the FK. Ensure the BM exists first, then insert ad_account.
-      const bmId = liveAccount.business.id
-      const { data: bm } = await supabase
-        .from("business_managers")
-        .select("id")
-        .eq("org_id", orgId)
-        .eq("fb_business_id", bmId)
-        .maybeSingle()
-
-      if (bm) {
-        // Best-effort insert, ignore duplicates/errors
-        try { await supabase.from("ad_accounts").insert({
-          org_id: orgId,
-          user_id: auth.user.id,
-          business_manager_id: bm.id,
-          fb_ad_account_id: liveAccount.id,
-          fb_account_id: liveAccount.account_id,
-          name: liveAccount.name,
-          currency: liveAccount.currency || "USD",
-          timezone_name: liveAccount.timezone_name || null,
-          account_status: liveAccount.account_status ?? 1,
-          is_active: true
-        }) } catch {}
-      }
-    }
-  }
+  if (!liveAccount) return null
 
   return { id: liveAccount.id, currency: liveAccount.currency, timezoneName: liveAccount.timezone_name }
 }
