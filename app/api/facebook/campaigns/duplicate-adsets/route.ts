@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
 
 const GRAPH_API_BASE = "https://graph.facebook.com/v25.0"
 
 // POST /api/facebook/campaigns/duplicate-adsets
-// Body: { targetCampaignIds, adSetConfigs: [{
+// Body: { targetCampaignIds, adAccountId, adSetConfigs: [{
 //   id, customName, copies, statusActive, startTime, endTime,
 //   customAttribution, attrViewDays, attrClickDays, attrEngagedViewDays,
 //   deepCopy, selectedAdIds, duplicatedAdsStatus
@@ -19,12 +19,20 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => ({}))
     const targetCampaignIds: string[] = Array.isArray(body.targetCampaignIds) ? body.targetCampaignIds : []
     const adSetConfigs: any[] = Array.isArray(body.adSetConfigs) ? body.adSetConfigs : []
+    const adAccountId = request.nextUrl.searchParams.get("ad_account_id") || body.adAccountId
 
     if (targetCampaignIds.length === 0) {
       return NextResponse.json({ error: "targetCampaignIds required" }, { status: 400 })
     }
+    if (!adAccountId) return NextResponse.json({ error: "adAccountId is required" }, { status: 400 })
 
-    const connection = await getFacebookConnection(ctx.orgId)
+    let connection
+    try {
+      connection = await getConnectionForAdAccount(ctx.orgId, adAccountId, "write")
+    } catch (err) {
+      if (err instanceof MissingViaError) return NextResponse.json({ error: err.message, code: "MISSING_LAUNCH_VIA" }, { status: 400 })
+      throw err
+    }
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
 
     const buildAttributionSpec = (cfg: any): { event_type: string; window_days: number }[] | null => {

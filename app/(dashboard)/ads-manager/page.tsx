@@ -575,6 +575,7 @@ function AdsManagerContent() {
   const [ads, setAds] = useState<Ad[]>([])
   const [accountSummary, setAccountSummary] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(false)
+  const [slowLoad, setSlowLoad] = useState(false)
   const [loadedMs, setLoadedMs] = useState<number | null>(null)
   const [error, setError] = useState("")
 
@@ -816,6 +817,7 @@ function AdsManagerContent() {
   // Fetches campaigns/adsets/ads only — `breakdowns` intentionally excluded from
   // deps so that toggling a breakdown never triggers a redundant main-data refetch.
   const clientCache = useRef<Map<string, { campaigns?: Campaign[]; adSets?: AdSet[]; ads?: Ad[] }>>(new Map())
+  const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchMainData = useCallback(async (forceRefresh = false) => {
     if (!selectedAccountId) return
@@ -837,6 +839,8 @@ function AdsManagerContent() {
       }
     } else {
       setLoading(true)
+      setSlowLoad(false)
+      slowTimer.current = setTimeout(() => setSlowLoad(true), 5000)
     }
 
     setError("")
@@ -872,6 +876,8 @@ function AdsManagerContent() {
       setError(e.message || "Failed to load")
     } finally {
       setLoading(false)
+      setSlowLoad(false)
+      if (slowTimer.current) clearTimeout(slowTimer.current)
     }
   }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange])
 
@@ -2385,19 +2391,19 @@ function AdsManagerContent() {
         )}
 
         <div className="ml-auto flex items-center gap-1.5">
-          {/* Open in Meta Ads Manager */}
+          {/* Drill into selected item within Ads Manager */}
           <button
             onClick={() => {
-              const actId = selectedAccountId?.replace("act_", "")
-              const ids = Array.from(selectedIds)
-              const base = `https://adsmanager.facebook.com/adsmanager/manage/${tab}?act=${actId}`
-              const url = ids.length === 1
-                ? `${base}&selected_${tab.slice(0, -1)}_ids=${ids[0]}`
-                : base
-              window.open(url, "_blank")
+              if (selectedIds.size === 0) return
+              const id = Array.from(selectedIds)[0]
+              const node = currentData.find(x => x.id === id)
+              if (!node) return
+              if (tab === "campaigns") drillToAdSets(node as Campaign)
+              else if (tab === "adsets") drillToAds(node as AdSet)
             }}
-            className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors"
-            title="View in Meta Ads Manager"
+            disabled={tab === "ads" || selectedIds.size === 0}
+            className="size-7 flex items-center justify-center border rounded-lg hover:bg-muted/50 transition-colors disabled:opacity-40"
+            title="View Ads Manager"
           >
             <svg className="size-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
@@ -2524,8 +2530,9 @@ function AdsManagerContent() {
         )}
 
         {loading && currentData.length === 0 ? (
-          <div className="flex items-center justify-center h-40">
+          <div className="flex flex-col items-center justify-center h-40 gap-2">
             <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
+            {slowLoad && <p className="text-xs text-muted-foreground animate-pulse">Wait a few seconds to finish</p>}
           </div>
         ) : (
           <table data-table="compact" className={cn("w-full text-sm border-collapse", loading && "opacity-60 transition-opacity")} style={{ minWidth: 1100, tableLayout: "fixed" }}>
@@ -3308,22 +3315,24 @@ function AdsManagerContent() {
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Details</p>
-                    <div className="rounded-xl border overflow-hidden text-xs">
-                      <button
-                        className="w-full flex items-center gap-2 px-3 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors text-left"
-                        onClick={() => {
-                          const actId = selectedAccountId?.replace("act_", "")
-                          const url = `https://adsmanager.facebook.com/adsmanager/manage/${tab}?act=${actId}&selected_${tab.slice(0,-1)}_ids=${node.id}`
-                          window.open(url, "_blank")
-                        }}
-                      >
-                        <IconExternalLink className="size-3.5 shrink-0" />
-                        View in Meta Ads Manager
-                      </button>
+                  {tab !== "ads" && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Details</p>
+                      <div className="rounded-xl border overflow-hidden text-xs">
+                        <button
+                          className="w-full flex items-center gap-2 px-3 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition-colors text-left"
+                          onClick={() => {
+                            setEditingNode(null)
+                            if (tab === "campaigns") drillToAdSets(node)
+                            else if (tab === "adsets") drillToAds(node)
+                          }}
+                        >
+                          <IconExternalLink className="size-3.5 shrink-0" />
+                          View Ads Manager
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* ── Footer ── */}

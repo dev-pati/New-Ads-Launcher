@@ -510,6 +510,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let batchId: string | undefined
     async function saveLaunchBatch() {
       const status = allErrors.length === 0 ? "success" : allResults.length > 0 ? "partial" : "failed"
       const creativeThumbs = launchCreatives
@@ -528,7 +529,7 @@ export async function POST(request: NextRequest) {
         .eq("fb_ad_account_id", adAccountId)
         .maybeSingle()
 
-      const { error } = await supabase.from("launch_batches").insert({
+      const { data, error } = await supabase.from("launch_batches").insert({
         org_id: authCtx.orgId,
         user_id: authCtx.user.id,
         user_name: userName,
@@ -557,8 +558,12 @@ export async function POST(request: NextRequest) {
           thumbnailUrl: r.thumbnailUrl || null,
           mediaType: r.mediaType || "image",
         })),
-      })
-      if (error) console.error("[launch] Failed to save launch batch:", error)
+      }).select("id").single()
+      if (error) {
+        console.error("[launch] Failed to save launch batch:", error)
+      } else {
+        batchId = data?.id
+      }
     }
 
     // Custom config mode: bypass normal campaign loop entirely
@@ -593,7 +598,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true, created: allResults, errors: allErrors,
         summary: `${allResults.length} ads created, ${allErrors.length} failed`,
-        adManagerUrl: `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId.replace("act_", "")}`,
+        adManagerUrl: `/ads-manager?batch=${batchId || ""}`,
+        batchId,
       })
     }
 
@@ -680,7 +686,8 @@ export async function POST(request: NextRequest) {
       created: allResults,
       errors: allErrors,
       summary: `${allResults.length} ads created, ${allErrors.length} failed`,
-      adManagerUrl: `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${adAccountId.replace("act_", "")}`,
+      adManagerUrl: `/ads-manager?batch=${batchId || ""}`,
+      batchId,
     })
   } catch (err: any) {
     console.error("Launch error:", err)

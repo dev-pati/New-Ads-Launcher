@@ -1,5 +1,7 @@
 import { buildMetaHeaders, extractTokenFromUrl, secureMetaFetch, type MetaFetchOpts } from "@/lib/meta-secure-fetch"
+import { withAppPrefix } from "@/lib/ad-name-prefix"
 import { createHmac } from "crypto"
+import * as Sentry from "@sentry/nextjs"
 
 const GRAPH_API_VERSION = "v25.0"
 export const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`
@@ -783,10 +785,23 @@ export async function uploadVideoToMeta(
         try {
           transferData = JSON.parse(transferText)
         } catch {
+          Sentry.captureMessage("Meta Video Transfer Parsing Error", {
+            level: "error",
+            extra: { status: transferRes.status, bodyExcerpt: transferText.slice(0, 500) }
+          })
           throw new Error(`failed to parse JSON. Status: ${transferRes.status}, Body: ${transferText}`)
         }
 
         if (!transferRes.ok) {
+          Sentry.captureMessage("Meta Video Transfer Network Error", {
+            level: "error",
+            extra: {
+              status: transferRes.status,
+              errorCode: transferData?.error?.code,
+              errorSubcode: transferData?.error?.error_subcode,
+              message: transferData?.error?.message
+            }
+          })
           throw new Error(transferData?.error?.message || "Unknown error")
         }
         lastErr = null
@@ -794,7 +809,8 @@ export async function uploadVideoToMeta(
       } catch (e: any) {
         lastErr = e?.message || "Transfer error"
         if (cAttempt < MAX_CHUNK_ATTEMPTS) {
-          await new Promise(r => setTimeout(r, 800 * cAttempt))
+          // TD-22: Exponential backoff for chunk retry
+          await new Promise(r => setTimeout(r, Math.pow(2, cAttempt) * 1000))
         }
       }
     }
@@ -1109,45 +1125,13 @@ export async function pollVideoReady(
   maxWaitMs: number = 120_000,
   opts?: MetaFetchOpts
 ): Promise<{ ready: boolean; status: string; errorMsg?: string; waitedMs: number }> {
+  // TD-37: Removed in-request setTimeout polling. Just check once.
+  // The UI should poll job status or users should re-click launch, not block the HTTP route for 120s.
   const start = Date.now()
-  // Tăng thời gian giãn cách để tránh cạn kiệt API Rate Limit (Quota)
-  const intervals = [10000, 15000, 20000, 30000, 30000]
-  let i = 0
-
-  while (Date.now() - start < maxWaitMs) {
-    try {
-      const res = await secureMetaFetch(
-        `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`,
-        undefined,
-        opts
-      )
-      if (res.ok) {
-        const data = await res.json()
-        const vstatus = data.status?.video_status as string | undefined
-        // Possible values: "uploading", "processing", "ready", "expired", "error"
-        if (vstatus === "ready") {
-          return { ready: true, status: vstatus, waitedMs: Date.now() - start }
-        }
-        if (vstatus === "error") {
-          const errMsg = data.status?.processing_phase?.errors?.[0]?.message
-            || data.status?.uploading_phase?.errors?.[0]?.message
-            || "Video processing failed on Meta"
-          return { ready: false, status: vstatus, errorMsg: errMsg, waitedMs: Date.now() - start }
-        }
-        if (vstatus === "expired") {
-          return { ready: false, status: vstatus, errorMsg: "Video upload expired", waitedMs: Date.now() - start }
-        }
-      }
-    } catch {}
-    const wait = intervals[Math.min(i, intervals.length - 1)]
-    await new Promise(r => setTimeout(r, wait))
-    i++
-  }
+  const result = await checkVideoStatus(videoId, accessToken, opts)
   return {
-    ready: false,
-    status: "timeout",
-    errorMsg: `Video still processing after ${Math.floor(maxWaitMs / 1000)}s — try again in a minute.`,
-    waitedMs: Date.now() - start,
+    ...result,
+    waitedMs: Date.now() - start
   }
 }
 
@@ -1329,6 +1313,11 @@ export async function createAd(
   },
   opts?: { isManual?: boolean } // via token (app khác phát hành) → skip appsecret_proof
 ): Promise<{ id: string }> {
+  // Provenance marker. Normalised once here rather than at each mode below, so
+  // every ad the app creates — all three launch routes and the automation
+  // engine — carries it. Idempotent; see lib/ad-name-prefix.ts.
+  params = { ...params, name: withAppPrefix(params.name) }
+
   // ── Post ID mode ─────────────────────────────────────────────────────────────
   // Reuse an existing Facebook dark post by its object_story_id.
   // The ad inherits all accumulated social proof (likes, comments, shares).

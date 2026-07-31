@@ -25,11 +25,22 @@ export function getUserIdFromClientToken(): string | null {
 function buildHeaders(token?: string): Record<string, string> {
   const headers: Record<string, string> = {}
   if (token) headers["Authorization"] = `Bearer ${token}`
-  // CF Access Service Token — allows browser requests through Cloudflare Zero Trust
+
+  // CF Access Service Token — identifier only.
+  //
+  // The matching CF-Access-Client-Secret is deliberately NOT read here. Anything
+  // prefixed `NEXT_PUBLIC_` is inlined into the client bundle at build time, so
+  // reading NEXT_PUBLIC_CF_ACCESS_CLIENT_SECRET published a Cloudflare Zero Trust
+  // service-token secret to every visitor — a credential that authenticates as the
+  // application to any CF Access-protected origin. `.env.example` already instructs
+  // operators to leave it empty; this removes the code path that consumed it.
+  //
+  // The secret belongs to server-side callers only, via the unprefixed
+  // CF_ACCESS_CLIENT_SECRET — see lib/supabase/{server,admin}.ts, which do this
+  // correctly. If a browser request ever genuinely needs to traverse CF Access,
+  // proxy it through a route handler rather than shipping the secret to the client.
   const cfId = process.env.NEXT_PUBLIC_CF_ACCESS_CLIENT_ID
-  const cfSecret = process.env.NEXT_PUBLIC_CF_ACCESS_CLIENT_SECRET
   if (cfId) headers["CF-Access-Client-Id"] = cfId
-  if (cfSecret) headers["CF-Access-Client-Secret"] = cfSecret
   return headers
 }
 

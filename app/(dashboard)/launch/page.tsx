@@ -9158,26 +9158,34 @@ function GalleryMediaPanel({ selectedCreatives, onOpenModal, onDeselect, onRemov
 
 // ─── Launch Result Modal ──────────────────────────────────────────────────────
 
+function CopyBtn({ value, className }: { value: string; className?: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500) }}
+      className={cn("text-muted-foreground hover:text-foreground shrink-0 transition-colors", copied && "text-green-600", className)}
+      title="Copy"
+    >
+      {copied ? <IconCircleCheck className="size-3" /> : <IconCopy className="size-3" />}
+    </button>
+  )
+}
+
 function DetailItem({ label, value, copyable, mono }: { label: string; value: string; copyable?: boolean; mono?: boolean }) {
   return (
     <div className="flex items-start gap-2 min-w-0">
       <span className="text-muted-foreground shrink-0 w-24 text-xs">{label}</span>
       <span className={cn("flex-1 text-foreground text-xs truncate", mono && "font-mono text-xs")} title={value}>{value}</span>
-      {copyable && (
-        <button onClick={() => navigator.clipboard.writeText(value)} className="text-muted-foreground hover:text-foreground shrink-0">
-          <IconCopy className="size-3" />
-        </button>
-      )}
+      {copyable && <CopyBtn value={value} />}
     </div>
   )
 }
 
-function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
-  index: number; ad: CreatedAd; status?: string; expanded: boolean; onToggle: () => void; launchMeta?: LaunchMeta
+function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta, batchId }: {
+  index: number; ad: CreatedAd; status?: string; expanded: boolean; onToggle: () => void; launchMeta?: LaunchMeta; batchId?: string | null
 }) {
   const displayName = ad.fileName?.replace(/\.[^/.]+$/, "") || ad.multiGroup || ad.flexibleAd || ad.carousel || `Ad ${index}`
-  const actId = launchMeta?.adAccountId?.replace("act_", "") || ""
-  const metaUrl = `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${actId}&filter_set=SEARCH_BY_AD_IDS-STRING_SET%1E${ad.adId}`
+  const metaUrl = batchId ? `/ads-manager?batch=${batchId}` : "/ads-manager"
   return (
     <>
       <tr className={cn("border-b last:border-0 hover:bg-muted/20 cursor-pointer select-none", expanded && "bg-muted/30")} onClick={onToggle}>
@@ -9198,7 +9206,7 @@ function AdResultRow({ index, ad, status, expanded, onToggle, launchMeta }: {
         <td className="px-2 w-40">
           <div className="flex items-center gap-1">
             <span className="font-mono text-xs text-muted-foreground">{ad.adId.slice(0, 15)}…</span>
-            <button onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(ad.adId) }} className="text-muted-foreground hover:text-foreground"><IconCopy className="size-3" /></button>
+            <CopyBtn value={ad.adId} />
             <a href={metaUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-primary hover:text-primary"><IconExternalLink className="size-3" /></a>
           </div>
         </td>
@@ -9234,6 +9242,7 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
   const [loadingInsights, setLoadingInsights] = useState(false)
   const [datePreset, setDatePreset] = useState("last_30d")
   const [fetchMs, setFetchMs] = useState<number | null>(null)
+  const [batchCopied, setBatchCopied] = useState(false)
 
   const isSuccess = result.failed === 0
   const isPartial = result.created > 0 && result.failed > 0
@@ -9300,8 +9309,11 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
               <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium", isSuccess ? "bg-green-100 text-green-700" : isPartial ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-700")}>
                 ● {result.created} of {result.created + result.failed} succeeded
               </span>
-              <button className="flex items-center gap-1 text-xs border rounded px-2 py-0.5 hover:bg-muted font-mono" onClick={() => navigator.clipboard.writeText(batchShort)}>
-                BATCH #{batchShort}<IconCopy className="size-3 ml-0.5" />
+              <button
+                className={cn("flex items-center gap-1 text-xs border rounded px-2 py-0.5 hover:bg-muted font-mono transition-colors", batchCopied && "text-green-600 border-green-300")}
+                onClick={() => { navigator.clipboard.writeText(result.batchId || batchShort); setBatchCopied(true); setTimeout(() => setBatchCopied(false), 1500) }}
+              >
+                BATCH #{batchShort}{batchCopied ? <IconCircleCheck className="size-3 ml-0.5" /> : <IconCopy className="size-3 ml-0.5" />}
               </button>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -9333,13 +9345,6 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                   Meta Ads ({result.created} succeeded)
                 </div>
                 <div className="ml-auto flex items-center gap-1.5">
-                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => {
-                    const links = adIds.map(id => `https://adsmanager.facebook.com/adsmanager/manage/ads?act=${actId}&filter_set=SEARCH_BY_AD_IDS-STRING_SET%1E${id}`).join("\n")
-                    navigator.clipboard.writeText(links)
-                  }}><IconEye className="size-3" />Preview Links</Button>
-                  <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => navigator.clipboard.writeText(adIds.join("\n"))}>
-                    <IconCopy className="size-3" />Copy Ad IDs
-                  </Button>
                   <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={loadStatus} disabled={loadingStatus || !hasAdIds} title={!hasAdIds ? "No ad IDs — launch again to enable" : undefined}>
                     {loadingStatus ? <IconLoader2 className="size-3 animate-spin" /> : <IconRefresh className="size-3" />}Load Status
                   </Button>
@@ -9365,7 +9370,8 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
                           status={adStatuses[ad.adId]}
                           expanded={expandedId === rowKey}
                           onToggle={() => setExpandedId(p => p === rowKey ? null : rowKey)}
-                          launchMeta={result.launchMeta} />
+                          launchMeta={result.launchMeta}
+                          batchId={result.batchId} />
                       )
                     })}
                   </tbody>
@@ -9508,10 +9514,9 @@ function LaunchResultModal({ result, onClose }: { result: LaunchResult; onClose:
             <IconClock className="size-3.5" />Completed in {formatDuration(result.durationMs)}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" className="text-xs">Load as Draft</Button>
-            <a href={`https://adsmanager.facebook.com/adsmanager/manage/ads?act=${actId}`} target="_blank" rel="noopener noreferrer">
+            <a href={`/ads-manager?batch=${result.batchId || ""}`}>
               <Button size="sm" className="text-xs gap-1.5 bg-[#1877F2] hover:bg-[#1877F2]/90">
-                View Meta Ads Manager<IconBrandMeta className="size-3.5" />
+                View Ads Manager<IconBrandMeta className="size-3.5" />
               </Button>
             </a>
           </div>
@@ -9572,8 +9577,6 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
   onRelaunch: (b: LaunchBatch) => void
 }) {
   if (!batch) return null
-  const accountNumId = batch.ad_account_id?.replace("act_", "")
-  const amsBase = `https://adsmanager.facebook.com/adsmanager/manage`
   const ctaLabel = CTA_OPTIONS.find(o => o.value === batch.cta)?.label || batch.cta || "—"
 
   return (
@@ -9669,9 +9672,7 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
                 {batch.adset_names.map((name, i) => (
                   <a
                     key={i}
-                    href={`${amsBase}/adsets?act=${accountNumId}&selected_adset_ids=${batch.adset_ids?.[i] || ""}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    href={`/ads-manager?batch=${batch.id}`}
                     className="flex items-center gap-1 text-xs px-2.5 py-1 bg-primary/10 dark:bg-primary/20 text-primary/90 dark:text-primary rounded-md hover:bg-blue-100 border border-primary/20 dark:border-primary/20 transition-colors"
                   >
                     {name}<IconExternalLink className="size-3" />
@@ -9700,14 +9701,11 @@ function BatchDetailModal({ batch, open, onClose, onRelaunch }: {
         {/* Footer actions */}
         <div className="flex items-center gap-2 px-5 py-3 border-t bg-muted/10">
           <a
-            href={`${amsBase}/ads?act=${accountNumId}`}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={`/ads-manager?batch=${batch.id}`}
           >
             <Button variant="outline" size="sm" className="gap-1.5">
               <IconBrandMeta className="size-3.5 text-[#1877F2]" />
-              View in Meta Ads Manager
-              <IconExternalLink className="size-3" />
+              View Ads Manager
             </Button>
           </a>
           <div className="ml-auto flex items-center gap-2">

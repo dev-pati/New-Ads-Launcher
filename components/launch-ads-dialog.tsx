@@ -735,7 +735,7 @@ export function LaunchAdsDialog({ open, onClose, selectedCreativeIds, adAccountI
                 <a href={result.adManagerUrl} target="_blank" rel="noopener noreferrer"
                   className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
                   <IconExternalLink className="size-4" />
-                  View in Meta Ads Manager
+                  View Ads Manager
                 </a>
               )}
             </div>
