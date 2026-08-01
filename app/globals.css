@@ -127,22 +127,28 @@
    ============================================================ */
 
 .dark {
-    --bg: #1f2127; --sidebar-surface: #191b20; --surface: #252730; --surface-2: #2a2c36; --inset: #1b1d23; --hover: #2c2e38;
+    /* Premium dark palette — Linear/Vercel-tier. Deeper base, indigo accent,
+       brighter primary text, Zinc borders. Surfaces step up from the page bg
+       instead of sitting at near-equal lightness, so cards read as elevated. */
+    --bg: #0c0c0c; --sidebar-surface: #0a0a0a; --surface: #121212; --surface-2: #1e1e1e; --inset: #0a0a0a; --hover: #1e1e1e;
     --line-soft: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.05); --line-str: rgba(255,255,255,.14);
-    --text-1: #d8d9e3; --text-2: #9c9fa6; --text-3: #6b6d78;
-    --violet: #5a7bf9; --violet-2: #7d97fb; --blue: #3a61f6; --cyan: #05c3fb; --gray-line: #cbd2e0;
-    --brand-accent: #3a61f6; --accent-soft: rgba(58,97,246,.16); --accent-line: rgba(58,97,246,.4);
-    --grad: linear-gradient(135deg,#3a61f6,#5a7bf9);
-    --grad-soft: linear-gradient(135deg,rgba(58,97,246,.2),rgba(5,195,251,.12));
+    --text-1: #ededed; --text-2: #a1a1aa; --text-3: #71717a;
+    --violet: #5e6ad2; --violet-2: #6c77dc; --blue: #5e6ad2; --cyan: #05c3fb; --gray-line: #cbd2e0;
+    --brand-accent: #5e6ad2; --accent-soft: rgba(94,106,210,.16); --accent-line: rgba(94,106,210,.4);
+    --grad: linear-gradient(135deg,#5e6ad2,#6c77dc);
+    --grad-soft: linear-gradient(135deg,rgba(94,106,210,.2),rgba(5,195,251,.12));
     --emerald: #3fbfb7; --amber: #f0aa2b; --rose: #fb6f63;
-    --sh: 0 2px 8px rgba(0,0,0,.4);
-    --sh-md: 0 16px 40px -14px rgba(0,0,0,.6);
-    --glow: 0 8px 24px -8px rgba(58,97,246,.55);
+    /* inset highlight (rgba(255,255,255,.05)) gives cards a 1px top edge so they
+       read as elevated on a near-black bg without relying on heavy drop shadow */
+    --sh: 0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05);
+    --sh-md: 0 4px 6px -1px rgba(0,0,0,.5), 0 2px 4px -1px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.05);
+    --glow: 0 0 20px rgba(94,106,210,.25);
 
     --primary: var(--brand-accent);
     --primary-foreground: #FFFFFF;
 
-    /* #93b0ff — 6.99:1 on --card (#252730), vs 2.98:1 for --brand-accent. See :root. */
+    /* #93b0ff stays the text-safe link tone — proven 6.99:1 on the old card;
+       still clears 7:1 on the new darker --card (#121212). */
     --link: #93b0ff;
 
     --background: var(--bg);

@@ -278,10 +278,10 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
               <Link
                 href={section.subItems[0].href}
                 className={cn(
-                  "flex items-center gap-2.5 h-9 px-3 mx-2 rounded-lg text-sm font-medium transition-colors",
+                  "relative flex items-center gap-2.5 h-9 px-3 mx-2 rounded-lg text-sm font-medium transition-colors before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-0.5 before:rounded-full before:bg-primary before:opacity-0 before:transition-opacity",
                   isActive
-                    ? "text-foreground"
-                    : "text-sidebar-foreground/55 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+                    ? "text-foreground bg-sidebar-accent before:opacity-100"
+                    : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                 )}
               >
                 <Icon className={cn("size-4 shrink-0", isActive ? "text-primary" : "")} />
@@ -294,7 +294,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
                   {/* Launch stats widget */}
                   {section.id === "launch" && (
                     <div className="mx-2 mb-2 rounded-lg bg-sidebar-accent px-3 py-2">
-                      <p className="text-xs font-medium text-sidebar-foreground/40 uppercase tracking-wide mb-1.5">
+                      <p className="text-xs font-medium text-sidebar-foreground/70 uppercase tracking-wide mb-1.5">
                         Your team&apos;s last 30d
                       </p>
                       <div className="flex items-center gap-4">
@@ -302,19 +302,19 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
                           <div className="text-xs font-bold text-sidebar-foreground">
                             {launchStats.ads === null ? "—" : launchStats.ads.toLocaleString()}
                           </div>
-                          <div className="text-xs text-sidebar-foreground/45">Ads</div>
+                          <div className="text-xs text-sidebar-foreground/60">Ads</div>
                         </div>
                         <div>
                           <div className="text-xs font-bold text-sidebar-foreground">
                             {launchStats.batches === null ? "—" : launchStats.batches}
                           </div>
-                          <div className="text-xs text-sidebar-foreground/45">Batches</div>
+                          <div className="text-xs text-sidebar-foreground/60">Batches</div>
                         </div>
                         <div>
                           <div className="text-xs font-bold text-sidebar-foreground">
                             {launchStats.saved === null ? "—" : launchStats.saved}
                           </div>
-                          <div className="text-xs text-sidebar-foreground/45">Templates</div>
+                          <div className="text-xs text-sidebar-foreground/60">Templates</div>
                         </div>
                       </div>
                     </div>
@@ -327,7 +327,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
                         key={sub.href}
                         href={sub.href}
                         className={cn(
-                          "flex items-center h-8 px-3 rounded-lg text-sm transition-colors mb-0.5 w-[180px]",
+                          "flex items-center h-8 px-3 rounded-lg text-sm transition-colors mb-0.5 w-full",
                           isSubActive
                             ? "bg-sidebar-primary text-sidebar-primary-foreground font-medium"
                             : "text-sidebar-foreground/65 hover:bg-sidebar-accent hover:text-sidebar-foreground"
