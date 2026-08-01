@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from "jose"
 import bcrypt from "bcryptjs"
 import crypto from "crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { sendOtpEmail } from "@/lib/smtp-email"
+import { sendEmail } from "@/lib/send-email"
 
 export type AuthAccount = {
   id: string
@@ -183,7 +183,18 @@ export async function generateAndSendOtp(email: string): Promise<{ ok: boolean; 
     return { ok: false, error: "Failed to store verification code", status: 500 }
   }
 
-  const { ok, error: mailError } = await sendOtpEmail(account.email, otp)
+  const { ok, error: mailError } = await sendEmail({
+    to: account.email,
+    subject: `Your AdLauncher login code: ${otp}`,
+    text: `Your AdLauncher login code is ${otp}. This code expires in 10 minutes. If you didn't request this, you can ignore this email.`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+        <h2>Your login code</h2>
+        <p style="font-size: 32px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+        <p style="color: #666; font-size: 14px;">This code expires in 10 minutes. If you didn't request this, you can ignore this email.</p>
+      </div>
+    `,
+  })
   if (!ok) {
     return { ok: false, error: mailError || "Failed to send email", status: 500 }
   }
