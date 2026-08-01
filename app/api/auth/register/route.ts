@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createSession, hashPassword } from "@/lib/custom-auth"
+import { hashPassword } from "@/lib/custom-auth"
 
 function slugify(value: string) {
   return value
@@ -76,10 +76,12 @@ export async function POST(request: Request) {
       role: "admin",
     })
 
-    await createSession(account)
     return NextResponse.json({ user: account })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[register] unexpected error:", err)
-    return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Internal server error" },
+      { status: 500 },
+    )
   }
 }
