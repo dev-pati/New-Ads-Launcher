@@ -281,7 +281,7 @@ function Sparkline({ data }: { data: number[] }) {
   }).join(" ")
   return (
     <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-12">
-      <polyline points={pts} fill="none" stroke="#3b82f6" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+      <polyline points={pts} fill="none" stroke="var(--chart-2)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )
 }
@@ -1251,9 +1251,9 @@ function MTDChartWidget({ daily }: { daily: DailyMetric[] }) {
               name === "ROAS" ? [Number(value).toFixed(2)+"x", name] : [fmt$(Number(value)), name]}
             labelFormatter={l => fmtDay(l)} />
           <Legend wrapperStyle={{ fontSize: 12 }} />
-          <Bar  yAxisId="left"  dataKey="spend"   name="Spend"   fill="#3b82f6" opacity={0.85} radius={[2,2,0,0]} />
-          <Line yAxisId="right" type="monotone" dataKey="roas"    name="ROAS"    stroke="#8b5cf6" strokeWidth={2} dot={{ r: 3 }} />
-          <Line yAxisId="left"  type="monotone" dataKey="revenue" name="Revenue" stroke="#ec4899" strokeWidth={2} dot={{ r: 3 }} />
+          <Bar  yAxisId="left"  dataKey="spend"   name="Spend"   fill="var(--chart-2)" opacity={0.85} radius={[2,2,0,0]} />
+          <Line yAxisId="right" type="monotone" dataKey="roas"    name="ROAS"    stroke="var(--chart-1)" strokeWidth={2} dot={{ r: 3 }} />
+          <Line yAxisId="left"  type="monotone" dataKey="revenue" name="Revenue" stroke="var(--rose)" strokeWidth={2} dot={{ r: 3 }} />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
@@ -1598,7 +1598,7 @@ function PacingWidget({ accountId }: { accountId: string }) {
             <path d={gaugeArc(p)} fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />
           )}
           <text x="80" y="62" textAnchor="middle" fontSize="20" fontWeight="bold" fill="currentColor">{p.toFixed(0)}%</text>
-          <text x="80" y="75" textAnchor="middle" fontSize="9" fill="#9ca3af">of budget</text>
+          <text x="80" y="75" textAnchor="middle" fontSize="9" fill="var(--chart-3)">of budget</text>
         </svg>
         <p className="text-xs text-muted-foreground -mt-1">
           {data.daysElapsed} of {data.daysInMonth} days elapsed

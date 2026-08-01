@@ -1537,7 +1537,7 @@ export default function AdsManagerPage() {
           `}</style>
           <Spreadsheet
             data={data}
-            darkMode={resolvedTheme === "dark"}
+            darkMode={resolvedTheme === "dark" || resolvedTheme === "dark-premium"}
             columnLabels={HEADERS}
             rowLabels={rowLabels}
             onChange={handleChange}

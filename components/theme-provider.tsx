@@ -12,6 +12,11 @@ function ThemeProvider({
       attribute="class"
       defaultTheme="system"
       themes={["light", "dark", "dark-premium"]}
+      value={{
+        light: "light",
+        dark: "dark",
+        "dark-premium": "dark dark-premium"
+      }}
       enableSystem
       disableTransitionOnChange
       {...props}

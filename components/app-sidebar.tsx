@@ -183,9 +183,12 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
     router.refresh()
   }
 
-  const changeTheme = (newTheme: "light" | "dark" | "dark-premium") => {
-    setTheme(newTheme)
-    updateSettings({ theme: newTheme })
+  const cycleTheme = () => {
+    const next = resolvedTheme === "light" ? "dark"
+      : resolvedTheme === "dark" ? "dark-premium"
+      : "light"
+    setTheme(next)
+    updateSettings({ theme: next })
   }
 
   const orgInitials = activeOrg?.name ? activeOrg.name.slice(0, 2).toUpperCase() : "AD"
@@ -380,14 +383,11 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
               <Link href="/settings"><IconSettings className="size-4" /> Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => changeTheme("light")} className={cn(resolvedTheme === "light" && "bg-accent text-accent-foreground font-medium")}>
-              <IconSun className="size-4" /> Light Mode
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => changeTheme("dark")} className={cn(resolvedTheme === "dark" && "bg-accent text-accent-foreground font-medium")}>
-              <IconMoon className="size-4" /> Classic Dark
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => changeTheme("dark-premium")} className={cn(resolvedTheme === "dark-premium" && "bg-accent text-accent-foreground font-medium")}>
-              <IconSparkles className="size-4 text-primary" /> Pro Max Dark
+            <DropdownMenuItem onClick={cycleTheme}>
+              {resolvedTheme === "light" && <IconSun className="size-4" />}
+              {resolvedTheme === "dark" && <IconMoon className="size-4" />}
+              {resolvedTheme === "dark-premium" && <IconSparkles className="size-4 text-primary" />}
+              {resolvedTheme === "light" ? "Light Mode" : resolvedTheme === "dark" ? "Classic Dark" : "Pro Max Dark"}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>

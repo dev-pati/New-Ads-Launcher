@@ -2184,7 +2184,7 @@ function AdManageAdsView() {
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} allowDecimals={false} />
                 <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
-                <Bar dataKey="count" name="Ads launched" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="count" name="Ads launched" fill="var(--chart-2)" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
