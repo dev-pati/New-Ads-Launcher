@@ -15,8 +15,12 @@ import {
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const requestedRedirect = searchParams.get("redirect")
+  const redirectTo = requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")
+    ? requestedRedirect
+    : "/projects"
   const otpRefs = useRef<Array<HTMLInputElement | null>>([])
-  const [email, setEmail] = useState("")
+  const [email, setEmail] = useState(() => searchParams.get("email") || "")
   const [otp, setOtp] = useState("")
   const [password, setPassword] = useState("")
   const [step, setStep] = useState<1 | 2>(1)
@@ -73,7 +77,7 @@ function LoginForm() {
       setLoading(false)
       return
     }
-    router.push("/projects")
+    router.push(redirectTo)
     router.refresh()
   }
 
@@ -92,7 +96,7 @@ function LoginForm() {
       setLoading(false)
       return
     }
-    router.push("/projects")
+    router.push(redirectTo)
     router.refresh()
   }
 
@@ -210,6 +214,11 @@ function LoginForm() {
             <p className="text-xs font-extrabold tracking-[.16em] text-[#176bff]">WELCOME BACK</p>
             <h1 className="mt-4 text-4xl font-extrabold tracking-[-.045em] text-[#13213d]">{usePassword ? "Sign in with password" : "Sign in to AdLauncher"}</h1>
             <p className="mt-3 text-[#66738b]">{usePassword ? "Enter your email and password." : "Use your work email. We’ll send a secure 6-digit code."}</p>
+            {searchParams.get("registered") === "1" && (
+              <div className="mt-5 flex items-center gap-2 rounded-xl bg-[#e9fbf5] px-4 py-3 text-sm font-bold text-[#16795f]">
+                <IconCheck className="size-4" /> Account created. Verify your email to continue.
+              </div>
+            )}
 
             <form onSubmit={usePassword ? handlePasswordLogin : handleSendOtp} className="mt-9">
               <label htmlFor="email" className="block text-xs font-extrabold tracking-[.1em] text-[#4c5a73]">WORK EMAIL</label>

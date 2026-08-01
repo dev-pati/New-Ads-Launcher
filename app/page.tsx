@@ -73,7 +73,7 @@ export default function LandingPage() {
                   <Link href="/auth/login">Sign In</Link>
                 </Button>
                 <Button size="sm" asChild>
-                  <Link href="/auth/register">Get Started</Link>
+                  <Link href="/auth/login">Get Started</Link>
                 </Button>
               </div>
             )}
@@ -134,7 +134,7 @@ export default function LandingPage() {
                 ) : (
                   <>
                     <Button size="lg" asChild className="gap-2 px-8">
-                      <Link href="/auth/register">
+                      <Link href="/auth/login">
                         Start Free
                         <IconArrowRight className="size-4" />
                       </Link>
@@ -270,7 +270,7 @@ export default function LandingPage() {
                 </Button>
               ) : (
                 <Button size="lg" variant="secondary" asChild className="gap-2 px-8">
-                  <Link href="/auth/register">
+                  <Link href="/auth/login">
                     Get Started Free
                     <IconArrowRight className="size-4" />
                   </Link>

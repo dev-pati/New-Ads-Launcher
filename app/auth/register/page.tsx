@@ -13,7 +13,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { IconRocket } from "@tabler/icons-react"
 import Image from "next/image"
 
 function RegisterForm() {
@@ -26,8 +25,6 @@ function RegisterForm() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -36,7 +33,7 @@ function RegisterForm() {
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, fullName, password: password || undefined, inviteToken }),
+      body: JSON.stringify({ email, fullName, password: password || undefined }),
     })
 
     if (!res.ok) {
@@ -46,16 +43,12 @@ function RegisterForm() {
       return
     }
 
-    if (inviteToken) {
-      try {
-        await fetch(`/api/invitations/accept?token=${inviteToken}`)
-      } catch {
-        // ignore - they can accept later
-      }
-    }
-
-    router.push("/projects")
-    router.refresh()
+    const params = new URLSearchParams({
+      registered: "1",
+      email: email.trim().toLowerCase(),
+    })
+    if (inviteToken) params.set("redirect", `/invite?token=${inviteToken}`)
+    router.push(`/auth/login?${params.toString()}`)
   }
 
   return (
@@ -70,9 +63,7 @@ function RegisterForm() {
           <CardHeader>
             <CardTitle>Create an account</CardTitle>
             <CardDescription>
-              {inviteToken
-                ? "Create an account to join the organization."
-                : "Register to start managing your Facebook ads."}
+              Create your account, then verify your email to sign in.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -125,7 +116,7 @@ function RegisterForm() {
             <p className="mt-4 text-center text-sm text-muted-foreground">
               Already have an account?{" "}
               <Link
-                href={inviteToken ? `/auth/login?redirect=/invite?token=${inviteToken}` : "/auth/login"}
+                href={inviteToken ? `/auth/login?redirect=${encodeURIComponent(`/invite?token=${inviteToken}`)}` : "/auth/login"}
                 className="text-primary underline-offset-4 hover:underline"
               >
                 Sign in
