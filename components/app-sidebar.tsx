@@ -28,6 +28,7 @@ import {
   IconCreditCard,
   IconSun,
   IconMoon,
+  IconSparkles,
   IconLogout,
 } from "@tabler/icons-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -182,8 +183,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
     router.refresh()
   }
 
-  const toggleTheme = () => {
-    const newTheme = resolvedTheme === "dark" ? "light" : "dark"
+  const changeTheme = (newTheme: "light" | "dark" | "dark-premium") => {
     setTheme(newTheme)
     updateSettings({ theme: newTheme })
   }
@@ -380,10 +380,16 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
               <Link href="/settings"><IconSettings className="size-4" /> Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={toggleTheme}>
-              {resolvedTheme === "dark" ? <IconSun className="size-4" /> : <IconMoon className="size-4" />}
-              {resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
+            <DropdownMenuItem onClick={() => changeTheme("light")} className={cn(resolvedTheme === "light" && "bg-accent text-accent-foreground font-medium")}>
+              <IconSun className="size-4" /> Light Mode
             </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => changeTheme("dark")} className={cn(resolvedTheme === "dark" && "bg-accent text-accent-foreground font-medium")}>
+              <IconMoon className="size-4" /> Classic Dark
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => changeTheme("dark-premium")} className={cn(resolvedTheme === "dark-premium" && "bg-accent text-accent-foreground font-medium")}>
+              <IconSparkles className="size-4 text-primary" /> Pro Max Dark
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               <IconLogout className="size-4" /> Log out
             </DropdownMenuItem>
