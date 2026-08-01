@@ -215,6 +215,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
-
-// Reference export so SUM_FIELDS is not flagged unused — it documents which metrics are sum-based.
-export const _SUM_FIELDS_DOC = SUM_FIELDS

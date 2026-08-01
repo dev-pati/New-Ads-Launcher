@@ -450,6 +450,7 @@ export interface Campaign {
   budget_remaining?: string
   spend_cap?: string
   bid_strategy?: string
+  special_ad_categories?: string[]
   start_time?: string
   stop_time?: string
   created_time: string

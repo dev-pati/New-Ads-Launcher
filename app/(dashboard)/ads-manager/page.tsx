@@ -106,6 +106,7 @@ interface Campaign {
   start_time?: string
   stop_time?: string
   bid_strategy?: string
+  special_ad_categories?: string[]
   /** Optional because the DB-snapshot fallback in the API route may not carry it. */
   created_time?: string
   insights?: { data: Insight[] }
