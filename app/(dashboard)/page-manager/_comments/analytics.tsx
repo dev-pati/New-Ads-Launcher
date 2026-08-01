@@ -82,7 +82,7 @@ export function CommentAnalyticsSection({ commentsData }: { commentsData: Commen
                     <XAxis dataKey="label" tick={{ fontSize: 9 }} />
                     <YAxis tick={{ fontSize: 9 }} domain={[0, 100]} />
                     <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(v) => [Number(v).toFixed(1), "Score"]} />
-                    <Line type="monotone" dataKey="score" name="Score" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="score" name="Score" stroke="var(--chart-2)" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
@@ -99,7 +99,7 @@ export function CommentAnalyticsSection({ commentsData }: { commentsData: Commen
                     <XAxis dataKey="label" tick={{ fontSize: 9 }} />
                     <YAxis tick={{ fontSize: 9 }} />
                     <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
-                    <Bar dataKey="count" name="Comments" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="count" name="Comments" fill="var(--chart-2)" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (

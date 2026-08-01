@@ -28,7 +28,7 @@ export const WavyBackground = ({
   [key: string]: any;
 }) => {
   const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
+  const isDark = resolvedTheme === "dark" || resolvedTheme === "dark-premium";
   const noise = createNoise3D();
   let w: number,
     h: number,

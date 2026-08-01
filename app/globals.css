@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+@custom-variant dark (&:is(.dark *, .dark-premium *));
 
 @theme inline {
     --font-heading: var(--font-manrope), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
@@ -127,6 +127,7 @@
    ============================================================ */
 
 .dark {
+    color-scheme: dark;
     --bg: #1f2127; --sidebar-surface: #191b20; --surface: #252730; --surface-2: #2a2c36; --inset: #1b1d23; --hover: #2c2e38;
     --line-soft: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.05); --line-str: rgba(255,255,255,.14);
     --text-1: #d8d9e3; --text-2: #9c9fa6; --text-3: #6b6d78;
@@ -143,6 +144,57 @@
     --primary-foreground: #FFFFFF;
 
     /* #93b0ff — 6.99:1 on --card (#252730), vs 2.98:1 for --brand-accent. See :root. */
+    --link: #93b0ff;
+
+    --background: var(--bg);
+    --foreground: var(--text-1);
+    --card: var(--surface);
+    --card-foreground: var(--text-1);
+    --popover: var(--surface);
+    --popover-foreground: var(--text-1);
+
+    --secondary: var(--surface-2);
+    --secondary-foreground: var(--text-1);
+
+    --muted: var(--inset);
+    --muted-foreground: var(--text-2);
+
+    --accent: var(--accent-soft);
+    --accent-foreground: var(--brand-accent);
+
+    --destructive: var(--rose);
+
+    --border: var(--line-soft);
+    --input: var(--line-str);
+    --ring: var(--brand-accent);
+
+    --sidebar: var(--sidebar-surface);
+    --sidebar-foreground: var(--text-1);
+    --sidebar-primary: var(--brand-accent);
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: var(--accent-soft);
+    --sidebar-accent-foreground: var(--text-1);
+    --sidebar-border: var(--line-soft);
+    --sidebar-ring: var(--brand-accent);
+}
+
+/* Theme option 3: "Pro Max" premium dark */
+.dark-premium {
+    color-scheme: dark;
+    --bg: #0c0c0c; --sidebar-surface: #0a0a0a; --surface: #121212; --surface-2: #1e1e1e; --inset: #0a0a0a; --hover: #1e1e1e;
+    --line-soft: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.05); --line-str: rgba(255,255,255,.14);
+    --text-1: #ededed; --text-2: #a1a1aa; --text-3: #71717a;
+    --violet: #5e6ad2; --violet-2: #6c77dc; --blue: #5e6ad2; --cyan: #05c3fb; --gray-line: #cbd2e0;
+    --brand-accent: #5e6ad2; --accent-soft: rgba(94,106,210,.16); --accent-line: rgba(94,106,210,.4);
+    --grad: linear-gradient(135deg,#5e6ad2,#6c77dc);
+    --grad-soft: linear-gradient(135deg,rgba(94,106,210,.2),rgba(5,195,251,.12));
+    --emerald: #3fbfb7; --amber: #f0aa2b; --rose: #fb6f63;
+    --sh: 0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.05);
+    --sh-md: 0 4px 6px -1px rgba(0,0,0,.5), 0 2px 4px -1px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.05);
+    --glow: 0 0 20px rgba(94,106,210,.25);
+
+    --primary: var(--brand-accent);
+    --primary-foreground: #FFFFFF;
     --link: #93b0ff;
 
     --background: var(--bg);

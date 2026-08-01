@@ -30,12 +30,12 @@ const fmtDay = (s: string) => {
 }
 const fmtPct = (v: number) => v.toFixed(2) + "%"
 
-const ACCOUNT_COLORS = ["#3b82f6","#06b6d4","#8b5cf6","#ec4899","#f59e0b","#10b981","#ef4444","#84cc16"]
+const ACCOUNT_COLORS = ["var(--chart-2)","var(--chart-4)","var(--chart-1)","var(--rose)","var(--amber)","var(--emerald)","var(--destructive)","var(--emerald)"]
 const AGE_COLORS: Record<string, string> = {
-  "13-17": "#60a5fa", "18-24": "#06b6d4", "25-34": "#f59e0b", "35-44": "#f97316",
-  "45-54": "#06b6d4", "55-64": "#8b5cf6", "65+": "#9ca3af", "Unknown": "#6366f1",
+  "13-17": "var(--chart-2)", "18-24": "var(--chart-4)", "25-34": "var(--amber)", "35-44": "var(--amber)",
+  "45-54": "var(--chart-4)", "55-64": "var(--chart-1)", "65+": "var(--chart-3)", "Unknown": "var(--chart-1)",
 }
-const GENDER_COLORS: Record<string, string> = { "Male": "#3b82f6", "Female": "#ec4899", "Unknown": "#9ca3af" }
+const GENDER_COLORS: Record<string, string> = { "Male": "var(--chart-2)", "Female": "var(--rose)", "Unknown": "var(--chart-3)" }
 
 const DATE_PRESETS = [
   { label: "Last 7 days",  value: "last_7d" },
@@ -360,7 +360,7 @@ export function SpendView() {
     setExpanded(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
   }
 
-  const CAMP_COLORS = ["#3b82f6","#f97316","#10b981","#8b5cf6","#ec4899"]
+  const CAMP_COLORS = ["var(--chart-2)","var(--amber)","var(--emerald)","var(--chart-1)","var(--rose)"]
 
   const handleExport = () => {
     const rows: (string | number)[][] = [
@@ -751,7 +751,7 @@ export function DemographicView() {
                   <Pie data={gender} cx={85} cy={85} innerRadius={50} outerRadius={80}
                     dataKey="spend" nameKey="label" paddingAngle={2}>
                     {gender.map((g: any) => (
-                      <Cell key={g.label} fill={GENDER_COLORS[g.label] || "#9ca3af"} />
+                      <Cell key={g.label} fill={GENDER_COLORS[g.label] || "var(--chart-3)"} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v: any) => fmt$(v)} />
@@ -762,7 +762,7 @@ export function DemographicView() {
                     const pct   = total > 0 ? ((g.spend / total) * 100).toFixed(1) : "0"
                     return (
                       <div key={g.label} className="flex items-center gap-2">
-                        <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: GENDER_COLORS[g.label] || "#9ca3af" }} />
+                        <span className="size-3 rounded-full shrink-0" style={{ backgroundColor: GENDER_COLORS[g.label] || "var(--chart-3)" }} />
                         <span className="text-sm font-medium">{pct}%</span>
                         <span className="text-xs text-muted-foreground">{g.label}</span>
                       </div>
@@ -783,7 +783,7 @@ export function DemographicView() {
                   <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(v: any) => fmt$(v)} />
                   <Bar dataKey="spend" name="Spend" radius={[2,2,0,0]}>
                     {age.map((a: any) => (
-                      <Cell key={a.label} fill={AGE_COLORS[a.label] || "#6366f1"} />
+                      <Cell key={a.label} fill={AGE_COLORS[a.label] || "var(--chart-1)"} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -802,7 +802,7 @@ export function DemographicView() {
                   <Pie data={age} cx={95} cy={95} innerRadius={55} outerRadius={90}
                     dataKey="spend" nameKey="label" paddingAngle={2}>
                     {age.map((a: any) => (
-                      <Cell key={a.label} fill={AGE_COLORS[a.label] || "#6366f1"} />
+                      <Cell key={a.label} fill={AGE_COLORS[a.label] || "var(--chart-1)"} />
                     ))}
                   </Pie>
                   <Tooltip formatter={(v: any) => fmt$(v)} />
@@ -813,7 +813,7 @@ export function DemographicView() {
                     const pct   = total > 0 ? ((a.spend / total) * 100).toFixed(1) : "0"
                     return (
                       <div key={a.label} className="flex items-center gap-2">
-                        <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: AGE_COLORS[a.label] || "#6366f1" }} />
+                        <span className="size-2.5 rounded-full shrink-0" style={{ backgroundColor: AGE_COLORS[a.label] || "var(--chart-1)" }} />
                         <span className="text-xs text-muted-foreground w-12">{a.label}</span>
                         <span className="text-xs font-medium">{pct}%</span>
                       </div>
@@ -852,7 +852,7 @@ export function DemographicView() {
                   <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }}
                     formatter={(v: any) => segmentMetric === "ctr" ? fmtPct(v) : fmt$(v)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey={segmentMetric} name={metricLabel[segmentMetric]} fill="#8b5cf6" radius={[2,2,0,0]} />
+                  <Bar dataKey={segmentMetric} name={metricLabel[segmentMetric]} fill="var(--chart-1)" radius={[2,2,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -912,8 +912,8 @@ export function DemographicView() {
                   <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }}
                     formatter={(v: any, name: any) => name === "Impressions" ? fmtK(v) : fmt$(v)} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar   yAxisId="left"  dataKey="spend"       name="Spend"       fill="#8b5cf6" radius={[2,2,0,0]} />
-                  <Line  yAxisId="right" dataKey="impressions" name="Impressions" stroke="#10b981" strokeWidth={2} dot={false} />
+                  <Bar   yAxisId="left"  dataKey="spend"       name="Spend"       fill="var(--chart-1)" radius={[2,2,0,0]} />
+                  <Line  yAxisId="right" dataKey="impressions" name="Impressions" stroke="var(--emerald)" strokeWidth={2} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -973,7 +973,7 @@ export function DemographicView() {
 
 // ─── COUNTRY ──────────────────────────────────────────────────────────────────
 
-const COUNTRY_COLORS = ["#3b82f6","#06b6d4","#8b5cf6","#ec4899","#f59e0b","#10b981","#ef4444","#84cc16","#f97316","#6366f1"]
+const COUNTRY_COLORS = ["var(--chart-2)","var(--chart-4)","var(--chart-1)","var(--rose)","var(--amber)","var(--emerald)","var(--destructive)","var(--emerald)","var(--amber)","var(--chart-1)"]
 
 export function CountryView() {
   const { selectedAccountId: accountId, adAccounts } = useAdAccount()
@@ -1207,7 +1207,7 @@ export function CountryView() {
                   <YAxis type="category" dataKey="code" tick={{ fontSize: 10 }} width={30} />
                   <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }}
                     formatter={(v: any) => chartMetric === "ctr" ? fmtPct(v) : chartMetric === "spend" || chartMetric === "cpm" || chartMetric === "cpc" ? fmt$(v) : fmtK(v)} />
-                  <Bar dataKey={chartMetric} fill="#3b82f6" radius={[0,2,2,0]}>
+                  <Bar dataKey={chartMetric} fill="var(--chart-2)" radius={[0,2,2,0]}>
                     {top10.map((_: any, i: number) => (
                       <Cell key={i} fill={COUNTRY_COLORS[i % COUNTRY_COLORS.length]} />
                     ))}
@@ -1680,10 +1680,10 @@ export function AdHistoryView() {
 // ─── PLACEMENTS ───────────────────────────────────────────────────────────────
 
 const PLATFORM_COLORS: Record<string, string> = {
-  Facebook: "#3b82f6",
-  Instagram: "#ec4899",
-  "Audience Network": "#f59e0b",
-  Messenger: "#06b6d4",
+  Facebook: "var(--chart-2)",
+  Instagram: "var(--rose)",
+  "Audience Network": "var(--amber)",
+  Messenger: "var(--chart-4)",
 }
 
 function platformColor(name: string) {
@@ -2045,18 +2045,18 @@ export function PlacementsView() {
 // ─── DEVICE ───────────────────────────────────────────────────────────────────
 
 const DEVICE_COLORS: Record<string, string> = {
-  "Desktop":            "#3b82f6",
-  "Mobile App":         "#10b981",
-  "Mobile Web":         "#f59e0b",
-  "Tablet":             "#8b5cf6",
-  "Connected TV":       "#ec4899",
-  "Unknown":            "#9ca3af",
-  "iPhone":             "#1d4ed8",
-  "iPad":               "#7c3aed",
-  "iPod":               "#6366f1",
-  "Android Smartphone": "#16a34a",
-  "Android Tablet":     "#ca8a04",
-  "Other":              "#64748b",
+  "Desktop":            "var(--chart-2)",
+  "Mobile App":         "var(--emerald)",
+  "Mobile Web":         "var(--amber)",
+  "Tablet":             "var(--chart-1)",
+  "Connected TV":       "var(--rose)",
+  "Unknown":            "var(--chart-3)",
+  "iPhone":             "var(--chart-2)",
+  "iPad":               "var(--chart-1)",
+  "iPod":               "var(--chart-1)",
+  "Android Smartphone": "var(--emerald)",
+  "Android Tablet":     "var(--amber)",
+  "Other":              "var(--chart-3)",
 }
 
 function DeviceIconEl({ type, className = "size-3.5 text-muted-foreground" }: { type: string; className?: string }) {
@@ -2316,7 +2316,7 @@ export function DeviceView() {
 
 // ─── REACH ────────────────────────────────────────────────────────────────────
 
-const FREQ_COLOR = (f: number) => f < 2 ? "#10b981" : f < 4 ? "#f59e0b" : "#ef4444"
+const FREQ_COLOR = (f: number) => f < 2 ? "var(--emerald)" : f < 4 ? "var(--amber)" : "var(--destructive)"
 const FREQ_LABEL = (f: number) => f < 2 ? "Good" : f < 4 ? "Watch" : "High"
 
 export function ReachView() {
@@ -2437,9 +2437,9 @@ export function ReachView() {
                   <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }}
                     formatter={(v: any, name: any) => [name === "Frequency" ? Number(v).toFixed(2) + "x" : fmtK(v), name]} />
                   <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} />
-                  <Bar  yAxisId="left"  dataKey="reach"       name="Reach"       fill="#3b82f6" fillOpacity={0.85} radius={[2,2,0,0]} />
-                  <Bar  yAxisId="left"  dataKey="impressions" name="Impressions" fill="#06b6d4" fillOpacity={0.5}  radius={[2,2,0,0]} />
-                  <Line yAxisId="right" type="monotone" dataKey="frequency" name="Frequency" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} />
+                  <Bar  yAxisId="left"  dataKey="reach"       name="Reach"       fill="var(--chart-2)" fillOpacity={0.85} radius={[2,2,0,0]} />
+                  <Bar  yAxisId="left"  dataKey="impressions" name="Impressions" fill="var(--chart-4)" fillOpacity={0.5}  radius={[2,2,0,0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="frequency" name="Frequency" stroke="var(--amber)" strokeWidth={2.5} dot={{ r: 3 }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -2452,8 +2452,8 @@ export function ReachView() {
                 <AreaChart data={months} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="reachGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.03} />
+                      <stop offset="5%"  stopColor="var(--chart-2)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--chart-2)" stopOpacity={0.03} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} />
@@ -2461,7 +2461,7 @@ export function ReachView() {
                   <YAxis tick={{ fontSize: 9 }} tickFormatter={v => fmtK(v)} />
                   <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(v: any) => [fmtK(v), "Cumulative Reach"]} />
                   <Area type="monotone" dataKey="cumulativeReach" name="Cumulative Reach"
-                    stroke="#3b82f6" strokeWidth={2.5} fill="url(#reachGrad)" />
+                    stroke="var(--chart-2)" strokeWidth={2.5} fill="url(#reachGrad)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -2679,9 +2679,9 @@ function HookRateAnalysisSection({ videoAds }: { videoAds: any[] }) {
 // ─── CREATIVE AUDIT ───────────────────────────────────────────────────────────
 
 const FORMAT_COLORS: Record<string, string> = {
-  Video:    "#3b82f6",
-  Image:    "#10b981",
-  Carousel: "#8b5cf6",
+  Video:    "var(--chart-2)",
+  Image:    "var(--emerald)",
+  Carousel: "var(--chart-1)",
 }
 
 const CTA_LABELS: Record<string, string> = {
@@ -2816,7 +2816,7 @@ export function CreativeAuditView() {
                 <ResponsiveContainer width={120} height={120}>
                   <PieChart>
                     <Pie data={formats} cx="50%" cy="50%" innerRadius={32} outerRadius={56} paddingAngle={2} dataKey="spend">
-                      {formats.map((f: any) => <Cell key={f.format} fill={FORMAT_COLORS[f.format] || "#64748b"} />)}
+                      {formats.map((f: any) => <Cell key={f.format} fill={FORMAT_COLORS[f.format] || "var(--chart-3)"} />)}
                     </Pie>
                     <Tooltip contentStyle={{ fontSize: 10, borderRadius: 6 }} formatter={(v: any) => fmt$(v)} />
                   </PieChart>
@@ -2826,14 +2826,14 @@ export function CreativeAuditView() {
                     <div key={f.format} className="space-y-0.5">
                       <div className="flex items-center justify-between text-xs">
                         <span className="flex items-center gap-1.5">
-                          <span className="size-2 rounded-sm shrink-0" style={{ backgroundColor: FORMAT_COLORS[f.format] || "#64748b" }} />
+                          <span className="size-2 rounded-sm shrink-0" style={{ backgroundColor: FORMAT_COLORS[f.format] || "var(--chart-3)" }} />
                           <span className="font-medium">{f.format}</span>
                         </span>
                         <span className="text-muted-foreground">{totalFormatSpend > 0 ? ((f.spend / totalFormatSpend) * 100).toFixed(0) + "%" : "0%"} · {fmt$(f.spend, 0)}</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-muted/40 overflow-hidden">
                         <div className="h-full rounded-full transition-all"
-                          style={{ width: `${totalFormatSpend > 0 ? (f.spend / totalFormatSpend) * 100 : 0}%`, backgroundColor: FORMAT_COLORS[f.format] || "#64748b" }} />
+                          style={{ width: `${totalFormatSpend > 0 ? (f.spend / totalFormatSpend) * 100 : 0}%`, backgroundColor: FORMAT_COLORS[f.format] || "var(--chart-3)" }} />
                       </div>
                     </div>
                   ))}
@@ -2851,7 +2851,7 @@ export function CreativeAuditView() {
                       tickFormatter={(v: string) => CTA_LABELS[v] || v.replace(/_/g, " ").slice(0, 12)} />
                     <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} formatter={(v: any) => fmt$(v)}
                       labelFormatter={(v: any) => CTA_LABELS[v] || String(v).replace(/_/g, " ")} />
-                    <Bar dataKey="spend" fill="#3b82f6" radius={[0, 3, 3, 0]} />
+                    <Bar dataKey="spend" fill="var(--chart-2)" radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : <p className="text-xs text-muted-foreground/50 text-center py-8">No CTA data available</p>}
@@ -2875,7 +2875,7 @@ export function CreativeAuditView() {
                       <div className="absolute top-1.5 left-1.5 flex gap-1">
                         <span className="text-xs font-bold bg-black/60 text-white px-1.5 py-0.5 rounded-full">#{i + 1}</span>
                         <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full"
-                          style={{ backgroundColor: (FORMAT_COLORS[ad.format] || "#64748b") + "CC", color: "#fff" }}>{ad.format}</span>
+                          style={{ backgroundColor: (FORMAT_COLORS[ad.format] || "var(--chart-3)") + "CC", color: "#fff" }}>{ad.format}</span>
                       </div>
                     </div>
                     <div className="p-2 space-y-1">
@@ -3039,8 +3039,8 @@ export function UploadStatsView() {
   const s                  = data?.summary        || {}
   const totalMediaAds      = (s.totalVideoAds || 0) + (s.totalImageAds || 0)
   const mediaData = [
-    { name: "Video", value: s.totalVideoAds || 0, color: "#3b82f6" },
-    { name: "Image", value: s.totalImageAds || 0, color: "#10b981" },
+    { name: "Video", value: s.totalVideoAds || 0, color: "var(--chart-2)" },
+    { name: "Image", value: s.totalImageAds || 0, color: "var(--emerald)" },
   ].filter(d => d.value > 0)
 
   const filteredBatches = batches.filter((b: any) =>
@@ -3085,8 +3085,8 @@ export function UploadStatsView() {
                   <YAxis tick={{ fontSize: 9 }} />
                   <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
                   <Legend iconSize={8} wrapperStyle={{ fontSize: 10 }} />
-                  <Bar dataKey="ads"     name="Ads Launched" fill="#3b82f6" radius={[3,3,0,0]} />
-                  <Bar dataKey="batches" name="Batches"      fill="#8b5cf6" radius={[3,3,0,0]} />
+                  <Bar dataKey="ads"     name="Ads Launched" fill="var(--chart-2)" radius={[3,3,0,0]} />
+                  <Bar dataKey="batches" name="Batches"      fill="var(--chart-1)" radius={[3,3,0,0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -3436,8 +3436,8 @@ export function PageInsightsView() {
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: any, name: any) => [fmtK(Number(v)), name]} labelFormatter={(s: any) => fmtDay(String(s))} />
                   <Legend />
-                  <Bar dataKey="reach"       name="Reach"       fill="#3b82f6" radius={[3,3,0,0]} />
-                  <Bar dataKey="impressions" name="Impressions" fill="#8b5cf6" radius={[3,3,0,0]} />
+                  <Bar dataKey="reach"       name="Reach"       fill="var(--chart-2)" radius={[3,3,0,0]} />
+                  <Bar dataKey="impressions" name="Impressions" fill="var(--chart-1)" radius={[3,3,0,0]} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -3453,8 +3453,8 @@ export function PageInsightsView() {
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: any, name: any) => [fmtK(Number(v)), name]} labelFormatter={(s: any) => fmtDay(String(s))} />
                   <Legend />
-                  <Area dataKey="post_engagements" name="Post Engagements" fill="#10b981" stroke="#10b981" fillOpacity={0.3} />
-                  <Area dataKey="engaged_users"    name="Engaged Users"    fill="#f59e0b" stroke="#f59e0b" fillOpacity={0.3} />
+                  <Area dataKey="post_engagements" name="Post Engagements" fill="var(--emerald)" stroke="var(--emerald)" fillOpacity={0.3} />
+                  <Area dataKey="engaged_users"    name="Engaged Users"    fill="var(--amber)" stroke="var(--amber)" fillOpacity={0.3} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -3469,7 +3469,7 @@ export function PageInsightsView() {
                   <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={fmtDay} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={fmtK} domain={["auto","auto"]} />
                   <Tooltip formatter={(v: any) => [fmtK(Number(v)), "Total Fans"]} labelFormatter={(s: any) => fmtDay(String(s))} />
-                  <Area dataKey="fans" name="Total Fans" fill="#ec4899" stroke="#ec4899" fillOpacity={0.2} />
+                  <Area dataKey="fans" name="Total Fans" fill="var(--rose)" stroke="var(--rose)" fillOpacity={0.2} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
