@@ -14,6 +14,7 @@ import {
   IconArrowRight,
   IconCheck,
   IconPlayerPlay,
+  IconLogout,
 } from "@tabler/icons-react"
 import { WavyBackground } from "@/components/ui/wavy-background"
 import { CanvasText } from "@/components/ui/canvas-text"
@@ -30,6 +31,13 @@ export default function LandingPage() {
     }
     checkAuth()
   }, [])
+
+  async function handleLogout() {
+    const res = await fetch("/api/auth/logout", { method: "POST" })
+    if (!res.ok) return
+    setIsSignedIn(false)
+    router.refresh()
+  }
 
   return (
     <div className="min-h-svh bg-background">
@@ -49,10 +57,16 @@ export default function LandingPage() {
             {isSignedIn === null ? (
               <div className="h-9 w-24" />
             ) : isSignedIn ? (
-              <Button onClick={() => router.push("/launch")} size="sm">
-                <IconRocket className="size-4" />
-                Dashboard
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button onClick={() => router.push("/launch")} size="sm">
+                  <IconRocket className="size-4" />
+                  Dashboard
+                </Button>
+                <Button onClick={handleLogout} variant="ghost" size="sm">
+                  <IconLogout className="size-4" />
+                  Log out
+                </Button>
+              </div>
             ) : (
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" asChild>

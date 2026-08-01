@@ -24,9 +24,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: result.error }, { status: result.status ?? 500 })
     }
 
-    return NextResponse.json({ message: "OTP sent" })
-  } catch (err: any) {
+    const timings = result.timings
+    const response = NextResponse.json({ message: "OTP sent" })
+    if (timings) {
+      response.headers.set(
+        "Server-Timing",
+        `db;dur=${timings.databaseMs}, smtp;dur=${timings.emailMs}, total;dur=${timings.totalMs}`,
+      )
+      console.info("[login] OTP timing", timings)
+    }
+    return response
+  } catch (err: unknown) {
     console.error("[login] unexpected error:", err)
-    return NextResponse.json({ error: err?.message || "Login failed" }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Login failed" }, { status: 500 })
   }
 }
