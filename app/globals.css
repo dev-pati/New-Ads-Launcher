@@ -127,6 +127,7 @@
    ============================================================ */
 
 .dark {
+    color-scheme: dark;
     --bg: #1f2127; --sidebar-surface: #191b20; --surface: #252730; --surface-2: #2a2c36; --inset: #1b1d23; --hover: #2c2e38;
     --line-soft: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.05); --line-str: rgba(255,255,255,.14);
     --text-1: #d8d9e3; --text-2: #9c9fa6; --text-3: #6b6d78;
@@ -179,6 +180,7 @@
 
 /* Theme option 3: "Pro Max" premium dark */
 .dark-premium {
+    color-scheme: dark;
     --bg: #0c0c0c; --sidebar-surface: #0a0a0a; --surface: #121212; --surface-2: #1e1e1e; --inset: #0a0a0a; --hover: #1e1e1e;
     --line-soft: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.05); --line-str: rgba(255,255,255,.14);
     --text-1: #ededed; --text-2: #a1a1aa; --text-3: #71717a;
