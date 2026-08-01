@@ -32,6 +32,7 @@ interface Props {
   open: boolean
   onClose: () => void
   onSuccess?: () => void
+  initialState?: Partial<CampaignFormState>
 }
 
 interface CreateCampaignResponse {
@@ -149,7 +150,7 @@ function validateState(
     .find(issue => stepOrder.indexOf(issue.step) <= lastStep) || null
 }
 
-export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
+export function CreateCampaignModal({ open, onClose, onSuccess, initialState }: Props) {
   const [activeStep, setActiveStep] = useState<Step>("campaign")
   const [state, setState] = useState<CampaignFormState>(defaultCampaignState)
   const [isPublishing, setIsPublishing] = useState(false)
@@ -289,10 +290,29 @@ export function CreateCampaignModal({ open, onClose, onSuccess }: Props) {
 
   useEffect(() => {
     if (!open) return
+    setState({
+      ...defaultCampaignState,
+      ...initialState,
+      specialAdCategories: [...(initialState?.specialAdCategories || defaultCampaignState.specialAdCategories)],
+      locations: [...(initialState?.locations || defaultCampaignState.locations)],
+      customAudiences: [...(initialState?.customAudiences || defaultCampaignState.customAudiences)],
+      excludedCustomAudiences: [...(initialState?.excludedCustomAudiences || defaultCampaignState.excludedCustomAudiences)],
+      detailedTargeting: [...(initialState?.detailedTargeting || defaultCampaignState.detailedTargeting)],
+      publisherPlatforms: [...(initialState?.publisherPlatforms || defaultCampaignState.publisherPlatforms)],
+      creativeIds: [...(initialState?.creativeIds || defaultCampaignState.creativeIds)],
+      selectedCreatives: [...(initialState?.selectedCreatives || defaultCampaignState.selectedCreatives)],
+      primaryTextVariations: [...(initialState?.primaryTextVariations || defaultCampaignState.primaryTextVariations)],
+      headlineVariations: [...(initialState?.headlineVariations || defaultCampaignState.headlineVariations)],
+      descriptionVariations: [...(initialState?.descriptionVariations || defaultCampaignState.descriptionVariations)],
+    })
+    setActiveStep("campaign")
     setFormError("")
     setMediaUploadError("")
     setCreatedIds(null)
-  }, [open])
+    setPublishStatus("idle")
+    setPublishMessage("")
+    setShowValidation(false)
+  }, [initialState, open])
 
   useEffect(() => {
     if (!open) return

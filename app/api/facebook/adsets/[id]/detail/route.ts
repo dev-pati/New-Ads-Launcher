@@ -24,9 +24,9 @@ export async function GET(
       "daily_budget", "lifetime_budget",
       "start_time", "end_time",
       "pacing_type",
-      "optimization_goal", "billing_event", "bid_strategy",
-      "destination_type", "attribution_spec",
-      "targeting{geo_locations,age_min,age_max,genders,custom_audiences,excluded_custom_audiences}",
+      "optimization_goal", "billing_event", "bid_strategy", "bid_amount",
+      "destination_type", "attribution_spec", "promoted_object{pixel_id,custom_event_type}",
+      "targeting{geo_locations,age_min,age_max,genders,custom_audiences,excluded_custom_audiences,flexible_spec,targeting_optimization,publisher_platforms,device_platforms,facebook_positions,instagram_positions,audience_network_positions,messenger_positions}",
       "campaign_id",
       "ads.summary(true){id}",
     ].join(",")

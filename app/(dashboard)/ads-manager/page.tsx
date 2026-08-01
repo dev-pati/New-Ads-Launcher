@@ -22,11 +22,19 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { AdsDateRangePicker, getPresetRange } from "@/components/ads-manager/AdsDateRangePicker"
+import type { WorkspaceNode } from "@/components/ads-manager/UnifiedWorkspaceEditor"
+import type {
+  CampaignFormState,
+  CampaignObjective,
+  PerformanceGoal,
+  SpecialAdCategory,
+} from "@/components/ads-manager/create-flow/types"
 
 // Modals only render when opened — load their JS on demand instead of in the main bundle
 const PerformancePopup = dynamic(() => import("@/components/ads-manager/PerformancePopup").then(m => m.PerformancePopup), { ssr: false })
 const CreateCampaignModal = dynamic(() => import("@/components/ads-manager/create-flow/CreateCampaignModal").then(m => m.CreateCampaignModal), { ssr: false })
 const CustomizeColumnsModal = dynamic(() => import("@/components/ads-manager/CustomizeColumnsModal").then(m => m.CustomizeColumnsModal), { ssr: false })
+const EditAdSetDrawer = dynamic(() => import("@/components/ads-manager/EditAdSetDrawer").then(m => m.EditAdSetDrawer), { ssr: false })
 import { COLUMN_DEFS, COLUMN_MAP, DEFAULT_PRESETS, ColumnPreset, CustomMetricConfig, getActivePreset, toColumnDef } from "@/lib/column-config"
 import { evalCustomMetric } from "@/lib/custom-metric-eval"
 import { BreakdownDropdown } from "@/components/ads-manager/BreakdownDropdown"
@@ -650,6 +658,7 @@ function AdsManagerContent() {
   const [defaultsOpen, setDefaultsOpen] = useState(false)
   const [defaultPrimaryText, setDefaultPrimaryText] = useState("")
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [createInitialState, setCreateInitialState] = useState<Partial<CampaignFormState> | undefined>()
   const [defaultHeadline, setDefaultHeadline] = useState("")
   const [defaultCta, setDefaultCta] = useState("SHOP_NOW")
   const [defaultLink, setDefaultLink] = useState("")
@@ -665,7 +674,17 @@ function AdsManagerContent() {
   const [breakdowns,        setBreakdowns]        = useState<string[]>([])
   const [breakdownRows,     setBreakdownRows]     = useState<BreakdownRow[]>([])
   const [breakdownError,    setBreakdownError]    = useState("")
-  const [performancePopup, setPerformancePopup] = useState<{ mode: "charts" | "compare"; rows: ReportRow[] } | null>(null)
+  const [performancePopup, setPerformancePopup] = useState<{
+    mode: "charts" | "compare"
+    rows: ReportRow[]
+    initialView?: "charts" | "edit" | "review" | "history"
+  } | null>(null)
+  const [workspaceAccess, setWorkspaceAccess] = useState({
+    loaded: false,
+    enabled: false,
+    canMutate: false,
+    role: "",
+  })
 
   // Launch → Ads Manager connection: ?batch=<id> prefilters ads to that launch's created ads.
   const searchParams = useSearchParams()
@@ -736,9 +755,88 @@ function AdsManagerContent() {
     setPerformancePopup({ mode: "compare", rows })
   }
   const openCharts = (clicked: { id: string; name: string }) =>
-    setPerformancePopup({ mode: "charts", rows: [toReportRow(clicked)] })
+    setPerformancePopup({ mode: "charts", rows: [toReportRow(clicked)], initialView: "charts" })
+  const openWorkspaceEditor = (clicked: { id: string; name: string }) => {
+    if (workspaceAccess.enabled) {
+      setPerformancePopup({ mode: "charts", rows: [toReportRow(clicked)], initialView: "edit" })
+      return
+    }
+    const node = campaigns.find(item => item.id === clicked.id)
+      || adSets.find(item => item.id === clicked.id)
+      || ads.find(item => item.id === clicked.id)
+      || null
+    setEditingNode(node)
+  }
+
+  const openReplacementCreate = (node: WorkspaceNode, nodeLevel: Level) => {
+    const campaign = campaigns.find(item => item.id === (nodeLevel === "campaign" ? node.id : node.campaign_id))
+    const targeting = node.targeting
+    const gender = targeting?.genders?.includes(1) && !targeting.genders.includes(2)
+      ? "MALE"
+      : targeting?.genders?.includes(2) && !targeting.genders.includes(1)
+        ? "FEMALE"
+        : "ALL"
+    const objective = (node.objective || campaign?.objective || "OUTCOME_SALES") as CampaignObjective
+    const performanceGoal = (node.optimization_goal || "OFFSITE_CONVERSIONS") as PerformanceGoal
+    const specialAdCategories = (
+      node.special_ad_categories
+      || campaign?.special_ad_categories
+      || []
+    ) as SpecialAdCategory[]
+    const dailyBudget = node.daily_budget && Number.isFinite(Number(node.daily_budget))
+      ? String(Number(node.daily_budget) / 100)
+      : undefined
+    const campaignBudget = campaign?.daily_budget && Number.isFinite(Number(campaign.daily_budget))
+      ? String(Number(campaign.daily_budget) / 100)
+      : undefined
+
+    setCreateInitialState({
+      campaignName: `${campaign?.name || node.name} — replacement`,
+      objective,
+      specialAdCategories,
+      advantageCampaignBudget: Boolean(campaign?.daily_budget || campaign?.lifetime_budget),
+      campaignBudget,
+      adSetName: nodeLevel === "adset" ? `${node.name} — replacement` : "New Ad Set",
+      conversionLocation: "website",
+      performanceGoal,
+      pixelId: node.promoted_object?.pixel_id || "",
+      conversionEvent: (node.promoted_object?.custom_event_type || "PURCHASE") as CampaignFormState["conversionEvent"],
+      dailyBudget,
+      scheduleStart: node.start_time?.slice(0, 16) || "",
+      scheduleEnd: (node.end_time || node.stop_time)?.slice(0, 16) || "",
+      locations: targeting?.geo_locations?.countries || ["US"],
+      ageMin: targeting?.age_min || 18,
+      ageMax: targeting?.age_max || 65,
+      gender,
+      customAudiences: targeting?.custom_audiences || [],
+      excludedCustomAudiences: targeting?.excluded_custom_audiences || [],
+      placementMode: targeting?.publisher_platforms?.length ? "manual" : "advantage",
+      publisherPlatforms: (targeting?.publisher_platforms || ["facebook", "instagram", "audience_network", "messenger"]) as CampaignFormState["publisherPlatforms"],
+    })
+    setPerformancePopup(null)
+    setCreateModalOpen(true)
+  }
 
   const DEFAULTS_KEY = `adsmanager_defaults_${selectedAccountId}`
+
+  useEffect(() => {
+    let cancelled = false
+    fetch("/api/ads-manager/workspace-access")
+      .then(response => response.ok ? response.json() : Promise.reject(new Error("Access check failed")))
+      .then(data => {
+        if (cancelled) return
+        setWorkspaceAccess({
+          loaded: true,
+          enabled: data.enabled === true,
+          canMutate: data.canMutate === true,
+          role: typeof data.role === "string" ? data.role : "",
+        })
+      })
+      .catch(() => {
+        if (!cancelled) setWorkspaceAccess(current => ({ ...current, loaded: true }))
+      })
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     if (!selectedAccountId) return
@@ -1183,8 +1281,8 @@ function AdsManagerContent() {
   // ─── Save Side Panel Edit ─────────────────────────────────────────────────────
   const saveSidePanelEdit = async (updatedNode: any) => {
     const updateList = (list: any[]) => list.map(x => x.id === updatedNode.id ? { ...x, ...updatedNode } : x)
-    if (tab === "campaigns") setCampaigns(updateList)
-    else if (tab === "adsets") setAdSets(updateList)
+    if (campaigns.some(item => item.id === updatedNode.id)) setCampaigns(updateList)
+    else if (adSets.some(item => item.id === updatedNode.id)) setAdSets(updateList)
     else setAds(updateList)
     setEditingNode(null)
 
@@ -1200,12 +1298,23 @@ function AdsManagerContent() {
           lifetime_budget: updatedNode.lifetime_budget ? parseInt(updatedNode.lifetime_budget) / 100 : undefined,
           start_time: updatedNode.start_time || undefined,
           end_time: updatedNode.end_time || undefined,
+          adAccountId: selectedAccountId,
+          optimization_goal: updatedNode.optimization_goal,
+          bid_amount: updatedNode.bid_amount ? parseInt(updatedNode.bid_amount) / 100 : undefined,
+          promoted_object: updatedNode.promoted_object,
+          attribution_spec: updatedNode.attribution_spec,
+          targeting: updatedNode.targeting,
+          advertiser: updatedNode.advertiser,
+          payer: updatedNode.payer,
         })
       })
       if (!r.ok) throw new Error("Failed to update")
+      setActionToast({ kind: "success", message: `Saved "${updatedNode.name}"` })
     } catch (err) {
       console.error(err)
       fetchMainData(true) // revert on fail
+      setActionToast({ kind: "error", message: "Failed to save changes" })
+      throw err
     }
   }
 
@@ -2205,7 +2314,18 @@ function AdsManagerContent() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
-      <CreateCampaignModal open={createModalOpen} onClose={() => setCreateModalOpen(false)} onSuccess={() => fetchMainData(true)} />
+      <CreateCampaignModal
+        open={createModalOpen}
+        initialState={createInitialState}
+        onClose={() => {
+          setCreateModalOpen(false)
+          setCreateInitialState(undefined)
+        }}
+        onSuccess={() => {
+          setCreateInitialState(undefined)
+          fetchMainData(true)
+        }}
+      />
 
       {/* ── Top bar ── */}
       <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
@@ -2397,7 +2517,10 @@ function AdsManagerContent() {
         </button>
         <button
           disabled={selectedIds.size === 0}
-          onClick={() => setEditingNode(currentData.find(x => x.id === Array.from(selectedIds)[0]) || null)}
+          onClick={() => {
+            const selected = currentData.find(x => x.id === Array.from(selectedIds)[0])
+            if (selected) openWorkspaceEditor(selected)
+          }}
           className="flex items-center gap-1.5 h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm disabled:opacity-40"
         >
           <IconPencil className="size-3.5" />
@@ -2703,7 +2826,7 @@ function AdsManagerContent() {
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(c.id); setInlineEditingName(c.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(c)}>Edit</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openWorkspaceEditor(c)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([c.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                                 <span className="text-[#ccd0d5]">·</span>
@@ -2754,7 +2877,7 @@ function AdsManagerContent() {
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openWorkspaceEditor(a)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                                 <span className="text-[#ccd0d5]">·</span>
@@ -2807,7 +2930,7 @@ function AdsManagerContent() {
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
-                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => setEditingNode(a)}>Edit</button>
+                                <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => openWorkspaceEditor(a)}>Edit</button>
                                 <span className="text-[#ccd0d5]">·</span>
                                 <button className="text-xs text-[#65676b] font-semibold hover:underline" onClick={() => { setSelectedIds(new Set([a.id])); setDuplicateDialogOpen(true) }}>Duplicate</button>
                                 <span className="text-[#ccd0d5]">·</span>
@@ -3106,12 +3229,28 @@ function AdsManagerContent() {
         onClose={() => setCustomizeColsOpen(false)}
       />
 
-      {/* ── Edit Side Panel ── */}
-      <Sheet open={!!editingNode} onOpenChange={(open) => !open && setEditingNode(null)}>
+      {/* ── Edit Ad Set Drawer ── */}
+      <EditAdSetDrawer
+        adSetId={tab === "adsets" && editingNode ? editingNode.id : null}
+        open={tab === "adsets" && !!editingNode}
+        onOpenChange={(open) => {
+          if (!open) setEditingNode(null)
+        }}
+        onSaved={() => {
+          setEditingNode(null)
+          fetchMainData(true)
+        }}
+        adAccountId={selectedAccountId ?? undefined}
+        currency={selectedAccount?.currency || "USD"}
+        timezoneName={selectedAccount?.timezone_name}
+      />
+
+      {/* ── Edit Side Panel (Campaign/Ad only) ── */}
+      <Sheet open={!!editingNode && tab !== "adsets"} onOpenChange={(open) => !open && setEditingNode(null)}>
         <SheetContent className="w-full sm:w-[480px] flex flex-col p-0 gap-0 overflow-hidden">
           <SheetHeader className="sr-only">
-            <SheetTitle>{tab === "campaigns" ? "Edit Campaign" : tab === "adsets" ? "Edit Ad Set" : "Edit Ad"}</SheetTitle>
-            <SheetDescription>Edit settings for this {tab === "campaigns" ? "campaign" : tab === "adsets" ? "ad set" : "ad"}.</SheetDescription>
+            <SheetTitle>{tab === "campaigns" ? "Edit Campaign" : "Edit Ad"}</SheetTitle>
+            <SheetDescription>Edit settings for this {tab === "campaigns" ? "campaign" : "ad"}.</SheetDescription>
           </SheetHeader>
           {editingNode && (() => {
             const node = editingNode as any
@@ -3427,6 +3566,9 @@ function AdsManagerContent() {
       {performancePopup && selectedAccountId && (
         <PerformancePopup
           mode={performancePopup.mode}
+          initialView={performancePopup.initialView}
+          unifiedWorkspace={workspaceAccess.enabled}
+          canMutate={workspaceAccess.canMutate}
           rows={performancePopup.rows}
           level={level}
           accountId={selectedAccountId}
@@ -3441,8 +3583,16 @@ function AdsManagerContent() {
           onDelete={(id: string) => { setSelectedIds(new Set([id])); setDeleteConfirmOpen(true) }}
           onEdit={(id: string) => {
             const node = campaigns.find(x => x.id === id) || adSets.find(x => x.id === id) || ads.find(x => x.id === id) || null
-            setEditingNode(node)
+            if (node) openWorkspaceEditor(node)
           }}
+          onSaveEdit={saveSidePanelEdit}
+          onCreate={() => {
+            setPerformancePopup(null)
+            setCreateInitialState(undefined)
+            setCreateModalOpen(true)
+          }}
+          onCreateReplacement={openReplacementCreate}
+          onPublished={() => fetchMainData(true)}
           onViewHistory={(_id: string) => { setHistoryOpen(true); fetchHistory() }}
           attributionWindows={attributionWindows}
         />

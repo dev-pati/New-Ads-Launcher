@@ -2363,6 +2363,117 @@ export async function setAdStatus(adId: string, accessToken: string, status: "AC
   }
 }
 
+export async function replaceAdCreative(
+  adAccountId: string,
+  adId: string,
+  accessToken: string,
+  params: {
+    name: string
+    status?: string
+    page_id: string
+    image_hash?: string
+    video_id?: string
+    thumbnail_url?: string
+    body: string
+    title: string
+    description?: string
+    cta: string
+    link_url: string
+    text_variations?: {
+      bodies: string[]
+      titles: string[]
+      descriptions: string[]
+    }
+  },
+  opts?: { isManual?: boolean }
+): Promise<{ creativeId: string }> {
+  const storySpec: Record<string, any> = {
+    page_id: params.page_id,
+    link_data: {
+      link: params.link_url,
+      message: params.body,
+      name: params.title,
+      description: params.description || "",
+      call_to_action: { type: params.cta, value: { link: params.link_url } },
+      ...(params.image_hash ? { image_hash: params.image_hash } : {}),
+    },
+  }
+  if (params.video_id) {
+    storySpec.video_data = {
+      video_id: params.video_id,
+      title: params.title,
+      message: params.body,
+      link_description: params.description || "",
+      call_to_action: { type: params.cta, value: { link: params.link_url } },
+      ...(params.thumbnail_url ? { image_url: params.thumbnail_url } : {}),
+    }
+    delete storySpec.link_data
+  }
+
+  const creative: Record<string, any> = { object_story_spec: storySpec }
+  const variations = params.text_variations
+  const bodies = Array.from(new Set([params.body, ...(variations?.bodies || [])].map(value => value.trim()).filter(Boolean))).slice(0, 5)
+  const titles = Array.from(new Set([params.title, ...(variations?.titles || [])].map(value => value.trim()).filter(Boolean))).slice(0, 5)
+  const descriptions = Array.from(new Set([params.description || "", ...(variations?.descriptions || [])].map(value => value.trim()).filter(Boolean))).slice(0, 5)
+  if (bodies.length > 1 || titles.length > 1 || descriptions.length > 1) {
+    creative.asset_feed_spec = {
+      bodies: bodies.map(text => ({ text })),
+      titles: titles.map(text => ({ text })),
+      descriptions: descriptions.map(text => ({ text })),
+      call_to_action_types: [params.cta],
+      link_urls: [{ website_url: params.link_url }],
+      ad_formats: [params.video_id ? "SINGLE_VIDEO" : "SINGLE_IMAGE"],
+      ...(params.video_id
+        ? { videos: [{ video_id: params.video_id, ...(params.thumbnail_url ? { thumbnail_url: params.thumbnail_url } : {}) }] }
+        : { images: [{ hash: params.image_hash }] }),
+    }
+    creative.degrees_of_freedom_spec = {
+      creative_features_spec: {
+        STANDARD_ENHANCEMENTS_CATALOG: { enroll_status: "OPT_OUT" },
+      },
+    }
+    delete storySpec.link_data
+    delete storySpec.video_data
+  }
+
+  const normalizedAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+  const createBody = new URLSearchParams({
+    name: `${params.name} creative`,
+    creative: JSON.stringify(creative),
+    access_token: accessToken,
+  })
+  const createResponse = await secureMetaFetch(
+    `${GRAPH_API_BASE}/${normalizedAccountId}/adcreatives`,
+    { method: "POST", body: createBody },
+    { skipProof: opts?.isManual }
+  )
+  const createData = await createResponse.json()
+  if (!createResponse.ok || createData?.error) {
+    const detail = createData?.error?.error_user_msg || createData?.error?.error_user_title || ""
+    throw new Error([createData?.error?.message || "Failed to create replacement creative", detail].filter(Boolean).join(" — "))
+  }
+
+  const creativeId = String(createData.id || "")
+  const reassignBody = new URLSearchParams({
+    creative: JSON.stringify({ creative_id: creativeId }),
+    name: params.name,
+    ...(params.status ? { status: params.status } : {}),
+    access_token: accessToken,
+  })
+  const reassignResponse = await secureMetaFetch(
+    `${GRAPH_API_BASE}/${adId}`,
+    { method: "POST", body: reassignBody },
+    { skipProof: opts?.isManual }
+  )
+  const reassignData = await reassignResponse.json()
+  if (!reassignResponse.ok || reassignData?.error) {
+    const detail = reassignData?.error?.error_user_msg || reassignData?.error?.error_user_title || ""
+    const reason = [reassignData?.error?.message || "Failed to assign replacement creative", detail].filter(Boolean).join(" — ")
+    throw new Error(`${reason}. New creative ${creativeId} was kept for retry.`)
+  }
+  return { creativeId }
+}
+
 // Campaign insights
 export async function getCampaignInsights(
   campaignId: string,
@@ -2391,7 +2502,23 @@ export async function updateNode(
     lifetime_budget?: number
     start_time?: string
     end_time?: string
-  }
+    // Ad set extended fields
+    optimization_goal?: string
+    bid_strategy?: string
+    bid_amount?: number
+    attribution_spec?: unknown
+    promoted_object?: unknown
+    targeting?: unknown
+    publisher_platforms?: string[]
+    device_platforms?: string[]
+    facebook_positions?: string[]
+    instagram_positions?: string[]
+    audience_network_positions?: string[]
+    messenger_positions?: string[]
+    advertiser?: { type: "page" | "business"; id: string } | null
+    payer?: { type: "page" | "business"; id: string } | null
+  },
+  opts?: { isManual?: boolean }
 ): Promise<{ success: boolean }> {
   const body = new URLSearchParams({ access_token: accessToken })
   if (params.name) body.set("name", params.name)
@@ -2400,8 +2527,26 @@ export async function updateNode(
   if (params.lifetime_budget !== undefined) body.set("lifetime_budget", String(Math.round(params.lifetime_budget * 100)))
   if (params.start_time) body.set("start_time", params.start_time)
   if (params.end_time) body.set("end_time", params.end_time)
+  if (params.optimization_goal) body.set("optimization_goal", params.optimization_goal)
+  if (params.bid_strategy) body.set("bid_strategy", params.bid_strategy)
+  if (params.bid_amount !== undefined) body.set("bid_amount", String(Math.round(params.bid_amount * 100)))
+  if (params.attribution_spec !== undefined) body.set("attribution_spec", JSON.stringify(params.attribution_spec))
+  if (params.promoted_object !== undefined) body.set("promoted_object", JSON.stringify(params.promoted_object))
+  if (params.targeting !== undefined) body.set("targeting", JSON.stringify(params.targeting))
+  if (params.publisher_platforms) body.set("publisher_platforms", JSON.stringify(params.publisher_platforms))
+  if (params.device_platforms) body.set("device_platforms", JSON.stringify(params.device_platforms))
+  if (params.facebook_positions) body.set("facebook_positions", JSON.stringify(params.facebook_positions))
+  if (params.instagram_positions) body.set("instagram_positions", JSON.stringify(params.instagram_positions))
+  if (params.audience_network_positions) body.set("audience_network_positions", JSON.stringify(params.audience_network_positions))
+  if (params.messenger_positions) body.set("messenger_positions", JSON.stringify(params.messenger_positions))
+  if (params.advertiser) body.set("advertiser", JSON.stringify(params.advertiser))
+  if (params.payer) body.set("payer", JSON.stringify(params.payer))
 
-  const res = await secureMetaFetch(`${GRAPH_API_BASE}/${nodeId}`, { method: "POST", body })
+  const res = await secureMetaFetch(
+    `${GRAPH_API_BASE}/${nodeId}`,
+    { method: "POST", body },
+    { skipProof: opts?.isManual }
+  )
   if (!res.ok) {
     const error = await res.json()
     const fb = error.error

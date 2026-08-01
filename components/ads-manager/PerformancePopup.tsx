@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   IconChevronDown, IconDownload, IconHistory, IconLoader2, IconPlus, IconCalendar,
-  IconSettings, IconX, IconDots, IconMessageCircle,
+  IconSettings, IconX, IconDots, IconMessageCircle, IconChartLine, IconPencil,
+  IconEye, IconLayoutSidebarLeftCollapse, IconListCheck,
 } from "@tabler/icons-react"
 import {
   Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/tooltip"
 import type { Level, ReportRow } from "./InsightDrawers"
 import { AdsDateRangePicker } from "./AdsDateRangePicker"
+import { UnifiedWorkspaceEditor, type WorkspaceNode } from "./UnifiedWorkspaceEditor"
 
 type Tab = "trends" | "breakdowns"
 
@@ -222,7 +224,8 @@ function NodeActionMenu({ level, id, onDuplicate, onDelete, onEdit, onViewHistor
 export function PerformancePopup({
   mode, level, accountId, rows, datePreset, since, until, onClose,
   campaigns, adSets, ads, onDuplicate, onDelete, onEdit, onViewHistory,
-  attributionWindows,
+  attributionWindows, initialView = "charts", onSaveEdit, onCreate,
+  onCreateReplacement, unifiedWorkspace = false, canMutate = false, onPublished,
 }: {
   mode: "charts" | "compare"
   level: Level
@@ -240,6 +243,13 @@ export function PerformancePopup({
   onEdit?: (id: string) => void
   onViewHistory?: (id: string) => void
   attributionWindows?: string[]
+  initialView?: "charts" | "edit" | "review" | "history"
+  onSaveEdit?: (node: WorkspaceNode) => Promise<void> | void
+  onCreate?: () => void
+  onCreateReplacement?: (node: WorkspaceNode, level: Level) => void
+  unifiedWorkspace?: boolean
+  canMutate?: boolean
+  onPublished?: () => void
 }) {
   const baseCapped = rows.slice(0, MAX_ROWS)
   const overCap = rows.length > MAX_ROWS
@@ -282,6 +292,11 @@ export function PerformancePopup({
   const [demoGender, setDemoGender] = useState<"all" | "male" | "female">("all")
   // Charts popup sub-page: main charts vs dedicated activity history
   const [chartsPage, setChartsPage] = useState<"charts" | "history">("charts")
+  const [workspaceView, setWorkspaceView] = useState<"charts" | "edit" | "review" | "history">(initialView)
+
+  useEffect(() => {
+    setWorkspaceView(initialView)
+  }, [initialView])
 
   // Data storage
   // Key: rowId + ":" + metric
@@ -309,6 +324,20 @@ export function PerformancePopup({
   const [localCampaigns, setLocalCampaigns] = useState<any[]>([])
   const [localAdSets, setLocalAdSets] = useState<any[]>([])
   const [localAds, setLocalAds] = useState<any[]>([])
+  const [workspaceDetails, setWorkspaceDetails] = useState<Record<string, WorkspaceNode>>({})
+  const [workspaceDetailLoading, setWorkspaceDetailLoading] = useState<Record<string, boolean>>({})
+  const [workspaceDetailErrors, setWorkspaceDetailErrors] = useState<Record<string, string>>({})
+  const [workspaceDetailRefresh, setWorkspaceDetailRefresh] = useState(0)
+  const [workspaceDrafts, setWorkspaceDrafts] = useState<Record<string, WorkspaceNode>>({})
+  const [workspacePublishResults, setWorkspacePublishResults] = useState<Array<{
+    id: string
+    level: Level
+    status: "published" | "failed" | "skipped"
+    message?: string
+  }>>([])
+  const [workspacePublishing, setWorkspacePublishing] = useState(false)
+  const [workspaceDiscardConfirm, setWorkspaceDiscardConfirm] = useState(false)
+  const workspaceDirty = Object.keys(workspaceDrafts).length > 0
   const historyRef = useRef<HTMLDivElement>(null)
 
   // bootstrapped hierarchy merged with parent arrays
@@ -351,6 +380,173 @@ export function PerformancePopup({
     setActiveNodeId(id)
     setActiveNodeLevel(lvl)
   }
+
+  const nodeLevelForId = (id: string): Level => {
+    if (allCampaigns.some(item => item.id === id)) return "campaign"
+    if (allAds.some(item => item.id === id)) return "ad"
+    return "adset"
+  }
+
+  const openWorkspaceEditor = (id: string, lvl?: Level) => {
+    selectNode(id, lvl || nodeLevelForId(id))
+    setWorkspaceView("edit")
+  }
+
+  const updateWorkspaceDraft = useCallback((node: WorkspaceNode, nodeLevel: Level) => {
+    setWorkspaceDrafts(current => ({ ...current, [`${nodeLevel}:${node.id}`]: node }))
+    setWorkspacePublishResults([])
+  }, [])
+
+  const requestWorkspaceClose = () => {
+    if (unifiedWorkspace && workspaceDirty) {
+      setWorkspaceDiscardConfirm(true)
+      return
+    }
+    onClose()
+  }
+
+  useEffect(() => {
+    if (!unifiedWorkspace || !workspaceDirty) return
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ""
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      const editing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT" || target?.isContentEditable
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault()
+        setWorkspaceView("review")
+      } else if (event.key === "Escape" && !editing) {
+        event.preventDefault()
+        setWorkspaceDiscardConfirm(true)
+      }
+    }
+    window.addEventListener("beforeunload", beforeUnload)
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload)
+      window.removeEventListener("keydown", onKeyDown)
+    }
+  }, [unifiedWorkspace, workspaceDirty])
+
+  const publishWorkspaceChanges = async () => {
+    const entries = Object.entries(workspaceDrafts)
+    if (!entries.length || workspacePublishing) return
+    setWorkspacePublishing(true)
+    try {
+      const response = await fetch("/api/ads-manager/workspace-publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adAccountId: accountId,
+          changes: entries.map(([key, node]) => ({
+            level: key.split(":")[0] as Level,
+            node,
+          })),
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Failed to publish workspace changes")
+      const results = Array.isArray(data.results) ? data.results : []
+      setWorkspacePublishResults(results)
+
+      const publishedKeys = new Set(
+        results
+          .filter((result: { status?: string }) => result.status === "published")
+          .map((result: { id: string; level: Level }) => `${result.level}:${result.id}`)
+      )
+      setWorkspaceDrafts(current => Object.fromEntries(
+        Object.entries(current).filter(([key]) => !publishedKeys.has(key))
+      ))
+      setWorkspaceDetails(current => Object.fromEntries(
+        Object.entries(current).filter(([key]) => !publishedKeys.has(key))
+      ))
+      onPublished?.()
+    } catch (error) {
+      setWorkspacePublishResults([{
+        id: workspaceDetailId,
+        level: effectiveLevel,
+        status: "failed",
+        message: error instanceof Error ? error.message : "Publish failed",
+      }])
+    } finally {
+      setWorkspacePublishing(false)
+    }
+  }
+
+  const workspaceDetailId = capped[0]?.id || ""
+  const workspaceDetailKey = `${effectiveLevel}:${workspaceDetailId}`
+  const structuralReplacement = useMemo(() => {
+    const entries = Object.entries(workspaceDrafts)
+    for (const [key, draft] of entries) {
+      const nodeLevel = key.split(":")[0] as Level
+      const original = workspaceDetails[key]
+      if (!original) continue
+      if (nodeLevel === "campaign") {
+        const beforeCategories = [...(original.special_ad_categories || [])].sort().join(",")
+        const afterCategories = [...(draft.special_ad_categories || [])].sort().join(",")
+        if (
+          draft.objective !== original.objective
+          || draft.buying_type !== original.buying_type
+          || afterCategories !== beforeCategories
+        ) return { draft, level: nodeLevel }
+      }
+      if (nodeLevel === "adset" && draft.conversion_location !== original.conversion_location) {
+        return { draft, level: nodeLevel }
+      }
+    }
+    return null
+  }, [workspaceDetails, workspaceDrafts])
+
+  useEffect(() => {
+    if (!unifiedWorkspace || workspaceView !== "edit" || !workspaceDetailId || isCompare) return
+    if (workspaceDetails[workspaceDetailKey] && workspaceDetailRefresh === 0) return
+
+    let cancelled = false
+    const load = async () => {
+      setWorkspaceDetailLoading(current => ({ ...current, [workspaceDetailKey]: true }))
+      setWorkspaceDetailErrors(current => ({ ...current, [workspaceDetailKey]: "" }))
+      try {
+        const url = effectiveLevel === "campaign"
+          ? `/api/facebook/campaigns/${workspaceDetailId}?ad_account_id=${encodeURIComponent(accountId)}`
+          : effectiveLevel === "adset"
+            ? `/api/facebook/adsets/${workspaceDetailId}/detail?ad_account_id=${encodeURIComponent(accountId)}`
+            : `/api/facebook/ad-detail?ad_id=${encodeURIComponent(workspaceDetailId)}&ad_account_id=${encodeURIComponent(accountId)}&date_preset=${encodeURIComponent(datePreset)}`
+        const response = await fetch(url)
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || "Failed to load fresh Meta details")
+        const detail = effectiveLevel === "campaign" ? data.campaign : effectiveLevel === "adset" ? data.adSet : data.ad
+        if (!detail?.id) throw new Error("Meta returned incomplete detail")
+        if (!cancelled) setWorkspaceDetails(current => ({ ...current, [workspaceDetailKey]: detail }))
+      } catch (error) {
+        if (!cancelled) {
+          setWorkspaceDetailErrors(current => ({
+            ...current,
+            [workspaceDetailKey]: error instanceof Error ? error.message : "Failed to load fresh Meta details",
+          }))
+        }
+      } finally {
+        if (!cancelled) {
+          setWorkspaceDetailLoading(current => ({ ...current, [workspaceDetailKey]: false }))
+          setWorkspaceDetailRefresh(0)
+        }
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [
+    accountId,
+    datePreset,
+    effectiveLevel,
+    isCompare,
+    unifiedWorkspace,
+    workspaceDetailId,
+    workspaceDetailKey,
+    workspaceDetailRefresh,
+    workspaceDetails,
+    workspaceView,
+  ])
 
   const qsBase = useMemo(() => {
     const p = new URLSearchParams({ adAccountId: accountId, level: effectiveLevel })
@@ -917,6 +1113,16 @@ export function PerformancePopup({
   const activeAd = allAds.find(a => a.id === activeId) || null
   const activeAdSet = allAdSets.find(a => a.id === activeId || a.id === activeAd?.adset_id) || null
   const activeCampaign = allCampaigns.find(c => c.id === activeId || c.id === activeAdSet?.campaign_id || c.id === activeAd?.campaign_id) || null
+  const selectedWorkspaceListNode = allCampaigns.find(item => item.id === activeId)
+    || allAdSets.find(item => item.id === activeId)
+    || allAds.find(item => item.id === activeId)
+    || null
+  const selectedWorkspaceNode = workspaceDrafts[`${activeNodeLevel}:${activeId}`]
+    || workspaceDetails[`${activeNodeLevel}:${activeId}`]
+    || selectedWorkspaceListNode
+  const effectiveWorkspaceView = unifiedWorkspace
+    ? workspaceView
+    : chartsPage === "history" ? "history" : "charts"
   const treeAdSets = activeCampaign ? allAdSets.filter(a => a.campaign_id === activeCampaign.id) : (activeAdSet ? [activeAdSet] : [])
   const treeAds = (adSetId: string) => allAds.filter(a => a.adset_id === adSetId)
   const spendTotal = totals.spend
@@ -925,6 +1131,7 @@ export function PerformancePopup({
     const lvlNorm: Level = lvl === "campaign" ? "campaign" : lvl === "ad" ? "ad" : "adset"
     selectNode(id, lvlNorm)
     setChartsPage("history")
+    setWorkspaceView("history")
   }
 
   return (
@@ -944,45 +1151,101 @@ export function PerformancePopup({
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-3 border-b shrink-0">
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">{chartsPage === "history" ? "Activity history" : "Charts"}</p>
-              <h2 className="font-semibold text-base truncate" title={headerTitle}>{headerTitle}</h2>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                {effectiveWorkspaceView === "charts" ? "Charts" : effectiveWorkspaceView === "edit" ? "Edit" : effectiveWorkspaceView === "review" ? "Review" : "Activity history"}
+              </p>
+              <h2 className="font-semibold text-base truncate" title={headerTitle}>
+                {effectiveWorkspaceView === "charts" ? headerTitle : (capped[0]?.name || headerTitle)}
+              </h2>
             </div>
-            <button onClick={onClose} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/50">
+            <button onClick={requestWorkspaceClose} className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-muted/50">
               <IconX className="size-4" />
             </button>
           </div>
 
           {/* Body */}
           <div className="flex-1 min-h-0 flex overflow-hidden">
+            {unifiedWorkspace && <nav className="w-14 shrink-0 border-r bg-[#1d2d35] px-2 py-3 flex flex-col items-center gap-2" aria-label="Workspace navigation">
+              {[
+                { view: "charts" as const, label: "Charts", icon: IconChartLine },
+                { view: "edit" as const, label: "Edit", icon: IconPencil },
+                { view: "review" as const, label: "Review", icon: IconListCheck },
+                { view: "history" as const, label: "History", icon: IconHistory },
+              ].map(item => (
+                <button
+                  key={item.view}
+                  type="button"
+                  onClick={() => {
+                    setWorkspaceView(item.view)
+                    if (item.view === "history") setChartsPage("history")
+                    if (item.view === "charts") setChartsPage("charts")
+                  }}
+                  className={cn(
+                    "grid size-9 place-items-center rounded-lg text-slate-300 transition-colors hover:bg-white/10 hover:text-white",
+                    workspaceView === item.view && "bg-white/15 text-white"
+                  )}
+                  aria-label={item.label}
+                  title={item.label}
+                >
+                  <item.icon className="size-4.5" />
+                </button>
+              ))}
+              <div className="flex-1" />
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(open => !open)}
+                className="grid size-9 place-items-center rounded-lg text-slate-300 hover:bg-white/10 hover:text-white"
+                aria-label="Toggle hierarchy"
+                title="Toggle hierarchy"
+              >
+                <IconLayoutSidebarLeftCollapse className="size-4.5" />
+              </button>
+            </nav>}
             {sidebarOpen && (
               <aside className="w-80 shrink-0 border-r bg-muted/20 overflow-y-auto p-3">
-                <div className="flex items-center gap-1 mb-3">
-                  <button onClick={() => setSidebarOpen(false)} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">Close</button>
-                  <button onClick={() => setChartsPage("charts")} className={cn("h-7 px-2 text-xs rounded-md border hover:bg-muted/50", chartsPage === "charts" && "bg-primary/10 text-primary border-primary/30")}>View charts</button>
-                  <button onClick={() => activeId && onEdit?.(activeId)} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">Edit</button>
-                  <button onClick={() => {
-                    if (activeId) seeHistoryLocal(activeId, String(activeNodeLevel))
-                    setChartsPage("history")
-                  }} className={cn("h-7 px-2 text-xs rounded-md border hover:bg-muted/50", chartsPage === "history" && "bg-primary/10 text-primary border-primary/30")}>See history</button>
-                </div>
+                {unifiedWorkspace ? (
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="relative flex-1">
+                      <input
+                        className="h-8 w-full rounded-md border bg-background px-2.5 text-xs"
+                        placeholder="Search hierarchy"
+                        aria-label="Search hierarchy"
+                      />
+                    </div>
+                    <button
+                      onClick={onCreate}
+                      disabled={!canMutate}
+                      className="h-8 px-2.5 text-xs rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <IconPlus className="size-3.5 inline mr-1" /> Create
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 mb-3">
+                    <button onClick={() => setSidebarOpen(false)} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">Close</button>
+                    <button onClick={() => setChartsPage("charts")} className={cn("h-7 px-2 text-xs rounded-md border hover:bg-muted/50", chartsPage === "charts" && "bg-primary/10 text-primary border-primary/30")}>View charts</button>
+                    <button onClick={() => activeId && onEdit?.(activeId)} className="h-7 px-2 text-xs rounded-md border hover:bg-muted/50">Edit</button>
+                    <button onClick={() => activeId && seeHistoryLocal(activeId, String(activeNodeLevel))} className={cn("h-7 px-2 text-xs rounded-md border hover:bg-muted/50", chartsPage === "history" && "bg-primary/10 text-primary border-primary/30")}>See history</button>
+                  </div>
+                )}
                 <div className="space-y-1 text-xs">
                   {activeCampaign && (
                     <div onClick={() => selectNode(activeCampaign.id, "campaign")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", activeCampaign.id === activeId && "bg-primary/10 text-primary")}>
                       <span className="truncate font-medium">📁 {activeCampaign.name}</span>
-                      <NodeActionMenu level="campaign" id={activeCampaign.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
+                      <NodeActionMenu level="campaign" id={activeCampaign.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "campaign") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                     </div>
                   )}
                   {treeAdSets.map(as => (
                     <div key={as.id} className="ml-4">
                       <div onClick={() => selectNode(as.id, "adset")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", as.id === activeId && "bg-primary/10 text-primary")}>
                         <span className="truncate">▦ {as.name}</span>
-                        <NodeActionMenu level="ad set" id={as.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
+                        <NodeActionMenu level="ad set" id={as.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "adset") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                       </div>
                       <div className="ml-4 space-y-1">
                         {treeAds(as.id).map(ad => (
                           <div key={ad.id} onClick={() => selectNode(ad.id, "ad")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", ad.id === activeId && "bg-primary/10 text-primary")}>
                             <span className="truncate">▣ {ad.name}</span>
-                            <NodeActionMenu level="ad" id={ad.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
+                            <NodeActionMenu level="ad" id={ad.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "ad") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                           </div>
                         ))}
                       </div>
@@ -999,8 +1262,106 @@ export function PerformancePopup({
                 Show hierarchy
               </button>
             )}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-            {chartsPage === "history" ? (
+            <div className={cn(
+              "flex-1 overflow-y-auto",
+              effectiveWorkspaceView === "edit" ? "" : "px-5 py-4 space-y-5"
+            )}>
+            {effectiveWorkspaceView === "edit" ? (
+              <UnifiedWorkspaceEditor
+                node={selectedWorkspaceNode}
+                level={activeNodeLevel}
+                onSave={() => setWorkspaceView("review")}
+                onReview={() => setWorkspaceView("review")}
+                readOnly={!canMutate || Boolean(workspaceDetailErrors[`${activeNodeLevel}:${activeId}`])}
+                loading={workspaceDetailLoading[`${activeNodeLevel}:${activeId}`] === true}
+                error={workspaceDetailErrors[`${activeNodeLevel}:${activeId}`]}
+                onRefresh={() => setWorkspaceDetailRefresh(value => value + 1)}
+                onDraftChange={updateWorkspaceDraft}
+                accountId={accountId}
+              />
+            ) : effectiveWorkspaceView === "review" ? (
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <section className="rounded-xl border bg-card p-5">
+                  <div className="mb-3 flex items-center gap-2">
+                    <IconEye className="size-4 text-primary" />
+                    <h3 className="font-semibold">Review changes</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Publish runs Campaign → Ad Set → Ad. A failed parent skips descendants; successful changes are not rolled back.
+                  </p>
+                  <div className="mt-4 space-y-2">
+                    {Object.entries(workspaceDrafts).length === 0 ? (
+                      <p className="rounded-lg border bg-muted/20 px-3 py-6 text-center text-sm text-muted-foreground">No staged changes.</p>
+                    ) : Object.entries(workspaceDrafts).map(([key, node]) => {
+                      const nodeLevel = key.split(":")[0] as Level
+                      const result = workspacePublishResults.find(item => item.id === node.id && item.level === nodeLevel)
+                      return (
+                        <div key={key} className="rounded-lg border px-3 py-2 text-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">{node.name}</p>
+                              <p className="text-xs capitalize text-muted-foreground">{nodeLevel === "adset" ? "Ad set" : nodeLevel}</p>
+                            </div>
+                            {result && (
+                              <span className={cn(
+                                "rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                                result.status === "published" && "bg-emerald-50 text-emerald-700",
+                                result.status === "failed" && "bg-red-50 text-red-700",
+                                result.status === "skipped" && "bg-amber-50 text-amber-700"
+                              )}>{result.status}</span>
+                            )}
+                          </div>
+                          {result?.message && <p className="mt-1 text-xs text-red-600">{result.message}</p>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-5 flex flex-wrap justify-end gap-2">
+                    <button onClick={() => setWorkspaceView("edit")} className="h-9 rounded-lg border px-3 text-sm hover:bg-muted/50">Back to edit</button>
+                    <button
+                      onClick={() => {
+                        setWorkspaceDrafts({})
+                        setWorkspacePublishResults([])
+                      }}
+                      disabled={workspacePublishing || Object.keys(workspaceDrafts).length === 0}
+                      className="h-9 rounded-lg border px-3 text-sm hover:bg-muted/50 disabled:opacity-40"
+                    >Discard draft</button>
+                    <button
+                      onClick={() => {
+                        if (structuralReplacement) {
+                          onCreateReplacement?.(structuralReplacement.draft, structuralReplacement.level)
+                          return
+                        }
+                        void publishWorkspaceChanges()
+                      }}
+                      disabled={!canMutate || workspacePublishing || Object.keys(workspaceDrafts).length === 0}
+                      className="h-9 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
+                    >{workspacePublishing
+                        ? "Publishing…"
+                        : structuralReplacement
+                          ? "Create replacement"
+                          : workspacePublishResults.some(result => result.status !== "published")
+                            ? "Retry failed"
+                            : "Publish"}</button>
+                  </div>
+                </section>
+                <section className="rounded-xl border bg-card p-5">
+                  <h3 className="font-semibold">Recommendations</h3>
+                  <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
+                    {Object.values(workspaceDrafts).some(node => node.status === "ACTIVE") && (
+                      <li className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">At least one object will become Active and may begin spending.</li>
+                    )}
+                    {structuralReplacement && (
+                      <li className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
+                        Objective, buying type, special category, or conversion location changed. Meta requires a replacement hierarchy; the existing hierarchy will remain untouched.
+                      </li>
+                    )}
+                    <li className="rounded-lg border px-3 py-2">Advanced fields remain unchanged unless they appear in the staged draft.</li>
+                    <li className="rounded-lg border px-3 py-2">No estimated uplift is shown without measured evidence.</li>
+                  </ul>
+                </section>
+              </div>
+            ) : effectiveWorkspaceView === "history" ? (
               <section ref={historyRef} className="rounded-xl border bg-card p-4">
                 <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
                   <div className="flex items-center gap-1.5">
@@ -1536,6 +1897,25 @@ export function PerformancePopup({
           </>)}
           </div>
           </div>
+          {workspaceDiscardConfirm && (
+            <div className="absolute inset-0 z-30 grid place-items-center bg-black/45 p-4">
+              <div className="w-full max-w-md rounded-xl border bg-background p-5 shadow-2xl">
+                <h3 className="font-semibold">Discard staged changes?</h3>
+                <p className="mt-2 text-sm text-muted-foreground">Your in-memory draft will be lost. Published changes are not affected.</p>
+                <div className="mt-5 flex justify-end gap-2">
+                  <button onClick={() => setWorkspaceDiscardConfirm(false)} className="h-9 rounded-lg border px-3 text-sm hover:bg-muted/50">Keep editing</button>
+                  <button
+                    onClick={() => {
+                      setWorkspaceDrafts({})
+                      setWorkspaceDiscardConfirm(false)
+                      onClose()
+                    }}
+                    className="h-9 rounded-lg bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
+                  >Discard and close</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </TooltipProvider>
