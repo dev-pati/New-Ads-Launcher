@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { mapCreativeForClient } from "@/lib/creative-media"
+import {
+  collectAllCreativePages,
+  mapCreativeForClient,
+  sortCreativesByLatestAssignment,
+} from "@/lib/creative-media"
 import { uploadImageToMeta, uploadVideoToMeta, pollVideoReady } from "@/lib/facebook"
 import { notifyOrgMembers } from "@/lib/notify-org"
 import { deleteMediaObject } from "@/lib/media-delete"
@@ -49,17 +53,14 @@ export async function GET(request: NextRequest) {
     const mediaType    = url.searchParams.get("media_type")   // "image" | "video"
     const statusFilter = url.searchParams.get("status")       // "uploaded" | "pending" | "processing" | "archived"
     const nameContains = url.searchParams.get("name_contains")
-    const limit  = Math.min(parseInt(url.searchParams.get("limit") || "20", 10), 200)
-    const cursor = url.searchParams.get("cursor") || null  // last item's created_at (ISO string)
+    const limit    = Math.min(parseInt(url.searchParams.get("limit") || "20", 10), 200)
+    const cursor   = url.searchParams.get("cursor") || null
+    const sortMode = url.searchParams.get("sort")
+    const assignedSortOffset = sortMode === "assigned_desc"
+      ? Math.max(parseInt(cursor || "0", 10) || 0, 0)
+      : 0
 
     const supabase = createAdminClient()
-    let query = supabase
-      .from("creatives")
-      .select("*, portal_media_assignments(created_at)")
-      .eq("org_id", ctx.orgId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(limit + 1)
 
     // Batch lookup by filenames (for CSV import) OR single dedup check (file_name + file_size)
     const fileNames = url.searchParams.getAll("file_name")
@@ -81,15 +82,54 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ creatives: (data ?? []).map(mapCreativeForClient) })
     }
 
-    if (adAccountIds.length === 1) {
-      query = query.eq("ad_account_id", adAccountIds[0])
-    } else if (adAccountIds.length > 1) {
-      query = query.in("ad_account_id", adAccountIds)
+    if (sortMode === "assigned_desc") {
+      // Date Assigned is the maximum timestamp of a to-many embedded relation, so
+      // PostgREST cannot order the parent creatives by it directly. Exhaust every
+      // matching database page first; only then flatten, sort, and apply the UI offset.
+      const rows = await collectAllCreativePages(async (from, to) => {
+        let pageQuery = supabase
+          .from("creatives")
+          .select("*, portal_media_assignments(created_at)")
+          .eq("org_id", ctx.orgId)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to)
+
+        if (adAccountIds.length === 1) pageQuery = pageQuery.eq("ad_account_id", adAccountIds[0])
+        else if (adAccountIds.length > 1) pageQuery = pageQuery.in("ad_account_id", adAccountIds)
+        if (mediaType) pageQuery = pageQuery.eq("media_type", mediaType)
+        if (statusFilter) pageQuery = pageQuery.eq("status", statusFilter)
+        if (nameContains) pageQuery = pageQuery.ilike("file_name", `%${nameContains}%`)
+
+        const { data: page, error: pageError } = await pageQuery
+        if (pageError) throw pageError
+        return page ?? []
+      })
+
+      const sorted = sortCreativesByLatestAssignment(rows.map((creative) => mapCreativeForClient(creative)))
+      const items = sorted.slice(assignedSortOffset, assignedSortOffset + limit)
+      const hasMore = assignedSortOffset + limit < sorted.length
+      return NextResponse.json({
+        creatives: items,
+        hasMore,
+        nextCursor: hasMore ? String(assignedSortOffset + limit) : null,
+      })
     }
-    if (mediaType)    query = query.eq("media_type", mediaType)
+
+    let query = supabase
+      .from("creatives")
+      .select("*, portal_media_assignments(created_at)")
+      .eq("org_id", ctx.orgId)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit + 1)
+
+    if (adAccountIds.length === 1) query = query.eq("ad_account_id", adAccountIds[0])
+    else if (adAccountIds.length > 1) query = query.in("ad_account_id", adAccountIds)
+    if (mediaType) query = query.eq("media_type", mediaType)
     if (statusFilter) query = query.eq("status", statusFilter)
-    if (nameContains) query = (query as any).ilike("file_name", `%${nameContains}%`)
-    if (cursor)       query = query.lt("created_at", cursor)
+    if (nameContains) query = query.ilike("file_name", `%${nameContains}%`)
+    if (cursor) query = query.lt("created_at", cursor)
 
     const { data, error } = await query
 
@@ -98,12 +138,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch creatives" }, { status: 500 })
     }
 
-    const hasMore  = (data?.length ?? 0) > limit
-    const items    = (data ?? []).slice(0, limit)
+    const mapped = (data ?? []).map((creative) => mapCreativeForClient(creative))
+
+    const hasMore  = mapped.length > limit
+    const items    = mapped.slice(0, limit)
     const nextCursor = hasMore ? (items[items.length - 1]?.created_at ?? null) : null
 
     return NextResponse.json({
-      creatives:  items.map((creative) => mapCreativeForClient(creative)),
+      creatives: items,
       hasMore,
       nextCursor,
     })

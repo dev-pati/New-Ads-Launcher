@@ -180,6 +180,35 @@ const root = process.cwd()
 const read = path => readFileSync(join(root, path), "utf8")
 
 describe("account filter plumbing", () => {
+  it("All Assets opens on all accounts and lists the newest assigned assets first", () => {
+    const source = read("app/(dashboard)/assets/page.tsx")
+    assert.match(source, /useState<"" \| "ready" \| "pending">\(""\)/)
+    assert.match(source, /section === "all" \? sortCreativesByLatestAssignment\(filtered\) : filtered/)
+  })
+
+  it("uses the newest Portal assignment when an asset belongs to more than one account", () => {
+    const source = read("lib/creative-media.ts")
+    assert.match(source, /arr\.reduce<string \| undefined>/)
+    assert.match(source, /Date\.parse\(assignment\.created_at\) > Date\.parse\(latest\)/)
+  })
+
+  it("refreshes All accounts after assigning Portal media to any account", () => {
+    const source = read("app/(dashboard)/assets/page.tsx")
+    assert.match(source, /assetFilterAccounts\.length === 0 \|\| assetFilterAccounts\.includes\(importConfirm\.adAccountId\)/)
+    assert.doesNotMatch(source, /importConfirm\.adAccountId === selectedAccountId/)
+  })
+
+  it("asks the API to sort by latest assignment before pagination", () => {
+    const page = read("app/(dashboard)/assets/page.tsx")
+    const route = read("app/api/creatives/route.ts")
+    assert.match(page, /sort: "assigned_desc"/)
+    assert.match(route, /sortMode === "assigned_desc"/)
+    assert.match(route, /sortCreativesByLatestAssignment/)
+    assert.match(route, /collectAllCreativePages/)
+    assert.match(route, /\.range\(from, to\)/)
+    assert.match(route, /String\(assignedSortOffset \+ limit\)/, "assigned-date pagination uses an offset after sorting")
+  })
+
   it("the API accepts a repeated ad_account_id and uses IN for several values", () => {
     const source = read("app/api/creatives/route.ts")
     assert.match(source, /getAll\("ad_account_id"\)/)

@@ -30,6 +30,7 @@ import {
 import type { FolderNode } from "@/lib/portal-media/tree"
 import { MetaAssignmentStatus } from "@/components/shared/meta-assignment-status"
 import { useMetaAssignmentProgress } from "@/hooks/use-meta-assignment-progress"
+import { sortCreativesByLatestAssignment } from "@/lib/creative-media"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -363,7 +364,7 @@ export default function AssetsPage() {
     // Picking one or more accounts narrows the fetch to exactly those accounts.
     if (reset) setLoadingCreatives(true); else setLoadingMoreCreatives(true)
     setActionError("")
-    const params = new URLSearchParams({ limit: String(CREATIVES_PAGE) })
+    const params = new URLSearchParams({ limit: String(CREATIVES_PAGE), sort: "assigned_desc" })
     for (const id of assetFilterAccounts) params.append("ad_account_id", id)
     if (cursor) params.set("cursor", cursor)
     fetch(`/api/creatives?${params}`)
@@ -646,9 +647,13 @@ export default function AssetsPage() {
   }
 
   const displayList = (() => {
-    if (section === "my-uploads") return filterCreatives(creatives.filter(c => c.user_id === currentUserId))
-    if (currentBoardId) return filterCreatives(boardCreatives)
-    return filterCreatives(creatives)
+    const filtered = section === "my-uploads"
+      ? filterCreatives(creatives.filter(c => c.user_id === currentUserId))
+      : currentBoardId
+        ? filterCreatives(boardCreatives)
+        : filterCreatives(creatives)
+
+    return section === "all" ? sortCreativesByLatestAssignment(filtered) : filtered
   })()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
@@ -835,9 +840,9 @@ export default function AssetsPage() {
       }
       clearPortalSelected()
       loadPortalTree()
-      // If the assigned ad account is the one All Assets is showing, refresh it
-      // immediately so the newly-assigned creative appears without a manual reload.
-      if (importConfirm.adAccountId === selectedAccountId) {
+      // Refresh when this assignment belongs to the current Assets scope. An empty
+      // account filter means every org account, not the global account-context choice.
+      if (assetFilterAccounts.length === 0 || assetFilterAccounts.includes(importConfirm.adAccountId)) {
         setCreativesNextCursor(null)
         setCreativesHasMore(false)
         loadCreatives(null, true)

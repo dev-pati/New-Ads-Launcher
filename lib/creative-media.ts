@@ -37,6 +37,28 @@ export interface ClientCreativeMedia {
   portal_media_assignments?: { created_at: string }[] | { created_at: string } | null
 }
 
+export function sortCreativesByLatestAssignment<
+  T extends { assigned_at?: string; created_at?: string }
+>(creatives: T[]): T[] {
+  return [...creatives].sort((a, b) => {
+    const assignedB = Date.parse(b.assigned_at || b.created_at || "") || 0
+    const assignedA = Date.parse(a.assigned_at || a.created_at || "") || 0
+    return assignedB - assignedA
+  })
+}
+
+export async function collectAllCreativePages<T>(
+  fetchPage: (from: number, to: number) => Promise<T[]>,
+  chunkSize = 1000,
+): Promise<T[]> {
+  const rows: T[] = []
+  for (let from = 0; ; from += chunkSize) {
+    const page = await fetchPage(from, from + chunkSize - 1)
+    rows.push(...page)
+    if (page.length < chunkSize) return rows
+  }
+}
+
 export function isMetaCdnUrl(url?: string | null) {
   return !!url && /(^https?:\/\/)?([^.]+\.)*fbcdn\.net/i.test(url)
 }
@@ -51,12 +73,16 @@ export function mapCreativeForClient<T extends ClientCreativeMedia>(creative: T)
   const mapped = { ...creative } as T & { assigned_at?: string }
 
   // Flatten the portal_media_assignments join (if present) into assigned_at.
-  // The join carries the timestamp of when this Portal asset was claimed for an ad account,
-  // which is the field Portal Vault sorts on and labels "Date Assigned".
+  // A Portal asset may be assigned to more than one account, and PostgREST does not
+  // guarantee the embedded relation's order. Assets therefore needs the latest claim,
+  // not whichever assignment happens to be returned first.
   const join = (creative as ClientCreativeMedia).portal_media_assignments
   if (join !== undefined) {
     const arr = Array.isArray(join) ? join : join ? [join] : []
-    mapped.assigned_at = arr[0]?.created_at ?? undefined
+    mapped.assigned_at = arr.reduce<string | undefined>((latest, assignment) => {
+      if (!latest || Date.parse(assignment.created_at) > Date.parse(latest)) return assignment.created_at
+      return latest
+    }, undefined)
     delete (mapped as ClientCreativeMedia).portal_media_assignments
   }
 

@@ -349,7 +349,12 @@ function SpendHoverValue({
   const [trendLoading, setTrendLoading] = useState(false)
   const [trendLoaded, setTrendLoaded] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const hoverTarget = useRef<"trigger" | "content" | null>(null)
+  const activeSurface = useRef({
+    triggerPointer: false,
+    triggerFocus: false,
+    contentPointer: false,
+    contentFocus: false,
+  })
   const budgetCents = Number((row as Campaign | AdSet).daily_budget || (row as Campaign | AdSet).lifetime_budget || 0)
   const budget = Number.isFinite(budgetCents) ? budgetCents / 100 : 0
   const max = Math.max(spend, budget, 1)
@@ -360,16 +365,28 @@ function SpendHoverValue({
   const closeSoon = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current)
     closeTimer.current = setTimeout(() => {
-      if (!hoverTarget.current) setOpen(false)
+      if (!Object.values(activeSurface.current).some(Boolean)) setOpen(false)
     }, 220)
   }
-  const enterTarget = (target: "trigger" | "content") => {
-    hoverTarget.current = target
+  const enterTarget = (target: keyof typeof activeSurface.current) => {
+    activeSurface.current[target] = true
     keepOpen()
   }
-  const leaveTarget = (target: "trigger" | "content") => {
-    if (hoverTarget.current === target) hoverTarget.current = null
+  const leaveTarget = (target: keyof typeof activeSurface.current) => {
+    activeSurface.current[target] = false
     closeSoon()
+  }
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      activeSurface.current = {
+        triggerPointer: false,
+        triggerFocus: false,
+        contentPointer: false,
+        contentFocus: false,
+      }
+      if (closeTimer.current) clearTimeout(closeTimer.current)
+    }
+    setOpen(nextOpen)
   }
 
   useEffect(() => {
@@ -425,27 +442,21 @@ function SpendHoverValue({
   if (!hasInsights) return <span className="text-sm font-medium tabular-nums leading-5">—</span>
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <div className="group/spend inline-flex items-center gap-1.5">
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            onMouseEnter={() => enterTarget("trigger")}
-            onMouseLeave={() => leaveTarget("trigger")}
-            onFocus={() => enterTarget("trigger")}
-            onBlur={() => leaveTarget("trigger")}
-            className="inline-flex items-center text-sm font-medium tabular-nums leading-5 underline decoration-dotted underline-offset-2"
-          >
-            {fmtMoney(spend)}
-          </button>
-        </PopoverTrigger>
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <div
+        className="group/spend inline-flex items-center gap-1.5"
+        onMouseEnter={() => enterTarget("triggerPointer")}
+        onMouseLeave={() => leaveTarget("triggerPointer")}
+        onFocusCapture={() => enterTarget("triggerFocus")}
+        onBlurCapture={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) leaveTarget("triggerFocus")
+        }}
+      >
         <button
           type="button"
           aria-label="Open performance chart"
           title="Open performance chart"
           className="inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-[#1877f2] opacity-60 transition-opacity hover:bg-muted hover:opacity-100 group-hover/spend:opacity-100"
-          onMouseEnter={() => enterTarget("trigger")}
-          onMouseLeave={() => leaveTarget("trigger")}
           onClick={event => {
             event.preventDefault()
             event.stopPropagation()
@@ -454,13 +465,27 @@ function SpendHoverValue({
         >
           <IconChartBar className="size-3.5" />
         </button>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className="inline-flex items-center text-sm font-medium tabular-nums leading-5 underline decoration-dotted underline-offset-2"
+          >
+            {fmtMoney(spend)}
+          </button>
+        </PopoverTrigger>
       </div>
       <PopoverContent
         side="right"
         align="start"
         sideOffset={8}
-        onMouseEnter={() => enterTarget("content")}
-        onMouseLeave={() => leaveTarget("content")}
+        onMouseEnter={() => enterTarget("contentPointer")}
+        onMouseLeave={() => leaveTarget("contentPointer")}
+        onFocusCapture={() => enterTarget("contentFocus")}
+        onBlurCapture={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) leaveTarget("contentFocus")
+        }}
+        onOpenAutoFocus={event => event.preventDefault()}
+        onCloseAutoFocus={event => event.preventDefault()}
         className="w-80 gap-3 p-4"
       >
         <div>
