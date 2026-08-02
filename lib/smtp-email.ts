@@ -1,4 +1,5 @@
 import nodemailer, { type Transporter } from "nodemailer"
+import { sendEmail } from "@/lib/send-email"
 
 let transporter: Transporter | null = null
 
@@ -26,25 +27,29 @@ function getTransporter() {
 
 export async function sendOtpEmail(to: string, otp: string): Promise<{ ok: boolean; error?: string }> {
   const tx = getTransporter()
-  if (!tx) return { ok: false, error: "SMTP not configured" }
+  const subject = `Your AdLauncher login code: ${otp}`
+  const text = `Your AdLauncher login code is ${otp}. This code expires in 10 minutes. If you didn't request this, you can ignore this email.`
+  const html = `
+    <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>Your login code</h2>
+      <p style="font-size: 32px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+      <p style="color: #666; font-size: 14px;">This code expires in 10 minutes. If you didn't request this, you can ignore this email.</p>
+    </div>
+  `
+
+  if (!tx) return sendEmail({ to, subject, text, html })
 
   try {
     await tx.sendMail({
       from: `AdLauncher <${process.env.SMTP_USER}>`,
       to,
-      subject: `Your AdLauncher login code: ${otp}`,
-      text: `Your AdLauncher login code is ${otp}. This code expires in 10 minutes. If you didn't request this, you can ignore this email.`,
-      html: `
-        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-          <h2>Your login code</h2>
-          <p style="font-size: 32px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
-          <p style="color: #666; font-size: 14px;">This code expires in 10 minutes. If you didn't request this, you can ignore this email.</p>
-        </div>
-      `,
+      subject,
+      text,
+      html,
     })
     return { ok: true }
   } catch (error) {
-    console.error("[smtp-email] failed to send OTP", error)
-    return { ok: false, error: "Unable to send login code" }
+    console.error("[smtp-email] SMTP failed, falling back to Resend", error)
+    return sendEmail({ to, subject, text, html })
   }
 }
