@@ -28,6 +28,8 @@ import {
   type MediaDetailFile,
 } from "@/components/shared/media-detail-sheet"
 import type { FolderNode } from "@/lib/portal-media/tree"
+import { MetaAssignmentStatus } from "@/components/shared/meta-assignment-status"
+import { useMetaAssignmentProgress } from "@/hooks/use-meta-assignment-progress"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -184,7 +186,17 @@ export default function AssetsPage() {
   const [portalError, setPortalError]     = useState("")
   const [portalErrorKind, setPortalErrorKind] = useState<"portal" | "adlauncher" | null>(null)
   const [mappingPortal, setMappingPortal] = useState(false)
-  const [assignJob, setAssignJob] = useState<{ jobId: string; status: string; done: number; total: number; failed: number } | null>(null)
+  const [assignItems, setAssignItems] = useState<Record<string, string>>({})
+  const trackedAssignmentIds = useMemo(
+    () => [...new Set([
+      ...Object.values(assignItems),
+      ...creatives
+        .filter(creative => creative.status === "pending" || creative.status === "processing")
+        .map(creative => creative.id),
+    ])],
+    [assignItems, creatives],
+  )
+  const assignmentProgressById = useMetaAssignmentProgress(trackedAssignmentIds)
   const [portalDetailOpen, setPortalDetailOpen] = useState(false)
   const [portalDetailFile, setPortalDetailFile] = useState<PortalMediaFile | null>(null)
 
@@ -448,46 +460,21 @@ export default function AssetsPage() {
     loadCreatives(null, true)
   }, [assetFilterAccounts, loadCreatives])
 
-  // Job Polling
+  // Per-item assignment progress. Job rows schedule work, but are deliberately
+  // not the display contract: each asset follows its own creative + Meta state.
   useEffect(() => {
-    if (!assignJob || assignJob.status === "done" || assignJob.status === "error") return
+    const creativeIds = Object.values(assignItems)
+    if (creativeIds.length === 0) return
+    const progress = creativeIds.map(id => assignmentProgressById[id])
+    if (progress.some(item => !item || item.phase === "assigning" || item.phase === "processing")) return
 
-    let mounted = true
-    const poll = async () => {
-      try {
-        const res = await fetch(`/api/portal-media/jobs/${assignJob.jobId}`)
-        if (!res.ok) throw new Error("poll failed")
-        const data = await res.json()
-        if (!mounted) return
-        setAssignJob({
-          jobId: data.jobId,
-          status: data.status,
-          done: data.done,
-          total: data.total,
-          failed: data.failed
-        })
-        if (data.status === "done" || data.status === "error") {
-          // Job finished, refresh creatives immediately
-          setCreativesNextCursor(null)
-          setCreativesHasMore(false)
-          loadCreatives(null, true)
-          // Hide progress overlay after 2 seconds
-          setTimeout(() => { if (mounted) setAssignJob(null) }, 2000)
-        }
-      } catch {
-        // Ignore poll failures, retry next tick
-      }
-    }
-
-    const interval = setInterval(poll, 2000)
-    return () => {
-      mounted = false
-      clearInterval(interval)
-    }
-    // Intentionally scoped to jobId/status only — including the whole assignJob
-    // object would reset this interval on every poll tick (done/total change).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignJob?.jobId, assignJob?.status, loadCreatives])
+    loadPortalTree()
+    setCreativesNextCursor(null)
+    setCreativesHasMore(false)
+    loadCreatives(null, true)
+    const timer = setTimeout(() => setAssignItems({}), 2000)
+    return () => clearTimeout(timer)
+  }, [assignItems, assignmentProgressById, loadCreatives, loadPortalTree])
 
   useEffect(() => { loadBoards() }, [loadBoards])
   useEffect(() => { loadPortalTree() }, [loadPortalTree])
@@ -835,8 +822,16 @@ export default function AssetsPage() {
       if (d.errors?.length) {
         setPortalError(`${d.assigned}/${d.requested} assigned — ${d.errors[0].error}`)
       }
-      if (d.job_id) {
-        setAssignJob({ jobId: d.job_id, status: "pending", done: 0, total: d.total || 0, failed: 0 })
+      if (Array.isArray(d.items)) {
+        setAssignItems(previous => {
+          const next = { ...previous }
+          for (const item of d.items) {
+            if (typeof item?.object_key === "string" && typeof item?.creative_id === "string") {
+              next[item.object_key] = item.creative_id
+            }
+          }
+          return next
+        })
       }
       clearPortalSelected()
       loadPortalTree()
@@ -1388,18 +1383,6 @@ export default function AssetsPage() {
 
                   {portalFiles.length > 0 && (
                     <>
-                      {(mappingPortal || assignJob) && (
-                        <div className="sticky bottom-3 z-20 flex justify-center pointer-events-none">
-                          <div className="flex items-center gap-2 rounded-full bg-background border px-3 py-1.5 text-sm font-medium shadow-md pointer-events-auto">
-                            <IconLoader2 className="size-4 animate-spin text-primary" />
-                            {assignJob
-                              ? assignJob.total > 0
-                                ? `Syncing to Meta ${assignJob.done}/${assignJob.total} · ${Math.floor((assignJob.done / assignJob.total) * 100)}%${assignJob.failed > 0 ? ` (${assignJob.failed} failed)` : ""}`
-                                : "Đang khởi tạo…"
-                              : "Assigning to ad account…"}
-                          </div>
-                        </div>
-                      )}
                       {/* Spreadsheet. No <video>/<img> is mounted here on purpose: the
                           resolver allows 120 GET/HEAD per IP per minute and the office
                           shares one IP, so a 114-row folder rendering thumbnails would
@@ -1431,6 +1414,10 @@ export default function AssetsPage() {
                             {portalFiles.slice(0, portalVisible).map(file => {
                               const isSelected = portalSelected.has(file.objectKey)
                               const assignedTo = portalAssignedBy.get(file.objectKey) || []
+                              const assigningCreativeId = assignItems[file.objectKey]
+                              const assigningProgress = assigningCreativeId
+                                ? assignmentProgressById[assigningCreativeId]
+                                : undefined
                               const isVideo = !file.mimeType?.startsWith("image/")
                               return (
                                 <tr
@@ -1471,7 +1458,9 @@ export default function AssetsPage() {
                                   <td className="px-3 text-sm text-muted-foreground tabular-nums">{formatBytes(file.sizeBytes)}</td>
                                   <td className="px-3 text-sm text-muted-foreground">{formatDate(file.createdAt || undefined)}</td>
                                   <td className="px-3">
-                                    {assignedTo.length > 0 ? (
+                                    {assigningCreativeId && assigningProgress?.phase !== "ready" ? (
+                                      <MetaAssignmentStatus progress={assigningProgress} fallbackStatus="pending" />
+                                    ) : assignedTo.length > 0 ? (
                                       <span className="text-sm px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
                                         {assignedTo.map(accountLabel).join(", ")}
                                       </span>
@@ -1862,7 +1851,9 @@ export default function AssetsPage() {
                     <tbody>
                       {displayList.map(c => {
                         const isSelected = selected.has(c.id)
-                        const isReady    = !!(c.fb_image_hash || c.fb_video_id)
+                        const isReady = c.status === "ready"
+                          || (c.media_type === "image" && Boolean(c.fb_image_hash))
+                        const assignmentProgress = assignmentProgressById[c.id]
                         const portalMeta = resolvePortalMetadata(c)
                         return (
                           <tr
@@ -1905,18 +1896,11 @@ export default function AssetsPage() {
                             </td>
                             <td className="px-3 text-sm text-muted-foreground capitalize">{c.media_type}</td>
                             <td className="px-3">
-                              <span className={cn("inline-flex items-center gap-1 text-sm px-2 py-0.5 rounded-full font-medium",
-                                isReady
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
-                                  : c.status === "processing"
-                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                                  : c.status === "error"
-                                  ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-                                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-                              )}>
-                                {!isReady && c.status !== "error" && <IconLoader2 className="size-3 shrink-0 animate-spin" />}
-                                {isReady ? "Ready" : c.status === "processing" ? "Syncing to Meta" : c.status === "error" ? "Error" : "Syncing to Meta"}
-                              </span>
+                              <MetaAssignmentStatus
+                                progress={assignmentProgress}
+                                fallbackStatus={c.status}
+                                ready={isReady}
+                              />
                             </td>
                             <td className="px-3 text-sm text-muted-foreground">{formatDate(c.assigned_at || c.created_at)}</td>
                             <td className="px-3">

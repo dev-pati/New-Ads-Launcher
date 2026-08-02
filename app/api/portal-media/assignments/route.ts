@@ -72,6 +72,7 @@ export async function PUT(request: NextRequest) {
   const supabase = createAdminClient()
   const assigned: string[] = []
   const creativeIds: string[] = []
+  const assignedItems: { object_key: string; creative_id: string }[] = []
   const errors: { object_key: string; error: string }[] = []
 
   for (const asset of assets) {
@@ -98,6 +99,7 @@ export async function PUT(request: NextRequest) {
       if (error) throw error
       assigned.push(asset.object_key)
       creativeIds.push(creativeId)
+      assignedItems.push({ object_key: asset.object_key, creative_id: creativeId })
     } catch (err) {
       errors.push({ object_key: asset.object_key, error: err instanceof Error ? err.message : String(err) })
     }
@@ -122,7 +124,15 @@ export async function PUT(request: NextRequest) {
       }).catch(err => console.error("[assignments] trigger cron err:", err))
     } catch (jobErr) {
       console.error("[assignments] Failed to create upload job:", jobErr)
-      errors.push({ object_key: "job_creation", error: jobErr instanceof Error ? jobErr.message : String(jobErr) })
+      const message = jobErr instanceof Error ? jobErr.message : String(jobErr)
+      await supabase
+        .from("creatives")
+        .update({ status: "error" })
+        .in("id", creativeIds)
+        .eq("org_id", ctx.orgId)
+      for (const item of assignedItems) {
+        errors.push({ object_key: item.object_key, error: message })
+      }
     }
   }
 
@@ -132,6 +142,7 @@ export async function PUT(request: NextRequest) {
     requested: assets.length,
     job_id: jobId,
     total: creativeIds.length,
+    items: assignedItems,
     errors
   })
 }

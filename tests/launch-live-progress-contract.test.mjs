@@ -36,14 +36,14 @@ describe("Launch live progress contract", () => {
     assert.match(resultModal, /loadStatus\(\)/)
   })
 
-  it("refreshes visible Ads Manager data near real time", () => {
+  it("refreshes visible Ads Manager data on focus without polling", () => {
     const page = read("app/(dashboard)/ads-manager/page.tsx")
 
     assert.match(page, /document\.visibilityState === "visible"/)
-    assert.match(page, /setInterval\(refreshVisibleData, 60_000\)/)
+    assert.doesNotMatch(page, /setInterval\(refreshVisibleData, 60_000\)/)
     assert.match(page, /fetchMainData\(true\)/)
+    assert.match(page, /useEffect\(\(\) => \{ fetchMainData\(\) \}, \[fetchMainData\]\)/)
     assert.match(page, /active_only=true/)
-    assert.doesNotMatch(page, /fetchMainData\(\)/)
   })
 
   it("sorts newest launch time first, then active status", () => {

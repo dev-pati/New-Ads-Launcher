@@ -34,6 +34,8 @@ import { Creative } from "@/types/creative"
 import { DynamicMediaToggle } from "@/components/ui/dynamic-media-toggle"
 import { CreativeCardMedia } from "@/components/creative-card-media"
 import { formatNumberShort, formatCurrency } from "@/lib/format"
+import { MetaAssignmentStatus } from "@/components/shared/meta-assignment-status"
+import { useMetaAssignmentProgress } from "@/hooks/use-meta-assignment-progress"
 
 // ─── Drive Link Tab ───────────────────────────────────────────────────────────
 
@@ -1041,6 +1043,12 @@ export function LoadMediaModal({
     if (typeof va === "number") return sortDir === "asc" ? va - vb : vb - va
     return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
   })
+  const vaultProgressById = useMetaAssignmentProgress(
+    vaultSorted
+      .filter(creative => creative.status === "pending" || creative.status === "processing")
+      .map(creative => creative.id),
+    open && mediaTab === "vault",
+  )
 
   const toggleAllVault = () => {
     setSelected(prev => prev.size === vaultSorted.length ? new Set() : new Set(vaultSorted.map(m => m.id)))
@@ -1630,7 +1638,7 @@ export function LoadMediaModal({
                   const isSelected = selected.has(m.id)
                   const statusRaw = String(m.status || "active").toLowerCase()
                   const isSyncing = statusRaw.includes("process") || statusRaw.includes("pending")
-                  const statusLabel = isSyncing ? "Syncing to Meta" : statusRaw.replace(/_/g, " ")
+                  const statusLabel = isSyncing ? "Assigning" : statusRaw.replace(/_/g, " ")
                   const statusColor = statusRaw === "active" || statusRaw === "ready"
                     ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
                     : statusRaw === "paused"
@@ -1766,9 +1774,10 @@ export function LoadMediaModal({
               ) : (
                 vaultSorted.map(c => {
                   const isSelected = selected.has(c.id)
-                  const isReady = !!(c.fb_image_hash || c.fb_video_id)
+                  const isReady = c.status === "ready"
+                    || (c.media_type === "image" && Boolean(c.fb_image_hash))
                   const pm = resolveCreativePortal(c)
-                  const statusLabel = isReady ? "Ready" : c.status === "processing" ? "Syncing to Meta" : c.status === "error" ? "Error" : "Syncing to Meta"
+                  const assignmentProgress = vaultProgressById[c.id]
                   return (
                     <div key={c.id}
                       onClick={() => toggle(c.id)}
@@ -1794,16 +1803,12 @@ export function LoadMediaModal({
                       </span>
                       <span className="text-sm px-1.5 py-0.5 rounded bg-muted/50 w-fit">{pm?.width && pm?.height ? `${pm.width}x${pm.height}` : "—"}</span>
                       <span className="text-sm px-1.5 py-0.5 rounded bg-muted/50 w-fit">{pm?.durationSeconds ? fmtDuration(pm.durationSeconds) : "—"}</span>
-                      <span className={cn("inline-flex items-center gap-1 text-sm px-1.5 py-0.5 rounded-full w-fit",
-                        isReady ? "bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400"
-                          : c.status === "processing" ? "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400"
-                          : c.status === "error" ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400"
-                          : "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400")}>
-                        {!isReady && c.status !== "error" && (
-                          <IconLoader2 className="size-3 shrink-0 animate-spin" />
-                        )}
-                        {statusLabel}
-                      </span>
+                      <MetaAssignmentStatus
+                        progress={assignmentProgress}
+                        fallbackStatus={c.status}
+                        ready={isReady}
+                        compact
+                      />
                       <span className="text-sm text-muted-foreground">
                         {(c.assigned_at || c.created_at) ? new Date(c.assigned_at || c.created_at!).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                       </span>

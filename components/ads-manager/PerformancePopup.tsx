@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import {
   IconChevronDown, IconDownload, IconHistory, IconLoader2, IconPlus, IconCalendar,
   IconSettings, IconX, IconDots, IconMessageCircle, IconChartLine, IconPencil,
@@ -339,11 +339,15 @@ export function PerformancePopup({
   const [workspaceDiscardConfirm, setWorkspaceDiscardConfirm] = useState(false)
   const workspaceDirty = Object.keys(workspaceDrafts).length > 0
   const historyRef = useRef<HTMLDivElement>(null)
+  const workspaceContentRef = useRef<HTMLDivElement>(null)
 
-  // bootstrapped hierarchy merged with parent arrays
-  const allCampaigns = (campaigns && campaigns.length) ? campaigns : localCampaigns
-  const allAdSets = (adSets && adSets.length) ? adSets : localAdSets
-  const allAds = (ads && ads.length) ? ads : localAds
+  // The parent lists can be one cursor page. Merge them with the editor's targeted
+  // hierarchy reads so opening an Ad does not lose its campaign siblings.
+  const mergeHierarchyRows = (primary: any[] = [], local: any[] = []) =>
+    Array.from(new Map([...local, ...primary].map(item => [item.id, item])).values())
+  const allCampaigns = mergeHierarchyRows(campaigns, localCampaigns)
+  const allAdSets = mergeHierarchyRows(adSets, localAdSets)
+  const allAds = mergeHierarchyRows(ads, localAds)
 
   // Active level for fetches: override if a tree node is selected, else prop level
   const effectiveLevel: Level = isCompare ? level : (activeNodeId ? activeNodeLevel : level)
@@ -477,6 +481,11 @@ export function PerformancePopup({
 
   const workspaceDetailId = capped[0]?.id || ""
   const workspaceDetailKey = `${effectiveLevel}:${workspaceDetailId}`
+
+  useLayoutEffect(() => {
+    if (workspaceView === "edit") workspaceContentRef.current?.scrollTo({ top: 0, left: 0 })
+  }, [workspaceDetailKey, workspaceView])
+
   const structuralReplacement = useMemo(() => {
     const entries = Object.entries(workspaceDrafts)
     for (const [key, draft] of entries) {
@@ -547,6 +556,48 @@ export function PerformancePopup({
     workspaceDetails,
     workspaceView,
   ])
+
+  // An Ads-tab cursor page is not a hierarchy. Once the selected ad's fresh detail
+  // identifies its parents, load that campaign's ad sets and every child's ads.
+  useEffect(() => {
+    if (!unifiedWorkspace || workspaceView !== "edit" || effectiveLevel !== "ad" || isCompare) return
+    const detail = workspaceDetails[workspaceDetailKey]
+    if (!detail?.campaign_id || !detail?.adset_id || !accountId) return
+    let cancelled = false
+
+    const loadHierarchy = async () => {
+      try {
+        const account = encodeURIComponent(accountId)
+        const campaignId = encodeURIComponent(detail.campaign_id!)
+        const adSetId = encodeURIComponent(detail.adset_id!)
+        const [campaignResponse, adSetsResponse, activeAdsResponse] = await Promise.all([
+          fetch(`/api/facebook/campaigns/${campaignId}?ad_account_id=${account}`),
+          fetch(`/api/facebook/adsets?ad_account_id=${account}&campaign_id=${campaignId}`),
+          fetch(`/api/facebook/ads?ad_account_id=${account}&adset_id=${adSetId}`),
+        ])
+        const [campaignData, adSetsData, activeAdsData] = await Promise.all([
+          campaignResponse.json(), adSetsResponse.json(), activeAdsResponse.json(),
+        ])
+        if (cancelled) return
+        if (campaignResponse.ok && campaignData.campaign?.id) setLocalCampaigns([campaignData.campaign])
+        const campaignAdSets = adSetsResponse.ok ? (adSetsData.adSets || []) : []
+        if (campaignAdSets.length) setLocalAdSets(campaignAdSets)
+        const adResults = await Promise.all(campaignAdSets.map(async (adSet: any) => {
+          const response = adSet.id === detail.adset_id
+            ? Promise.resolve({ ok: activeAdsResponse.ok, data: activeAdsData })
+            : fetch(`/api/facebook/ads?ad_account_id=${account}&adset_id=${encodeURIComponent(adSet.id)}`)
+              .then(async response => ({ ok: response.ok, data: await response.json() }))
+          const result = await response
+          return result.ok ? (result.data.ads || []) : []
+        }))
+        if (!cancelled) setLocalAds(adResults.flat())
+      } catch {
+        // The selected ad remains editable even if its optional hierarchy cannot load.
+      }
+    }
+    void loadHierarchy()
+    return () => { cancelled = true }
+  }, [accountId, effectiveLevel, isCompare, unifiedWorkspace, workspaceDetailKey, workspaceDetails, workspaceView])
 
   const qsBase = useMemo(() => {
     const p = new URLSearchParams({ adAccountId: accountId, level: effectiveLevel })
@@ -1230,21 +1281,21 @@ export function PerformancePopup({
                 )}
                 <div className="space-y-1 text-xs">
                   {activeCampaign && (
-                    <div onClick={() => selectNode(activeCampaign.id, "campaign")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", activeCampaign.id === activeId && "bg-primary/10 text-primary")}>
-                      <span className="truncate font-medium">📁 {activeCampaign.name}</span>
+                    <div onClick={() => selectNode(activeCampaign.id, "campaign")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer text-blue-600 dark:text-blue-400 hover:bg-muted/40", activeCampaign.id === activeId && "bg-primary/10 text-primary")}>
+                      <span className="truncate font-medium text-[#1877f2] dark:text-white">📁 {activeCampaign.name}</span>
                       <NodeActionMenu level="campaign" id={activeCampaign.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "campaign") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                     </div>
                   )}
                   {treeAdSets.map(as => (
                     <div key={as.id} className="ml-4">
-                      <div onClick={() => selectNode(as.id, "adset")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", as.id === activeId && "bg-primary/10 text-primary")}>
-                        <span className="truncate">▦ {as.name}</span>
+                      <div onClick={() => selectNode(as.id, "adset")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer text-blue-600 dark:text-blue-400 hover:bg-muted/40", as.id === activeId && "bg-primary/10 text-primary")}>
+                        <span className="truncate text-[#1877f2] dark:text-white">▦ {as.name}</span>
                         <NodeActionMenu level="ad set" id={as.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "adset") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                       </div>
                       <div className="ml-4 space-y-1">
                         {treeAds(as.id).map(ad => (
-                          <div key={ad.id} onClick={() => selectNode(ad.id, "ad")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-muted/40", ad.id === activeId && "bg-primary/10 text-primary")}>
-                            <span className="truncate">▣ {ad.name}</span>
+                          <div key={ad.id} onClick={() => selectNode(ad.id, "ad")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer text-blue-600 dark:text-blue-400 hover:bg-muted/40", ad.id === activeId && "bg-primary/10 text-primary")}>
+                            <span className="truncate text-[#1877f2] dark:text-white">▣ {ad.name}</span>
                             <NodeActionMenu level="ad" id={ad.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "ad") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                           </div>
                         ))}
@@ -1262,7 +1313,7 @@ export function PerformancePopup({
                 Show hierarchy
               </button>
             )}
-            <div className={cn(
+            <div ref={workspaceContentRef} className={cn(
               "flex-1 overflow-y-auto",
               effectiveWorkspaceView === "edit" ? "" : "px-5 py-4 space-y-5"
             )}>

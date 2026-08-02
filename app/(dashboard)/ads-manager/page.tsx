@@ -12,7 +12,7 @@ import {
   IconArrowUp, IconArrowDown, IconHistory, IconTable, IconCheck,
   IconChevronRight as IconDrillRight,
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
-  IconAdjustments, IconDownload,
+  IconAdjustments, IconDownload, IconChartBar,
 } from "@tabler/icons-react"
 import dynamic from "next/dynamic"
 import { type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
@@ -21,6 +21,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { AdsDateRangePicker, getPresetRange } from "@/components/ads-manager/AdsDateRangePicker"
 import type { WorkspaceNode } from "@/components/ads-manager/UnifiedWorkspaceEditor"
 import type {
@@ -40,6 +41,7 @@ import { evalCustomMetric } from "@/lib/custom-metric-eval"
 import { BreakdownDropdown } from "@/components/ads-manager/BreakdownDropdown"
 import { BREAKDOWN_API_MAP } from "@/lib/breakdown-config"
 import { useLaunchBatchesRealtime } from "@/hooks/use-launch-batches-realtime"
+import { OpportunityScoreBadge } from "@/components/ads-manager/OpportunityScoreBadge"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
@@ -297,6 +299,179 @@ function formatMoneyAmount(value: number): string {
 function fmtMoney(v: number): string {
   if (!Number.isFinite(v) || v === 0) return "$0.00"
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function SpendHoverValue({
+  row,
+  spend,
+  hasInsights,
+  onOpenCharts,
+  accountId,
+  level,
+  datePreset,
+  since,
+  until,
+}: {
+  row: Campaign | AdSet | Ad
+  spend: number
+  hasInsights: boolean
+  onOpenCharts: () => void
+  accountId: string
+  level: Level
+  datePreset: string
+  since?: string
+  until?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [series, setSeries] = useState<Array<{ date: string; label: string; value: number }>>([])
+  const [trendLoading, setTrendLoading] = useState(false)
+  const [trendLoaded, setTrendLoaded] = useState(false)
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const budgetCents = Number((row as Campaign | AdSet).daily_budget || (row as Campaign | AdSet).lifetime_budget || 0)
+  const budget = Number.isFinite(budgetCents) ? budgetCents / 100 : 0
+  const max = Math.max(spend, budget, 1)
+  const keepOpen = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    setOpen(true)
+  }
+  const closeSoon = () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+    closeTimer.current = setTimeout(() => setOpen(false), 120)
+  }
+
+  useEffect(() => {
+    if (!open || trendLoaded || trendLoading || !accountId) return
+    let cancelled = false
+    const load = async () => {
+      setTrendLoading(true)
+      try {
+        const params = new URLSearchParams({
+          adAccountId: accountId,
+          level,
+          id: row.id,
+          metric: "spend",
+          granularity: "day",
+        })
+        if (since && until) {
+          params.set("since", since)
+          params.set("until", until)
+        } else {
+          params.set("datePreset", datePreset)
+        }
+        const response = await fetch(`/api/insights/report-trends?${params}`)
+        const data = await response.json()
+        if (!response.ok) throw new Error(data.error || "Failed to load spend trend")
+        if (!cancelled) setSeries(Array.isArray(data.series) ? data.series : [])
+      } catch {
+        if (!cancelled) setSeries([])
+      } finally {
+        if (!cancelled) {
+          setTrendLoaded(true)
+          setTrendLoading(false)
+        }
+      }
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [accountId, datePreset, level, open, row.id, since, trendLoaded, trendLoading, until])
+
+  useEffect(() => () => {
+    if (closeTimer.current) clearTimeout(closeTimer.current)
+  }, [])
+
+  const chartWidth = 272
+  const chartHeight = 92
+  const chartPad = 8
+  const chartMax = Math.max(...series.map(point => point.value), 1)
+  const chartPoints = series.map((point, index) => {
+    const x = chartPad + (series.length <= 1 ? 0 : index * (chartWidth - chartPad * 2) / (series.length - 1))
+    const y = chartHeight - chartPad - (point.value / chartMax) * (chartHeight - chartPad * 2)
+    return `${x},${y}`
+  }).join(" ")
+
+  if (!hasInsights) return <span className="text-sm font-medium tabular-nums leading-5">—</span>
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onMouseEnter={keepOpen}
+          onMouseLeave={closeSoon}
+          onFocus={keepOpen}
+          onBlur={closeSoon}
+          className="group/spend inline-flex items-center gap-1.5 text-sm font-medium tabular-nums leading-5 underline decoration-dotted underline-offset-2"
+        >
+          <IconChartBar className="size-3.5 text-[#1877f2] opacity-0 transition-opacity group-hover/spend:opacity-100 group-focus/spend:opacity-100" />
+          {fmtMoney(spend)}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={8}
+        onMouseEnter={keepOpen}
+        onMouseLeave={closeSoon}
+        className="w-80 gap-3 p-4"
+      >
+        <div>
+          <p className="font-semibold">About your spending</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Performance for the selected reporting period and the budget configured on this item.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs text-muted-foreground">Amount spent</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{fmtMoney(spend)}</p>
+          </div>
+          <div className="border-l pl-3">
+            <p className="text-xs text-muted-foreground">Budget</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">{budget > 0 ? fmtMoney(budget) : "—"}</p>
+            <p className="text-xs text-muted-foreground">{budget > 0 ? "Configured amount" : "Using parent budget"}</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs"><span>Amount spent</span><span>{fmtMoney(spend)}</span></div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.max(2, Math.min(100, (spend / max) * 100))}%` }} />
+          </div>
+          <div className="flex items-center justify-between text-xs"><span>Budget</span><span>{budget > 0 ? fmtMoney(budget) : "—"}</span></div>
+          <div className="h-2 overflow-hidden rounded-full bg-muted">
+            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${budget > 0 ? Math.max(2, Math.min(100, (budget / max) * 100)) : 0}%` }} />
+          </div>
+        </div>
+        <div className="space-y-2 border-t pt-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold">Daily spend</p>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><span className="size-2 rounded-full bg-teal-500" />Amount spent</span>
+          </div>
+          {trendLoading ? (
+            <div className="flex h-28 items-center justify-center"><IconLoader2 className="size-5 animate-spin text-[#1877f2]" /></div>
+          ) : series.length ? (
+            <div>
+              <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="h-28 w-full overflow-visible" role="img" aria-label="Daily amount spent chart">
+                {[0.25, 0.5, 0.75].map(ratio => (
+                  <line key={ratio} x1={chartPad} x2={chartWidth - chartPad} y1={chartHeight * ratio} y2={chartHeight * ratio} className="stroke-border" strokeWidth="1" />
+                ))}
+                {series.length > 1 && <polyline points={chartPoints} fill="none" className="stroke-teal-500" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />}
+                {series.map((point, index) => {
+                  const [x, y] = chartPoints.split(" ")[index].split(",").map(Number)
+                  return <circle key={point.date} cx={x} cy={y} r="2.5" className="fill-teal-500" />
+                })}
+              </svg>
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>{series[0]?.label}</span><span>{series[series.length - 1]?.label}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex h-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">No daily spend data</div>
+          )}
+        </div>
+        <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onOpenCharts}>Performance overview</Button>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 // Inline percentage formatter with thousands separators for large values.
@@ -605,13 +780,23 @@ function AdsManagerContent() {
   const [ads, setAds] = useState<Ad[]>([])
   const [accountSummary, setAccountSummary] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(false)
-  const [slowLoad, setSlowLoad] = useState(false)
   const [loadedMs, setLoadedMs] = useState<number | null>(null)
+  const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null)
   const [error, setError] = useState("")
 
   // Hierarchical filter: checked campaigns → filters adsets; checked adsets → filters ads
   const [campaignFilter, setCampaignFilter] = useState<Set<string>>(new Set())
   const [adSetFilter, setAdSetFilter] = useState<Set<string>>(new Set())
+  const hierarchyParentId = tab === "adsets" && campaignFilter.size === 1
+    ? Array.from(campaignFilter)[0]
+    : tab === "ads" && adSetFilter.size === 1
+      ? Array.from(adSetFilter)[0]
+      : null
+  const hierarchyCacheKey = tab === "adsets"
+    ? `campaign:${Array.from(campaignFilter).sort().join(",") || "all"}`
+    : tab === "ads"
+      ? `adset:${Array.from(adSetFilter).sort().join(",") || "all"}`
+      : "all"
 
   // Filters & search
   const [search, setSearch] = useState("")
@@ -946,8 +1131,6 @@ function AdsManagerContent() {
     ads?: Ad[]
     paging?: { after?: string; hasNext: boolean }
   }>>(new Map())
-  const slowTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   const fetchMainData = useCallback(async (forceRefresh = false) => {
     if (!selectedAccountId) return
 
@@ -955,7 +1138,7 @@ function AdsManagerContent() {
     const after = pageCursorsRef.current[tab][page - 1]
     const paginationParam = `&limit=${PAGE_SIZE}${statusFilter === "ACTIVE" ? "&active_only=true" : ""}${after ? `&after=${encodeURIComponent(after)}` : ""}`
     const refreshParam = `${forceRefresh ? "&refresh=true" : ""}${paginationParam}`
-    const cacheKey = `${selectedAccountId}:${datePreset}:${customDateRange ? "custom" : "preset"}:${tab}:${statusFilter}:page:${page}:after:${after || "first"}`
+    const cacheKey = `${selectedAccountId}:${dateParam}:${tab}:${statusFilter}:hierarchy:${hierarchyCacheKey}:page:${page}:after:${after || "first"}`
 
     const cached = forceRefresh ? undefined : clientCache.current.get(cacheKey)
     if (cached) {
@@ -967,10 +1150,10 @@ function AdsManagerContent() {
         setAds(cached.ads || [])
       }
       setPaging(cached.paging || { hasNext: false })
+      setLoadedAccountId(selectedAccountId)
+      return
     } else {
       setLoading(true)
-      setSlowLoad(false)
-      slowTimer.current = setTimeout(() => setSlowLoad(true), 5000)
     }
 
     setError("")
@@ -990,7 +1173,8 @@ function AdsManagerContent() {
             : { ...previous, campaigns: [...previous.campaigns.slice(0, page), d.paging.after] })
         }
       } else if (tab === "adsets") {
-        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
+        const parentParam = hierarchyParentId ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}` : ""
+        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
@@ -1002,7 +1186,8 @@ function AdsManagerContent() {
             : { ...previous, adsets: [...previous.adsets.slice(0, page), d.paging.after] })
         }
       } else {
-        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
+        const parentParam = hierarchyParentId ? `&adset_id=${encodeURIComponent(hierarchyParentId)}` : ""
+        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
@@ -1015,18 +1200,21 @@ function AdsManagerContent() {
         }
       }
       setLoadedMs(Date.now() - t0)
+      setLoadedAccountId(selectedAccountId)
     } catch (e: any) {
       setError(e.message || "Failed to load")
+      setLoadedAccountId(selectedAccountId)
     } finally {
       setLoading(false)
-      setSlowLoad(false)
-      if (slowTimer.current) clearTimeout(slowTimer.current)
     }
-  }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange, page, statusFilter])
+  }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange, page, statusFilter, hierarchyParentId, hierarchyCacheKey])
 
   const handleLaunchBatchChange = useCallback((event: "INSERT" | "UPDATE" | "DELETE") => {
     if (historyOpen) void fetchHistory()
-    if (event === "INSERT") void fetchMainData(true)
+    if (event === "INSERT") {
+      clientCache.current.clear()
+      void fetchMainData(true)
+    }
   }, [fetchHistory, fetchMainData, historyOpen])
 
   useLaunchBatchesRealtime(handleLaunchBatchChange)
@@ -1090,18 +1278,16 @@ function AdsManagerContent() {
 
   const breakdownDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Main data: account / tab / date change → immediate refetch
-  useEffect(() => { fetchMainData(true) }, [fetchMainData])
+  // Main data: account / tab / date change reuses a matching loaded state.
+  useEffect(() => { fetchMainData() }, [fetchMainData])
 
   useEffect(() => {
     if (!selectedAccountId) return
     const refreshVisibleData = () => {
       if (document.visibilityState === "visible") fetchMainData(true)
     }
-    const interval = setInterval(refreshVisibleData, 60_000)
     window.addEventListener("focus", refreshVisibleData)
     return () => {
-      clearInterval(interval)
       window.removeEventListener("focus", refreshVisibleData)
     }
   }, [selectedAccountId, fetchMainData])
@@ -1145,12 +1331,24 @@ function AdsManagerContent() {
   useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, statusFilter, datePreset, customDateRange, breakdowns])
   useEffect(() => {
     setPageCursors(previous => ({ ...previous, [tab]: [undefined] }))
-  }, [selectedAccountId, tab, statusFilter, datePreset, customDateRange])
+  }, [selectedAccountId, tab, statusFilter, datePreset, customDateRange, hierarchyCacheKey])
 
   // ─── Tab switch: if items checked, capture as filter for the next level ─────
   // Badge appears only on the NEXT tab, not on all 3 at once
 
   const switchTab = (newTab: Tab) => {
+    if (tab === "campaigns" && newTab === "adsets" && selectedIds.size > 1) {
+      setError("Select one campaign at a time to view its ad sets.")
+      return
+    }
+    if (tab === "adsets" && newTab === "ads" && selectedIds.size > 1) {
+      setError("Select one ad set at a time to view its ads.")
+      return
+    }
+    if (tab === "campaigns" && newTab === "ads" && (selectedIds.size > 0 || campaignFilter.size > 0)) {
+      setError("Select an ad set before viewing its ads.")
+      return
+    }
     if (tab === "campaigns" && selectedIds.size > 0) {
       setCampaignFilter(new Set(selectedIds))
       setAdSetFilter(new Set())
@@ -1158,6 +1356,8 @@ function AdsManagerContent() {
     if (tab === "adsets" && selectedIds.size > 0) {
       setAdSetFilter(new Set(selectedIds))
     }
+    setPage(1)
+    setPageCursors(previous => ({ ...previous, [newTab]: [undefined] }))
     setSelectedIds(new Set())
     setTab(newTab)
   }
@@ -1173,6 +1373,7 @@ function AdsManagerContent() {
         body: JSON.stringify({ id, newStatus }),
       })
       if (!r.ok) return
+      clientCache.current.clear()
       // Optimistic update
       if (tab === "campaigns") setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: newStatus, effective_status: newStatus } : c))
       else if (tab === "adsets") setAdSets(prev => prev.map(a => a.id === id ? { ...a, status: newStatus, effective_status: newStatus } : a))
@@ -1204,6 +1405,7 @@ function AdsManagerContent() {
         body: JSON.stringify({ id, name: inlineEditingName })
       })
       if (!r.ok) throw new Error("Failed to update name")
+      clientCache.current.clear()
     } catch (err) {
       console.error(err)
       fetchMainData(true) // revert on fail
@@ -1233,6 +1435,7 @@ function AdsManagerContent() {
       }
       setDuplicateDialogOpen(false)
       setSelectedIds(new Set())
+      clientCache.current.clear()
       await fetchMainData(true)
     } catch (err) {
       console.error(err)
@@ -1310,6 +1513,7 @@ function AdsManagerContent() {
         })
       })
       if (!r.ok) throw new Error("Failed to update")
+      clientCache.current.clear()
       setActionToast({ kind: "success", message: `Saved "${updatedNode.name}"` })
     } catch (err) {
       console.error(err)
@@ -1333,6 +1537,7 @@ function AdsManagerContent() {
       })
       const d = await r.json()
       if (d.deleted > 0) {
+        clientCache.current.clear()
         const deletedSet = new Set(d.results.filter((x: any) => x.success).map((x: any) => x.id))
         if (tab === "campaigns") {
           setCampaigns(prev => prev.filter(c => !deletedSet.has(c.id)))
@@ -1852,7 +2057,7 @@ function AdsManagerContent() {
 
     switch (colId) {
       case "spend":
-        return <span className="text-sm font-medium tabular-nums leading-5">{ins ? fmtMoney(spend) : "—"}</span>
+        return <SpendHoverValue row={row} spend={spend} hasInsights={Boolean(ins)} onOpenCharts={() => openCharts(row)} accountId={selectedAccountId || ""} level={level} datePreset={datePreset} since={drawerSince} until={drawerUntil} />
 
       case "results": {
         const { count, type } = getResults(row, objective)
@@ -2265,11 +2470,15 @@ function AdsManagerContent() {
   const drillToAdSets = (campaign: Campaign) => {
     setCampaignFilter(new Set([campaign.id]))
     setAdSetFilter(new Set())
+    setPage(1)
+    setPageCursors(previous => ({ ...previous, adsets: [undefined] }))
     setSelectedIds(new Set())
     setTab("adsets")
   }
   const drillToAds = (adSet: AdSet) => {
     setAdSetFilter(new Set([adSet.id]))
+    setPage(1)
+    setPageCursors(previous => ({ ...previous, ads: [undefined] }))
     setSelectedIds(new Set())
     setTab("ads")
   }
@@ -2303,18 +2512,36 @@ function AdsManagerContent() {
       return { count: selectedIds.size, clear: () => setSelectedIds(new Set()) }
     }
     if (t === "campaigns" && t !== tab && campaignFilter.size > 0) {
-      return { count: campaignFilter.size, clear: () => { setCampaignFilter(new Set()); setAdSetFilter(new Set()) } }
+      return {
+        count: campaignFilter.size,
+        clear: () => {
+          setCampaignFilter(new Set())
+          setAdSetFilter(new Set())
+          setPage(1)
+          setPageCursors(previous => ({ ...previous, adsets: [undefined] }))
+        },
+      }
     }
     if (t === "adsets" && t !== tab && adSetFilter.size > 0) {
-      return { count: adSetFilter.size, clear: () => setAdSetFilter(new Set()) }
+      return {
+        count: adSetFilter.size,
+        clear: () => {
+          setAdSetFilter(new Set())
+          setPage(1)
+          setPageCursors(previous => ({ ...previous, ads: [undefined] }))
+        },
+      }
     }
     return null
   }
 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
+  const isLoadingAccount = Boolean(selectedAccountId && loadedAccountId !== selectedAccountId)
+  const isDataLoading = loading || isLoadingAccount
+
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-background">
+    <div className="relative flex flex-col h-full overflow-hidden bg-background">
       <CreateCampaignModal
         open={createModalOpen}
         initialState={createInitialState}
@@ -2324,6 +2551,7 @@ function AdsManagerContent() {
         }}
         onSuccess={() => {
           setCreateInitialState(undefined)
+          clientCache.current.clear()
           fetchMainData(true)
         }}
       />
@@ -2333,6 +2561,7 @@ function AdsManagerContent() {
         <h1 className="text-base font-bold">Campaigns</h1>
         {/* Account selector */}
         <AdAccountPill className="h-8 py-0 text-xs" labelClassName="max-w-[180px]" />
+        {selectedAccountId && <OpportunityScoreBadge adAccountId={selectedAccountId} />}
         {selectedAccount && (
           <span className="text-xs text-muted-foreground">{selectedAccount.id}</span>
         )}
@@ -2692,7 +2921,7 @@ function AdsManagerContent() {
       </div>
 
       {/* ── Table ── */}
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 overflow-auto" aria-busy={isDataLoading}>
         {error && (
           <div className="m-4 px-4 py-3 bg-destructive/10 border border-destructive/30 rounded-lg text-xs text-destructive">{error}</div>
         )}
@@ -2702,13 +2931,7 @@ function AdsManagerContent() {
           </div>
         )}
 
-        {loading && currentData.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-40 gap-2">
-            <IconLoader2 className="size-6 animate-spin text-muted-foreground" />
-            {slowLoad && <p className="text-xs text-muted-foreground animate-pulse">Wait a few seconds to finish</p>}
-          </div>
-        ) : (
-          <table data-table="compact" className={cn("w-full text-sm border-collapse", loading && "opacity-60 transition-opacity")} style={{ minWidth: 1100, tableLayout: "fixed" }}>
+          <table data-table="compact" className="w-full text-sm border-collapse" style={{ minWidth: 1100, tableLayout: "fixed" }}>
             {/* `dark:bg-muted/80` was translucent, which is invisible while nothing is pinned
                 horizontally but shows the scrolling columns through the frozen header cells the
                 moment they are. Opaque here and on the three frozen cells below. */}
@@ -2776,31 +2999,44 @@ function AdsManagerContent() {
                   )
                 })}
               </tr>
+              {isDataLoading && (
+                <tr className="h-0">
+                  <th colSpan={Math.max(12, columnOrder.length + (tab === "ads" ? 4 : 3))} className="relative h-0 p-0">
+                    <div className="absolute inset-x-0 top-0 z-40 h-[3px] overflow-hidden bg-[#d8dadf] dark:bg-white/10" role="status" aria-label="Loading Ads Manager data">
+                      <div className="ads-manager-progress-indicator absolute inset-y-0 bg-[#42b72a]" />
+                    </div>
+                  </th>
+                </tr>
+              )}
             </thead>
 
-            <tbody>
+            <tbody className={cn("transition-opacity duration-200", isDataLoading && "pointer-events-none select-none opacity-35")}>
               {pagedData.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="py-16">
-                    <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                      <span className="text-sm">
-                        {search ? `No ${tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"} match "${search}"` : `No ${tab} found`}
-                      </span>
-                      {/* Suggest switching to another tab if it has matching results */}
-                      {search && (
-                        <div className="flex items-center gap-2 flex-wrap justify-center">
-                          {(["campaigns", "adsets", "ads"] as Tab[]).filter(t => t !== tab && (tabMatchCounts[t] ?? 0) > 0).map(t => (
-                            <button
-                              key={t}
-                              onClick={() => switchTab(t)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors font-medium"
-                            >
-                              Found {tabMatchCounts[t]} in {t === "campaigns" ? "Campaigns" : t === "adsets" ? "Ad sets" : "Ads"} →
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    {isDataLoading ? (
+                      <div className="h-8" aria-hidden="true" />
+                    ) : (
+                      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                        <span className="text-sm">
+                          {search ? `No ${tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"} match "${search}"` : `No ${tab} found`}
+                        </span>
+                        {/* Suggest switching to another tab if it has matching results */}
+                        {search && (
+                          <div className="flex items-center gap-2 flex-wrap justify-center">
+                            {(["campaigns", "adsets", "ads"] as Tab[]).filter(t => t !== tab && (tabMatchCounts[t] ?? 0) > 0).map(t => (
+                              <button
+                                key={t}
+                                onClick={() => switchTab(t)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-colors font-medium"
+                              >
+                                Found {tabMatchCounts[t]} in {t === "campaigns" ? "Campaigns" : t === "adsets" ? "Ad sets" : "Ads"} →
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : tab === "campaigns" ? (
@@ -2927,7 +3163,7 @@ function AdsManagerContent() {
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               <div className="flex items-center gap-2">
-                                <p className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200 line-clamp-2">{a.name}</p>
+                                <button onClick={() => openWorkspaceEditor(a)} className="text-[#1877f2] hover:underline text-xs font-semibold text-left line-clamp-2">{a.name}</button>
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
@@ -2998,7 +3234,6 @@ function AdsManagerContent() {
               </tfoot>
             )}
           </table>
-        )}
       </div>
 
       {/* ── Duplicate Dialog ── */}
@@ -3239,6 +3474,7 @@ function AdsManagerContent() {
         }}
         onSaved={() => {
           setEditingNode(null)
+          clientCache.current.clear()
           fetchMainData(true)
         }}
         adAccountId={selectedAccountId ?? undefined}
@@ -3593,7 +3829,10 @@ function AdsManagerContent() {
             setCreateModalOpen(true)
           }}
           onCreateReplacement={openReplacementCreate}
-          onPublished={() => fetchMainData(true)}
+          onPublished={() => {
+            clientCache.current.clear()
+            fetchMainData(true)
+          }}
           onViewHistory={(_id: string) => { setHistoryOpen(true); fetchHistory() }}
           attributionWindows={attributionWindows}
         />

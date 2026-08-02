@@ -337,3 +337,49 @@
     font-family: inherit;
   }
 }
+@keyframes ads-manager-indeterminate-progress {
+  0% {
+    left: -35%;
+    width: 30%;
+  }
+  55% {
+    width: 42%;
+  }
+  100% {
+    left: 100%;
+    width: 30%;
+  }
+}
+
+@keyframes ads-manager-progress-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.ads-manager-progress-indicator {
+  animation: ads-manager-indeterminate-progress 1.25s ease-in-out infinite;
+}
+
+.meta-assignment-progress-indicator {
+  position: relative;
+  animation: ads-manager-indeterminate-progress 1.25s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ads-manager-progress-indicator {
+    left: 0;
+    width: 35%;
+    animation: ads-manager-progress-pulse 1.5s ease-in-out infinite;
+  }
+
+  .meta-assignment-progress-indicator {
+    left: 0;
+    width: 35%;
+    animation: ads-manager-progress-pulse 1.5s ease-in-out infinite;
+  }
+}

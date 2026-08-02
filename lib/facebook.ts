@@ -1336,6 +1336,45 @@ export async function checkVideoStatus(
   }
 }
 
+// Lightweight per-item status read for assignment progress. Unlike
+// getVideoReadyData(), this deliberately does not request thumbnails or source URLs.
+export async function getVideoProcessingStatus(
+  videoId: string,
+  accessToken: string,
+  opts?: MetaFetchOpts
+): Promise<{ ready: boolean; status: string; processingProgress: number | null; errorMsg?: string }> {
+  try {
+    const res = await secureMetaFetch(
+      `${GRAPH_API_BASE}/${videoId}?fields=status&access_token=${accessToken}`,
+      undefined,
+      opts
+    )
+    if (!res.ok) {
+      return { ready: false, status: "unknown", processingProgress: null, errorMsg: "Failed to fetch status from Meta" }
+    }
+
+    const data = await res.json()
+    const status = (data.status?.video_status as string | undefined) || "unknown"
+    const processingProgress = typeof data.status?.processing_progress === "number"
+      ? data.status.processing_progress
+      : null
+    const errorMsg = status === "error"
+      ? (data.status?.processing_phase?.errors?.[0]?.message
+          || data.status?.uploading_phase?.errors?.[0]?.message
+          || "Video processing failed on Meta")
+      : undefined
+
+    return { ready: status === "ready", status, processingProgress, errorMsg }
+  } catch (error) {
+    return {
+      ready: false,
+      status: "unknown",
+      processingProgress: null,
+      errorMsg: error instanceof Error ? error.message : "Failed to fetch status from Meta",
+    }
+  }
+}
+
 // Fetch a video's playable source URL from Facebook
 export async function getVideoSource(videoId: string, accessToken: string, opts?: MetaFetchOpts): Promise<string | null> {
   try {

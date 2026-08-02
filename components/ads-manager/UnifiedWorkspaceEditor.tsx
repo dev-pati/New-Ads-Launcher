@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  IconAlertTriangle,
   IconCheck,
   IconExternalLink,
   IconPhoto,
@@ -225,20 +224,30 @@ export function UnifiedWorkspaceEditor({
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false)
+  const syncingNodeRef = useRef(false)
   const nodeSignature = useMemo(() => JSON.stringify(node), [node])
   const draftSignature = useMemo(() => JSON.stringify(draft), [draft])
 
   useEffect(() => {
     setDraft(current =>
-      JSON.stringify(current) === nodeSignature
-        ? current
-        : JSON.parse(nodeSignature) as WorkspaceNode | null
+      {
+        if (JSON.stringify(current) === nodeSignature) {
+          syncingNodeRef.current = false
+          return current
+        }
+        syncingNodeRef.current = true
+        return JSON.parse(nodeSignature) as WorkspaceNode | null
+      }
     )
     setSaved(false)
   }, [level, nodeSignature])
 
   useEffect(() => {
     if (!draft || nodeSignature === "null" || !onDraftChange) return
+    if (syncingNodeRef.current) {
+      if (draftSignature === nodeSignature) syncingNodeRef.current = false
+      return
+    }
     if (draftSignature !== nodeSignature) onDraftChange(draft, level)
   }, [draft, draftSignature, level, nodeSignature, onDraftChange])
 
@@ -774,7 +783,6 @@ export function UnifiedWorkspaceEditor({
               </div>
             </Section>
             <Section title="Ad creative">
-              <AdPreview node={draft} />
               <div className="mt-4 space-y-3">
                 <Button type="button" variant="outline" size="sm" onClick={() => setMediaPickerOpen(true)}>
                   Replace media from Creative Portal
@@ -816,23 +824,15 @@ export function UnifiedWorkspaceEditor({
             </div>
           </div>
         </section>
-        <section className="rounded-lg border border-[#e4e6eb] bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-card">
+        {level === "ad" && <section className="rounded-lg border border-[#e4e6eb] bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-card">
           <div className="mb-3 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold">Preview</p>
             <Button variant="outline" size="sm" className="h-8">
               <IconExternalLink className="mr-1 size-3.5" /> Advanced preview
             </Button>
           </div>
-          {level === "ad" ? (
-            <AdPreview node={draft} />
-          ) : (
-            <div className="rounded-lg border bg-muted/20 p-5 text-center">
-              <IconAlertTriangle className="mx-auto mb-2 size-6 text-amber-600" />
-              <p className="text-sm font-semibold">Select an ad for creative preview</p>
-              <p className="mt-1 text-xs text-muted-foreground">Campaign and ad set edits keep the hierarchy visible while you drill down.</p>
-            </div>
-          )}
-        </section>
+          <AdPreview node={draft} />
+        </section>}
       </aside>
     </div>
   )

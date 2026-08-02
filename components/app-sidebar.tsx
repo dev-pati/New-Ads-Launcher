@@ -155,6 +155,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
   const { settings, updateSettings } = useUserSettings()
   const [collapsed, setCollapsed] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
   const { unreadCount } = useNotifications()
   const activeSection = getActiveSection(pathname)
 
@@ -187,6 +188,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
     const next = resolvedTheme === "light" ? "dark"
       : resolvedTheme === "dark" ? "dark-premium"
       : "light"
+    setUserMenuOpen(false)
     setTheme(next)
     updateSettings({ theme: next })
   }
@@ -349,7 +351,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
 
       {/* User footer */}
       <div className="border-t border-sidebar-border p-2">
-        <DropdownMenu>
+        <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
           <DropdownMenuTrigger asChild>
             <button
               className={cn(
