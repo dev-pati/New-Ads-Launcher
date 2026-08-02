@@ -426,18 +426,35 @@ function SpendHoverValue({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+      <div className="group/spend inline-flex items-center gap-1.5">
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            onMouseEnter={() => enterTarget("trigger")}
+            onMouseLeave={() => leaveTarget("trigger")}
+            onFocus={() => enterTarget("trigger")}
+            onBlur={() => leaveTarget("trigger")}
+            className="inline-flex items-center text-sm font-medium tabular-nums leading-5 underline decoration-dotted underline-offset-2"
+          >
+            {fmtMoney(spend)}
+          </button>
+        </PopoverTrigger>
         <button
           type="button"
+          aria-label="Open performance chart"
+          title="Open performance chart"
+          className="inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-[#1877f2] opacity-60 transition-opacity hover:bg-muted hover:opacity-100 group-hover/spend:opacity-100"
           onMouseEnter={() => enterTarget("trigger")}
           onMouseLeave={() => leaveTarget("trigger")}
-          onFocus={() => enterTarget("trigger")}
-          onBlur={() => leaveTarget("trigger")}
-          className="inline-flex items-center text-sm font-medium tabular-nums leading-5 underline decoration-dotted underline-offset-2"
+          onClick={event => {
+            event.preventDefault()
+            event.stopPropagation()
+            onOpenCharts()
+          }}
         >
-          {fmtMoney(spend)}
+          <IconChartBar className="size-3.5" />
         </button>
-      </PopoverTrigger>
+      </div>
       <PopoverContent
         side="right"
         align="start"
@@ -500,24 +517,7 @@ function SpendHoverValue({
             <div className="flex h-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">No daily spend data</div>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            aria-label="Open performance chart"
-            title="Open performance chart"
-            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-[#1877f2] transition-colors hover:bg-muted"
-            onMouseEnter={() => enterTarget("trigger")}
-            onMouseLeave={() => leaveTarget("trigger")}
-            onClick={event => {
-              event.preventDefault()
-              event.stopPropagation()
-              onOpenCharts()
-            }}
-          >
-            <IconChartBar className="size-4" />
-          </button>
-          <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onOpenCharts}>Performance overview</Button>
-        </div>
+        <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onOpenCharts}>Performance overview</Button>
       </PopoverContent>
     </Popover>
   )
