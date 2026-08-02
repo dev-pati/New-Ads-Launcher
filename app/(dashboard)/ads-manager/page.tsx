@@ -301,6 +301,28 @@ function fmtMoney(v: number): string {
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+async function readJsonWithProgress<T>(response: Response, onProgress: (value: number) => void): Promise<T> {
+  if (!response.body) return response.json() as Promise<T>
+  const total = Number(response.headers.get("content-length"))
+  if (!Number.isFinite(total) || total <= 0) return response.json() as Promise<T>
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let loaded = 0
+  let text = ""
+  onProgress(12)
+  while (true) {
+    const chunk = await reader.read()
+    if (chunk.done) break
+    loaded += chunk.value.byteLength
+    text += decoder.decode(chunk.value, { stream: true })
+    onProgress(Math.min(95, 12 + Math.round((loaded / total) * 83)))
+  }
+  text += decoder.decode()
+  onProgress(98)
+  return JSON.parse(text) as T
+}
+
 function SpendHoverValue({
   row,
   spend,
@@ -327,6 +349,7 @@ function SpendHoverValue({
   const [trendLoading, setTrendLoading] = useState(false)
   const [trendLoaded, setTrendLoaded] = useState(false)
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hoverTarget = useRef<"trigger" | "content" | null>(null)
   const budgetCents = Number((row as Campaign | AdSet).daily_budget || (row as Campaign | AdSet).lifetime_budget || 0)
   const budget = Number.isFinite(budgetCents) ? budgetCents / 100 : 0
   const max = Math.max(spend, budget, 1)
@@ -336,7 +359,17 @@ function SpendHoverValue({
   }
   const closeSoon = () => {
     if (closeTimer.current) clearTimeout(closeTimer.current)
-    closeTimer.current = setTimeout(() => setOpen(false), 120)
+    closeTimer.current = setTimeout(() => {
+      if (!hoverTarget.current) setOpen(false)
+    }, 220)
+  }
+  const enterTarget = (target: "trigger" | "content") => {
+    hoverTarget.current = target
+    keepOpen()
+  }
+  const leaveTarget = (target: "trigger" | "content") => {
+    if (hoverTarget.current === target) hoverTarget.current = null
+    closeSoon()
   }
 
   useEffect(() => {
@@ -373,7 +406,7 @@ function SpendHoverValue({
     }
     void load()
     return () => { cancelled = true }
-  }, [accountId, datePreset, level, open, row.id, since, trendLoaded, trendLoading, until])
+  }, [accountId, datePreset, level, open, row.id, since, trendLoaded, until])
 
   useEffect(() => () => {
     if (closeTimer.current) clearTimeout(closeTimer.current)
@@ -396,13 +429,12 @@ function SpendHoverValue({
       <PopoverTrigger asChild>
         <button
           type="button"
-          onMouseEnter={keepOpen}
-          onMouseLeave={closeSoon}
-          onFocus={keepOpen}
-          onBlur={closeSoon}
-          className="group/spend inline-flex items-center gap-1.5 text-sm font-medium tabular-nums leading-5 underline decoration-dotted underline-offset-2"
+          onMouseEnter={() => enterTarget("trigger")}
+          onMouseLeave={() => leaveTarget("trigger")}
+          onFocus={() => enterTarget("trigger")}
+          onBlur={() => leaveTarget("trigger")}
+          className="inline-flex items-center text-sm font-medium tabular-nums leading-5 underline decoration-dotted underline-offset-2"
         >
-          <IconChartBar className="size-3.5 text-[#1877f2] opacity-0 transition-opacity group-hover/spend:opacity-100 group-focus/spend:opacity-100" />
           {fmtMoney(spend)}
         </button>
       </PopoverTrigger>
@@ -410,8 +442,8 @@ function SpendHoverValue({
         side="right"
         align="start"
         sideOffset={8}
-        onMouseEnter={keepOpen}
-        onMouseLeave={closeSoon}
+        onMouseEnter={() => enterTarget("content")}
+        onMouseLeave={() => leaveTarget("content")}
         className="w-80 gap-3 p-4"
       >
         <div>
@@ -468,7 +500,24 @@ function SpendHoverValue({
             <div className="flex h-28 items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">No daily spend data</div>
           )}
         </div>
-        <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onOpenCharts}>Performance overview</Button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            aria-label="Open performance chart"
+            title="Open performance chart"
+            className="inline-flex size-8 items-center justify-center rounded-md border border-border bg-background text-[#1877f2] transition-colors hover:bg-muted"
+            onMouseEnter={() => enterTarget("trigger")}
+            onMouseLeave={() => leaveTarget("trigger")}
+            onClick={event => {
+              event.preventDefault()
+              event.stopPropagation()
+              onOpenCharts()
+            }}
+          >
+            <IconChartBar className="size-4" />
+          </button>
+          <Button type="button" variant="outline" size="sm" className="w-fit" onClick={onOpenCharts}>Performance overview</Button>
+        </div>
       </PopoverContent>
     </Popover>
   )
@@ -780,6 +829,7 @@ function AdsManagerContent() {
   const [ads, setAds] = useState<Ad[]>([])
   const [accountSummary, setAccountSummary] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingProgress, setLoadingProgress] = useState(0)
   const [loadedMs, setLoadedMs] = useState<number | null>(null)
   const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null)
   const [error, setError] = useState("")
@@ -1154,6 +1204,7 @@ function AdsManagerContent() {
       return
     } else {
       setLoading(true)
+      setLoadingProgress(0)
     }
 
     setError("")
@@ -1162,7 +1213,8 @@ function AdsManagerContent() {
     try {
       if (tab === "campaigns") {
         const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
-        const d = await r.json()
+        setLoadingProgress(12)
+        const d = await readJsonWithProgress<any>(r, setLoadingProgress)
         if (!r.ok) throw new Error(d.error || "Failed")
         setCampaigns(d.campaigns || [])
         setPaging(d.paging || { hasNext: false })
@@ -1175,7 +1227,8 @@ function AdsManagerContent() {
       } else if (tab === "adsets") {
         const parentParam = hierarchyParentId ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}` : ""
         const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
-        const d = await r.json()
+        setLoadingProgress(12)
+        const d = await readJsonWithProgress<any>(r, setLoadingProgress)
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
         setPaging(d.paging || { hasNext: false })
@@ -1188,7 +1241,8 @@ function AdsManagerContent() {
       } else {
         const parentParam = hierarchyParentId ? `&adset_id=${encodeURIComponent(hierarchyParentId)}` : ""
         const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
-        const d = await r.json()
+        setLoadingProgress(12)
+        const d = await readJsonWithProgress<any>(r, setLoadingProgress)
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
         setPaging(d.paging || { hasNext: false })
@@ -1199,6 +1253,7 @@ function AdsManagerContent() {
             : { ...previous, ads: [...previous.ads.slice(0, page), d.paging.after] })
         }
       }
+      setLoadingProgress(100)
       setLoadedMs(Date.now() - t0)
       setLoadedAccountId(selectedAccountId)
     } catch (e: any) {
@@ -1206,6 +1261,7 @@ function AdsManagerContent() {
       setLoadedAccountId(selectedAccountId)
     } finally {
       setLoading(false)
+      setLoadingProgress(100)
     }
   }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange, page, statusFilter, hierarchyParentId, hierarchyCacheKey])
 
@@ -3003,7 +3059,7 @@ function AdsManagerContent() {
                 <tr className="h-0">
                   <th colSpan={Math.max(12, columnOrder.length + (tab === "ads" ? 4 : 3))} className="relative h-0 p-0">
                     <div className="absolute inset-x-0 top-0 z-40 h-[3px] overflow-hidden bg-[#d8dadf] dark:bg-white/10" role="status" aria-label="Loading Ads Manager data">
-                      <div className="ads-manager-progress-indicator absolute inset-y-0 bg-[#42b72a]" />
+                      <div className="absolute inset-y-0 left-0 bg-[#42b72a] transition-[width] duration-150" style={{ width: `${loadingProgress}%` }} />
                     </div>
                   </th>
                 </tr>

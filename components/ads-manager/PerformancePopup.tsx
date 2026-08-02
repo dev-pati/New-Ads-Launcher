@@ -1282,20 +1282,20 @@ export function PerformancePopup({
                 <div className="space-y-1 text-xs">
                   {activeCampaign && (
                     <div onClick={() => selectNode(activeCampaign.id, "campaign")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer text-blue-600 dark:text-blue-400 hover:bg-muted/40", activeCampaign.id === activeId && "bg-primary/10 text-primary")}>
-                      <span className="truncate font-medium text-[#1877f2] dark:text-white">📁 {activeCampaign.name}</span>
+                      <span className="truncate font-medium text-slate-900 dark:text-white">📁 {activeCampaign.name}</span>
                       <NodeActionMenu level="campaign" id={activeCampaign.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "campaign") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                     </div>
                   )}
                   {treeAdSets.map(as => (
                     <div key={as.id} className="ml-4">
                       <div onClick={() => selectNode(as.id, "adset")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer text-blue-600 dark:text-blue-400 hover:bg-muted/40", as.id === activeId && "bg-primary/10 text-primary")}>
-                        <span className="truncate text-[#1877f2] dark:text-white">▦ {as.name}</span>
+                            <span className="truncate text-slate-900 dark:text-white">▦ {as.name}</span>
                         <NodeActionMenu level="ad set" id={as.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "adset") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                       </div>
                       <div className="ml-4 space-y-1">
                         {treeAds(as.id).map(ad => (
                           <div key={ad.id} onClick={() => selectNode(ad.id, "ad")} className={cn("flex items-center justify-between gap-2 rounded-md px-2 py-1.5 cursor-pointer text-blue-600 dark:text-blue-400 hover:bg-muted/40", ad.id === activeId && "bg-primary/10 text-primary")}>
-                            <span className="truncate text-[#1877f2] dark:text-white">▣ {ad.name}</span>
+                                <span className="truncate text-slate-900 dark:text-white">▣ {ad.name}</span>
                             <NodeActionMenu level="ad" id={ad.id} onDuplicate={onDuplicate} onDelete={onDelete} onEdit={unifiedWorkspace ? (id) => openWorkspaceEditor(id, "ad") : onEdit} onViewHistory={onViewHistory} onSeeHistory={seeHistoryLocal} />
                           </div>
                         ))}

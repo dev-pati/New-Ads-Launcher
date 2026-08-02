@@ -173,6 +173,10 @@ function StatusControl({ value, onChange }: { value: string; onChange: (value: s
 
 function AdPreview({ node }: { node: WorkspaceNode }) {
   const thumbnail = node.thumb_url || node?.creative?.thumbnail_url || node?.creative?.image_url
+  const videoId = node.video_id || node?.creative?.video_id
+  const videoSrc = videoId
+    ? `/api/insights/video-proxy?videoId=${encodeURIComponent(videoId)}${node.page_id ? `&pageId=${encodeURIComponent(node.page_id)}` : ""}`
+    : ""
   const title = node.headline || node?.creative?.title || node?.creative?.name || node?.name
   const body = node.primaryText || node?.creative?.body || "Primary text will appear here."
   return (
@@ -186,12 +190,24 @@ function AdPreview({ node }: { node: WorkspaceNode }) {
       </div>
       <p className="px-3 pb-2 text-xs leading-relaxed">{body}</p>
       <div className="relative flex aspect-square items-center justify-center bg-neutral-100 dark:bg-neutral-900">
-        {thumbnail ? (
+        {videoSrc ? (
+          <video
+            src={videoSrc}
+            poster={thumbnail || undefined}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="auto"
+            className="size-full object-contain"
+            aria-label="Ad video preview"
+          />
+        ) : thumbnail ? (
           <img src={thumbnail} alt="" className="size-full object-contain" />
         ) : (
           <IconPhoto className="size-12 text-muted-foreground" />
         )}
-        {(node.video_id || node?.creative?.video_id) && (
+        {videoSrc && (
           <span className="absolute grid size-11 place-items-center rounded-full bg-black/70 text-white">
             <IconPlayerPlay className="size-5" />
           </span>
