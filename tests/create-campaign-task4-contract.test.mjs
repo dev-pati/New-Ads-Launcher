@@ -1,3 +1,6 @@
+// refactor-fragile: the assertions below read source files as text, so they fail on
+// renames, moves and reformatting as readily as on real behaviour changes. Before
+// adding one, read tests/README.md — assert the contract, not the characters.
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
@@ -35,7 +38,9 @@ describe("Task 4 Create Campaign contract", () => {
 
   it("wires proven Meta ad-set fields end to end", () => {
     const types = read("components/ads-manager/create-flow/types.ts")
-    const adSet = read("components/ads-manager/create-flow/AdSetLevel.tsx")
+    // The ad-set form fields moved into the shared AdSetFormFields component
+    // (used by both Create and Edit); AdSetLevel now only composes it.
+    const adSet = read("components/ads-manager/create-flow/AdSetFormFields.tsx")
     const route = read("app/api/facebook/create-campaign/route.ts")
 
     for (const field of ["conversionEvent", "costPerResultGoal", "attributionClickDays", "attributionViewDays"]) {
@@ -44,7 +49,7 @@ describe("Task 4 Create Campaign contract", () => {
     }
     assert.match(adSet, /Conversion event/)
     assert.match(adSet, /Cost per result goal/)
-    assert.match(adSet, /Attribution setting/)
+    assert.match(adSet, /Attribution setting/i)
     assert.match(route, /bid_strategy: costPerResultGoal \? "COST_CAP"/)
     assert.match(route, /attribution_spec/)
   })

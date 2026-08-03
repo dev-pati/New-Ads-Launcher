@@ -479,7 +479,7 @@ export function SheetsImportDialog({ open, onOpenChange, adAccountId, onImport }
       colIdx !== null ? String(row[colIdx] ?? "").trim() : ""
 
     // CSV source: batch-fetch creatives by filename upfront (case-insensitive, org-wide)
-    let creativeByName: Record<string, Creative> = {}
+    const creativeByName: Record<string, Creative> = {}
     if (importSource === "csv" && mapping.creative_file !== null) {
       const fileNames = [...new Set(
         rowsToImport.map(r => getCell(r, mapping.creative_file)).filter(Boolean)

@@ -469,7 +469,7 @@ function creativesToMatrix(
       if (presence) {
         const OrigViewer = cell.DataViewer
         cell.className = ensurePresenceStyle(presence.color)
-        cell.DataViewer = (props: any) => (
+        const PresenceViewer = (props: any) => (
           <span data-presence-user={presence.userName}>
             {OrigViewer ? (
               <OrigViewer {...props} />
@@ -478,6 +478,8 @@ function creativesToMatrix(
             )}
           </span>
         )
+        PresenceViewer.displayName = "PresenceViewer"
+        cell.DataViewer = PresenceViewer
       }
 
       return cell

@@ -22,7 +22,8 @@ function shouldFireNow(cfg: any, now: Date): boolean {
   if (isNaN(hh) || isNaN(mm) || hh > 23 || mm > 59) return false
 
   // Convert scheduleTime to UTC if timezone provided
-  let targetHour = hh, targetMin = mm
+  let targetHour = hh
+  const targetMin = mm
   if (cfg.scheduleTimezone && cfg.scheduleTimezone !== "UTC") {
     try {
       const localNow = new Date(now.toLocaleString("en-US", { timeZone: cfg.scheduleTimezone }))

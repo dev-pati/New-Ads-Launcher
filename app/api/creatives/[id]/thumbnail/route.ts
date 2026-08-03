@@ -73,7 +73,7 @@ export async function POST(
       hasThumb ? creative.fb_thumbnail_url : videoData.thumbnailUrl,
       hasPlayableSource ? creative.file_url : videoData.sourceUrl,
     ]
-    let currentStatus = "ready"
+    const currentStatus = "ready"
 
     // 4. Update DB if we got new info
     const update: CreativeUpdate = {}

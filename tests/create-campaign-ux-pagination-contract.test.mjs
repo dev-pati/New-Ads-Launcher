@@ -1,3 +1,6 @@
+// refactor-fragile: the assertions below read source files as text, so they fail on
+// renames, moves and reformatting as readily as on real behaviour changes. Before
+// adding one, read tests/README.md — assert the contract, not the characters.
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
@@ -23,7 +26,8 @@ describe("Create Campaign UX and Ads Manager paging contract", () => {
   it("marks missing fields inline without a top-level validation message", () => {
     const modal = read("components/ads-manager/create-flow/CreateCampaignModal.tsx")
     const campaign = read("components/ads-manager/create-flow/CampaignLevel.tsx")
-    const adSet = read("components/ads-manager/create-flow/AdSetLevel.tsx")
+    // Ad-set inputs live in the shared AdSetFormFields component, not AdSetLevel.
+    const adSet = read("components/ads-manager/create-flow/AdSetFormFields.tsx")
     const ad = read("components/ads-manager/create-flow/AdLevel.tsx")
 
     assert.match(modal, /invalidFields/)

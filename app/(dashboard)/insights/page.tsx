@@ -1404,13 +1404,11 @@ function Top5RevenueWidget({ topAds, loading }: { topAds: TopAd[]; loading: bool
   )
 }
 
-function WinnersWidget({ topAds, loading }: { topAds: TopAd[]; loading: boolean }) {
-  if (loading) return <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground"><IconLoader2 className="size-4 animate-spin" />Loading…</div>
-
-  const winners      = topAds.filter(a => a.roas >= 1.5 && a.spend >= 20)
-  const highPotential = topAds.filter(a => a.spend < 50 && a.spend > 5 && a.results > 0 && a.roas < 1.5)
-
-  const ThumbStrip = ({ ads, max = 4 }: { ads: TopAd[]; max?: number }) => (
+// Hoisted out of WinnersWidget's render: it closes over nothing from that scope,
+// and defining it during render remounted the thumbnails (and re-fetched every
+// <img>) on each render.
+function ThumbStrip({ ads, max = 4 }: { ads: TopAd[]; max?: number }) {
+  return (
     <div className="flex -space-x-1">
       {ads.slice(0, max).map(a => (
         <div key={a.adId} className="size-9 rounded-md border-2 border-background bg-muted overflow-hidden shrink-0">
@@ -1429,6 +1427,14 @@ function WinnersWidget({ topAds, loading }: { topAds: TopAd[]; loading: boolean 
       )}
     </div>
   )
+}
+
+function WinnersWidget({ topAds, loading }: { topAds: TopAd[]; loading: boolean }) {
+  if (loading) return <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground"><IconLoader2 className="size-4 animate-spin" />Loading…</div>
+
+  const winners      = topAds.filter(a => a.roas >= 1.5 && a.spend >= 20)
+  const highPotential = topAds.filter(a => a.spend < 50 && a.spend > 5 && a.results > 0 && a.roas < 1.5)
+
 
   return (
     <div className="flex items-center gap-8">

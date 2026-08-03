@@ -80,7 +80,7 @@ export function CommentAutomationSection({ commentsData }: { commentsData: Comme
     }
   }
 
-  const useTemplate = async (template: typeof TEMPLATES[0]) => {
+  const applyTemplate = async (template: typeof TEMPLATES[0]) => {
     if (pendingTemplateId) return
     setPendingTemplateId(template.id)
     try {
@@ -207,7 +207,7 @@ export function CommentAutomationSection({ commentsData }: { commentsData: Comme
               <div className="flex items-center justify-between border-t pt-1">
                 <span className="text-xs text-muted-foreground/60">{t.time}</span>
                 <button
-                  onClick={() => !added && void useTemplate(t)}
+                  onClick={() => !added && void applyTemplate(t)}
                   disabled={pendingTemplateId === t.id}
                   className={cn("flex items-center gap-1 text-xs font-medium transition-colors",
                     added ? "cursor-default text-muted-foreground/40" : "text-primary hover:text-primary/70")}

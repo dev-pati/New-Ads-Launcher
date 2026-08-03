@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 
     // ── Fetch creatives for media type breakdown ───────────────────────────────
     const allCreativeIds = [...new Set(rows.flatMap(b => (b.creative_ids as string[] | null) || []))]
-    let creativeMediaMap: Record<string, "video" | "image"> = {}
+    const creativeMediaMap: Record<string, "video" | "image"> = {}
     if (allCreativeIds.length > 0) {
       const { data: creatives } = await supabase
         .from("creatives")

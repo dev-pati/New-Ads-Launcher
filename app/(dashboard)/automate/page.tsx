@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -458,7 +459,7 @@ function CreateFbRuleModal({
             <div className="flex gap-2 mt-2">
               <Button variant="outline" onClick={onClose}>Close</Button>
               <Button asChild>
-                <a href="/automate/rules" onClick={onClose}>View in Rules</a>
+                <Link href="/automate/rules" onClick={onClose}>View in Rules</Link>
               </Button>
             </div>
           </div>
@@ -937,7 +938,7 @@ export default function AutomatePage() {
     } catch {}
   }
 
-  const useTemplate = (tpl: typeof TEMPLATES[0]) => {
+  const applyTemplate = (tpl: typeof TEMPLATES[0]) => {
     router.push(`/automate/new?template=${tpl.id}`)
   }
 
@@ -1120,7 +1121,7 @@ export default function AutomatePage() {
                             <span className="size-1.5 rounded-full bg-green-500 inline-block" />Live on Meta
                           </span>
                         )}
-                        <Button size="sm" onClick={() => useTemplate(featured)} className="ml-auto h-7 text-xs">
+                        <Button size="sm" onClick={() => applyTemplate(featured)} className="ml-auto h-7 text-xs">
                           Use Template
                         </Button>
                       </div>
@@ -1144,7 +1145,7 @@ export default function AutomatePage() {
                       "border rounded-xl p-4 bg-card transition-shadow relative",
                       isSoon ? "opacity-70 cursor-not-allowed" : "hover:shadow-sm cursor-pointer",
                     )}
-                    onClick={() => { if (!isSoon) useTemplate(t) }}
+                    onClick={() => { if (!isSoon) applyTemplate(t) }}
                   >
                     <div className="flex items-start gap-3 mb-3">
                       <div className={cn("size-9 rounded-lg flex items-center justify-center shrink-0", t.iconBg)}>
@@ -1168,7 +1169,7 @@ export default function AutomatePage() {
                         size="sm"
                         className="h-7 text-xs"
                         disabled={isSoon}
-                        onClick={e => { e.stopPropagation(); useTemplate(t) }}
+                        onClick={e => { e.stopPropagation(); applyTemplate(t) }}
                       >
                         {isSoon ? "Coming soon" : "Use"}
                       </Button>

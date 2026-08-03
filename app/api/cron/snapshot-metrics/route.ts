@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
 
         // Get campaign statuses
         const campaignIds = insights.map(i => i.campaign_id).filter(Boolean)
-        let statusMap: Record<string, { status: string; effective_status: string }> = {}
+        const statusMap: Record<string, { status: string; effective_status: string }> = {}
         if (campaignIds.length > 0) {
           const statusData = await metaGet(
             `/campaigns?ids=${campaignIds.join(",")}&fields=id,status,effective_status`,

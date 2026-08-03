@@ -1,0 +1,25 @@
+#!/bin/sh
+# Local pre-push gate.
+#
+# This exists because pushing to main triggers the Mac mini Docker deploy. By the
+# time GitHub Actions reports on a push to main, production has already changed.
+# So the last check that can still stop a bad deploy is this one, on your machine.
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Bypass when you have a reason:
+#   git push --no-verify
+
+set -e
+
+echo "pre-push: typecheck"
+npm run typecheck
+
+echo "pre-push: lint"
+npx eslint . --quiet
+
+echo "pre-push: test"
+npm test
+
+echo "pre-push: ok"
