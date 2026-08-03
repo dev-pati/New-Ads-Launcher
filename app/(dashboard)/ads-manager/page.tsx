@@ -83,7 +83,6 @@ function downloadCsv(filename: string, rows: Record<string, string | number>[]) 
 
 type Tab = "campaigns" | "adsets" | "ads"
 type SortDir = "asc" | "desc"
-type LoadingPhase = "idle" | "indeterminate" | "determinate" | "complete"
 
 const STANDARD_ATTR = [
   { key: "1d_click", label: "1-day click", desc: "Conversions counted after an action within 1 day of an ad click." },
@@ -318,28 +317,6 @@ function formatMoneyAmount(value: number): string {
 function fmtMoney(v: number): string {
   if (!Number.isFinite(v) || v === 0) return "$0.00"
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
-
-async function readJsonWithProgress<T>(response: Response, onProgress: (value: number) => void): Promise<T> {
-  if (!response.body) return response.json() as Promise<T>
-  const total = Number(response.headers.get("content-length"))
-  if (!Number.isFinite(total) || total <= 0) return response.json() as Promise<T>
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let loaded = 0
-  let text = ""
-  onProgress(3)
-  while (true) {
-    const chunk = await reader.read()
-    if (chunk.done) break
-    loaded += chunk.value.byteLength
-    text += decoder.decode(chunk.value, { stream: true })
-    onProgress(Math.min(90, 3 + Math.round((loaded / total) * 87)))
-  }
-  text += decoder.decode()
-  onProgress(90)
-  return JSON.parse(text) as T
 }
 
 function SpendHoverValue({
@@ -873,7 +850,6 @@ function AdsManagerContent() {
   const [accountSummary, setAccountSummary] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
-  const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>("idle")
   const [loadedMs, setLoadedMs] = useState<number | null>(null)
   const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null)
   const [error, setError] = useState("")
@@ -941,18 +917,22 @@ function AdsManagerContent() {
   const [bulkPublishResults, setBulkPublishResults] = useState<BulkPublishResult[]>([])
   const [bulkDiscardConfirmOpen, setBulkDiscardConfirmOpen] = useState(false)
 
+  // Smooth ease-out progress: jump to 2% on load start, glide toward 90% while
+  // Meta responds, then the caller snaps to 100% on completion. No indeterminate
+  // sweep — that animated bar visibly looped while waiting and felt jittery.
   useEffect(() => {
-    if (!loading || loadingPhase !== "determinate") return
+    if (!loading) return
+    setLoadingProgress(0)
     const timer = window.setInterval(() => {
       setLoadingProgress(current => {
         if (current >= 90) return current
-        if (current < 24) return Math.min(90, current + 4)
-        if (current < 60) return Math.min(90, current + 2)
-        return Math.min(90, current + 1)
+        // Slow linear climb to 90% then hold: never rush past it while Meta works.
+        const step = current < 45 ? 2 : 1
+        return Math.min(90, current + step)
       })
-    }, 240)
+    }, 90)
     return () => window.clearInterval(timer)
-  }, [loading, loadingPhase])
+  }, [loading])
 
   const bulkDrafts = useMemo(
     () => selectedAccountId ? (bulkDraftsByAccount[selectedAccountId] || {}) : {},
@@ -1309,8 +1289,6 @@ function AdsManagerContent() {
       return
     } else {
       setLoading(true)
-      setLoadingProgress(3)
-      setLoadingPhase("indeterminate")
     }
 
     setError("")
@@ -1319,9 +1297,7 @@ function AdsManagerContent() {
     try {
       if (tab === "campaigns") {
         const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
-        setLoadingPhase("determinate")
-        setLoadingProgress(current => Math.max(current, 3))
-        const d = await readJsonWithProgress<any>(r, value => setLoadingProgress(current => Math.max(current, value)))
+        const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setCampaigns(d.campaigns || [])
         setPaging(d.paging || { hasNext: false })
@@ -1338,9 +1314,7 @@ function AdsManagerContent() {
             ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}`
             : ""
         const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
-        setLoadingPhase("determinate")
-        setLoadingProgress(current => Math.max(current, 3))
-        const d = await readJsonWithProgress<any>(r, value => setLoadingProgress(current => Math.max(current, value)))
+        const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
         setPaging(d.paging || { hasNext: false })
@@ -1365,9 +1339,7 @@ function AdsManagerContent() {
                 : ""
             : ""
         const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
-        setLoadingPhase("determinate")
-        setLoadingProgress(current => Math.max(current, 3))
-        const d = await readJsonWithProgress<any>(r, value => setLoadingProgress(current => Math.max(current, value)))
+        const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
         setPaging(d.paging || { hasNext: false })
@@ -1379,7 +1351,6 @@ function AdsManagerContent() {
         }
       }
       setLoadingProgress(100)
-      setLoadingPhase("complete")
       setLoadedMs(Date.now() - t0)
       setLoadedAccountId(selectedAccountId)
       await new Promise<void>(resolve => window.setTimeout(resolve, 140))
@@ -1388,7 +1359,6 @@ function AdsManagerContent() {
       setLoadedAccountId(selectedAccountId)
     } finally {
       setLoading(false)
-      setLoadingPhase("idle")
     }
   }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange, page, statusFilter, hierarchyParentId, hierarchyParentIds, hierarchyParentType, hierarchyCacheKey])
 
@@ -2900,7 +2870,6 @@ function AdsManagerContent() {
 
   const isLoadingAccount = Boolean(selectedAccountId && loadedAccountId !== selectedAccountId)
   const isDataLoading = loading || isLoadingAccount
-  const isIndeterminateLoading = loadingPhase === "indeterminate" || (isLoadingAccount && !loading)
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden bg-background">
@@ -3412,23 +3381,19 @@ function AdsManagerContent() {
                       className="absolute inset-x-0 top-0 z-40 h-[3px] overflow-hidden bg-[#d8dadf] dark:bg-white/10"
                       role="progressbar"
                       aria-label="Loading Ads Manager data"
-                      aria-valuetext={isIndeterminateLoading ? "Waiting for Meta" : loadingProgress >= 100 ? "Loading complete" : `${loadingProgress}% loaded`}
+                      aria-valuetext={loadingProgress >= 100 ? "Loading complete" : `${loadingProgress}% loaded`}
                     >
-                      {isIndeterminateLoading ? (
-                        <div className="ads-manager-progress-indicator absolute inset-y-0 bg-[#42b72a]" />
-                      ) : (
-                        <div
-                          className="absolute inset-y-0 left-0 bg-[#42b72a] transition-[width] duration-200"
-                          style={{ width: `${Math.max(3, Math.min(100, loadingProgress))}%` }}
-                        />
-                      )}
+                      <div
+                        className="absolute inset-y-0 left-0 bg-[#1877f2] transition-[width] duration-300 ease-out"
+                        style={{ width: `${Math.max(0, Math.min(100, loadingProgress))}%` }}
+                      />
                     </div>
                   </th>
                 </tr>
               )}
             </thead>
 
-            <tbody className={cn("transition-opacity duration-200", isDataLoading && "pointer-events-none select-none opacity-35")}>
+            <tbody className={cn("transition-opacity duration-200", isLoadingAccount ? "opacity-35 pointer-events-none select-none" : (loading ? "pointer-events-none select-none" : ""))}>
               {pagedData.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="py-16">

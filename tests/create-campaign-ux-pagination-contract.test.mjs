@@ -63,4 +63,13 @@ describe("Create Campaign UX and Ads Manager paging contract", () => {
       assert.match(source, /paging/)
     }
   })
+
+  it("resets the unified editor scroll when the selected hierarchy node changes", () => {
+    const popup = read("components/ads-manager/PerformancePopup.tsx")
+
+    assert.match(popup, /const workspaceContentRef = useRef<HTMLDivElement>\(null\)/)
+    assert.match(popup, /workspaceContentRef\.current\?\.scrollTo\(\{ top: 0, left: 0 \}\)/)
+    assert.match(popup, /\[workspaceDetailKey, workspaceView\]/)
+    assert.match(popup, /<div ref=\{workspaceContentRef\} className=/)
+  })
 })
