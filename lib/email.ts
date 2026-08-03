@@ -1,10 +1,4 @@
-import { Resend } from "resend"
-
-const getResend = () => {
-  const apiKey = process.env.RESEND_API_KEY
-  if (!apiKey) return null
-  return new Resend(apiKey)
-}
+import { sendEmail } from "@/lib/send-email"
 
 // Use NEXT_PUBLIC_APP_URL, fallback to SERVER_URL (server-only), then warn
 function getAppUrl(): string {
@@ -27,16 +21,9 @@ export async function sendInviteEmail({
   inviterName: string
   token: string
 }) {
-  const resend = getResend()
-  if (!resend) {
-    console.error("[email] RESEND_API_KEY missing — invite email not sent to:", to)
-    return
-  }
-
   const acceptUrl = `${getAppUrl()}/invite?token=${token}`
 
-  const { data, error } = await resend.emails.send({
-    from: "AdLauncher <team@sonkieu.site>",
+  const { ok, error } = await sendEmail({
     to,
     subject: `You're invited to join ${orgName}`,
     html: `
@@ -50,14 +37,15 @@ export async function sendInviteEmail({
         <p style="color: #999; font-size: 12px;">If you don't have an account yet, you'll be asked to create one first.</p>
       </div>
     `,
+    text: `You're invited to join ${orgName} on AdLauncher. Go to: ${acceptUrl}`,
   })
 
-  if (error) {
-    console.error("[email] Resend error sending invite to", to, "—", error)
-    throw new Error(`Email delivery failed: ${error.message}`)
+  if (!ok) {
+    console.error("[email] SMTP error sending invite to", to, "—", error)
+    throw new Error(`Email delivery failed: ${error || "unknown"}`)
   }
 
-  console.log("[email] Invite sent to", to, "— Resend ID:", data?.id)
+  console.log("[email] Invite sent to", to)
 }
 
 // Send notification email (user đã có account - đã được add vào org rồi)
@@ -70,16 +58,9 @@ export async function sendAddedToOrgEmail({
   orgName: string
   inviterName: string
 }) {
-  const resend = getResend()
-  if (!resend) {
-    console.error("[email] RESEND_API_KEY missing — added-to-org email not sent to:", to)
-    return
-  }
-
   const dashboardUrl = `${getAppUrl()}/campaigns`
 
-  const { data, error } = await resend.emails.send({
-    from: "AdLauncher <team@pati.tuananhdo.site>",
+  const { ok, error } = await sendEmail({
     to,
     subject: `You've been added to ${orgName}`,
     html: `
@@ -91,12 +72,12 @@ export async function sendAddedToOrgEmail({
         </a>
       </div>
     `,
+    text: `You've been added to ${orgName} on AdLauncher. Go to: ${dashboardUrl}`,
   })
 
-  if (error) {
-    console.error("[email] Resend error sending added-to-org to", to, "—", error)
-    // Don't throw — user was already added to org, email is just a notification
+  if (!ok) {
+    console.error("[email] SMTP error sending added-to-org to", to, "—", error)
   } else {
-    console.log("[email] Added-to-org sent to", to, "— Resend ID:", data?.id)
+    console.log("[email] Added-to-org sent to", to)
   }
 }

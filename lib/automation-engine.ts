@@ -1,7 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getFacebookConnection } from "@/lib/auth"
 import type { ActionConfig } from "@/lib/workflow-types"
-import { Resend } from "resend"
 import { sendEmail } from "@/lib/send-email"
 import { buildNotificationEmail } from "@/lib/email-template"
 import { sendLarkMessage, sendLarkGroupMessage } from "@/lib/send-lark"

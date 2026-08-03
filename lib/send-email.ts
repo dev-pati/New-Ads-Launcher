@@ -1,7 +1,9 @@
 /**
- * send-email.ts — Email sender via Resend API
- * Vercel serverless blocks SMTP, so Resend is the only option on production.
+ * send-email.ts — Email sender via SMTP (nodemailer).
+ * Lark SMTP is the only transport. Resend removed: its sandbox rejects
+ * non-owner recipients, which blocked login OTPs.
  */
+import nodemailer, { type Transporter } from "nodemailer"
 
 interface SendEmailOptions {
   to: string | string[]
@@ -12,27 +14,48 @@ interface SendEmailOptions {
   replyTo?: string
 }
 
+let transporter: Transporter | null = null
+
+function getTransporter(): Transporter | null {
+  if (transporter) return transporter
+
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return null
+
+  const port = Number(SMTP_PORT) || 465
+  transporter = nodemailer.createTransport({
+    pool: true,
+    maxConnections: 2,
+    maxMessages: 100,
+    host: SMTP_HOST,
+    port,
+    secure: port === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    connectionTimeout: 5_000,
+    greetingTimeout: 5_000,
+    socketTimeout: 10_000,
+  })
+  return transporter
+}
+
 export async function sendEmail({ to, cc, subject, text, html, replyTo }: SendEmailOptions): Promise<{ ok: boolean; error?: string }> {
-  const resendKey = process.env.RESEND_API_KEY
-  if (!resendKey) return { ok: false, error: "RESEND_API_KEY not configured" }
+  const tx = getTransporter()
+  if (!tx) return { ok: false, error: "SMTP_HOST / SMTP_USER / SMTP_PASS not configured" }
 
-  const from = process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev"
-
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER
+  try {
+    await tx.sendMail({
       from,
-      to: Array.isArray(to) ? to : [to],
-      ...(cc ? { cc: Array.isArray(cc) ? cc : [cc] } : {}),
+      to: Array.isArray(to) ? to.join(", ") : to,
+      ...(cc ? { cc: Array.isArray(cc) ? cc.join(", ") : cc } : {}),
       subject,
       text,
       html: html ?? text.replace(/\n/g, "<br>"),
-      reply_to: replyTo,
-    }),
-  })
-
-  const data = await res.json()
-  if (!res.ok) return { ok: false, error: data.message ?? "Resend failed" }
-  return { ok: true }
+      ...(replyTo ? { replyTo } : {}),
+    })
+    return { ok: true }
+  } catch (error) {
+    console.error("[send-email] SMTP failed", error)
+    return { ok: false, error: error instanceof Error ? error.message : "SMTP failed" }
+  }
 }

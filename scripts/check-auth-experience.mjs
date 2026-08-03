@@ -5,7 +5,7 @@ const [loginPage, registerPage, registerRoute, smtpSender, landingPage] = await 
   readFile(new URL("../app/auth/login/page.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/auth/register/page.tsx", import.meta.url), "utf8"),
   readFile(new URL("../app/api/auth/register/route.ts", import.meta.url), "utf8"),
-  readFile(new URL("../lib/smtp-email.ts", import.meta.url), "utf8"),
+  readFile(new URL("../lib/send-email.ts", import.meta.url), "utf8"),
   readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
 ])
 
