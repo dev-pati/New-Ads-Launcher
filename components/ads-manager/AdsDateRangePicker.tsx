@@ -20,14 +20,27 @@ export const DATE_PICKER_PRESETS = [
   { value: "maximum",     label: "Maximum"       },
 ]
 
-// Fallback lower bound for "Maximum" before the account's created_time loads.
-const MAXIMUM_FALLBACK_START = new Date(2018, 0, 1)
+// Meta Insights rejects any window whose start is more than 37 months before today.
+// "Maximum" must respect that floor — showing the account's real created_time as the
+// start would display a range the API cannot fulfil (returns "Invalid time range").
+const META_INSIGHTS_MAX_LOOKBACK_MONTHS = 37
+
+function metaInsightsFloor(today: Date): Date {
+  const floor = new Date(today)
+  floor.setMonth(floor.getMonth() - META_INSIGHTS_MAX_LOOKBACK_MONTHS)
+  floor.setHours(0, 0, 0, 0)
+  return floor
+}
 
 export function getPresetRange(preset: string, maximumStart?: Date): { start: Date; end: Date } {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const d = (n: number) => { const x = new Date(today); x.setDate(x.getDate() + n); return x }
   switch (preset) {
-    case "maximum": return { start: maximumStart ?? MAXIMUM_FALLBACK_START, end: today }
+    case "maximum": {
+      const floor = metaInsightsFloor(today)
+      const raw = maximumStart ?? floor
+      return { start: raw < floor ? floor : raw, end: today }
+    }
     case "today":      return { start: today,   end: today }
     case "yesterday":  return { start: d(-1),   end: d(-1) }
     case "last_7d":    return { start: d(-6),   end: today }

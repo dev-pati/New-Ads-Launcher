@@ -104,47 +104,69 @@ function toInsight(row: {
   }
 }
 
+const META_INSIGHTS_MAX_LOOKBACK_MONTHS = 37
+
+function iso(d: Date) {
+  return d.toISOString().split("T")[0]
+}
+
 export function clampTimeToToday(since = "", until = "") {
-  const today = new Date().toISOString().split("T")[0]
-  return {
-    since: since && since > today ? today : since,
-    until: until && until > today ? today : until,
+  const todayIso = iso(new Date())
+  let u = until && until > todayIso ? todayIso : until
+  // Meta Insights rejects any window whose `since` is more than 37 months before `until`.
+  // Enforce it once here so every consumer (campaigns/adsets/ads/breakdown/report/...) is
+  // safe, instead of each route re-discovering the same "Invalid time range" error.
+  let s = since && since > todayIso ? todayIso : since
+  if (s && u) {
+    const untilDate = new Date(u + "T00:00:00")
+    const floor = new Date(untilDate)
+    floor.setMonth(floor.getMonth() - META_INSIGHTS_MAX_LOOKBACK_MONTHS)
+    const floorIso = iso(floor)
+    if (s < floorIso) s = floorIso
   }
+  return { since: s, until: u }
 }
 
 export function datePresetToRange(preset: string, sinceP = "", untilP = "") {
   if (sinceP && untilP) return clampTimeToToday(sinceP, untilP)
   const now   = new Date()
   const today = now.toISOString().split("T")[0]
-  if (preset === "today")      return { since: today, until: today }
-  if (preset === "yesterday")  return { since: ago(1), until: ago(1) }
-  // last_*d are inclusive of today — N days counting today as day 1. Meta's own
-  // date_preset=last_*d drops today, so callers must send the resolved time_range.
-  if (preset === "last_7d")    return { since: ago(6),  until: today }
-  if (preset === "last_14d")   return { since: ago(13), until: today }
-  if (preset === "last_28d")   return { since: ago(27), until: today }
-  if (preset === "last_30d")   return { since: ago(29), until: today }
-  if (preset === "last_90d")   return { since: ago(89), until: today }
-  if (preset === "this_month") {
+  let s = ""
+  let u = today
+
+  if (preset === "today")           { s = today; u = today }
+  else if (preset === "yesterday")  { s = ago(1); u = ago(1) }
+  else if (preset === "last_7d")    { s = ago(6);  u = today }
+  else if (preset === "last_14d")   { s = ago(13); u = today }
+  else if (preset === "last_28d")   { s = ago(27); u = today }
+  else if (preset === "last_30d")   { s = ago(29); u = today }
+  else if (preset === "last_90d")   { s = ago(89); u = today }
+  else if (preset === "this_month") {
     const m = String(now.getMonth() + 1).padStart(2, "0")
-    return { since: `${now.getFullYear()}-${m}-01`, until: today }
+    s = `${now.getFullYear()}-${m}-01`
   }
-  if (preset === "last_month") {
+  else if (preset === "last_month") {
     const y = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear()
     const m = now.getMonth() === 0 ? 12 : now.getMonth()
     const last = new Date(y, m, 0)
-    return { since: `${y}-${String(m).padStart(2, "0")}-01`, until: last.toISOString().split("T")[0] }
+    s = `${y}-${String(m).padStart(2, "0")}-01`
+    u = last.toISOString().split("T")[0]
   }
-  if (preset === "this_year")  return { since: `${now.getFullYear()}-01-01`, until: today }
-  if (preset === "last_year") {
+  else if (preset === "this_year")  { s = `${now.getFullYear()}-01-01` }
+  else if (preset === "last_year") {
     const y = now.getFullYear() - 1
-    return { since: `${y}-01-01`, until: `${y}-12-31` }
+    s = `${y}-01-01`
+    u = `${y}-12-31`
   }
-  if (preset === "maximum") {
+  else if (preset === "maximum") {
     const threeYearsAgo = new Date(Date.now() - 3 * 365 * 86_400_000)
-    return { since: threeYearsAgo.toISOString().split("T")[0], until: today }
+    s = threeYearsAgo.toISOString().split("T")[0]
   }
-  return { since: ago(29), until: today }
+  else {
+    s = ago(29)
+  }
+
+  return clampTimeToToday(s, u)
 }
 
 // Resolve the canonical since/until the Ads Manager UI means for a request, then
