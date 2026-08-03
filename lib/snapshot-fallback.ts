@@ -112,7 +112,7 @@ function iso(d: Date) {
 
 export function clampTimeToToday(since = "", until = "") {
   const todayIso = iso(new Date())
-  let u = until && until > todayIso ? todayIso : until
+  const u = until && until > todayIso ? todayIso : until
   // Meta Insights rejects any window whose `since` is more than 37 months before `until`.
   // Enforce it once here so every consumer (campaigns/adsets/ads/breakdown/report/...) is
   // safe, instead of each route re-discovering the same "Invalid time range" error.

@@ -48,3 +48,7 @@ scratch/
 
 # Supabase CLI local link metadata - never commit (see supabase/config.toml)
 supabase/.temp/
+
+# Windows artifact: shell redirects can materialise a literal NUL file here.
+# An untracked stray file has broken the Mac mini deploy before.
+NUL
