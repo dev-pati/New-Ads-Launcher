@@ -1535,6 +1535,7 @@ export function PerformancePopup({
                   <div className="absolute right-0 top-10 z-20 bg-background border rounded-xl shadow-xl p-3">
                     <AdsDateRangePicker
                       preset="custom"
+                      accountId={accountId}
                       autoApply
                       hideLabel
                       onClose={() => setCalOpen(false)}

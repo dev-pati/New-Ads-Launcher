@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getCampaigns, getCampaignsPage } from "@/lib/facebook"
 import { getCachedFacebookMetadata, clearCachedFacebookMetadata, isCachedFacebookMetadataFresh } from "../_cache"
-import { campaignManagerSnapshotFallback, datePresetToRange } from "@/lib/snapshot-fallback"
+import { campaignManagerSnapshotFallback, datePresetToRange, resolveAdsManagerTimeRange } from "@/lib/snapshot-fallback"
 
 const CACHE_TTL = 15 * 60 * 1000 // 15 minutes for P0 optimization
 
@@ -23,9 +23,11 @@ export async function GET(request: NextRequest) {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { since, until } = datePresetToRange(datePreset)
+    const apiTimeRange = resolveAdsManagerTimeRange(datePreset, timeRange)
+    const parsedTimeRange = apiTimeRange ? JSON.parse(apiTimeRange) : { since: "", until: "" }
+    const { since, until } = datePresetToRange(datePreset, parsedTimeRange.since, parsedTimeRange.until)
     const fallback = async (reason: string) => {
-      const snapshot = await campaignManagerSnapshotFallback(ctx.orgId, adAccountId, since, until)
+      const snapshot = since ? await campaignManagerSnapshotFallback(ctx.orgId, adAccountId, since, until) : null
       if (snapshot) return NextResponse.json({ ...snapshot, metaUnavailable: true, reason })
       return null
     }
@@ -49,8 +51,8 @@ export async function GET(request: NextRequest) {
         cacheKey,
         CACHE_TTL,
         () => maxRows || after
-          ? getCampaignsPage(adAccountId, connection.access_token, datePreset, timeRange || undefined, maxRows || 20, activeOnly, after)
-          : getCampaigns(adAccountId, connection.access_token, datePreset, timeRange || undefined)
+          ? getCampaignsPage(adAccountId, connection.access_token, datePreset, apiTimeRange || undefined, maxRows || 20, activeOnly, after)
+          : getCampaigns(adAccountId, connection.access_token, datePreset, apiTimeRange || undefined)
       )
     } catch (err) {
       const snapshotRes = await fallback(err instanceof Error ? err.message : "meta_unavailable")

@@ -118,11 +118,13 @@ export function datePresetToRange(preset: string, sinceP = "", untilP = "") {
   const today = now.toISOString().split("T")[0]
   if (preset === "today")      return { since: today, until: today }
   if (preset === "yesterday")  return { since: ago(1), until: ago(1) }
-  if (preset === "last_7d")    return { since: ago(7), until: ago(1) }
-  if (preset === "last_14d")   return { since: ago(14), until: ago(1) }
-  if (preset === "last_28d")   return { since: ago(28), until: ago(1) }
-  if (preset === "last_30d")   return { since: ago(30), until: ago(1) }
-  if (preset === "last_90d")   return { since: ago(90), until: ago(1) }
+  // last_*d are inclusive of today — N days counting today as day 1. Meta's own
+  // date_preset=last_*d drops today, so callers must send the resolved time_range.
+  if (preset === "last_7d")    return { since: ago(6),  until: today }
+  if (preset === "last_14d")   return { since: ago(13), until: today }
+  if (preset === "last_28d")   return { since: ago(27), until: today }
+  if (preset === "last_30d")   return { since: ago(29), until: today }
+  if (preset === "last_90d")   return { since: ago(89), until: today }
   if (preset === "this_month") {
     const m = String(now.getMonth() + 1).padStart(2, "0")
     return { since: `${now.getFullYear()}-${m}-01`, until: today }
@@ -133,7 +135,35 @@ export function datePresetToRange(preset: string, sinceP = "", untilP = "") {
     const last = new Date(y, m, 0)
     return { since: `${y}-${String(m).padStart(2, "0")}-01`, until: last.toISOString().split("T")[0] }
   }
-  return { since: ago(30), until: ago(1) }
+  if (preset === "this_year")  return { since: `${now.getFullYear()}-01-01`, until: today }
+  if (preset === "last_year") {
+    const y = now.getFullYear() - 1
+    return { since: `${y}-01-01`, until: `${y}-12-31` }
+  }
+  if (preset === "maximum") {
+    const threeYearsAgo = new Date(Date.now() - 3 * 365 * 86_400_000)
+    return { since: threeYearsAgo.toISOString().split("T")[0], until: today }
+  }
+  return { since: ago(29), until: today }
+}
+
+// Resolve the canonical since/until the Ads Manager UI means for a request, then
+// serialize to Meta's time_range JSON. Always prefer an explicit time_range over
+// date_preset: Meta's date_preset=last_*d excludes today, but the UI's "Last N days"
+// includes today. Returns "" only for Maximum without a client-supplied range.
+export function resolveAdsManagerTimeRange(datePreset: string, timeRange = ""): string {
+  let sinceP = ""
+  let untilP = ""
+  if (timeRange) {
+    try {
+      const parsed = JSON.parse(timeRange)
+      sinceP = parsed.since || ""
+      untilP = parsed.until || ""
+    } catch {}
+  }
+  const { since, until } = datePresetToRange(datePreset, sinceP, untilP)
+  if (!since) return timeRange
+  return JSON.stringify({ since, until })
 }
 
 export async function campaignManagerSnapshotFallback(orgId: string, adAccountId: string, since: string, until: string) {

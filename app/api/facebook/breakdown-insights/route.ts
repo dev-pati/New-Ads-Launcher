@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { getCachedFacebookMetadata } from "../_cache"
 import { metaFetch } from "../_meta-fetch"
+import { resolveAdsManagerTimeRange } from "@/lib/snapshot-fallback"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
   const connection = await getFacebookConnection(ctx.orgId)
   if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 401 })
 
+  const apiTimeRange = resolveAdsManagerTimeRange(datePreset || "last_7d", timeRange || "")
   const dateKey  = timeRange ? `tr:${timeRange}` : `dp:${datePreset || "last_7d"}`
   const bdsKey   = [breakdowns || "", timeIncrement || ""].filter(Boolean).join(":")
   const cacheKey = `breakdown-insights:${adAccountId}:${level}:${dateKey}:${bdsKey}`
@@ -51,7 +53,7 @@ export async function GET(request: NextRequest) {
         access_token: connection.access_token,
       })
 
-      if (timeRange)     params.set("time_range", timeRange)
+      if (apiTimeRange)  params.set("time_range", apiTimeRange)
       else               params.set("date_preset", datePreset || "last_7d")
       if (breakdowns)    params.set("breakdowns", breakdowns)
       if (timeIncrement) params.set("time_increment", timeIncrement)

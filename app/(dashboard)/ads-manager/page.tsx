@@ -42,6 +42,24 @@ import { BreakdownDropdown } from "@/components/ads-manager/BreakdownDropdown"
 import { BREAKDOWN_API_MAP } from "@/lib/breakdown-config"
 import { useLaunchBatchesRealtime } from "@/hooks/use-launch-batches-realtime"
 import { OpportunityScoreBadge } from "@/components/ads-manager/OpportunityScoreBadge"
+import {
+  BulkDraftReviewDialog,
+  BulkEditDraftDialog,
+  BulkStatusChangeDialog,
+  type BulkEditHierarchy,
+} from "@/components/ads-manager/BulkEditDraftDialogs"
+import { BulkEditFieldMenu } from "@/components/ads-manager/BulkEditFieldMenu"
+import {
+  type BulkDraftField,
+  type BulkDraftMap,
+  type BulkEditableItem,
+  type BulkPublishResult,
+  bulkDraftKey,
+  bulkDraftStorageKey,
+  parseBulkDrafts,
+  removePublishedDrafts,
+  serializeBulkDrafts,
+} from "@/lib/ads-manager-bulk-drafts"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function downloadCsv(filename: string, rows: Record<string, string | number>[]) {
@@ -65,6 +83,7 @@ function downloadCsv(filename: string, rows: Record<string, string | number>[]) 
 
 type Tab = "campaigns" | "adsets" | "ads"
 type SortDir = "asc" | "desc"
+type LoadingPhase = "idle" | "indeterminate" | "determinate" | "complete"
 
 const STANDARD_ATTR = [
   { key: "1d_click", label: "1-day click", desc: "Conversions counted after an action within 1 day of an ad click." },
@@ -310,16 +329,16 @@ async function readJsonWithProgress<T>(response: Response, onProgress: (value: n
   const decoder = new TextDecoder()
   let loaded = 0
   let text = ""
-  onProgress(12)
+  onProgress(3)
   while (true) {
     const chunk = await reader.read()
     if (chunk.done) break
     loaded += chunk.value.byteLength
     text += decoder.decode(chunk.value, { stream: true })
-    onProgress(Math.min(95, 12 + Math.round((loaded / total) * 83)))
+    onProgress(Math.min(90, 3 + Math.round((loaded / total) * 87)))
   }
   text += decoder.decode()
-  onProgress(98)
+  onProgress(90)
   return JSON.parse(text) as T
 }
 
@@ -694,7 +713,6 @@ function DeliveryBadge({ effective_status, learning }: { effective_status: strin
     <span className="flex items-center gap-1.5 text-sm font-medium text-[#1c2b33] dark:text-gray-300">
       <span className={cn("size-[7px] rounded-full shrink-0", dot)} />
       {label}
-      {isLearning && typeof learning?.conversions === "number" && <span className="text-[#65676b]">({learning.conversions}/50)</span>}
     </span>
   )
 }
@@ -855,6 +873,7 @@ function AdsManagerContent() {
   const [accountSummary, setAccountSummary] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
+  const [loadingPhase, setLoadingPhase] = useState<LoadingPhase>("idle")
   const [loadedMs, setLoadedMs] = useState<number | null>(null)
   const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null)
   const [error, setError] = useState("")
@@ -862,15 +881,24 @@ function AdsManagerContent() {
   // Hierarchical filter: checked campaigns → filters adsets; checked adsets → filters ads
   const [campaignFilter, setCampaignFilter] = useState<Set<string>>(new Set())
   const [adSetFilter, setAdSetFilter] = useState<Set<string>>(new Set())
-  const hierarchyParentId = tab === "adsets" && campaignFilter.size === 1
-    ? Array.from(campaignFilter)[0]
-    : tab === "ads" && adSetFilter.size === 1
-      ? Array.from(adSetFilter)[0]
-      : null
+  const campaignParentIds = useMemo(() => Array.from(campaignFilter).sort(), [campaignFilter])
+  const adSetParentIds = useMemo(() => Array.from(adSetFilter).sort(), [adSetFilter])
+  const hierarchyParentType = tab === "adsets"
+    ? "campaign"
+    : tab === "ads" && adSetParentIds.length
+      ? "adset"
+      : tab === "ads" && campaignParentIds.length
+        ? "campaign"
+        : null
+  const hierarchyParentIds = useMemo(
+    () => hierarchyParentType === "adset" ? adSetParentIds : hierarchyParentType === "campaign" ? campaignParentIds : [],
+    [adSetParentIds, campaignParentIds, hierarchyParentType],
+  )
+  const hierarchyParentId = hierarchyParentIds.length === 1 ? hierarchyParentIds[0] : null
   const hierarchyCacheKey = tab === "adsets"
-    ? `campaign:${Array.from(campaignFilter).sort().join(",") || "all"}`
+    ? `campaign:${campaignParentIds.join(",") || "all"}`
     : tab === "ads"
-      ? `adset:${Array.from(adSetFilter).sort().join(",") || "all"}`
+      ? `${hierarchyParentType || "all"}:${hierarchyParentIds.join(",") || "all"}`
       : "all"
 
   // Filters & search
@@ -898,6 +926,58 @@ function AdsManagerContent() {
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  // Account-scoped bulk edit drafts. V1 persists within the current browser tab,
+  // which keeps drafts across dialog closes/navigation without leaking them across accounts.
+  const [bulkDraftsByAccount, setBulkDraftsByAccount] = useState<Record<string, BulkDraftMap>>({})
+  const loadedBulkDraftAccounts = useRef(new Set<string>())
+  const [bulkEditorOpen, setBulkEditorOpen] = useState(false)
+  const [bulkEditorField, setBulkEditorField] = useState<BulkDraftField>("name")
+  const [bulkStatusOpen, setBulkStatusOpen] = useState(false)
+  const [bulkStatusField, setBulkStatusField] = useState<"turn_on" | "turn_off">("turn_on")
+  const [bulkReviewOpen, setBulkReviewOpen] = useState(false)
+  const [bulkReviewInitialKeys, setBulkReviewInitialKeys] = useState<string[] | undefined>()
+  const [bulkPublishing, setBulkPublishing] = useState(false)
+  const [bulkPublishResults, setBulkPublishResults] = useState<BulkPublishResult[]>([])
+  const [bulkDiscardConfirmOpen, setBulkDiscardConfirmOpen] = useState(false)
+
+  useEffect(() => {
+    if (!loading || loadingPhase !== "determinate") return
+    const timer = window.setInterval(() => {
+      setLoadingProgress(current => {
+        if (current >= 90) return current
+        if (current < 24) return Math.min(90, current + 4)
+        if (current < 60) return Math.min(90, current + 2)
+        return Math.min(90, current + 1)
+      })
+    }, 240)
+    return () => window.clearInterval(timer)
+  }, [loading, loadingPhase])
+
+  const bulkDrafts = useMemo(
+    () => selectedAccountId ? (bulkDraftsByAccount[selectedAccountId] || {}) : {},
+    [bulkDraftsByAccount, selectedAccountId],
+  )
+  const bulkDraftCount = Object.keys(bulkDrafts).length
+
+  useEffect(() => {
+    if (!selectedAccountId || loadedBulkDraftAccounts.current.has(selectedAccountId)) return
+    loadedBulkDraftAccounts.current.add(selectedAccountId)
+    const stored = typeof window === "undefined"
+      ? {}
+      : parseBulkDrafts(window.sessionStorage.getItem(bulkDraftStorageKey(selectedAccountId)))
+    setBulkDraftsByAccount(current => ({ ...current, [selectedAccountId]: stored }))
+  }, [selectedAccountId])
+
+  const replaceBulkDrafts = useCallback((next: BulkDraftMap) => {
+    if (!selectedAccountId) return
+    setBulkDraftsByAccount(current => ({ ...current, [selectedAccountId]: next }))
+    if (typeof window !== "undefined") {
+      const key = bulkDraftStorageKey(selectedAccountId)
+      if (Object.keys(next).length) window.sessionStorage.setItem(key, serializeBulkDrafts(next))
+      else window.sessionStorage.removeItem(key)
+    }
+  }, [selectedAccountId])
 
   // Toggling status
   const [toggling, setToggling] = useState<Set<string>>(new Set())
@@ -1229,7 +1309,8 @@ function AdsManagerContent() {
       return
     } else {
       setLoading(true)
-      setLoadingProgress(0)
+      setLoadingProgress(3)
+      setLoadingPhase("indeterminate")
     }
 
     setError("")
@@ -1238,8 +1319,9 @@ function AdsManagerContent() {
     try {
       if (tab === "campaigns") {
         const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
-        setLoadingProgress(12)
-        const d = await readJsonWithProgress<any>(r, setLoadingProgress)
+        setLoadingPhase("determinate")
+        setLoadingProgress(current => Math.max(current, 3))
+        const d = await readJsonWithProgress<any>(r, value => setLoadingProgress(current => Math.max(current, value)))
         if (!r.ok) throw new Error(d.error || "Failed")
         setCampaigns(d.campaigns || [])
         setPaging(d.paging || { hasNext: false })
@@ -1250,10 +1332,15 @@ function AdsManagerContent() {
             : { ...previous, campaigns: [...previous.campaigns.slice(0, page), d.paging.after] })
         }
       } else if (tab === "adsets") {
-        const parentParam = hierarchyParentId ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}` : ""
+        const parentParam = hierarchyParentIds.length > 1
+          ? `&campaign_ids=${encodeURIComponent(hierarchyParentIds.join(","))}`
+          : hierarchyParentId
+            ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}`
+            : ""
         const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
-        setLoadingProgress(12)
-        const d = await readJsonWithProgress<any>(r, setLoadingProgress)
+        setLoadingPhase("determinate")
+        setLoadingProgress(current => Math.max(current, 3))
+        const d = await readJsonWithProgress<any>(r, value => setLoadingProgress(current => Math.max(current, value)))
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(d.adSets || [])
         setPaging(d.paging || { hasNext: false })
@@ -1264,10 +1351,23 @@ function AdsManagerContent() {
             : { ...previous, adsets: [...previous.adsets.slice(0, page), d.paging.after] })
         }
       } else {
-        const parentParam = hierarchyParentId ? `&adset_id=${encodeURIComponent(hierarchyParentId)}` : ""
+        const parentParam = hierarchyParentType === "adset"
+          ? hierarchyParentIds.length > 1
+            ? `&adset_ids=${encodeURIComponent(hierarchyParentIds.join(","))}`
+            : hierarchyParentId
+              ? `&adset_id=${encodeURIComponent(hierarchyParentId)}`
+              : ""
+          : hierarchyParentType === "campaign"
+            ? hierarchyParentIds.length > 1
+              ? `&campaign_ids=${encodeURIComponent(hierarchyParentIds.join(","))}`
+              : hierarchyParentId
+                ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}`
+                : ""
+            : ""
         const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
-        setLoadingProgress(12)
-        const d = await readJsonWithProgress<any>(r, setLoadingProgress)
+        setLoadingPhase("determinate")
+        setLoadingProgress(current => Math.max(current, 3))
+        const d = await readJsonWithProgress<any>(r, value => setLoadingProgress(current => Math.max(current, value)))
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(d.ads || [])
         setPaging(d.paging || { hasNext: false })
@@ -1279,16 +1379,18 @@ function AdsManagerContent() {
         }
       }
       setLoadingProgress(100)
+      setLoadingPhase("complete")
       setLoadedMs(Date.now() - t0)
       setLoadedAccountId(selectedAccountId)
+      await new Promise<void>(resolve => window.setTimeout(resolve, 140))
     } catch (e: any) {
       setError(e.message || "Failed to load")
       setLoadedAccountId(selectedAccountId)
     } finally {
       setLoading(false)
-      setLoadingProgress(100)
+      setLoadingPhase("idle")
     }
-  }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange, page, statusFilter, hierarchyParentId, hierarchyCacheKey])
+  }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange, page, statusFilter, hierarchyParentId, hierarchyParentIds, hierarchyParentType, hierarchyCacheKey])
 
   const handleLaunchBatchChange = useCallback((event: "INSERT" | "UPDATE" | "DELETE") => {
     if (historyOpen) void fetchHistory()
@@ -1418,18 +1520,7 @@ function AdsManagerContent() {
   // Badge appears only on the NEXT tab, not on all 3 at once
 
   const switchTab = (newTab: Tab) => {
-    if (tab === "campaigns" && newTab === "adsets" && selectedIds.size > 1) {
-      setError("Select one campaign at a time to view its ad sets.")
-      return
-    }
-    if (tab === "adsets" && newTab === "ads" && selectedIds.size > 1) {
-      setError("Select one ad set at a time to view its ads.")
-      return
-    }
-    if (tab === "campaigns" && newTab === "ads" && (selectedIds.size > 0 || campaignFilter.size > 0)) {
-      setError("Select an ad set before viewing its ads.")
-      return
-    }
+    setError("")
     if (tab === "campaigns" && selectedIds.size > 0) {
       setCampaignFilter(new Set(selectedIds))
       setAdSetFilter(new Set())
@@ -1699,6 +1790,8 @@ function AdsManagerContent() {
     }
     if (tab === "ads" && adSetFilter.size > 0) {
       list = (list as Ad[]).filter(a => adSetFilter.has(a.adset_id))
+    } else if (tab === "ads" && campaignFilter.size > 0) {
+      list = (list as Ad[]).filter(a => campaignFilter.has(a.campaign_id))
     }
 
     // Status filter
@@ -1747,6 +1840,193 @@ function AdsManagerContent() {
   }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, statusFilter, sortField, sortDir, campaignNameById, adSetNameById, activeLaunchFilter, launchAdIds])
 
   const pagedData = currentData
+
+  const selectedBulkItems: BulkEditableItem[] = useMemo(() => {
+    const selected = currentData.filter(item => selectedIds.has(item.id))
+    return selected.map(item => {
+      if (tab === "campaigns") {
+        const campaign = item as Campaign
+        return {
+          id: campaign.id,
+          name: campaign.name,
+          status: campaign.status,
+          daily_budget: campaign.daily_budget,
+          lifetime_budget: campaign.lifetime_budget,
+          budgetEligible: false,
+          budgetBlockedReason: "Campaign budget is not a bulk-edit field",
+        }
+      }
+      if (tab === "adsets") {
+        const adSet = item as AdSet
+        const campaign = campaigns.find(candidate => candidate.id === adSet.campaign_id)
+        const parentOwnsBudget = Boolean(campaign?.daily_budget || campaign?.lifetime_budget)
+        const hasOwnBudget = adSet.daily_budget !== undefined || adSet.lifetime_budget !== undefined
+        return {
+          id: adSet.id,
+          name: adSet.name,
+          status: adSet.status,
+          campaign_id: adSet.campaign_id,
+          daily_budget: adSet.daily_budget,
+          lifetime_budget: adSet.lifetime_budget,
+          budgetEligible: hasOwnBudget && !parentOwnsBudget,
+          budgetBlockedReason: parentOwnsBudget ? "Controlled by campaign budget" : "No editable budget found",
+        }
+      }
+      const ad = item as Ad
+      return {
+        id: ad.id,
+        name: ad.name,
+        status: ad.status,
+        campaign_id: ad.campaign_id,
+        adset_id: ad.adset_id,
+        budgetEligible: false,
+        budgetBlockedReason: "Ads do not own budgets",
+      }
+    })
+  }, [campaigns, currentData, selectedIds, tab])
+
+  const currentDraftLevel: Level = tab === "campaigns" ? "campaign" : tab === "adsets" ? "adset" : "ad"
+  const bulkEditHierarchy: BulkEditHierarchy = useMemo(() => {
+    if (currentDraftLevel === "campaign") {
+      return {
+        rows: selectedBulkItems.map(item => ({
+          id: item.id,
+          level: "campaign" as const,
+          name: item.name,
+          depth: 0 as const,
+          selected: true,
+        })),
+        counts: { campaign: selectedBulkItems.length },
+      }
+    }
+
+    const selectedCampaignIds = Array.from(new Set(selectedBulkItems.map(item => item.campaign_id).filter(Boolean) as string[]))
+    if (currentDraftLevel === "adset") {
+      const rows: BulkEditHierarchy["rows"] = []
+      for (const campaignId of selectedCampaignIds) {
+        rows.push({
+          id: campaignId,
+          level: "campaign",
+          name: campaigns.find(campaign => campaign.id === campaignId)?.name || `Campaign ${campaignId}`,
+          depth: 0,
+          selected: false,
+        })
+        for (const item of selectedBulkItems.filter(candidate => candidate.campaign_id === campaignId)) {
+          rows.push({ id: item.id, level: "adset", name: item.name, depth: 1, selected: true })
+        }
+      }
+      return {
+        rows,
+        counts: { campaign: selectedCampaignIds.length, adset: selectedBulkItems.length },
+      }
+    }
+
+    const rows: BulkEditHierarchy["rows"] = []
+    const selectedAdSetIds = Array.from(new Set(selectedBulkItems.map(item => item.adset_id).filter(Boolean) as string[]))
+    for (const campaignId of selectedCampaignIds) {
+      rows.push({
+        id: campaignId,
+        level: "campaign",
+        name: campaigns.find(campaign => campaign.id === campaignId)?.name || `Campaign ${campaignId}`,
+        depth: 0,
+        selected: false,
+      })
+      const campaignAdSetIds = Array.from(new Set(
+        selectedBulkItems
+          .filter(item => item.campaign_id === campaignId)
+          .map(item => item.adset_id)
+          .filter(Boolean) as string[],
+      ))
+      for (const adSetId of campaignAdSetIds) {
+        rows.push({
+          id: adSetId,
+          level: "adset",
+          name: adSets.find(adSet => adSet.id === adSetId)?.name || `Ad set ${adSetId}`,
+          depth: 1,
+          selected: false,
+        })
+        for (const item of selectedBulkItems.filter(candidate => candidate.adset_id === adSetId)) {
+          rows.push({ id: item.id, level: "ad", name: item.name, depth: 2, selected: true })
+        }
+      }
+    }
+    return {
+      rows,
+      counts: { campaign: selectedCampaignIds.length, adset: selectedAdSetIds.length, ad: selectedBulkItems.length },
+    }
+  }, [adSets, campaigns, currentDraftLevel, selectedBulkItems])
+
+  const selectedDraftKeys = useMemo(
+    () => Array.from(selectedIds)
+      .map(id => bulkDraftKey(currentDraftLevel, id))
+      .filter(key => Boolean(bulkDrafts[key])),
+    [bulkDrafts, currentDraftLevel, selectedIds],
+  )
+
+  const openBulkEditor = (field: BulkDraftField) => {
+    if (!workspaceAccess.canMutate || selectedBulkItems.length === 0) return
+    if (field === "turn_on" || field === "turn_off") {
+      setBulkStatusField(field)
+      setBulkStatusOpen(true)
+      return
+    }
+    setBulkEditorField(field === "budget" && tab !== "adsets" ? "name" : field)
+    setBulkEditorOpen(true)
+  }
+
+  const openBulkReview = (keys?: string[]) => {
+    setBulkPublishResults([])
+    setBulkReviewInitialKeys(keys)
+    setBulkReviewOpen(true)
+  }
+
+  const publishBulkDrafts = async (keys: string[], sourceDrafts: BulkDraftMap = bulkDrafts) => {
+    if (!selectedAccountId || bulkPublishing || keys.length === 0) return
+    const changes = keys.map(key => sourceDrafts[key]).filter(Boolean)
+    if (!changes.length) return
+    setBulkPublishing(true)
+    setBulkPublishResults([])
+    try {
+      const response = await fetch("/api/ads-manager/workspace-publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adAccountId: selectedAccountId,
+          changes: changes.map(draft => ({ level: draft.level, node: draft.node })),
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || "Failed to publish bulk edits")
+      const results = Array.isArray(data.results) ? data.results as BulkPublishResult[] : []
+      setBulkPublishResults(results)
+      replaceBulkDrafts(removePublishedDrafts(sourceDrafts, results))
+
+      const published = results.filter(result => result.status === "published").length
+      const failed = results.length - published
+      if (published > 0) {
+        clientCache.current.clear()
+        await fetchMainData(true)
+      }
+      if (failed === 0) {
+        setBulkReviewOpen(false)
+        setBulkStatusOpen(false)
+        setActionToast({ kind: "success", message: `Published ${published} draft${published === 1 ? "" : "s"}` })
+      } else {
+        setActionToast({ kind: "error", message: `${failed} draft${failed === 1 ? "" : "s"} could not be published and remain queued` })
+      }
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Failed to publish bulk edits"
+      setBulkPublishResults(changes.map(draft => ({
+        id: draft.id,
+        level: draft.level,
+        status: "failed" as const,
+        message,
+      })))
+      setActionToast({ kind: "error", message })
+    } finally {
+      setBulkPublishing(false)
+    }
+  }
 
   // Totals
   const totalResultsCount = useMemo(() => currentData.reduce((sum, item) => {
@@ -2620,6 +2900,7 @@ function AdsManagerContent() {
 
   const isLoadingAccount = Boolean(selectedAccountId && loadedAccountId !== selectedAccountId)
   const isDataLoading = loading || isLoadingAccount
+  const isIndeterminateLoading = loadingPhase === "indeterminate" || (isLoadingAccount && !loading)
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden bg-background">
@@ -2653,6 +2934,24 @@ function AdsManagerContent() {
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
+          {workspaceAccess.enabled && bulkDraftCount > 0 && (
+            <>
+              <button
+                onClick={() => setBulkDiscardConfirmOpen(true)}
+                disabled={!workspaceAccess.canMutate || bulkPublishing}
+                className="flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+              >
+                <IconTrash className="size-3.5" />Discard Drafts
+              </button>
+              <button
+                onClick={() => openBulkReview()}
+                disabled={!workspaceAccess.canMutate || bulkPublishing}
+                className="flex h-7 items-center gap-1.5 rounded-lg bg-[#1877f2] px-3 text-xs font-semibold text-white transition-colors hover:bg-[#166fe5] disabled:opacity-40"
+              >
+                Review and publish ({bulkDraftCount})
+              </button>
+            </>
+          )}
           <button onClick={() => { setHistoryOpen(true); fetchHistory() }} className="flex items-center gap-1.5 h-7 px-2.5 text-xs border rounded-lg hover:bg-muted/50 transition-colors mr-2">
             <IconHistory className="size-3.5" />History
           </button>
@@ -2826,17 +3125,33 @@ function AdsManagerContent() {
           <IconCopy className="size-3.5" />
           Duplicate{selectedIds.size > 0 && ` (${selectedIds.size})`}
         </button>
-        <button
-          disabled={selectedIds.size === 0}
-          onClick={() => {
-            const selected = currentData.find(x => x.id === Array.from(selectedIds)[0])
-            if (selected) openWorkspaceEditor(selected)
-          }}
-          className="flex items-center gap-1.5 h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm disabled:opacity-40"
-        >
-          <IconPencil className="size-3.5" />
-          Edit{selectedIds.size > 0 && ` (${selectedIds.size})`}
-        </button>
+        <div className="flex items-center">
+          <button
+            disabled={selectedIds.size === 0}
+            onClick={() => {
+              if (workspaceAccess.enabled && selectedIds.size > 1) {
+                openBulkEditor("name")
+                return
+              }
+              const selected = currentData.find(x => x.id === Array.from(selectedIds)[0])
+              if (selected) openWorkspaceEditor(selected)
+            }}
+            className={cn(
+              "flex h-7 items-center gap-1.5 border border-[#ccd0d5] bg-[#f5f6f7] px-3 text-xs font-semibold text-[#4b4f56] shadow-sm transition-colors hover:bg-[#ebedf0] disabled:opacity-40 dark:border-gray-700 dark:bg-muted dark:text-gray-300 dark:hover:bg-muted/80",
+              workspaceAccess.enabled ? "rounded-l" : "rounded",
+            )}
+          >
+            <IconPencil className="size-3.5" />
+            Edit{selectedIds.size > 0 && ` (${selectedIds.size})`}
+          </button>
+          {workspaceAccess.enabled && (
+            <BulkEditFieldMenu
+              level={currentDraftLevel}
+              disabled={selectedIds.size === 0 || !workspaceAccess.canMutate}
+              onSelect={openBulkEditor}
+            />
+          )}
+        </div>
         <button
           disabled={selectedIds.size === 0}
           onClick={() => {
@@ -2849,21 +3164,31 @@ function AdsManagerContent() {
           Compare{selectedIds.size > 0 && ` (${selectedIds.size})`}
         </button>
 
-        {selectedIds.size > 0 && (
+        {selectedIds.size > 0 && !workspaceAccess.enabled && (
           <div className="flex items-center gap-1.5 ml-2">
             <button
               onClick={() => Array.from(selectedIds).forEach(id => toggleStatus(id, "ACTIVE"))}
               className="h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#1877f2] font-semibold shadow-sm"
             >
-              Activate
+              Turn on
             </button>
             <button
               onClick={() => Array.from(selectedIds).forEach(id => toggleStatus(id, "PAUSED"))}
               className="h-7 px-3 text-xs border border-[#ccd0d5] dark:border-gray-700 rounded bg-[#f5f6f7] dark:bg-muted hover:bg-[#ebedf0] dark:hover:bg-muted/80 transition-colors text-[#4b4f56] dark:text-gray-300 font-semibold shadow-sm"
             >
-              Pause
+              Turn off
             </button>
           </div>
+        )}
+
+        {workspaceAccess.enabled && selectedDraftKeys.length > 0 && (
+          <button
+            onClick={() => openBulkReview(selectedDraftKeys)}
+            disabled={!workspaceAccess.canMutate || bulkPublishing}
+            className="h-7 rounded bg-[#1877f2] px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#166fe5] disabled:opacity-40"
+          >
+            Publish selected ({selectedDraftKeys.length})
+          </button>
         )}
 
         {/* Selection indicator — only shown when items selected */}
@@ -3083,8 +3408,20 @@ function AdsManagerContent() {
               {isDataLoading && (
                 <tr className="h-0">
                   <th colSpan={Math.max(12, columnOrder.length + (tab === "ads" ? 4 : 3))} className="relative h-0 p-0">
-                    <div className="absolute inset-x-0 top-0 z-40 h-[3px] overflow-hidden bg-[#d8dadf] dark:bg-white/10" role="status" aria-label="Loading Ads Manager data">
-                      <div className="absolute inset-y-0 left-0 bg-[#42b72a] transition-[width] duration-150" style={{ width: `${loadingProgress}%` }} />
+                    <div
+                      className="absolute inset-x-0 top-0 z-40 h-[3px] overflow-hidden bg-[#d8dadf] dark:bg-white/10"
+                      role="progressbar"
+                      aria-label="Loading Ads Manager data"
+                      aria-valuetext={isIndeterminateLoading ? "Waiting for Meta" : loadingProgress >= 100 ? "Loading complete" : `${loadingProgress}% loaded`}
+                    >
+                      {isIndeterminateLoading ? (
+                        <div className="ads-manager-progress-indicator absolute inset-y-0 bg-[#42b72a]" />
+                      ) : (
+                        <div
+                          className="absolute inset-y-0 left-0 bg-[#42b72a] transition-[width] duration-200"
+                          style={{ width: `${Math.max(3, Math.min(100, loadingProgress))}%` }}
+                        />
+                      )}
                     </div>
                   </th>
                 </tr>
@@ -3123,24 +3460,26 @@ function AdsManagerContent() {
               ) : tab === "campaigns" ? (
                 (pagedData as Campaign[]).map(c => {
                   const isSel = selectedIds.has(c.id)
+                  const hasDraft = Boolean(bulkDrafts[bulkDraftKey("campaign", c.id)])
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === c.id) : []
                   return (
                     <Fragment key={c.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(c.id) : s.add(c.id); return s })} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(c.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === c.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(c.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               <div className="flex items-center gap-2">
                                 <button onClick={() => drillToAdSets(c)} className="text-[#1877f2] hover:underline text-xs font-semibold text-left line-clamp-2">{c.name}</button>
+                                {hasDraft && <span className="shrink-0 rounded-full border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">Unpublished edits</span>}
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(c.id); setInlineEditingName(c.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
@@ -3173,25 +3512,27 @@ function AdsManagerContent() {
               ) : tab === "adsets" ? (
                 (pagedData as AdSet[]).map(a => {
                   const isSel = selectedIds.has(a.id)
+                  const hasDraft = Boolean(bulkDrafts[bulkDraftKey("adset", a.id)])
                   const objective = campaigns.find(c => c.id === a.campaign_id)?.objective
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
                     <Fragment key={a.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               <div className="flex items-center gap-2">
                                 <button onClick={() => drillToAds(a)} className="text-[#1877f2] hover:underline text-xs font-semibold text-left line-clamp-2">{a.name}</button>
+                                {hasDraft && <span className="shrink-0 rounded-full border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">Unpublished edits</span>}
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
@@ -3225,26 +3566,28 @@ function AdsManagerContent() {
                 (pagedData as Ad[]).map(a => {
                   const adSet = adSets.find(s => s.id === a.adset_id)
                   const isSel = selectedIds.has(a.id)
+                  const hasDraft = Boolean(bulkDrafts[bulkDraftKey("ad", a.id)])
                   const thumb = a.creative?.thumbnail_url || a.creative?.image_url
                   const objective = campaigns.find(c => c.id === a.campaign_id)?.objective
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
                     <Fragment key={a.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
                             <div className="flex flex-col gap-0.5">
                               <div className="flex items-center gap-2">
                                 <button onClick={() => openWorkspaceEditor(a)} className="text-[#1877f2] hover:underline text-xs font-semibold text-left line-clamp-2">{a.name}</button>
+                                {hasDraft && <span className="shrink-0 rounded-full border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">Unpublished edits</span>}
                                 <button onClick={e => { e.stopPropagation(); setInlineEditingId(a.id); setInlineEditingName(a.name) }} className="opacity-0 group-hover/cell:opacity-100 p-0.5 hover:bg-black/5 rounded transition-opacity"><IconPencil className="size-3 text-[#65676b]" /></button>
                               </div>
                               <div className="flex items-center gap-1.5 opacity-0 group-hover/cell:opacity-100 transition-opacity">
@@ -3858,6 +4201,84 @@ function AdsManagerContent() {
           })()}
         </SheetContent>
       </Sheet>
+
+      {bulkStatusOpen && (
+        <BulkStatusChangeDialog
+          key={`${currentDraftLevel}:${bulkStatusField}`}
+          open={bulkStatusOpen}
+          level={currentDraftLevel}
+          items={selectedBulkItems}
+          drafts={bulkDrafts}
+          field={bulkStatusField}
+          publishing={bulkPublishing}
+          onOpenChange={setBulkStatusOpen}
+          onSave={next => {
+            replaceBulkDrafts(next)
+            const count = selectedBulkItems.length
+            setActionToast({ kind: "success", message: `Saved draft edits for ${count} item${count === 1 ? "" : "s"}` })
+          }}
+          onPublish={(next, keys) => {
+            replaceBulkDrafts(next)
+            void publishBulkDrafts(keys, next)
+          }}
+        />
+      )}
+
+      {bulkEditorOpen && (
+        <BulkEditDraftDialog
+          key={`${currentDraftLevel}:${bulkEditorField}`}
+          open={bulkEditorOpen}
+          level={currentDraftLevel}
+          items={selectedBulkItems}
+          drafts={bulkDrafts}
+          hierarchy={bulkEditHierarchy}
+          initialField={bulkEditorField}
+          onOpenChange={setBulkEditorOpen}
+          onSave={next => {
+            replaceBulkDrafts(next)
+            const count = selectedBulkItems.length
+            setActionToast({ kind: "success", message: `Saved draft edits for ${count} item${count === 1 ? "" : "s"}` })
+          }}
+        />
+      )}
+
+      {bulkReviewOpen && (
+        <BulkDraftReviewDialog
+          open={bulkReviewOpen}
+          drafts={bulkDrafts}
+          publishing={bulkPublishing}
+          results={bulkPublishResults}
+          initialKeys={bulkReviewInitialKeys}
+          onOpenChange={open => {
+            if (!bulkPublishing) setBulkReviewOpen(open)
+          }}
+          onPublish={publishBulkDrafts}
+        />
+      )}
+
+      <Dialog open={bulkDiscardConfirmOpen} onOpenChange={setBulkDiscardConfirmOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Discard drafts?</DialogTitle>
+            <DialogDescription>
+              All {bulkDraftCount} unpublished edit{bulkDraftCount === 1 ? "" : "s"} in this ad account will be removed. Meta will not be changed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkDiscardConfirmOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                replaceBulkDrafts({})
+                setBulkDiscardConfirmOpen(false)
+                setActionToast({ kind: "success", message: "Discarded all unpublished edits" })
+              }}
+            >
+              Discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {actionToast && (
         <div className={cn(

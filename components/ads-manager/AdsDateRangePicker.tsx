@@ -214,13 +214,22 @@ export function AdsDateRangePicker({
     }
   }, [open]) // eslint-disable-line
 
-  // Once account created_time arrives, refresh Maximum range if selected.
+  // Reset once the account changes so Maximum refetches this account's own created_time
+  // instead of reusing the previous ad account's range.
+  useEffect(() => {
+    setMaxStart(null)
+  }, [accountId])
+
+  // Once account created_time arrives, refresh Maximum range if selected — and push the
+  // resolved range up to the parent so it re-queries with the real start, not the 2018
+  // placeholder it may have applied before created_time loaded.
   useEffect(() => {
     if (!maxStart) return
     if (pending === "maximum" || preset === "maximum") {
       const { start, end } = getPresetRange("maximum", maxStart)
       setRangeStart(start)
       setRangeEnd(end)
+      if (preset === "maximum") onChange("maximum", start, end)
     }
   }, [maxStart]) // eslint-disable-line
 
@@ -233,8 +242,13 @@ export function AdsDateRangePicker({
   }, [])
 
   // Lazy-fetch the account's created_time so "Maximum" spans from creation to today.
+  // Fetch even when the picker is closed if Maximum is already the active preset,
+  // so a page load or account switch with Maximum selected does not stay on the
+  // 2018 placeholder.
   useEffect(() => {
-    if (!open || !accountId || maxStart) return
+    if (!accountId || maxStart) return
+    const wantFetch = open || preset === "maximum" || pending === "maximum"
+    if (!wantFetch) return
     let cancelled = false
     fetch(`/api/facebook/ad-accounts/created-time?ad_account_id=${encodeURIComponent(accountId)}`)
       .then(r => r.json())
@@ -245,7 +259,7 @@ export function AdsDateRangePicker({
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [open, accountId, maxStart])
+  }, [open, accountId, maxStart, preset, pending])
 
   const closePicker = () => {
     setOpen(false)
