@@ -181,15 +181,15 @@ export function LoadCopyModal({
   return (
     <Dialog open={open} onOpenChange={next => !next && onClose()}>
       <DialogContent className="flex max-h-[88vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
-        <div className="flex items-center justify-between border-b px-5 py-4">
-          <div>
+        <div className="flex items-start justify-between gap-3 border-b py-4 pl-5 pr-16 sm:items-center">
+          <div className="min-w-0">
             <DialogTitle className="text-base">Load copy</DialogTitle>
             <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
               <IconBuildingStore className="size-3.5" />
               {adAccountName || "Selected ad account"}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
             <Button
               size="sm"
               variant={source === "templates" ? "default" : "outline"}

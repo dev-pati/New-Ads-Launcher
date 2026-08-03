@@ -251,6 +251,15 @@ function TemplateFormDialog({
 
   const set = (k: keyof ReturnType<typeof emptyForm>, v: string) => setForm(p => ({ ...p, [k]: v }))
 
+  const trimmedLink = form.link.trim()
+  const linkInvalid = trimmedLink.length > 0 && !/^https:\/\/./.test(trimmedLink)
+  const canSave = !saving && form.name.trim().length > 0 && !linkInvalid
+
+  const handleSave = () => {
+    if (linkInvalid) return
+    onSave(form)
+  }
+
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
@@ -288,7 +297,16 @@ function TemplateFormDialog({
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground">Web Link</Label>
-              <Input placeholder="https://..." value={form.link} onChange={e => set("link", e.target.value)} />
+              <Input
+                placeholder="https://..."
+                value={form.link}
+                onChange={e => set("link", e.target.value)}
+                aria-invalid={linkInvalid}
+                className={cn(linkInvalid && "border-destructive focus-visible:ring-destructive/20")}
+              />
+              {linkInvalid && (
+                <p className="text-xs text-destructive">Web link must start with https://</p>
+              )}
             </div>
           </div>
           <div className="space-y-1.5">
@@ -299,7 +317,7 @@ function TemplateFormDialog({
 
         <DialogFooter className="px-5 py-3 border-t shrink-0">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button onClick={() => onSave(form)} disabled={saving || !form.name.trim()}>
+          <Button onClick={handleSave} disabled={!canSave}>
             {saving && <IconLoader2 className="size-3.5 mr-1.5 animate-spin" />}
             {initial ? "Save Changes" : "Create Template"}
           </Button>

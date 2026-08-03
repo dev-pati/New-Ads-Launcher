@@ -37,7 +37,8 @@ describe("Portal per-item assignment progress contract", () => {
     assert.match(assets, /assignmentProgressById\[assigningCreativeId\]/)
     assert.match(vault, /vaultProgressById\[c\.id\]/)
     assert.match(status, /"Assigning…"/)
-    assert.match(status, /\{percent\}%/)
+    assert.doesNotMatch(status, /\{percent\}%/)
+    assert.match(status, /Keep one loading state until ready/)
   })
 
   it("bounds Meta polling while still rotating through individual items", () => {

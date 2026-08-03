@@ -11,8 +11,18 @@ describe("Launch live progress contract", () => {
 
     assert.doesNotMatch(dialog, /Prevent closing during active launch/)
     assert.match(dialog, /role="status"/)
-    assert.match(dialog, /fixed bottom-4 left-4/)
+    // Fixed bottom-right of the viewport, offset left of the feedback bubble
+    // (right-20 ≈ 80px clears the ~48px feedback button at right-4).
+    assert.match(dialog, /fixed bottom-4 right-20/)
     assert.match(dialog, /onClick=\{\(\) => onOpenChange\(true\)\}/)
+  })
+
+  it("expands the minimized status dock with per-ad progress from the launch result", () => {
+    const dialog = read("components/launch/launch-progress-dialog.tsx")
+
+    assert.match(dialog, /const \[expanded, setExpanded\] = useState\(false\)/)
+    assert.match(dialog, /result\?\.ads \|\| \[\]/)
+    assert.match(dialog, /Per-ad status is not exposed until this launch request completes\./)
   })
 
   it("removes bulk activation controls from Configure Ad Sets", () => {
@@ -36,14 +46,12 @@ describe("Launch live progress contract", () => {
     assert.match(resultModal, /loadStatus\(\)/)
   })
 
-  it("refreshes visible Ads Manager data on focus without polling", () => {
+  it("refreshes visible Ads Manager data only on a fixed 10-minute interval", () => {
     const page = read("app/(dashboard)/ads-manager/page.tsx")
 
-    assert.match(page, /document\.visibilityState === "visible"/)
-    assert.doesNotMatch(page, /setInterval\(refreshVisibleData, 60_000\)/)
-    assert.match(page, /fetchMainData\(true\)/)
+    assert.doesNotMatch(page, /document\.visibilityState === "visible"/)
+    assert.match(page, /window\.setInterval\(\(\) => fetchMainData\(true\), 10 \* 60 \* 1000\)/)
     assert.match(page, /useEffect\(\(\) => \{ fetchMainData\(\) \}, \[fetchMainData\]\)/)
-    assert.match(page, /active_only=true/)
   })
 
   it("sorts newest launch time first, then active status", () => {

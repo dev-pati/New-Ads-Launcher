@@ -4624,17 +4624,17 @@ function DuplicateAdSetModal({
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className={cn(
-        "p-0 max-h-[92vh] overflow-y-auto overflow-x-hidden transition-[max-width] duration-200",
+        "p-0 max-h-[92vh] flex flex-col overflow-hidden transition-[max-width] duration-200",
         sourceAdSet ? "max-w-[832px]" : "max-w-md"
       )}>
-        <div className="px-5 py-4 border-b flex items-center gap-2">
+        <div className="px-5 py-4 border-b flex items-center gap-2 shrink-0">
           <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center">
             <IconCopy className="size-4 text-primary" />
           </div>
           <DialogTitle className="text-base font-semibold flex-1 text-center">Duplicate existing ad sets</DialogTitle>
         </div>
 
-        <div className="px-5 py-4 space-y-3">
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {/* Source selector */}
           <div className="border rounded-xl p-3">
             <p className="text-sm font-semibold mb-2">
@@ -4896,18 +4896,22 @@ function DuplicateAdSetModal({
                   <div className="flex items-start justify-between mb-1">
                     <div className="flex items-center gap-1">
                       <p className="text-sm font-semibold">Duplicate ads</p>
-                      <IconInfoCircle className="size-3 text-muted-foreground" />
+                      <Tip text="ON copies ads exactly from the existing ad set, so launch will include those ads.">
+                        <IconInfoCircle className="size-3 text-muted-foreground cursor-help" />
+                      </Tip>
                     </div>
-                    <button
-                      onClick={() => setDuplicateAds(v => !v)}
-                      className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
-                        duplicateAds ? "bg-primary" : "bg-muted-foreground/30")}
-                    >
-                      <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
-                        duplicateAds ? "translate-x-4" : "translate-x-0.5")} />
-                    </button>
+                    <Tip text="ON copies ads exactly from the existing ad set, so launch will include those ads.">
+                      <button
+                        onClick={() => setDuplicateAds(v => !v)}
+                        className={cn("relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
+                          duplicateAds ? "bg-primary" : "bg-muted-foreground/30")}
+                      >
+                        <span className={cn("inline-block size-3.5 rounded-full bg-white shadow-sm transition-transform",
+                          duplicateAds ? "translate-x-4" : "translate-x-0.5")} />
+                      </button>
+                    </Tip>
                   </div>
-                  <p className="text-xs text-muted-foreground">Copy ads to new ad set</p>
+                  <p className="text-xs text-muted-foreground">ON copies ads exactly from the existing ad set, so launch will include those ads.</p>
                 </div>
 
                 <div className={cn("border rounded-xl p-3", launchAsActive && "bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900")}>
@@ -5253,7 +5257,7 @@ function DuplicateAdSetModal({
           )}
         </div>
 
-        <div className="px-5 pb-4">
+        <div className="shrink-0 px-5 pb-4">
           <Button
             className="w-full h-11 text-sm font-semibold"
             disabled={!selectedSourceId || !newName.trim() || duplicating}
@@ -7504,8 +7508,10 @@ function AdCopyTemplateModal({
     setCreateOpen(true)
   }
 
+  const formLinkInvalid = formLink.trim().length > 0 && !/^https:\/\/./.test(formLink.trim())
+
   const handleSaveTemplate = async () => {
-    if (!formName.trim() || !adAccountId) return
+    if (!formName.trim() || !adAccountId || formLinkInvalid) return
     setSaving(true)
     try {
       if (editTarget) {
@@ -7861,8 +7867,15 @@ function AdCopyTemplateModal({
                   value={formLink}
                   onChange={e => setFormLink(e.target.value)}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring"
+                  aria-invalid={formLinkInvalid}
+                  className={cn(
+                    "w-full px-3 py-2 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring",
+                    formLinkInvalid && "border-destructive focus:ring-destructive/20"
+                  )}
                 />
+                {formLinkInvalid && (
+                  <p className="text-xs text-destructive mt-1">Web link must start with https://</p>
+                )}
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground block mb-1.5">CTA</label>
@@ -7877,7 +7890,7 @@ function AdCopyTemplateModal({
           </div>
           <div className="flex items-center justify-end gap-2 px-5 py-3 border-t shrink-0">
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={saving}>Cancel</Button>
-            <Button onClick={handleSaveTemplate} disabled={!formName.trim() || saving}>
+            <Button onClick={handleSaveTemplate} disabled={!formName.trim() || saving || formLinkInvalid}>
               {saving && <IconLoader2 className="size-3.5 mr-1.5 animate-spin" />}
               {editTarget ? "Save Changes" : "Create Template"}
             </Button>
@@ -13809,7 +13822,21 @@ function LaunchPageContent() {
         open={launchProgressOpen}
         onOpenChange={setLaunchProgressOpen}
         error={launchError}
-        result={launchResult ? { success: launchResult.created, errors: launchResult.failed, total: launchResult.created + launchResult.failed } : null}
+        result={launchResult ? {
+          success: launchResult.created,
+          errors: launchResult.failed,
+          total: launchResult.created + launchResult.failed,
+          ads: [
+            ...launchResult.createdAds.map(ad => ({
+              name: ad.fileName || ad.adSetName || ad.adId,
+              status: "created",
+            })),
+            ...launchResult.errors.map(e => ({
+              name: e.fileName || e.adSetId,
+              status: "error",
+            })),
+          ],
+        } : null}
       />
       {mode === "table" && launchResult && (
         <LaunchResultModal result={launchResult} onClose={() => setLaunchResult(null)} />

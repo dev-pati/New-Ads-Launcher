@@ -37,20 +37,17 @@ export function MetaAssignmentStatus({
     )
   }
 
-  const percent = progress?.percent ?? null
+  // No percent label: Meta's per-item progress is indeterminate for images and for
+  // the pre-fb_video_id phase (see lib/meta-assignment-progress.ts), so a number here
+  // was either missing or misleadingly precise. Keep one loading state until ready.
   return (
-    <div className={cn("min-w-[96px]", className)} title={percent === null ? "Waiting for Meta to report per-item progress" : `Meta processing: ${percent}%`}>
-      <div className="flex items-center justify-between gap-2 text-xs font-medium text-blue-700 dark:text-blue-400">
-        <span>{percent === null ? "Assigning…" : "Assigning"}</span>
-        {percent !== null && <span className="tabular-nums">{percent}%</span>}
+    <div className={cn("min-w-[96px]", className)} title="Assigning to Meta">
+      <div className="flex items-center gap-2 text-xs font-medium text-blue-700 dark:text-blue-400">
+        <span>{"Assigning…"}</span>
       </div>
       {!compact && (
         <div className="mt-1 h-1 overflow-hidden rounded-full bg-blue-100 dark:bg-blue-950/60">
-          {percent === null ? (
-            <div className="meta-assignment-progress-indicator h-full bg-blue-500" />
-          ) : (
-            <div className="h-full rounded-full bg-blue-500 transition-[width] duration-300" style={{ width: `${percent}%` }} />
-          )}
+          <div className="meta-assignment-progress-indicator h-full bg-blue-500" />
         </div>
       )}
     </div>

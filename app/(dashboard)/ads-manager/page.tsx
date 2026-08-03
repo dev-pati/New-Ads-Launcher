@@ -1434,15 +1434,12 @@ function AdsManagerContent() {
   // Main data: account / tab / date change reuses a matching loaded state.
   useEffect(() => { fetchMainData() }, [fetchMainData])
 
+  // Time-based only: tab/window focus must never trigger a refetch, it was
+  // reloading (and resetting scroll/selection) on every alt-tab back.
   useEffect(() => {
     if (!selectedAccountId) return
-    const refreshVisibleData = () => {
-      if (document.visibilityState === "visible") fetchMainData(true)
-    }
-    window.addEventListener("focus", refreshVisibleData)
-    return () => {
-      window.removeEventListener("focus", refreshVisibleData)
-    }
+    const timer = window.setInterval(() => fetchMainData(true), 10 * 60 * 1000)
+    return () => window.clearInterval(timer)
   }, [selectedAccountId, fetchMainData])
 
   // Account-level summary for footer metrics that Meta dedupes across the whole ad account.

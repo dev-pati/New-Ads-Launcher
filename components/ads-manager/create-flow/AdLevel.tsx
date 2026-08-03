@@ -98,7 +98,7 @@ function TextFieldWithVariations({
         <textarea
           rows={3}
           aria-invalid={invalid}
-          className={cn(`${inputClass} resize-none py-2`, invalid && "border-red-500 focus:border-red-500 dark:border-red-500")}
+          className={cn(`${inputClass} min-h-[72px] resize-y py-2`, invalid && "border-red-500 focus:border-red-500 dark:border-red-500")}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
