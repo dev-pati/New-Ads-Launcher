@@ -13,6 +13,7 @@ import {
 } from "@/lib/facebook"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createScheduledActivation } from "@/lib/scheduled-activations"
 import { getOrgAdAccountInfo, normalizeAdAccountId } from "../_utils"
 import { wallClockToUtcIso } from "@/lib/timezone"
 
@@ -826,7 +827,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Record the launch batch — required for every launch route (CONTEXT.md).
-      const batchStatus = errors.length === 0 ? "success" : "partial"
+      const batchStatus = errors.length > 0 ? "partial" : (startTime ? "scheduled" : "success")
       const supabase = createAdminClient()
       const { data: batch } = await supabase.from("launch_batches").insert({
         org_id: ctx.orgId,
@@ -849,6 +850,14 @@ export async function POST(request: NextRequest) {
         created_ads: created,
       }).select("id").single()
 
+      await createScheduledActivation({
+        orgId: ctx.orgId,
+        adAccountId,
+        adIds: created.map(c => c.adId),
+        scheduledAt: startTime,
+        endTime,
+      })
+
       return NextResponse.json({
         success: true,
         campaignId: campaign.id,
@@ -857,6 +866,7 @@ export async function POST(request: NextRequest) {
         errors,
         batchStatus,
         batchId: batch?.id || null,
+        scheduled: startTime ? { at: startTime, end: endTime || null } : null,
       })
     }
 
@@ -881,6 +891,7 @@ export async function POST(request: NextRequest) {
       urlTags: state.urlParameters || undefined,
     })
 
+    const batchStatus = startTime ? "scheduled" : "success"
     const supabase = createAdminClient()
     const { data: batch } = await supabase.from("launch_batches").insert({
       org_id: ctx.orgId,
@@ -896,12 +907,20 @@ export async function POST(request: NextRequest) {
       cta: state.callToAction || null,
       web_link: state.destinationUrl || null,
       page_id: state.pageId || null,
-      status: "success",
+      status: batchStatus,
       total_ads: 1,
       failed_ads: 0,
       errors: [],
       created_ads: [{ adId: ad.id, adSetId: adSet.id, creativeId: state.creativeId || null }],
     }).select("id").single()
+
+    await createScheduledActivation({
+      orgId: ctx.orgId,
+      adAccountId,
+      adIds: [ad.id],
+      scheduledAt: startTime,
+      endTime,
+    })
 
     return NextResponse.json({
       success: true,
@@ -909,6 +928,7 @@ export async function POST(request: NextRequest) {
       adSetId: adSet.id,
       adId: ad.id,
       batchId: batch?.id || null,
+      scheduled: startTime ? { at: startTime, end: endTime || null } : null,
     })
   } catch (err) {
     if (campaignId && rollbackToken) await rollbackCampaign(campaignId, rollbackToken)

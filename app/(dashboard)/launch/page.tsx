@@ -240,7 +240,7 @@ interface LaunchBatch {
   cta?: string
   web_link?: string
   page_id?: string
-  status: "success" | "partial" | "failed"
+  status: "success" | "partial" | "failed" | "scheduled"
   total_ads: number
   failed_ads: number
   duration_ms: number
@@ -248,6 +248,10 @@ interface LaunchBatch {
   errors: any[]
   created_ads?: CreatedAd[]
   deleted_at?: string | null
+  scheduled_at?: string | null
+  end_time?: string | null
+  scheduled_status?: "pending" | "activated" | "paused" | "cancelled" | "failed" | null
+  scheduled_error?: string | null
 }
 
 // Facebook ads-supported languages (Meta locale codes)
@@ -304,6 +308,28 @@ function formatDate(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ", " +
     d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+}
+
+// How long until a scheduled activation fires, e.g. "in 2h 15m" / "in 3d" / "due".
+function formatCountdown(iso: string): string {
+  const diffMs = new Date(iso).getTime() - Date.now()
+  if (diffMs <= 0) return "due"
+  const mins = Math.round(diffMs / 60000)
+  if (mins < 60) return `in ${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `in ${hours}h ${mins % 60}m`
+  return `in ${Math.floor(hours / 24)}d`
+}
+
+function scheduleStatusLabel(status?: string | null): string {
+  switch (status) {
+    case "pending": return "Pending"
+    case "activated": return "Active"
+    case "paused": return "Paused"
+    case "cancelled": return "Cancelled"
+    case "failed": return "Failed"
+    default: return "Scheduled"
+  }
 }
 
 // ─── Platform Status Popover ──────────────────────────────────────────────────
@@ -9770,6 +9796,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
     const params = new URLSearchParams()
     if (statusFilter !== "all") params.set("status", statusFilter)
     if (tab === "deleted") params.set("trash", "1")
+    if (tab === "scheduled") params.set("tab", "scheduled")
     fetch(`/api/launch-history?${params}`)
       .then(r => r.json())
       .then(d => setBatches(d.batches || []))
@@ -10040,17 +10067,13 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
       </div>
 
       <div data-table="comfortable">
-        {tab !== "launches" && tab !== "deleted" ? (
-          <div className="flex items-center justify-center py-10 text-xs text-muted-foreground/50">
-            No scheduled ads
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div className="flex items-center justify-center py-10">
             <IconLoader2 className="size-4 animate-spin text-muted-foreground" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex items-center justify-center py-10 text-xs text-muted-foreground/50">
-            No launches yet
+            {tab === "scheduled" ? "No scheduled ads" : tab === "deleted" ? "Trash is empty" : "No launches yet"}
           </div>
         ) : <>
           {filtered.slice(0, displayCount).map(b => (
@@ -10103,7 +10126,9 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
               <span className="text-xs font-medium">{b.adset_ids?.length || 0}</span>
 
               {/* Date */}
-              <span className="text-xs text-muted-foreground">{formatDate(b.created_at)}</span>
+              <span className="text-xs text-muted-foreground">
+                {formatDate(tab === "scheduled" && b.scheduled_at ? b.scheduled_at : b.created_at)}
+              </span>
 
               {/* User */}
               <div className="flex items-center gap-1.5">
@@ -10113,15 +10138,26 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
 
               {/* Time taken */}
               <span className="text-xs text-muted-foreground">
-                {b.duration_ms ? formatDuration(b.duration_ms) : "—"}
+                {tab === "scheduled" && b.scheduled_at
+                  ? formatCountdown(b.scheduled_at)
+                  : b.duration_ms ? formatDuration(b.duration_ms) : "—"}
               </span>
 
               {/* Status */}
               <span className={cn("text-xs px-1.5 py-0.5 rounded-full font-semibold w-fit",
-                b.status === "success" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
-                b.status === "partial" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
-                "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400")}>
-                {b.status === "success" ? "Success" : b.status === "partial" ? "Partial" : "Failed"}
+                tab === "scheduled"
+                  ? b.scheduled_status === "failed"
+                    ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                    : b.scheduled_status === "activated" || b.scheduled_status === "paused"
+                      ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      : "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                  : b.status === "success" ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" :
+                    b.status === "partial" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                    "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400")}
+                title={tab === "scheduled" ? b.scheduled_error || undefined : undefined}>
+                {tab === "scheduled"
+                  ? scheduleStatusLabel(b.scheduled_status)
+                  : b.status === "success" ? "Success" : b.status === "partial" ? "Partial" : "Failed"}
               </span>
 
               {/* Actions */}

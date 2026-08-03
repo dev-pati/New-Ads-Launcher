@@ -3,6 +3,7 @@ import { notifyOrgMembers } from "@/lib/notify-org"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createScheduledActivation } from "@/lib/scheduled-activations"
 import { createAd, getVideoThumbnail, getResourceAccountId, getDynamicCreativeAdSets, getAdSetCampaignsAndNames, copyAdSet, pollVideoReady } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
 
@@ -540,7 +541,11 @@ export async function POST(request: NextRequest) {
     } // end else (standard branch)
 
     const durationMs = Date.now() - startTime
-    const batchStatus = errors.length === 0 ? "success" : created.length > 0 ? "partial" : "failed"
+    const batchStatus = created.length === 0
+      ? "failed"
+      : errors.length > 0
+        ? "partial"
+        : (scheduledStart ? "scheduled" : "success")
 
     // Collect creative thumbnails for history display
     const creativeThumbs = creatives
@@ -599,14 +604,12 @@ export async function POST(request: NextRequest) {
         .map((c: any) => c.adId)
         .filter(Boolean) as string[]
       if (adIds.length > 0) {
-        const adminDb = createAdminClient()
-        await adminDb.from("scheduled_activations").insert({
-          org_id: ctx.orgId,
-          ad_account_id: adAccountId,
-          ad_ids: adIds,
-          scheduled_at: scheduledStart,
-          end_time: scheduledEnd || null,
-          status: "pending",
+        await createScheduledActivation({
+          orgId: ctx.orgId,
+          adAccountId,
+          adIds,
+          scheduledAt: scheduledStart,
+          endTime: scheduledEnd || null,
         })
       }
     }
