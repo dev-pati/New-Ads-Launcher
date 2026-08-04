@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { notifyOrgMembers } from "@/lib/notify-org"
+import { notifyLaunchOutcome } from "@/lib/notifications/launch"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -337,17 +337,19 @@ export async function POST(request: NextRequest) {
 
     const batchId = batchRecord?.id || null
 
-    if (totalCreated > 0) {
-      await notifyOrgMembers({
-        orgId: ctx.orgId,
-        actorId: ctx.user.id,
-        actorName: userName,
-        type: "ad_launched",
-        title: `${userName} launched ${totalCreated} ad${totalCreated !== 1 ? "s" : ""}`,
-        body: adAccountName ? `on ${adAccountName}` : undefined,
-        link: batchId ? `/ads-manager?batch=${batchId}` : "/ads-manager",
-      })
-    }
+    // Table mode launches many rows at once, so a partial failure is the common case,
+    // not the edge case — it is the one this route most needs to report.
+    void notifyLaunchOutcome({
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName: userName,
+      batchId,
+      adAccountName: adAccountName || adAccountId,
+      targetName: finalAdSetNames[0] || originalAdSetNames[0] || null,
+      created: totalCreated,
+      failed: totalFailed,
+      source: "launch-table-batch",
+    })
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { notifyOrgMembers } from "@/lib/notify-org"
+import { notifyLaunchOutcome } from "@/lib/notifications/launch"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -580,18 +580,20 @@ export async function POST(request: NextRequest) {
     }
     const batchId: string | null = batchRecord?.id || null
 
-    // Notify teammates about the launch
-    if (created.length > 0) {
-      await notifyOrgMembers({
-        orgId: ctx.orgId,
-        actorId: ctx.user.id,
-        actorName: userName,
-        type: "ad_launched",
-        title: `${userName} launched ${created.length} ad${created.length !== 1 ? "s" : ""}`,
-        body: adAccountName ? `on ${adAccountName}` : undefined,
-        link: batchId ? `/ads-manager?batch=${batchId}` : "/ads-manager",
-      })
-    }
+    // Notify teammates about the launch. Both outcomes are reported: a launch that
+    // half-failed used to be indistinguishable from one that fully succeeded.
+    // dedupeKey is the batch id, so a retried request delivers once.
+    void notifyLaunchOutcome({
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName: userName,
+      batchId,
+      adAccountName: adAccountName || adAccountId,
+      targetName: finalAdSetNames[0] || null,
+      created: created.length,
+      failed: errors.length,
+      source: "launch-direct",
+    })
 
     // Save scheduled activation record so cron job can activate at the right time
     if (scheduledStart && created.length > 0) {

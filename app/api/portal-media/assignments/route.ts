@@ -6,6 +6,7 @@ import { listApprovedAssets } from "@/lib/supabase/portal-registry"
 import { buildTree, collectKeysUnder } from "@/lib/portal-media/tree"
 import { claimPortalAsset, portalStoragePath } from "@/lib/portal-media/claim"
 import { createUploadJob } from "@/lib/media-upload-jobs"
+import { emitAndLog } from "@/lib/notifications/emit"
 
 async function requireLaunchRole() {
   const ctx = await getAuthContext()
@@ -134,6 +135,40 @@ export async function PUT(request: NextRequest) {
         errors.push({ object_key: item.object_key, error: message })
       }
     }
+  }
+
+  // Assigning Portal media is how creative reaches an ad account, and until now it was
+  // the loudest action in the product that said nothing at all. One notification per
+  // assign pass, not per asset — a 200-file folder must not produce 200 rows.
+  if (assigned.length > 0) {
+    const { data: accountRow } = await supabase
+      .from("ad_accounts")
+      .select("name")
+      .eq("org_id", ctx.orgId)
+      .eq("fb_ad_account_id", adAccountId)
+      .maybeSingle()
+
+    void emitAndLog("portal-media.assign", {
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName: ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone",
+      type: "media.assigned",
+      action: "assigned",
+      objectType: "media_assignment",
+      objectId: jobId ?? adAccountId,
+      count: assigned.length,
+      context: { preposition: "to", name: accountRow?.name || adAccountId },
+      body: errors.length
+        ? `${errors.length} of ${assets.length} could not be assigned.`
+        : null,
+      link: "/assets",
+      // The upload job is the assign pass. A retried request reuses neither, so the
+      // fallback key still collapses a double-click inside the same minute.
+      dedupeKey: jobId
+        ? `media.assigned:${jobId}`
+        : `media.assigned:${ctx.user.id}:${adAccountId}:${Math.floor(Date.now() / 60000)}`,
+      source: "portal-media.assign",
+    })
   }
 
   return NextResponse.json({

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { mapCreativeForClient } from "@/lib/creative-media"
-import { notifyOrgMembers } from "@/lib/notify-org"
+import { emitAndLog } from "@/lib/notifications/emit"
 import { checkCreativeDup, getActorName } from "@/lib/upload-utils"
 import { fireMediaUploadedTriggers }      from "@/lib/media-trigger-checker"
 
@@ -151,13 +151,18 @@ export async function POST(request: NextRequest) {
     }, "immediately").catch(err => console.error("[finalize] media trigger error:", err))
 
     const actorName = getActorName(ctx.user)
-    await notifyOrgMembers({
+    void emitAndLog("creatives.finalize", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,
-      type: "asset_uploaded",
-      title: `${actorName} uploaded "${filename}"`,
+      type: "asset.uploaded",
+      action: "created",
+      objectType: "creative",
+      objectId: creative.id,
+      objectName: filename,
       link: "/assets",
+      dedupeKey: `asset.uploaded:${creative.id}`,
+      source: "creatives.finalize",
     })
 
     return NextResponse.json({ creative: mapCreativeForClient(creative), rateLimitPct: 0 }, { status: 201 })

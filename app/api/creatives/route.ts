@@ -7,7 +7,7 @@ import {
   sortCreativesByLatestAssignment,
 } from "@/lib/creative-media"
 import { uploadImageToMeta, uploadVideoToMeta, pollVideoReady } from "@/lib/facebook"
-import { notifyOrgMembers } from "@/lib/notify-org"
+import { emitAndLog } from "@/lib/notifications/emit"
 import { deleteMediaObject } from "@/lib/media-delete"
 
 // Large media uploads (videos can be 100MB+) — use Node runtime + extended timeout
@@ -316,13 +316,19 @@ export async function POST(request: NextRequest) {
     }
 
     const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-    await notifyOrgMembers({
+    // Keyed on the creative row, so a retried upload of the same row delivers once.
+    void emitAndLog("creatives.create", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,
-      type: "asset_uploaded",
-      title: `${actorName} uploaded "${file.name}"`,
+      type: "asset.uploaded",
+      action: "created",
+      objectType: "creative",
+      objectId: creative.id,
+      objectName: file.name,
       link: "/assets",
+      dedupeKey: `asset.uploaded:${creative.id}`,
+      source: "creatives.create",
     })
 
     return NextResponse.json({ creative: mapCreativeForClient(creative) }, { status: 201 })

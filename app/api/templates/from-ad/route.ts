@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAdDetail } from "@/lib/facebook"
-import { notifyOrgMembers } from "@/lib/notify-org"
+import { emitAndLog } from "@/lib/notifications/emit"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "../../facebook/_utils"
 
 // "Save as Template" from Ads Manager: read a live ad's copy + media + metrics
@@ -97,13 +97,19 @@ export async function POST(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-    await notifyOrgMembers({
+    void emitAndLog("templates.from-ad", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,
-      type: "template_created",
-      title: `${actorName} saved ad "${ad.name}" as template`,
+      type: "template.created",
+      action: "created",
+      objectType: "template",
+      objectId: data.id,
+      objectName: templateName,
+      body: ad.name ? `Saved from ad "${ad.name}".` : null,
       link: "/templates",
+      dedupeKey: `template.created:${data.id}`,
+      source: "templates.from-ad",
     })
 
     return NextResponse.json({ template: data }, { status: 201 })

@@ -3,7 +3,7 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { uploadImageToMeta, uploadVideoUrlToMeta } from "@/lib/facebook"
 import { mapCreativeForClient } from "@/lib/creative-media"
-import { notifyOrgMembers } from "@/lib/notify-org"
+import { emitAndLog } from "@/lib/notifications/emit"
 import { getOrgAdAccountInfo } from "@/app/api/facebook/_utils"
 import { checkCreativeDup, getActorName } from "@/lib/upload-utils"
 
@@ -174,13 +174,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save creative" }, { status: 500 })
     }
 
-    await notifyOrgMembers({
+    void emitAndLog("creatives.upload-binary", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName: getActorName(ctx.user),
-      type: "asset_uploaded",
-      title: `${getActorName(ctx.user)} uploaded "${filename}"`,
+      type: "asset.uploaded",
+      action: "created",
+      objectType: "creative",
+      objectId: creative.id,
+      objectName: filename,
       link: "/assets",
+      dedupeKey: `asset.uploaded:${creative.id}`,
+      source: "creatives.upload-binary",
     })
 
     return NextResponse.json({ creative: mapCreativeForClient(creative), rateLimitPct }, { status: 201 })

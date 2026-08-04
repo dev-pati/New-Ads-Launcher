@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { notifyOrgMembers } from "@/lib/notify-org"
+import { emitAndLog } from "@/lib/notifications/emit"
 
 export async function GET(request: NextRequest) {
   try {
@@ -58,13 +58,18 @@ export async function POST(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-    await notifyOrgMembers({
+    void emitAndLog("templates.create", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,
-      type: "template_created",
-      title: `${actorName} created template "${name.trim()}"`,
+      type: "template.created",
+      action: "created",
+      objectType: "template",
+      objectId: data.id,
+      objectName: name.trim(),
       link: "/templates",
+      dedupeKey: `template.created:${data.id}`,
+      source: "templates.create",
     })
 
     return NextResponse.json({ template: data }, { status: 201 })

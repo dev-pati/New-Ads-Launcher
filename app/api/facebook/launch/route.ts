@@ -4,6 +4,7 @@ import { assertLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail, getResourceAccountId } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "../_utils"
+import { notifyLaunchOutcome } from "@/lib/notifications/launch"
 
 function applyPattern(pattern: string, ctx: { filename?: string; index?: number; date: string; shortDate: string }) {
   let r = pattern
@@ -571,6 +572,21 @@ export async function POST(request: NextRequest) {
       } else {
         batchId = data?.id
       }
+
+      // This route wrote a batch row but never told anybody — the two other launch
+      // routes did. Emitting here covers both exits (custom config and the normal
+      // campaign loop) because both go through saveLaunchBatch.
+      void notifyLaunchOutcome({
+        orgId: authCtx.orgId,
+        actorId: authCtx.user.id,
+        actorName: userName,
+        batchId: batchId ?? null,
+        adAccountName: savedAccount?.name || adAccountId,
+        targetName: adsetNames[0] || null,
+        created: allResults.length,
+        failed: allErrors.length,
+        source: "launch",
+      })
     }
 
     // Custom config mode: bypass normal campaign loop entirely

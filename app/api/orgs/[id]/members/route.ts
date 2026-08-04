@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendInviteEmail, sendAddedToOrgEmail } from "@/lib/email"
-import { notifyOrgMembers } from "@/lib/notify-org"
+import { emitAndLog } from "@/lib/notifications/emit"
+import { conflictResponse, readExpectedVersion, updateWithVersion } from "@/lib/optimistic-update"
 
 type MemberRow = {
   id: string
@@ -253,14 +254,22 @@ export async function POST(
       }
 
       const inviterName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Someone"
-      await notifyOrgMembers({
+      // The actor is the inviter, not the invitee: the invitee did not do anything.
+      // Getting this backwards also suppressed the notification for the one person who
+      // most needs it, because the emitter never notifies the actor.
+      void emitAndLog("orgs.members.add", {
         orgId,
-        actorId: existingUser.id,
-        actorName: existingUser.email,
-        type: "member_joined",
-        title: `${existingUser.email} joined the workspace`,
-        body: `Invited by ${inviterName}`,
+        actorId: user.id,
+        actorName: inviterName,
+        type: "member.joined",
+        action: "joined",
+        objectType: "member",
+        objectId: existingUser.id,
+        objectName: existingUser.full_name || existingUser.email,
+        body: `${existingUser.email} was added to the workspace as ${sanitizedRole}.`,
         link: "/settings",
+        dedupeKey: `member.joined:${orgId}:${existingUser.id}`,
+        source: "orgs.members.add",
       })
 
       return NextResponse.json({ success: true, added: true })
@@ -327,9 +336,15 @@ export async function PATCH(
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { id: orgId } = await params
-    const { member_id: memberId, role } = await request.json()
+    const body = await request.json()
+    const { member_id: memberId, role } = body
 
     if (!memberId) return NextResponse.json({ error: "member_id is required" }, { status: 400 })
+
+    const expectedVersion = readExpectedVersion(body)
+    if (expectedVersion === "invalid") {
+      return NextResponse.json({ error: "Invalid expected_version" }, { status: 400 })
+    }
 
     const VALID_ROLES = ["admin", "editor", "launcher", "uploader", "analyst", "commenter"]
     if (!VALID_ROLES.includes(role)) {
@@ -349,13 +364,53 @@ export async function PATCH(
       return NextResponse.json({ error: "Only admins can change roles" }, { status: 403 })
     }
 
-    await supabase
-      .from("org_members")
-      .update({ role })
-      .eq("id", memberId)
-      .eq("org_id", orgId)
+    const actorName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Someone"
+    const outcome = await updateWithVersion<{ id: string; user_id: string; role: string }>({
+      db: supabase,
+      table: "org_members",
+      id: memberId,
+      orgId,
+      expectedVersion,
+      updates: { role },
+      actorId: user.id,
+    })
 
-    return NextResponse.json({ success: true })
+    if (outcome.ok === false) {
+      if (outcome.kind === "not_found") {
+        return NextResponse.json({ error: "Member not found" }, { status: 404 })
+      }
+      if (outcome.kind === "conflict") return conflictResponse(outcome.conflict)
+      return NextResponse.json({ error: outcome.message }, { status: 500 })
+    }
+
+    if (outcome.changes.length > 0) {
+      const { data: target } = await supabase
+        .from("accounts")
+        .select("full_name, email")
+        .eq("id", outcome.row.user_id)
+        .maybeSingle()
+      const targetName = target?.full_name || target?.email || "a member"
+
+      // A role change decides what someone is allowed to do next — including whether
+      // they can still launch. Everyone in the org sees it, and the affected member
+      // sees it whether or not their role would normally receive ops notifications.
+      void emitAndLog("orgs.members.role", {
+        orgId,
+        actorId: user.id,
+        actorName,
+        type: "member.role_changed",
+        action: "updated",
+        objectType: "member",
+        objectId: outcome.row.user_id,
+        objectName: targetName,
+        changes: outcome.changes,
+        alsoUserIds: [outcome.row.user_id],
+        link: "/settings",
+        source: "orgs.members.role",
+      })
+    }
+
+    return NextResponse.json({ success: true, degraded: outcome.degraded })
   } catch (err) {
     console.error("Failed to update member role:", err)
     return NextResponse.json({ error: "Failed to update role" }, { status: 500 })

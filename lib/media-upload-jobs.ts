@@ -1,4 +1,5 @@
 import { createAdminClient } from "./supabase/admin"
+import { emitAndLog } from "./notifications/emit"
 
 export interface JobProgress {
   jobId: string
@@ -156,5 +157,46 @@ export async function updateJobStatus(db: ReturnType<typeof createAdminClient>, 
     status = "pending"
   }
 
+  const { data: job } = await db
+    .from("media_upload_jobs")
+    .select("status, org_id, ad_account_id")
+    .eq("id", jobId)
+    .maybeSingle()
+
+  const previous = job?.status as string | undefined
   await db.from("media_upload_jobs").update({ status }).eq("id", jobId)
+
+  // The transition into a terminal state is the event. The cron re-runs constantly, so
+  // this must fire on the edge, not on the state — and the dedupe key catches the case
+  // where two workers observe the same edge.
+  const terminal = status === "done" || status === "error"
+  if (!terminal || previous === status || !job?.org_id) return
+
+  const { data: account } = await db
+    .from("ad_accounts")
+    .select("name")
+    .eq("org_id", job.org_id)
+    .eq("fb_ad_account_id", job.ad_account_id)
+    .maybeSingle()
+  const accountName = account?.name || job.ad_account_id || "the ad account"
+
+  void emitAndLog("media-upload-job", {
+    orgId: job.org_id,
+    // No human ran this — the cron did. An actor id here would exclude that person
+    // from their own upload result, which is exactly who is waiting for it.
+    actorId: null,
+    actorName: "AdLauncher",
+    type: status === "done" ? "media.upload_completed" : "media.upload_failed",
+    action: status === "done" ? "completed" : "failed",
+    objectType: "upload_job",
+    objectId: jobId,
+    objectName: accountName,
+    count: total,
+    body: status === "done"
+      ? `${done} of ${total} asset${total === 1 ? "" : "s"} are now on Meta and ready to launch.`
+      : `${failed} of ${total} asset${total === 1 ? "" : "s"} failed to upload to Meta. View error details.`,
+    link: "/assets",
+    dedupeKey: `media.upload:${jobId}:${status}`,
+    source: "cron.upload-to-facebook",
+  })
 }
