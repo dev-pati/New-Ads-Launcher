@@ -16,6 +16,7 @@ const MAX_VIDEOS_PER_ORG = 5
 const MAX_JOB_BATCHES = 2
 const RATE_LIMIT_ALERT_RECIPIENTS = ["thanhtin@patigroup.com"]
 const RATE_LIMIT_NOTIFY_PCT = 65
+const STALE_RUNNING_ITEM_MS = 5 * 60 * 1000
 
 // Adaptive batch size based on rate limit pct
 function batchSize(pct: number): number {
@@ -58,6 +59,18 @@ export async function GET(request: NextRequest) {
   // 0. B8 job queue — drain up to MAX_JOB_BATCHES jobs, each their items.
   //    Backward compat: legacy "pending" creatives without a job still run below.
   try {
+    // Requeue items orphaned in "running" by a killed/timed-out tick (maxDuration 60s).
+    // The pending-only select below never re-claims them, and the legacy fallback also
+    // skips running items, so without this a stale item traps its creative in
+    // "Assigning…" forever. 5min >> 60s maxDuration, so a live tick can't be wrongly
+    // reset. Idempotent via isLaunchable() in processUpload — Meta already has the asset
+    // → short-circuit, no double upload (TD-35).
+    const staleBefore = new Date(Date.now() - STALE_RUNNING_ITEM_MS).toISOString()
+    await db.from("media_upload_job_items")
+      .update({ status: "pending", updated_at: new Date().toISOString() })
+      .eq("status", "running")
+      .lt("updated_at", staleBefore)
+
     const { data: activeJobs } = await db
       .from("media_upload_jobs")
       .select("id, org_id, ad_account_id")
