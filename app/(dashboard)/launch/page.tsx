@@ -229,6 +229,7 @@ const PRODUCT_FIELD_OPTIONS = [
 interface LaunchBatch {
   id: string
   user_name: string
+  launcher?: { avatar_url?: string } | null
   ad_account_id: string
   ad_account_name: string
   adset_ids: string[]
@@ -439,7 +440,7 @@ function AdAccountDropdown({ accounts, selectedId, onSelect }: {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
-          className="h-8 flex items-center gap-1.5 px-3 rounded-lg border bg-background hover:bg-muted/40 transition-colors min-w-[180px] max-w-[240px] text-sm"
+          className="h-8 flex items-center gap-1.5 px-3 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-black dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-700/60 transition-colors min-w-[180px] max-w-[240px] text-sm"
         >
           <IconBrandMeta className="size-3.5 text-[#0064E0] shrink-0" />
           <span className="truncate flex-1 text-left">{selected?.name || "Select account..."}</span>
@@ -8498,16 +8499,19 @@ function AdSetupPanel({
           {primaryTexts.map((text, idx) => (
             <div key={idx} className={cn("relative", idx > 0 && "mt-2")}>
               <textarea value={text}
+                ref={el => {
+                  if (el) {
+                    el.style.height = "auto"
+                    el.style.height = Math.min(el.scrollHeight, 140) + "px"
+                  }
+                }}
                 onChange={e => {
                   updateText(idx, e.target.value)
-                  const t = e.target as HTMLTextAreaElement
-                  t.style.height = "auto"
-                  t.style.height = t.scrollHeight + "px"
                 }}
                 placeholder="Write your primary ad text..."
                 rows={1}
-                className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-none placeholder:text-muted-foreground/50 pr-8 overflow-hidden"
-                style={{ height: "40px", minHeight: "40px" }}
+                className="w-full px-3 py-2.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring resize-y placeholder:text-muted-foreground/50 pr-8 overflow-y-auto"
+                style={{ height: "46px", minHeight: "46px", maxHeight: "140px" }}
               />
               {primaryTexts.length > 1 && (
                 <button onClick={() => removeText(idx)}
@@ -9519,7 +9523,14 @@ function ThumbStack({ thumbs, count }: { thumbs: string[]; count: number }) {
 
 // ─── User Avatar ──────────────────────────────────────────────────────────────
 
-function UserAvatar({ name }: { name: string }) {
+function UserAvatar({ name, url }: { name: string; url?: string | null }) {
+  if (url) {
+    return (
+      <div className="size-6 rounded-full overflow-hidden shrink-0">
+        <img src={url} alt={name} className="size-full object-cover" />
+      </div>
+    )
+  }
   const initials = name ? name.slice(0, 1).toUpperCase() : "?"
   const colors = ["bg-teal-500", "bg-primary/100", "bg-purple-500", "bg-orange-500", "bg-pink-500"]
   const color = colors[name.charCodeAt(0) % colors.length]
@@ -9747,9 +9758,10 @@ interface DraftSnapshot {
  * it is the one column where growing to fill the leftover width shows more real content instead of
  * leaving it empty.
  */
-const HISTORY_COLS = "140px 1fr 140px 50px 64px 110px 110px 80px 84px 100px"
+const HISTORY_COLS = "150px minmax(360px,1fr) 150px 56px 70px 120px 150px 90px 96px 100px"
 const historyGrid = (withCheckbox: boolean) => ({
   gridTemplateColumns: withCheckbox ? `30px ${HISTORY_COLS}` : HISTORY_COLS,
+  columnGap: "12px",
 })
 const DRAFT_COLS = "120px 1fr 140px 70px 120px 90px 100px"
 
@@ -9990,11 +10002,13 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
                       {/* Thumbnails */}
                       <ThumbStack thumbs={d.creative_thumbs || []} count={d.row_count} />
                       {/* Name */}
-                      <span className="text-xs font-medium truncate pr-2">{d.name}</span>
+                      <span className="block min-w-0 truncate pr-2 text-xs font-medium">{d.name}</span>
                       {/* Account */}
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <IconBrandMeta className="size-3.5 text-[#1877F2] shrink-0" />
-                        <span className="text-xs text-muted-foreground truncate">{d.ad_account_name || d.ad_account_id || "—"}</span>
+                      <div className="flex min-w-0 w-full overflow-hidden">
+                        <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300">
+                          <IconBrandMeta className="size-3.5 shrink-0 text-[#1877F2]" />
+                          <span className="min-w-0 truncate">{d.ad_account_name || d.ad_account_id || "—"}</span>
+                        </span>
                       </div>
                       {/* Row count */}
                       <span className="text-xs font-medium">{d.row_count}</span>
@@ -10002,7 +10016,7 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
                       <span className="text-xs text-muted-foreground">{formatDate(d.created_at)}</span>
                       {/* User */}
                       <div className="flex items-center gap-1.5">
-                        <UserAvatar name={d.user_name || "?"} />
+                        <UserAvatar name={d.user_name || "?"} url={(d as any).launcher?.avatar_url} />
                         <span className="text-xs text-muted-foreground truncate">{d.user_name}</span>
                       </div>
                       {/* Actions */}
@@ -10098,15 +10112,17 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
               <ThumbStack thumbs={b.creative_thumbs || []} count={b.creative_ids?.length || 0} />
 
               {/* Ad Sets */}
-              <span className="text-xs text-muted-foreground truncate pr-2">
+              <span className="block min-w-0 truncate pr-2 text-xs text-muted-foreground">
                 {b.adset_names?.slice(0, 2).join(", ")}
                 {(b.adset_names?.length || 0) > 2 && ` +${(b.adset_names?.length || 0) - 2}`}
               </span>
 
               {/* Account */}
-              <div className="flex items-center gap-1.5 min-w-0">
-                <IconBrandMeta className="size-3.5 text-[#1877F2] shrink-0" />
-                <span className="text-xs text-muted-foreground truncate">{b.ad_account_name || b.ad_account_id}</span>
+              <div className="flex min-w-0 w-full overflow-hidden">
+                <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300">
+                  <IconBrandMeta className="size-3.5 shrink-0 text-[#1877F2]" />
+                  <span className="min-w-0 truncate">{b.ad_account_name || b.ad_account_id}</span>
+                </span>
               </div>
 
               {/* Ads count */}
@@ -10120,12 +10136,12 @@ function LaunchHistorySection({ reloadTrigger, onRelaunch, onLoadDraft, tabOverr
 
               {/* User */}
               <div className="flex items-center gap-1.5">
-                <UserAvatar name={b.user_name || "?"} />
+                <UserAvatar name={b.user_name || "?"} url={b.launcher?.avatar_url} />
                 <span className="text-xs text-muted-foreground truncate">{b.user_name}</span>
               </div>
 
               {/* Time taken */}
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs font-medium text-foreground tabular-nums">
                 {b.duration_ms ? formatDuration(b.duration_ms) : "—"}
               </span>
 
@@ -13988,7 +14004,7 @@ function LaunchPageContent() {
               onClick={() => setAdProfilesOpen(true)}
               title={pagesError || (selectedPage?.name) || "Select Facebook page"}
               className={cn(
-                "h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors min-w-[140px] max-w-[200px]",
+                "h-8 flex items-center gap-1.5 px-2.5 rounded-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-black dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-700/60 transition-colors min-w-[140px] max-w-[200px]",
                 pagesError && "border-amber-300",
                 validationErrors.page && "border-destructive"
               )}
@@ -14015,7 +14031,7 @@ function LaunchPageContent() {
             </div>
             <button
               onClick={() => setAdProfilesOpen(true)}
-              className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border bg-background hover:bg-muted/40 transition-colors min-w-[140px] max-w-[200px]"
+              className="h-8 flex items-center gap-1.5 px-2.5 rounded-full border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-black dark:text-white hover:bg-zinc-50 dark:hover:bg-zinc-700/60 transition-colors min-w-[140px] max-w-[200px]"
             >
               {(() => {
                 const isFbActor = selectedIgPageId.startsWith("fb_")

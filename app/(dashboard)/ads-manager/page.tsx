@@ -395,14 +395,14 @@ function BudgetQuickEditCell({
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4">
             <span className="font-semibold text-sm text-[#1c2b33] dark:text-white">{typeLabel}</span>
-            <div className="relative flex items-center w-36 rounded border bg-background focus-within:ring-1 focus-within:ring-ring">
+            <div className="relative flex items-center w-[110px] min-w-[110px] rounded border bg-background focus-within:ring-1 focus-within:ring-ring">
               <span className="pl-2 text-[#4b4f56] dark:text-gray-400">$</span>
               <Input
                 id={`budget-${targetNode.id}`}
                 value={amount}
                 onChange={event => setAmount(event.target.value)}
                 inputMode="decimal"
-                className="h-8 w-full border-0 pl-1 pr-8 py-1 text-sm shadow-none focus-visible:ring-0"
+                className="h-8 w-full border-0 pl-1 pr-9 py-1 text-sm text-right shadow-none focus-visible:ring-0"
                 autoFocus
               />
               <span className="absolute right-2 text-[10px] text-muted-foreground uppercase pointer-events-none">USD</span>
@@ -427,7 +427,7 @@ function BudgetQuickEditCell({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="text-[#1877f2] hover:underline font-semibold text-sm bg-transparent border-0 cursor-pointer"
+              className="text-muted-foreground hover:text-foreground hover:underline font-semibold text-sm bg-transparent border-0 cursor-pointer"
             >
               Cancel
             </button>
@@ -3916,6 +3916,26 @@ function AdsManagerContent() {
                   )
                 })
               )}
+              {paging.hasNext && (
+                <tr className="border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-transparent">
+                  <td className="px-2" />
+                  <td className="px-3" />
+                  <td colSpan={tab === "ads" ? 2 : 1} className="px-3 py-2 text-left">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPage(p => p + 1)}
+                      disabled={loading}
+                      className="shadow-none text-[11px] text-muted-foreground hover:text-foreground h-auto p-0 font-semibold"
+                    >
+                      {loading ? "Loading…" : "Load more (20 more)"}
+                    </Button>
+                  </td>
+                  {columnOrder.map(colId => (
+                    <td key={colId} />
+                  ))}
+                </tr>
+              )}
             </tbody>
 
             {/* ── Totals row ── */}
@@ -3923,7 +3943,7 @@ function AdsManagerContent() {
               <tfoot>
                 <tr className="border-t-2 border-[#e4e6eb] dark:border-gray-800 bg-[#f7f8fa] dark:bg-muted/20">
                   <td colSpan={tab === "ads" ? 4 : 3} className="px-3 text-xs text-muted-foreground font-medium">
-                    Results from {currentData.length} {tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"}
+                    Showing {currentData.length} loaded {tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"}
                   </td>
                   {columnOrder.map(colId => (
                     <td key={colId} className={cn("px-2 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", isTextCol(colId) ? "text-left" : "text-right")}>
@@ -3934,13 +3954,6 @@ function AdsManagerContent() {
               </tfoot>
             )}
           </table>
-          {paging.hasNext && (
-            <div className="flex justify-center py-3 border-t border-[#e4e6eb] dark:border-gray-800">
-              <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={loading}>
-                {loading ? "Loading…" : "Load more (20 more)"}
-              </Button>
-            </div>
-          )}
       </div>
 
       {/* ── Duplicate Dialog ── */}
