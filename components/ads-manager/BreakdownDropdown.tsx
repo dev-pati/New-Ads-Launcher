@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils"
 import { IconSearch, IconChevronDown, IconChevronRight, IconX } from "@tabler/icons-react"
 import {
   BREAKDOWN_GROUPS, POPULAR_BREAKDOWNS, ALL_BREAKDOWN_OPTIONS,
-  BreakdownOption,
+  BreakdownOption, getBreakdownIncompatibility, isBreakdownCompatible,
 } from "@/lib/breakdown-config"
 
 // Time breakdown IDs are mutually exclusive (only one time_increment at a time)
@@ -50,26 +50,31 @@ function BreakdownSubmenu({
       style={{ width: 248, maxHeight: 420 }}
     >
       <div className="py-1.5">
-        {options.filter(o => o.id !== "none").map(opt => (
-          <button
-            key={opt.id}
-            onClick={() => onToggle(opt.id)}
-            className={cn(
-              "w-full flex flex-col items-start px-3 py-[7px] text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
-              selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
-            )}
-          >
-            <span className="flex items-center gap-2.5 text-xs text-[#1c2b33] dark:text-foreground">
-              <CheckBox active={selected.includes(opt.id)} />
-              {opt.label}
-            </span>
-            {opt.description && (
-              <span className="text-xs text-muted-foreground mt-0.5 pl-[22px]">
-                {opt.description}
+        {options.filter(o => o.id !== "none").map(opt => {
+          const blockedReason = getBreakdownIncompatibility(opt.id, selected)
+          return (
+            <button
+              key={opt.id}
+              disabled={Boolean(blockedReason)}
+              title={blockedReason || opt.description}
+              onClick={() => onToggle(opt.id)}
+              className={cn(
+                "w-full flex flex-col items-start px-3 py-[7px] text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+                selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
+              )}
+            >
+              <span className="flex items-center gap-2.5 text-xs text-[#1c2b33] dark:text-foreground">
+                <CheckBox active={selected.includes(opt.id)} />
+                {opt.label}
               </span>
-            )}
-          </button>
-        ))}
+              {(blockedReason || opt.description) && (
+                <span className="text-xs text-muted-foreground mt-0.5 pl-[22px]">
+                  {blockedReason || opt.description}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -118,15 +123,13 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
   const toggleOption = (id: string) => {
     if (selected.includes(id)) {
       onChange(selected.filter(s => s !== id))
-    } else {
-      // Time breakdowns are mutually exclusive
+    } else if (isBreakdownCompatible(id, selected)) {
       if (TIME_IDS.has(id)) {
         onChange([...selected.filter(s => !TIME_IDS.has(s)), id])
       } else {
         onChange([...selected, id])
       }
     }
-    // Keep dropdown open for multi-select
   }
 
   const clearAll = () => { onChange([]); setOpen(false) }
@@ -210,19 +213,24 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                 searchResults.length === 0 ? (
                   <p className="text-xs text-muted-foreground text-center py-8">No results</p>
                 ) : (
-                  searchResults.map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => toggleOption(opt.id)}
-                      className={cn(
-                        "w-full flex items-center gap-2.5 px-3 py-[7px] text-xs text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
-                        selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
-                      )}
-                    >
-                      <CheckBox active={selected.includes(opt.id)} />
-                      <span className="text-[#1c2b33] dark:text-foreground">{opt.label}</span>
-                    </button>
-                  ))
+                  searchResults.map(opt => {
+                    const blockedReason = getBreakdownIncompatibility(opt.id, selected)
+                    return (
+                      <button
+                        key={opt.id}
+                        disabled={Boolean(blockedReason)}
+                        title={blockedReason || undefined}
+                        onClick={() => toggleOption(opt.id)}
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-3 py-[7px] text-xs text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+                          selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
+                        )}
+                      >
+                        <CheckBox active={selected.includes(opt.id)} />
+                        <span className="text-[#1c2b33] dark:text-foreground">{opt.label}</span>
+                      </button>
+                    )
+                  })
                 )
               ) : (
                 <>
@@ -245,20 +253,25 @@ export function BreakdownDropdown({ selected, onChange }: Props) {
                   <p className="px-3 pt-1 pb-0.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Popular
                   </p>
-                  {POPULAR_BREAKDOWNS.map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => toggleOption(opt.id)}
-                      onMouseEnter={scheduleCloseGroup}
-                      className={cn(
-                        "w-full flex items-center gap-2.5 px-3 py-[7px] text-xs text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40",
-                        selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
-                      )}
-                    >
-                      <CheckBox active={selected.includes(opt.id)} />
-                      <span className="text-[#1c2b33] dark:text-foreground">{opt.label}</span>
-                    </button>
-                  ))}
+                  {POPULAR_BREAKDOWNS.map(opt => {
+                    const blockedReason = getBreakdownIncompatibility(opt.id, selected)
+                    return (
+                      <button
+                        key={opt.id}
+                        disabled={Boolean(blockedReason)}
+                        title={blockedReason || undefined}
+                        onClick={() => toggleOption(opt.id)}
+                        onMouseEnter={scheduleCloseGroup}
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-3 py-[7px] text-xs text-left transition-colors hover:bg-[#f5f6f7] dark:hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent",
+                          selected.includes(opt.id) && "bg-[#e7f3ff] dark:bg-blue-950/30"
+                        )}
+                      >
+                        <CheckBox active={selected.includes(opt.id)} />
+                        <span className="text-[#1c2b33] dark:text-foreground">{opt.label}</span>
+                      </button>
+                    )
+                  })}
 
                   <div className="mx-2.5 my-1 border-t" />
 

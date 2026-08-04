@@ -241,6 +241,11 @@ const ACTION_ALIASES: Record<string, string[]> = {
 
 const PAGE_SIZE = 20
 
+function mergeById<T extends { id: string }>(prev: T[], next: T[]) {
+  const seen = new Set(prev.map(item => item.id))
+  return [...prev, ...next.filter(item => !seen.has(item.id))]
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getBreakdownLabel(item: Record<string, string>, selectedIds: string[]): string {
@@ -902,8 +907,14 @@ function AdsManagerContent() {
   const [sortField, setSortField] = useState<string | null>(null)
   const [sortDir, setSortDir] = useState<SortDir>("asc")
 
-  // Selection
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  // Selection — kept per tab so switching tabs or drilling down/back doesn't drop it.
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<Set<string>>(new Set())
+  const [selectedAdSetIds, setSelectedAdSetIds] = useState<Set<string>>(new Set())
+  const [selectedAdIds, setSelectedAdIds] = useState<Set<string>>(new Set())
+  const selectedIdsByTab: Record<Tab, Set<string>> = { campaigns: selectedCampaignIds, adsets: selectedAdSetIds, ads: selectedAdIds }
+  const setSelectedIdsByTab: Record<Tab, React.Dispatch<React.SetStateAction<Set<string>>>> = { campaigns: setSelectedCampaignIds, adsets: setSelectedAdSetIds, ads: setSelectedAdIds }
+  const selectedIds = selectedIdsByTab[tab]
+  const setSelectedIds = setSelectedIdsByTab[tab]
 
   // Account-scoped bulk edit drafts. V1 persists within the current browser tab,
   // which keeps drafts across dialog closes/navigation without leaking them across accounts.
@@ -1046,9 +1057,14 @@ function AdsManagerContent() {
   const customColumnMap = useMemo(() => ({ ...COLUMN_MAP, ...Object.fromEntries(customMetrics.map(m => [m.id, toColumnDef(m)])) }), [customMetrics])
   const customMetricById = useMemo(() => new Map(customMetrics.map(m => [m.id, m])), [customMetrics])
   const getColWidth = (id: string) => {
+    if (columnWidths[id]) return columnWidths[id]
+    if (id === "results") return 120
+    if (id === "cost_per_result") return 140
+    if (id === "spend") return 120
+    if (id === "budget") return 125
+    if (id === "delivery") return 100
     const label = customColumnMap[id]?.headerLabel || ""
-    const def = label.length > 34 ? 160 : label.length > 20 ? 135 : 112
-    return columnWidths[id] || def
+    return label.length > 34 ? 160 : label.length > 20 ? 135 : 112
   }
   const isTextCol = (id: string) => [
     "delivery", "effective_status", "attribution_setting",
@@ -1277,7 +1293,8 @@ function AdsManagerContent() {
     const refreshParam = `${forceRefresh ? "&refresh=true" : ""}${paginationParam}`
     const cacheKey = `${selectedAccountId}:${dateParam}:${tab}:${statusFilter}:hierarchy:${hierarchyCacheKey}:page:${page}:after:${after || "first"}`
 
-    const cached = forceRefresh ? undefined : clientCache.current.get(cacheKey)
+    const appending = page > 1
+    const cached = (forceRefresh || appending) ? undefined : clientCache.current.get(cacheKey)
     if (cached) {
       if (tab === "campaigns") {
         setCampaigns(cached.campaigns || [])
@@ -1301,7 +1318,7 @@ function AdsManagerContent() {
         const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
-        setCampaigns(d.campaigns || [])
+        setCampaigns(prev => page === 1 ? (d.campaigns || []) : mergeById(prev, d.campaigns || []))
         setPaging(d.paging || { hasNext: false })
         clientCache.current.set(cacheKey, { campaigns: d.campaigns || [], paging: d.paging })
         if (d.paging?.after) {
@@ -1318,7 +1335,7 @@ function AdsManagerContent() {
         const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
-        setAdSets(d.adSets || [])
+        setAdSets(prev => page === 1 ? (d.adSets || []) : mergeById(prev, d.adSets || []))
         setPaging(d.paging || { hasNext: false })
         clientCache.current.set(cacheKey, { adSets: d.adSets || [], paging: d.paging })
         if (d.paging?.after) {
@@ -1343,7 +1360,7 @@ function AdsManagerContent() {
         const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
         const d = await r.json()
         if (!r.ok) throw new Error(d.error || "Failed")
-        setAds(d.ads || [])
+        setAds(prev => page === 1 ? (d.ads || []) : mergeById(prev, d.ads || []))
         setPaging(d.paging || { hasNext: false })
         clientCache.current.set(cacheKey, { ads: d.ads || [], paging: d.paging })
         if (d.paging?.after) {
@@ -1480,7 +1497,7 @@ function AdsManagerContent() {
   }, [breakdowns, fetchBreakdownData])
 
   // Local filters reset the visible page; server-backed inputs also reset the cursor chain.
-  useEffect(() => { setPage(1); setSelectedIds(new Set()) }, [tab, search, statusFilter, datePreset, customDateRange, breakdowns])
+  useEffect(() => { setPage(1) }, [tab, search, statusFilter, datePreset, customDateRange, breakdowns])
   useEffect(() => {
     setPageCursors(previous => ({ ...previous, [tab]: [undefined] }))
   }, [selectedAccountId, tab, statusFilter, datePreset, customDateRange, hierarchyCacheKey])
@@ -1499,7 +1516,6 @@ function AdsManagerContent() {
     }
     setPage(1)
     setPageCursors(previous => ({ ...previous, [newTab]: [undefined] }))
-    setSelectedIds(new Set())
     setTab(newTab)
   }
 
@@ -1702,6 +1718,71 @@ function AdsManagerContent() {
 
   // ─── Sort ────────────────────────────────────────────────────────────────────
 
+  const fetchRemainingRowsForSort = useCallback(async () => {
+    if (!selectedAccountId || !paging.hasNext) return
+
+    setLoading(true)
+    setError("")
+    const dateParam = buildDateParam()
+    let cursorPage = page
+    let hasNext: boolean = paging.hasNext
+
+    try {
+      while (hasNext) {
+        const after = pageCursorsRef.current[tab][cursorPage]
+        if (!after) break
+
+        const paginationParam = `&limit=${PAGE_SIZE}${statusFilter === "ACTIVE" ? "&active_only=true" : ""}&after=${encodeURIComponent(after)}`
+        const parentParam = tab === "adsets"
+          ? hierarchyParentIds.length > 1
+            ? `&campaign_ids=${encodeURIComponent(hierarchyParentIds.join(","))}`
+            : hierarchyParentId
+              ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}`
+              : ""
+          : tab === "ads"
+            ? hierarchyParentType === "adset"
+              ? hierarchyParentIds.length > 1
+                ? `&adset_ids=${encodeURIComponent(hierarchyParentIds.join(","))}`
+                : hierarchyParentId
+                  ? `&adset_id=${encodeURIComponent(hierarchyParentId)}`
+                  : ""
+              : hierarchyParentType === "campaign"
+                ? hierarchyParentIds.length > 1
+                  ? `&campaign_ids=${encodeURIComponent(hierarchyParentIds.join(","))}`
+                  : hierarchyParentId
+                    ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}`
+                    : ""
+                : ""
+            : ""
+        const endpoint = tab === "campaigns" ? "campaigns" : tab === "adsets" ? "adsets" : "ads"
+        const r = await fetch(`/api/facebook/${endpoint}?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${paginationParam}`)
+        const d = await r.json()
+        if (!r.ok) throw new Error(d.error || "Failed")
+
+        if (tab === "campaigns") setCampaigns(prev => mergeById(prev, d.campaigns || []))
+        else if (tab === "adsets") setAdSets(prev => mergeById(prev, d.adSets || []))
+        else setAds(prev => mergeById(prev, d.ads || []))
+
+        cursorPage += 1
+        hasNext = Boolean(d.paging?.hasNext)
+        if (d.paging?.after) {
+          const nextCursors = {
+            ...pageCursorsRef.current,
+            [tab]: [...pageCursorsRef.current[tab].slice(0, cursorPage), d.paging.after],
+          }
+          pageCursorsRef.current = nextCursors
+          setPageCursors(nextCursors)
+        }
+      }
+      setPage(cursorPage)
+      setPaging({ hasNext: false })
+    } catch (e: any) {
+      setError(e.message || "Failed to load remaining rows")
+    } finally {
+      setLoading(false)
+    }
+  }, [selectedAccountId, paging.hasNext, buildDateParam, page, tab, statusFilter, hierarchyParentIds, hierarchyParentId, hierarchyParentType])
+
   /**
    * Three states per column: ascending → descending → default.
    *
@@ -1709,7 +1790,8 @@ function AdsManagerContent() {
    * back to the table's own order short of a reload. Clearing `sortField` is what "default"
    * means — the currentData memo falls through to `byNewestFirst`.
    */
-  const handleSort = (field: string) => {
+  const handleSort = async (field: string) => {
+    await fetchRemainingRowsForSort()
     if (sortField !== field) { setSortField(field); setSortDir("asc"); return }
     if (sortDir === "asc") { setSortDir("desc"); return }
     setSortField(null)
@@ -2428,29 +2510,7 @@ function AdsManagerContent() {
         const { count, type } = getResults(row, objective)
         return <>
           <span className="text-sm font-medium tabular-nums leading-5 font-semibold text-[#1c2b33] dark:text-white">{ins ? count : "—"}</span>
-          {ins && count > 0 && <p className="text-xs text-[#65676b]">{type}</p>}
-          {(() => {
-            const d = getResultsDetail(row, objective)
-            if (!d || !d.count) return null
-            return (
-              <div className="mt-1 space-y-0.5">
-                {d.perAction && (
-                  <p className="text-xs text-[#65676b]">
-                    <span className="tabular-nums text-[#1c2b33] dark:text-white">{d.perAction}</span> Per Action
-                  </p>
-                )}
-                {d.avgWatch != null && d.avgWatch > 0 ? (
-                  <p className="text-xs text-[#65676b]">
-                    <span className="tabular-nums text-[#1c2b33] dark:text-white">{fmtWatch(d.avgWatch)}</span> Average
-                  </p>
-                ) : d.rate != null ? (
-                  <p className="text-xs text-[#65676b]">
-                    <span className="tabular-nums text-[#1c2b33] dark:text-white">{d.rate.toFixed(2)}%</span>
-                  </p>
-                ) : null}
-              </div>
-            )
-          })()}
+          {ins && <p className="text-xs text-[#65676b]">{type}</p>}
         </>
       }
 
@@ -2748,34 +2808,10 @@ function AdsManagerContent() {
         const obj = OBJECTIVE_RESULT[objective || ""]
         if (!obj) return <span className="text-xs">—</span>
         const count = getVal(obj.actionType)
-        const perAction = count > 0 ? fmtMoney((spend / count)) : null
-        const linkClicks = parseFloat(ins.inline_link_clicks || "0")
-        const rate = count > 0 && linkClicks > 0 ? (count / linkClicks) * 100 : null
-        const avgWatchRaw = ins.video_avg_time_watched_actions?.find(a => a.action_type === "video_view")?.value
-          ?? ins.video_avg_time_watched_actions?.[0]?.value
-        const avgWatch = avgWatchRaw ? parseFloat(avgWatchRaw) : null
         return (
           <>
             <span className="text-sm font-medium tabular-nums leading-5 font-semibold">{count || "—"}</span>
-            {count > 0 && <p className="text-xs text-[#65676b]">{obj.type}</p>}
-            {count > 0 && (
-              <div className="mt-1 space-y-0.5">
-                {perAction && (
-                  <p className="text-xs text-[#65676b]">
-                    <span className="tabular-nums text-[#1c2b33] dark:text-white">{perAction}</span> Per Action
-                  </p>
-                )}
-                {avgWatch != null && avgWatch > 0 ? (
-                  <p className="text-xs text-[#65676b]">
-                    <span className="tabular-nums text-[#1c2b33] dark:text-white">{fmtWatch(avgWatch)}</span> Average
-                  </p>
-                ) : rate != null ? (
-                  <p className="text-xs text-[#65676b]">
-                    <span className="tabular-nums text-[#1c2b33] dark:text-white">{rate.toFixed(2)}%</span>
-                  </p>
-                ) : null}
-              </div>
-            )}
+            <p className="text-xs text-[#65676b]">{obj.type}</p>
           </>
         )
       }
@@ -3092,16 +3128,14 @@ function AdsManagerContent() {
         </div>
 
         <div className="ml-auto flex items-center gap-2 py-1.5">
-          {/* Pagination count */}
+          {/* Loaded-row count — rows accumulate via Load more, so this is a running total, not a page window */}
           <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {currentData.length === 0
-              ? `Page ${page} · 0 rows`
-              : `${(page - 1) * PAGE_SIZE + 1}–${(page - 1) * PAGE_SIZE + currentData.length} · Page ${page}`}
+            {currentData.length === 0 ? "0 rows loaded" : `${currentData.length} rows loaded`}
           </span>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="size-6 flex items-center justify-center border rounded hover:bg-muted/50 disabled:opacity-30">
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="size-6 flex items-center justify-center border rounded hover:bg-muted/50 disabled:opacity-30" title="Reload from the first page">
             <IconChevronLeft className="size-3.5" />
           </button>
-          <button onClick={() => setPage(p => p + 1)} disabled={!paging.hasNext} className="size-6 flex items-center justify-center border rounded hover:bg-muted/50 disabled:opacity-30">
+          <button onClick={() => setPage(p => p + 1)} disabled={!paging.hasNext} className="size-6 flex items-center justify-center border rounded hover:bg-muted/50 disabled:opacity-30" title="Load 20 more">
             <IconChevronRight className="size-3.5" />
           </button>
 
@@ -3497,7 +3531,7 @@ function AdsManagerContent() {
                             </div>
                           )}
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, c)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-3 align-middle overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, c)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -3506,7 +3540,7 @@ function AdsManagerContent() {
                           <td className={cn("px-3 sticky z-10", FROZEN_LEFT.name, FROZEN_BAND_BG, FROZEN_DIVIDER)}>
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-3 align-middle overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -3550,7 +3584,7 @@ function AdsManagerContent() {
                             </div>
                           )}
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, a)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-3 align-middle overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, a)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -3559,7 +3593,7 @@ function AdsManagerContent() {
                           <td className={cn("px-3 sticky z-10", FROZEN_LEFT.name, FROZEN_BAND_BG, FROZEN_DIVIDER)}>
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-3 align-middle overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -3626,7 +3660,7 @@ function AdsManagerContent() {
                             )}
                           </div>
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, a)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-3 align-middle overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, a)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -3636,7 +3670,7 @@ function AdsManagerContent() {
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
                           <td className="px-3 bg-[#f5f6f7] dark:bg-muted/10" />
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-3 align-middle overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -3661,6 +3695,13 @@ function AdsManagerContent() {
               </tfoot>
             )}
           </table>
+          {paging.hasNext && (
+            <div className="flex justify-center py-3 border-t border-[#e4e6eb] dark:border-gray-800">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={loading}>
+                {loading ? "Loading…" : "Load more (20 more)"}
+              </Button>
+            </div>
+          )}
       </div>
 
       {/* ── Duplicate Dialog ── */}

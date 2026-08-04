@@ -96,6 +96,9 @@ interface PortalAssignment {
  *  minute and the whole office shares one IP, so a folder of 114 must not mount at once. */
 const PORTAL_PAGE_SIZE = 24
 
+type PortalSortKey = "name" | "brand" | "product" | "language" | "dimensions" | "size" | "approved" | "assigned"
+type PortalSort = { key: PortalSortKey; dir: "asc" | "desc" } | null
+
 type Section = "all" | "boards" | "requests" | "my-uploads" | "portal" | `board_${string}`
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -158,6 +161,21 @@ function RowCheckbox({ checked, onToggle, label, className }: {
   )
 }
 
+function PortalSortTh({ label, keyId, sort, onSort }: { label: string; keyId: PortalSortKey; sort: PortalSort; onSort: (key: PortalSortKey) => void }) {
+  const active = sort?.key === keyId
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(keyId)}
+      className="flex items-center gap-1.5 uppercase tracking-wide hover:text-foreground"
+      aria-sort={active ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <span>{label}</span>
+      <IconChevronDown className={cn("size-3 transition-transform", !active && "opacity-40", active && sort.dir === "asc" && "rotate-180")} />
+    </button>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AssetsPage() {
@@ -170,6 +188,7 @@ export default function AssetsPage() {
   const [portalPath, setPortalPath]      = useState<string[]>([])
   const [portalVisible, setPortalVisible] = useState(PORTAL_PAGE_SIZE)
   const [portalSelected, setPortalSelected] = useState<Set<string>>(new Set())
+  const [portalSort, setPortalSort] = useState<PortalSort>(null)
   const [portalAccountId, setPortalAccountId] = useState("")
   /**
    * The provider's accounts reshaped for AdAccountPill's `showAccountId`, which reads
@@ -697,6 +716,36 @@ export default function AssetsPage() {
     }
     return map
   }, [portalAssignments])
+
+  const cyclePortalSort = (key: PortalSortKey) => setPortalSort(prev => {
+    if (!prev || prev.key !== key) return { key, dir: "asc" }
+    if (prev.dir === "asc") return { key, dir: "desc" }
+    return null
+  })
+
+  const sortedPortalFiles = useMemo(() => {
+    if (!portalSort) return portalFiles
+    const { key, dir } = portalSort
+    const sign = dir === "asc" ? 1 : -1
+    const val = (f: PortalMediaFile): string | number => {
+      switch (key) {
+        case "name": return f.name.toLowerCase()
+        case "brand": return (f.brandName || "").toLowerCase()
+        case "product": return (f.productName || "").toLowerCase()
+        case "language": return (f.language || "").toLowerCase()
+        case "dimensions": return (f.width || 0) * (f.height || 0) || f.durationSeconds || 0
+        case "size": return f.sizeBytes || 0
+        case "approved": return f.createdAt ? new Date(f.createdAt).getTime() : 0
+        case "assigned": return (portalAssignedBy.get(f.objectKey)?.join(",") || "").toLowerCase()
+      }
+    }
+    return [...portalFiles].sort((a, b) => {
+      const va = val(a), vb = val(b)
+      if (va < vb) return -1 * sign
+      if (va > vb) return 1 * sign
+      return 0
+    })
+  }, [portalFiles, portalSort, portalAssignedBy])
 
   const openPortalFolder = (label: string) => {
     setPortalPath(prev => [...prev, label])
@@ -1403,20 +1452,36 @@ export default function AssetsPage() {
                                   onToggle={togglePortalSelectAll}
                                 />
                               </th>
-                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">File name</th>
-                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Brand</th>
-                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Product</th>
-                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Lang</th>
-                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
-                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Size</th>
-                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Approved</th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                                <PortalSortTh label="File name" keyId="name" sort={portalSort} onSort={cyclePortalSort} />
+                              </th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                                <PortalSortTh label="Brand" keyId="brand" sort={portalSort} onSort={cyclePortalSort} />
+                              </th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                                <PortalSortTh label="Product" keyId="product" sort={portalSort} onSort={cyclePortalSort} />
+                              </th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                                <PortalSortTh label="Lang" keyId="language" sort={portalSort} onSort={cyclePortalSort} />
+                              </th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                                <PortalSortTh label="Dims / Dur" keyId="dimensions" sort={portalSort} onSort={cyclePortalSort} />
+                              </th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                                <PortalSortTh label="Size" keyId="size" sort={portalSort} onSort={cyclePortalSort} />
+                              </th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                                <PortalSortTh label="Approved" keyId="approved" sort={portalSort} onSort={cyclePortalSort} />
+                              </th>
                               {/* "View media" used to be a column here; it lives in the
                                   Media Detail sidebar now, above File Information. */}
-                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Assigned</th>
+                              <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                                <PortalSortTh label="Assigned" keyId="assigned" sort={portalSort} onSort={cyclePortalSort} />
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
-                            {portalFiles.slice(0, portalVisible).map(file => {
+                            {sortedPortalFiles.slice(0, portalVisible).map(file => {
                               const isSelected = portalSelected.has(file.objectKey)
                               const assignedTo = portalAssignedBy.get(file.objectKey) || []
                               const assigningCreativeId = assignItems[file.objectKey]

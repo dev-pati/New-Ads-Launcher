@@ -127,3 +127,56 @@ export const ALL_BREAKDOWN_OPTIONS: BreakdownOption[] = [
   _seen.add(o.id)
   return true
 })
+
+const OPTION_GROUPS: Record<string, string> = Object.fromEntries(
+  BREAKDOWN_GROUPS.flatMap(group => group.options.filter(o => o.id !== "none").map(o => [o.id, group.id]))
+)
+
+const TIME_IDS = new Set(BREAKDOWN_GROUPS.find(g => g.id === "time")?.options.filter(o => o.id !== "none").map(o => o.id) ?? [])
+const PLATFORM_DEVICE_IDS = new Set(["platform", "placement", "impression_device"])
+
+export function getBreakdownIncompatibility(id: string, selected: string[]): string | null {
+  if (selected.includes(id)) return null
+  const group = OPTION_GROUPS[id]
+  if (!group) return null
+
+  const selectedWithoutId = selected.filter(s => s !== id)
+  const dataSelected = selectedWithoutId.filter(s => OPTION_GROUPS[s] && !TIME_IDS.has(s))
+
+  if (TIME_IDS.has(id)) {
+    return selectedWithoutId.some(s => TIME_IDS.has(s)) ? "Only one time breakdown can be selected." : null
+  }
+
+  const otherGroup = dataSelected.find(s => OPTION_GROUPS[s] !== group)
+  if (otherGroup) return `Can't combine with ${labelForBreakdown(otherGroup)}.`
+
+  if (group === "demographics") {
+    const simple = id === "age" || id === "gender"
+    const hasSimple = dataSelected.some(s => s === "age" || s === "gender")
+    const hasPacked = dataSelected.some(s => s === "age_gender" || s === "audience_seg")
+    if (simple && hasPacked) return "Can't combine with this demographic breakdown."
+    if (!simple && hasSimple) return "Can't combine with Age or Gender."
+    if (!simple && dataSelected.length > 0) return "Only one of these breakdowns can be selected."
+    return null
+  }
+
+  if (group === "delivery") {
+    const pairable = PLATFORM_DEVICE_IDS.has(id)
+    const selectedPairable = dataSelected.every(s => PLATFORM_DEVICE_IDS.has(s))
+    if (!pairable && dataSelected.length > 0) return "Only one of these breakdowns can be selected."
+    if (pairable && !selectedPairable) return "Can't combine with this delivery breakdown."
+    if (id === "platform" && dataSelected.includes("placement")) return "Platform and Placement overlap."
+    if (id === "placement" && dataSelected.includes("platform")) return "Placement and Platform overlap."
+    return null
+  }
+
+  return dataSelected.length > 0 ? "Only one of these breakdowns can be selected." : null
+}
+
+export function isBreakdownCompatible(id: string, selected: string[]): boolean {
+  return !getBreakdownIncompatibility(id, selected)
+}
+
+function labelForBreakdown(id: string): string {
+  return ALL_BREAKDOWN_OPTIONS.find(o => o.id === id)?.label ?? "selected breakdown"
+}
