@@ -258,6 +258,8 @@ export interface Workflow {
   steps: WorkflowStep[]
   createdAt: string
   updatedAt: string
+  /** Optimistic-concurrency token from `automations.row_version`. */
+  row_version?: number
 }
 
 // ─── Variable tokens for notification messages ────────────────────────────────

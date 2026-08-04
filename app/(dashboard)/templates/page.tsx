@@ -22,6 +22,9 @@ import {
 import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { TopPerformingTab } from "@/components/templates/TopPerformingTab"
 import { AINamingTab } from "@/components/templates/AINamingTab"
+import { ConflictDialog } from "@/components/shared/conflict-dialog"
+import { patchWithVersion } from "@/lib/client/optimistic-fetch"
+import type { ConflictInfo } from "@/lib/conflict-types"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -58,6 +61,7 @@ interface AdCopyTemplate {
   tags: string[]
   created_at: string
   updated_at: string
+  row_version?: number
   // Present only on templates saved from an ad via Ads Manager → Save as Template
   media?: TemplateMedia | null
   metrics?: TemplateMetrics | null
@@ -434,6 +438,7 @@ export default function TemplatesPage() {
   const [editTarget, setEditTarget] = useState<AdCopyTemplate | null>(null)
   const [prefillData, setPrefillData] = useState<Partial<ReturnType<typeof emptyForm>> | null>(null)
   const [saving, setSaving] = useState(false)
+  const [conflict, setConflict] = useState<ConflictInfo | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [activeFolder, setActiveFolder] = useState<string | null>(null) // null = All, "__uncategorized__" = no tags, else tag name
@@ -495,13 +500,16 @@ export default function TemplatesPage() {
       const tags = form.tags.split(",").map(s => s.trim()).filter(Boolean)
       const payload = { ...form, tags }
       if (editTarget) {
-        const r = await fetch(`/api/templates/${editTarget.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-        const d = await r.json()
-        if (r.ok) setTemplates(prev => prev.map(t => t.id === editTarget.id ? d.template : t))
+        const result = await patchWithVersion<{ template: AdCopyTemplate }>(
+          `/api/templates/${editTarget.id}`,
+          payload,
+          {
+            expectedVersion: editTarget.row_version ?? null,
+            baseline: { name: editTarget.name, primary_text: editTarget.primary_text, headline: editTarget.headline, description: editTarget.description, link: editTarget.link, cta: editTarget.cta },
+          }
+        )
+        if (!result.ok && "conflict" in result) { setConflict(result.conflict); return }
+        if (result.ok) setTemplates(prev => prev.map(t => t.id === editTarget.id ? result.data.template : t))
       } else {
         const r = await fetch("/api/templates", {
           method: "POST",
@@ -861,6 +869,18 @@ export default function TemplatesPage() {
         prefill={prefillData ?? undefined}
         onSave={handleSave}
         saving={saving}
+      />
+
+      <ConflictDialog
+        conflict={conflict}
+        onClose={() => setConflict(null)}
+        onReloadLatest={() => {
+          if (!conflict) return
+          const fresh = conflict.current as unknown as AdCopyTemplate
+          setTemplates(prev => prev.map(t => t.id === fresh.id ? fresh : t))
+          setEditTarget(fresh)
+          setConflict(null)
+        }}
       />
 
       {/* ── Delete Confirm ── */}

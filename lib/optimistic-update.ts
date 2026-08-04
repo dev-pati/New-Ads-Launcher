@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { diffFields } from "@/lib/notifications/message"
 import type { FieldChange } from "@/lib/notifications/types"
+import type { ConflictInfo } from "@/lib/conflict-types"
+
+export type { ConflictInfo } from "@/lib/conflict-types"
 
 /**
  * Optimistic concurrency control for AdLauncher-owned rows.
@@ -22,20 +25,6 @@ import type { FieldChange } from "@/lib/notifications/types"
  *   - `expectedVersion` is absent (a client that has not been updated yet)
  *   - the `row_version` column is absent (20260803_row_version.sql not applied)
  */
-
-export type ConflictInfo = {
-  code: "STALE_WRITE"
-  message: string
-  /** The row as it is now, so the client can offer "reload latest". */
-  current: Record<string, unknown>
-  currentVersion: number | null
-  changedBy: string | null
-  changedAt: string | null
-  /** What moved under the editor since they loaded — only meaningful with `baseline`. */
-  conflictFields: FieldChange[]
-  /** Fields the editor was about to write that somebody else already changed. */
-  overlappingFields: string[]
-}
 
 export type UpdateOutcome<T> =
   | { ok: true; row: T; before: Record<string, unknown>; changes: FieldChange[]; degraded: boolean }

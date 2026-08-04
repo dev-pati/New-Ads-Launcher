@@ -19,6 +19,9 @@ import { ActionConfigPanel } from "./ActionConfigPanel"
 import type {
   WorkflowStep, TriggerConfig, ActionConfig, DelayConfig, ApprovalConfig, Workflow, AppId,
 } from "@/lib/workflow-types"
+import { ConflictDialog } from "@/components/shared/conflict-dialog"
+import { patchWithVersion } from "@/lib/client/optimistic-fetch"
+import type { ConflictInfo } from "@/lib/conflict-types"
 
 // ─── Trigger app picker data ──────────────────────────────────────────────────
 
@@ -737,6 +740,8 @@ type AddingAt = { index: number; x: number; y: number } | null
 
 export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
   const [automationId, setAutomationId] = useState<string | undefined>(initialWorkflow?.id)
+  const [rowVersion, setRowVersion] = useState<number | null>(initialWorkflow?.row_version ?? null)
+  const [conflict, setConflict] = useState<ConflictInfo | null>(null)
   const [name, setName] = useState(initialWorkflow?.name ?? "Untitled Zap")
   const [steps, setSteps] = useState<WorkflowStep[]>(
     // New workflows start empty; templates/saved workflows start with their steps
@@ -952,40 +957,53 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
   const handleSave = useCallback(async () => {
     setSaving(true)
     try {
-      const method = automationId ? "PATCH" : "POST"
-      const url    = automationId ? `/api/automations/${automationId}` : "/api/automations"
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          trigger_type: steps[0]?.triggerConfig?.event ?? "performance_monitoring",
-          trigger_config: steps[0]?.triggerConfig ?? {},
-          conditions: [],
-          actions: steps.slice(1).map(s => ({
-            kind:           s.kind,
-            actionConfig:   s.actionConfig   ?? null,
-            delayConfig:    s.delayConfig    ?? null,
-            approvalConfig: s.approvalConfig ?? null,
-          })),
-          ad_account_ids: [],
-          notif_config: {
-            emails:     notifEmail.split(",").map(e => e.trim()).filter(Boolean),
-            on_success: notifOnSuccess,
-            on_fail:    notifOnFail,
-          },
-        }),
-      })
-      const data = await res.json()
-      // Store the ID returned from the API so Run/Test/History work immediately
-      if (data?.automation?.id && !automationId) {
-        setAutomationId(data.automation.id)
+      const body = {
+        name,
+        trigger_type: steps[0]?.triggerConfig?.event ?? "performance_monitoring",
+        trigger_config: steps[0]?.triggerConfig ?? {},
+        conditions: [],
+        actions: steps.slice(1).map(s => ({
+          kind:           s.kind,
+          actionConfig:   s.actionConfig   ?? null,
+          delayConfig:    s.delayConfig    ?? null,
+          approvalConfig: s.approvalConfig ?? null,
+        })),
+        ad_account_ids: [],
+        notif_config: {
+          emails:     notifEmail.split(",").map(e => e.trim()).filter(Boolean),
+          on_success: notifOnSuccess,
+          on_fail:    notifOnFail,
+        },
+      }
+
+      if (automationId) {
+        // Two people can have this same automation open in separate tabs — the
+        // version guard is what stops the second save from wiping the first.
+        const result = await patchWithVersion<{ automation: Workflow }>(
+          `/api/automations/${automationId}`,
+          body,
+          { expectedVersion: rowVersion }
+        )
+        if (!result.ok && "conflict" in result) { setConflict(result.conflict); return }
+        if (result.ok) setRowVersion(result.data.automation.row_version ?? null)
+      } else {
+        const res = await fetch("/api/automations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+        const data = await res.json()
+        // Store the ID returned from the API so Run/Test/History work immediately
+        if (data?.automation?.id) {
+          setAutomationId(data.automation.id)
+          setRowVersion(data.automation.row_version ?? null)
+        }
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch { /* silent */ }
     finally { setSaving(false) }
-  }, [name, steps])
+  }, [name, steps, automationId, rowVersion])
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
@@ -1336,6 +1354,12 @@ export function WorkflowBuilder({ initialWorkflow, adAccountName }: Props) {
           onClose={() => setChoosingActionForStep(null)}
         />
       )}
+
+      <ConflictDialog
+        conflict={conflict}
+        onClose={() => setConflict(null)}
+        onReloadLatest={() => window.location.reload()}
+      />
     </div>
   )
 }

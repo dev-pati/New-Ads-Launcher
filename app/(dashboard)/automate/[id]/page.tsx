@@ -278,7 +278,7 @@ export default async function AutomationBuilderPage({
 
   const templateWorkflow = template ? TEMPLATE_WORKFLOWS[template] : undefined
 
-  let initialWorkflow: { id?: string; name?: string; steps?: WorkflowStep[] } | undefined
+  let initialWorkflow: { id?: string; name?: string; steps?: WorkflowStep[]; row_version?: number } | undefined
 
   if (isNew) {
     initialWorkflow = templateWorkflow ?? { name: "Untitled Zap" }
@@ -317,7 +317,12 @@ export default async function AutomationBuilderPage({
             approvalConfig: a.approvalConfig ?? undefined,
           }))
           steps.push(...actionSteps)
-          initialWorkflow = { id: automation.id, name: automation.name, steps }
+          initialWorkflow = {
+            id: automation.id,
+            name: automation.name,
+            steps,
+            row_version: typeof automation.row_version === "number" ? automation.row_version : undefined,
+          }
         }
       }
     } catch (e) {

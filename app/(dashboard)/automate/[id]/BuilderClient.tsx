@@ -19,7 +19,7 @@ const WorkflowBuilder = dynamic(
 export function BuilderClient({
   initialWorkflow,
 }: {
-  initialWorkflow?: { name?: string; steps?: WorkflowStep[] }
+  initialWorkflow?: { id?: string; name?: string; steps?: WorkflowStep[]; row_version?: number }
 }) {
   return (
     <div className="h-full overflow-hidden">
