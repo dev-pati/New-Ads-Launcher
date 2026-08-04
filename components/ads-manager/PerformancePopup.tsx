@@ -174,6 +174,18 @@ function cardsForLevel(level: Level) {
 }
 
 // ── Sidebar tree node action menu (Meta-style) ──────────────────────────────
+// Hoisted out of NodeActionMenu's render: it closes over nothing from that scope,
+// and defining it during render made React remount every menu row on each render.
+function Item({ label, shortcut, onClick, disabled }: { label: string; shortcut?: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className={cn("w-full flex items-center justify-between gap-3 px-3 py-1.5 text-left text-xs hover:bg-muted/50", disabled && "opacity-40 cursor-not-allowed")}>
+      <span>{label}</span>
+      {shortcut && <span className="text-[10px] text-muted-foreground">{shortcut}</span>}
+    </button>
+  )
+}
+
 function NodeActionMenu({ level, id, onDuplicate, onDelete, onEdit, onViewHistory, onSeeHistory }: {
   level: string; id: string
   onDuplicate?: (id: string) => void
@@ -191,13 +203,6 @@ function NodeActionMenu({ level, id, onDuplicate, onDelete, onEdit, onViewHistor
     return () => document.removeEventListener("mousedown", h)
   }, [open])
   const copyId = () => { try { navigator.clipboard?.writeText(id) } catch {} setOpen(false) }
-  const Item = ({ label, shortcut, onClick, disabled }: { label: string; shortcut?: string; onClick: () => void; disabled?: boolean }) => (
-    <button onClick={onClick} disabled={disabled}
-      className={cn("w-full flex items-center justify-between gap-3 px-3 py-1.5 text-left text-xs hover:bg-muted/50", disabled && "opacity-40 cursor-not-allowed")}>
-      <span>{label}</span>
-      {shortcut && <span className="text-[10px] text-muted-foreground">{shortcut}</span>}
-    </button>
-  )
   return (
     <div ref={ref} className="relative inline-flex">
       <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }} className="p-0.5 rounded hover:bg-black/5 dark:hover:bg-white/10">

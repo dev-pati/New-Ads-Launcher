@@ -1,3 +1,6 @@
+// refactor-fragile: the assertions below read source files as text, so they fail on
+// renames, moves and reformatting as readily as on real behaviour changes. Before
+// adding one, read tests/README.md — assert the contract, not the characters.
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -14,31 +17,48 @@ describe("Ads Manager inline loading contract", () => {
     assert.doesNotMatch(page, /loading && currentData\.length === 0/)
   })
 
-  it("shows progress below the table header and dims stale rows", () => {
+  it("shows progress in the table header and marks the region busy", () => {
     const page = read("app/(dashboard)/ads-manager/page.tsx")
-    const styles = read("app/globals.css")
 
-    assert.match(page, /<thead[\s\S]*?isDataLoading[\s\S]*?role="progressbar"[\s\S]*?ads-manager-progress-indicator/)
-    assert.match(page, /<tbody className=\{cn\([\s\S]*?isDataLoading[\s\S]*?pointer-events-none[\s\S]*?opacity-35/)
+    // The bar lives in <thead>, is rendered only while loading, and reports its
+    // position to assistive tech rather than animating a sweep.
+    assert.match(page, /isDataLoading && \(/)
+    assert.match(page, /role="progressbar"/)
+    assert.match(page, /aria-valuetext=/)
     assert.match(page, /aria-busy=\{isDataLoading\}/)
-    assert.match(page, /readJsonWithProgress/)
-    assert.match(styles, /@keyframes ads-manager-indeterminate-progress/)
-    assert.match(styles, /\.ads-manager-progress-indicator[\s\S]*?animation: ads-manager-indeterminate-progress/)
+    // Width is driven by the numeric progress value, i.e. determinate.
+    assert.match(page, /width: `\$\{Math\.max\(0, Math\.min\(100, loadingProgress\)\)\}%`/)
   })
 
-  it("starts indeterminate, then advances 3 to 90 before completing at 100", () => {
+  it("keeps stale rows non-interactive, and only dims them on an account switch", () => {
     const page = read("app/(dashboard)/ads-manager/page.tsx")
 
-    assert.match(page, /setLoadingProgress\(3\)/)
-    assert.match(page, /setLoadingPhase\("indeterminate"\)/)
-    assert.match(page, /setLoadingPhase\("determinate"\)/)
-    assert.match(page, /isDataLoading && \(/)
+    // Rows must not be clickable while their data is stale.
+    assert.match(page, /<tbody className=\{cn\([\s\S]*?pointer-events-none/)
+    // Dimming is reserved for switching account, where the whole table is
+    // replaced. A plain refresh must not dim — that flicker was the bug fixed
+    // in 61fff28, so this asserts the opacity change is gated on the account
+    // switch and not on `loading`.
+    assert.match(page, /isLoadingAccount \? "opacity-35/)
+  })
+
+  it("climbs toward 90 while Meta responds, then snaps to 100 on completion", () => {
+    const page = read("app/(dashboard)/ads-manager/page.tsx")
+
+    assert.match(page, /setLoadingProgress\(0\)/)
     assert.match(page, /window\.setInterval/)
+    // Holds at 90 rather than rushing past it while the request is outstanding.
     assert.match(page, /current >= 90/)
-    assert.match(page, /current \+ 4/)
-    assert.match(page, /Math\.max\(current, value\)/)
+    assert.match(page, /Math\.min\(90,/)
     assert.match(page, /setLoadingProgress\(100\)/)
-    assert.match(page, /setLoadingPhase\("complete"\)/)
-    assert.match(page, /window\.setTimeout\(resolve, 140\)/)
+  })
+
+  it("has no indeterminate sweep left in the page", () => {
+    const page = read("app/(dashboard)/ads-manager/page.tsx")
+
+    // 61fff28 deliberately removed the animated sweep: it visibly looped while
+    // waiting and read as jitter. Guard against it coming back.
+    assert.doesNotMatch(page, /ads-manager-progress-indicator/)
+    assert.doesNotMatch(page, /setLoadingPhase/)
   })
 })

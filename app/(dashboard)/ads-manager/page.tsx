@@ -1576,7 +1576,7 @@ function AdsManagerContent() {
     try {
       const ids = Array.from(selectedIds)
       for (const id of ids) {
-        let node: any = campaigns.find(x => x.id === id) || adSets.find(x => x.id === id) || ads.find(x => x.id === id)
+        const node: any = campaigns.find(x => x.id === id) || adSets.find(x => x.id === id) || ads.find(x => x.id === id)
         await fetch("/api/facebook/duplicate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },

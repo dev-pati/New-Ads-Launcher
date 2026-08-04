@@ -492,7 +492,7 @@ export async function checkBestPerformingOrganicPost(
     pageToken
   )
 
-  let posts: any[] = data.data || []
+  const posts: any[] = data.data || []
 
   // Score each post
   const scored = posts.map(post => {

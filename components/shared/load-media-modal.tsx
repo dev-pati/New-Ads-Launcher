@@ -2375,7 +2375,7 @@ export function LoadMediaModal({
           type="file"
           accept="image/*,video/*"
           multiple
-          // @ts-ignore
+          // @ts-expect-error — webkitdirectory is a non-standard attribute React does not type
           webkitdirectory=""
           className="hidden"
           onChange={e => { handleUpload(e.target.files); e.target.value = "" }}

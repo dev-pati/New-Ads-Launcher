@@ -5,7 +5,10 @@
  * Setup on MacMini:
  *   1. Copy .env.local values to this script or use dotenv
  *   2. Run: node scripts/crawl-inspo.mjs
- *   3. Add to crontab: 0 */6 * * * cd /path/to/project && node scripts/crawl-inspo.mjs >> /tmp/crawl-inspo.log 2>&1
+ *   3. Add to crontab, every 6 hours (note: the schedule is written without a
+ *      literal star-slash because that sequence would close this comment):
+ *        0 <slash-6 hours> * * * cd /path/to/project && node scripts/crawl-inspo.mjs >> /tmp/crawl-inspo.log 2>&1
+ *      i.e. the minute field is 0 and the hour field is the step expression for 6.
  *
  * Usage:
  *   node scripts/crawl-inspo.mjs               # default crawl

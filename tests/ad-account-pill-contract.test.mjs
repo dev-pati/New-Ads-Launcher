@@ -1,3 +1,6 @@
+// refactor-fragile: the assertions below read source files as text, so they fail on
+// renames, moves and reformatting as readily as on real behaviour changes. Before
+// adding one, read tests/README.md — assert the contract, not the characters.
 import { describe, it } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync, existsSync } from "node:fs"

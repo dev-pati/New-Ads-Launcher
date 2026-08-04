@@ -1,0 +1,38 @@
+name: CI
+
+# Why this triggers on pull_request and not only on push:
+# pushing to main fires the Mac mini deploy hook, so a check that runs on
+# push-to-main reports *after* production has already been updated. The gate
+# that actually blocks is the one on the pull request. The push-to-main run is
+# kept as a record of what main looked like, not as a gate.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Three gates, all currently green. Any of them failing fails the build.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npx eslint . --quiet
+
+      - name: Test
+        run: npm test

@@ -234,6 +234,31 @@ http://localhost:3000
 
 Lưu ý: Meta/Facebook OAuth thường cần HTTPS domain đúng trong Meta Developer Console. Localhost chủ yếu dùng để kiểm tra UI, API nội bộ, assets, settings. Khi test kết nối Facebook thật, nên dùng domain production/staging HTTPS.
 
+### 6.1. Bật Git Hook Kiểm Tra Trước Khi Push
+
+Chạy **một lần cho mỗi clone**:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Từ đó mỗi lần `git push`, máy sẽ tự chạy 3 cổng kiểm tra trước khi code rời khỏi máy:
+
+| Cổng | Lệnh |
+|---|---|
+| Kiểu dữ liệu | `npm run typecheck` |
+| Lint | `npx eslint . --quiet` |
+| Test | `npm test` |
+
+Nếu một cổng fail thì push bị chặn. Muốn bỏ qua: `git push --no-verify`.
+
+Vì sao cần hook ở máy local dù đã có CI: **push lên `main` sẽ kích hoạt deploy Docker
+trên Mac mini ngay lập tức.** GitHub Actions chạy sau khi push, tức là lúc nó báo đỏ
+thì production đã đổi rồi. Trên nhánh `main`, hook này là chốt chặn cuối cùng còn kịp
+ngăn một bản deploy hỏng. CI (`.github/workflows/ci.yml`) chặn ở pull request.
+
+Chi tiết về test suite và các quy tắc viết test: [`tests/README.md`](tests/README.md).
+
 ## 7. Database Và Migration
 
 Database chính là Supabase/Postgres, schema app dùng là:

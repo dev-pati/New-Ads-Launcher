@@ -30,7 +30,7 @@ export async function PUT(request: NextRequest) {
   try {
     const response = await fetch(signedUrl, {
       method: "PUT",
-      // @ts-ignore — duplex is required when body is a ReadableStream
+      // @ts-expect-error — duplex is required when body is a ReadableStream
       duplex: "half",
       body: request.body,
       headers: { "Content-Type": contentType },

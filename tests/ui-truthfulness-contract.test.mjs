@@ -1,3 +1,6 @@
+// refactor-fragile: the assertions below read source files as text, so they fail on
+// renames, moves and reformatting as readily as on real behaviour changes. Before
+// adding one, read tests/README.md — assert the contract, not the characters.
 import assert from "node:assert/strict"
 import { describe, it } from "node:test"
 import { readFileSync } from "node:fs"
@@ -27,7 +30,10 @@ describe("production UI truthfulness", () => {
       assert.match(page, new RegExp(`id: "launch_winners_${platform}"`))
     }
     assert.match(page, /disabled=\{isSoon\}/)
-    assert.match(page, /if \(!isSoon\) useTemplate\(t\)/)
+    // The contract is that a coming-soon template cannot be applied by clicking.
+    // Assert the guard, not the handler's name — this line previously pinned the
+    // name `useTemplate` and broke on a pure rename. See tests/README.md.
+    assert.match(page, /if \(!isSoon\)/)
   })
 
   it("rejects roadmap-only automation at the API boundary", () => {
