@@ -127,7 +127,7 @@ export function stageStatusDrafts(
 
 export function stageBudgetDrafts(
   current: BulkDraftMap,
-  level: "adset",
+  level: BulkDraftLevel,
   items: BulkEditableItem[],
   amountMajor: number,
 ): BulkDraftMap {

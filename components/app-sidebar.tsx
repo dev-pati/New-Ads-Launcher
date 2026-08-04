@@ -233,17 +233,6 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
             </span>
           )}
         </div>
-        <div className="flex items-center gap-0.5 shrink-0">
-          {/* The bell used to live here, at size-6 next to the collapse chevron, and
-              disappeared entirely when the sidebar collapsed. It is now a first-class
-              row in the footer. */}
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="size-6 flex items-center justify-center rounded hover:bg-sidebar-accent text-sidebar-foreground/50 hover:text-sidebar-foreground transition-colors"
-          >
-            {collapsed ? <IconChevronRight className="size-3.5" /> : <IconChevronLeft className="size-3.5" />}
-          </button>
-        </div>
       </div>
 
       {/* Main nav */}
@@ -293,14 +282,14 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
 
               {/* Sub-items — only show when there are multiple sub-items */}
               {isActive && section.subItems.length > 1 && (
-                <div className="ml-5 mt-0.5 mb-1">
+                <div className="ml-5 mr-2 mt-0.5 mb-1">
                   {/* Launch stats widget */}
                   {section.id === "launch" && (
-                    <div className="mx-2 mb-2 rounded-lg bg-sidebar-accent px-3 py-2">
-                      <p className="text-xs font-medium text-sidebar-foreground/70 uppercase tracking-wide mb-1.5">
+                    <div className="mb-2 rounded-lg bg-sidebar-accent px-2.5 py-2">
+                      <p className="text-xs font-medium text-sidebar-foreground/70 uppercase tracking-wide mb-1.5 truncate">
                         Your team&apos;s last 30d
                       </p>
-                      <div className="flex items-center gap-4">
+                      <div className="grid grid-cols-3 gap-1">
                         <div>
                           <div className="text-xs font-bold text-sidebar-foreground">
                             {launchStats.ads === null ? "—" : launchStats.ads.toLocaleString()}
@@ -347,96 +336,35 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
         })}
       </nav>
 
-      {/* User footer */}
-      <div className="border-t border-sidebar-border p-2 space-y-1">
-        {/* Notifications — sits directly above the profile row, matches the nav rhythm
-            (h-9 / rounded-lg / size-[18px]) and stays reachable when collapsed. */}
-        <Tooltip delayDuration={0}>
-          <TooltipTrigger asChild>
-            <button
-              ref={notifButtonRef}
-              onClick={() => setNotifOpen(v => !v)}
-              aria-label="Notifications"
-              aria-expanded={notifOpen}
-              className={cn(
-                "relative flex items-center gap-2.5 h-9 w-full rounded-lg text-sm font-medium transition-colors cursor-pointer",
-                collapsed ? "justify-center px-0" : "px-3",
-                notifOpen
-                  ? "bg-sidebar-accent text-sidebar-foreground"
-                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              )}
-            >
-              <span className="relative shrink-0 flex items-center">
-                <IconBell className={cn("size-[18px]", unreadCount > 0 && "text-primary")} />
-                {/* Collapsed has no room for a count, so it degrades to a dot. */}
-                {unreadCount > 0 && (
-                  collapsed ? (
-                    <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary ring-2 ring-sidebar" />
-                  ) : null
+      <div className={cn("border-t border-sidebar-border", collapsed ? "p-0" : "p-2")}>
+        <div className={cn("items-center gap-1", collapsed ? "flex flex-col gap-2 py-2" : "flex justify-center")}>
+          <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                aria-label="Profile"
+                className={cn(
+                  "flex items-center justify-center rounded-lg hover:bg-sidebar-accent transition-colors",
+                  "size-9"
                 )}
-              </span>
-              {!collapsed && (
-                <>
-                  <span className="flex-1 text-left">Notifications</span>
-                  {unreadCount > 0 && (
-                    <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center leading-none">
-                      {unreadCount > 99 ? "99+" : unreadCount}
-                    </span>
+              >
+                <div className={cn("rounded-full bg-primary/15 flex items-center justify-center text-primary font-semibold shrink-0 overflow-hidden", collapsed ? "size-7 text-xs" : "size-7 text-xs")}>
+                  {userAvatarUrl ? (
+                    <img src={userAvatarUrl} alt="" className="size-full object-cover" />
+                  ) : (
+                    userInitials
                   )}
-                </>
-              )}
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="right" className="font-medium">
-            {unreadCount > 0
-              ? `Notifications — ${unreadCount} unread`
-              : "Notifications"}
-          </TooltipContent>
-        </Tooltip>
-
-        {notifOpen && (
-          <NotificationsDropdown
-            anchorRef={notifButtonRef}
-            notifications={notifications}
-            unreadCount={unreadCount}
-            loading={notifLoading}
-            live={notifLive}
-            onRead={markRead}
-            onReadAll={markAllRead}
-            onRefresh={refreshNotifs}
-            onClose={() => setNotifOpen(false)}
-          />
-        )}
-
-        <DropdownMenu open={userMenuOpen} onOpenChange={setUserMenuOpen}>
-          <DropdownMenuTrigger asChild>
-            <button
-              className={cn(
-                "flex items-center gap-2 w-full rounded-lg p-1 hover:bg-sidebar-accent transition-colors",
-                collapsed && "justify-center"
-              )}
-            >
-              <div className="size-7 rounded-full bg-primary/15 flex items-center justify-center text-primary text-xs font-semibold shrink-0 overflow-hidden">
-                {userAvatarUrl ? (
-                  <img src={userAvatarUrl} alt="" className="size-7 object-cover" />
-                ) : (
-                  userInitials
-                )}
-              </div>
-              {!collapsed && (
-                <div className="flex-1 min-w-0 text-left">
-                  {userName && <p className="text-xs font-medium text-sidebar-foreground truncate">{userName}</p>}
-                  {userEmail && <p className="text-xs text-sidebar-foreground/45 truncate">{userEmail}</p>}
                 </div>
-              )}
-            </button>
-          </DropdownMenuTrigger>
+              </button>
+            </DropdownMenuTrigger>
           <DropdownMenuContent align="end" side="top" className="w-48">
             <DropdownMenuItem asChild>
               <Link href="/projects"><IconBuilding className="size-4" /> Lobby</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/rewards"><IconGift className="size-4" /> Rewards</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/tracking"><IconChartBar className="size-4" /> Tracking</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/settings"><IconSettings className="size-4" /> Settings</Link>
@@ -491,6 +419,73 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <button
+              ref={notifButtonRef}
+              onClick={() => setNotifOpen(v => !v)}
+              aria-label="Notifications"
+              aria-expanded={notifOpen}
+              className={cn(
+                "relative flex items-center justify-center rounded-lg transition-colors cursor-pointer",
+                "size-9",
+                notifOpen
+                  ? "bg-sidebar-accent text-sidebar-foreground"
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              )}
+            >
+              <span className="relative shrink-0 flex items-center">
+                <IconBell className={cn("size-[18px]", unreadCount > 0 && "text-primary")} />
+                {unreadCount > 0 && (
+                  collapsed ? (
+                    <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary ring-2 ring-sidebar" />
+                  ) : (
+                    <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center leading-none ring-2 ring-sidebar">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </span>
+                  )
+                )}
+              </span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="font-medium">
+            {unreadCount > 0 ? `Notifications — ${unreadCount} unread` : "Notifications"}
+          </TooltipContent>
+        </Tooltip>
+
+        {notifOpen && (
+          <NotificationsDropdown
+            anchorRef={notifButtonRef}
+            notifications={notifications}
+            unreadCount={unreadCount}
+            loading={notifLoading}
+            live={notifLive}
+            onRead={markRead}
+            onReadAll={markAllRead}
+            onRefresh={refreshNotifs}
+            onClose={() => setNotifOpen(false)}
+          />
+        )}
+
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className={cn(
+                "flex items-center justify-center rounded-lg text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors",
+                "size-9"
+              )}
+            >
+              {collapsed ? <IconChevronRight className="size-[18px]" /> : <IconChevronLeft className="size-[18px]" />}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="font-medium">
+            {collapsed ? "Expand" : "Collapse"}
+          </TooltipContent>
+        </Tooltip>
+        </div>
       </div>
     </aside>
   )

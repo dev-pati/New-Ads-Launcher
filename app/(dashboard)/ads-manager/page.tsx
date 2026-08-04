@@ -59,6 +59,7 @@ import {
   parseBulkDrafts,
   removePublishedDrafts,
   serializeBulkDrafts,
+  stageBudgetDrafts,
 } from "@/lib/ads-manager-bulk-drafts"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -322,6 +323,137 @@ function formatMoneyAmount(value: number): string {
 function fmtMoney(v: number): string {
   if (!Number.isFinite(v) || v === 0) return "$0.00"
   return `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function BudgetQuickEditCell({
+  targetNode,
+  targetLevel,
+  displayMinor,
+  displayType,
+  canMutate,
+  publishing,
+  onSaveDraft,
+  onPublish,
+}: {
+  targetNode: Campaign | AdSet
+  targetLevel: "campaign" | "adset"
+  displayMinor?: string
+  displayType: "Daily" | "Lifetime"
+  canMutate: boolean
+  publishing: boolean
+  onSaveDraft: (node: Campaign | AdSet, level: "campaign" | "adset", amountMajor: number) => void
+  onPublish: (node: Campaign | AdSet, level: "campaign" | "adset", amountMajor: number) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [amount, setAmount] = useState("")
+  const current = Number(displayMinor || 0) / 100
+  const parsed = Number(amount)
+  const canSave = canMutate && Number.isFinite(parsed) && parsed > 0 && !publishing
+
+  useEffect(() => {
+    if (open) setAmount(current ? current.toFixed(2) : "")
+  }, [current, open])
+
+  const save = () => {
+    if (!canSave) return
+    onSaveDraft(targetNode, targetLevel, parsed)
+    setOpen(false)
+  }
+
+  const publish = async () => {
+    if (!canSave) return
+    await onPublish(targetNode, targetLevel, parsed)
+    setOpen(false)
+  }
+
+  const maxDaily = Number.isFinite(parsed) ? (parsed * 1.75).toFixed(2) : "0.00"
+  const maxWeekly = Number.isFinite(parsed) ? (parsed * 7).toFixed(2) : "0.00"
+  const typeLabel = displayType === "Daily" ? "Daily budget" : "Lifetime budget"
+  const levelLabel = targetLevel === "adset" ? "ad set" : "campaign"
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <div className="group/budget inline-flex items-start justify-end gap-1.5">
+        {canMutate && (
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Edit budget"
+              onClick={event => event.stopPropagation()}
+              className="mt-0.5 inline-flex size-5 items-center justify-center rounded text-[#65676b] opacity-0 transition-opacity hover:bg-black/5 group-hover/row:opacity-100 focus:opacity-100"
+            >
+              <IconPencil className="size-3" />
+            </button>
+          </PopoverTrigger>
+        )}
+        <div>
+          <span className="text-sm font-medium tabular-nums leading-5">{displayMinor ? fmtBudget(displayMinor) : "—"}</span>
+          <p className="text-xs text-[#65676b]">{displayType}</p>
+        </div>
+      </div>
+      <PopoverContent side="left" align="start" className="w-[340px] p-4 text-xs" onClick={event => event.stopPropagation()}>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-semibold text-sm text-[#1c2b33] dark:text-white">{typeLabel}</span>
+            <div className="relative flex items-center w-36 rounded border bg-background focus-within:ring-1 focus-within:ring-ring">
+              <span className="pl-2 text-[#4b4f56] dark:text-gray-400">$</span>
+              <Input
+                id={`budget-${targetNode.id}`}
+                value={amount}
+                onChange={event => setAmount(event.target.value)}
+                inputMode="decimal"
+                className="h-8 w-full border-0 pl-1 pr-8 py-1 text-sm shadow-none focus-visible:ring-0"
+                autoFocus
+              />
+              <span className="absolute right-2 text-[10px] text-muted-foreground uppercase pointer-events-none">USD</span>
+            </div>
+          </div>
+
+          <div className="space-y-2 text-[#65676b] dark:text-gray-400 leading-normal">
+            <p>
+              You are using {levelLabel} budget.
+              {displayType === "Daily" ? (
+                <> The maximum that you will spend on any day is <strong className="text-[#1c2b33] dark:text-white">${maxDaily}</strong> and the maximum that you will spend in a week is <strong className="text-[#1c2b33] dark:text-white">${maxWeekly}</strong>.</>
+              ) : (
+                <> The maximum that you will spend over the lifetime of the {levelLabel} is <strong className="text-[#1c2b33] dark:text-white">${parsed ? parsed.toFixed(2) : "0.00"}</strong>.</>
+              )}
+            </p>
+            <button type="button" className="text-[#1877f2] hover:underline block font-medium">
+              About {displayType.toLowerCase()} budget
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between border-t pt-3">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-[#1877f2] hover:underline font-semibold text-sm bg-transparent border-0 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={save}
+                disabled={!canSave}
+                className="h-8 rounded border border-gray-300 bg-white px-3 font-semibold text-[#4b4f56] shadow-sm hover:bg-gray-50 disabled:opacity-40 text-sm cursor-pointer dark:bg-muted dark:text-gray-300 dark:border-gray-700"
+              >
+                Save to draft
+              </button>
+              <button
+                type="button"
+                onClick={publish}
+                disabled={!canSave}
+                className="h-8 rounded bg-[#00695c] hover:bg-[#004d40] px-3 font-semibold text-white shadow-sm disabled:opacity-40 text-sm cursor-pointer"
+              >
+                {publishing ? <IconLoader2 className="size-3.5 animate-spin" /> : "Publish"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 function SpendHoverValue({
@@ -2114,6 +2246,35 @@ function AdsManagerContent() {
     }
   }
 
+  const budgetEditItem = (node: Campaign | AdSet, level: "campaign" | "adset"): BulkEditableItem => {
+    const hasOwnBudget = node.daily_budget !== undefined || node.lifetime_budget !== undefined
+    const parentOwnsBudget = level === "adset"
+      ? Boolean(campaigns.find(c => c.id === (node as AdSet).campaign_id)?.daily_budget || campaigns.find(c => c.id === (node as AdSet).campaign_id)?.lifetime_budget)
+      : false
+    return {
+      id: node.id,
+      name: node.name,
+      status: node.status,
+      campaign_id: level === "adset" ? (node as AdSet).campaign_id : undefined,
+      daily_budget: node.daily_budget,
+      lifetime_budget: node.lifetime_budget,
+      budgetEligible: hasOwnBudget && !parentOwnsBudget,
+    }
+  }
+
+  const handleSaveBudgetDraft = (node: Campaign | AdSet, level: "campaign" | "adset", amountMajor: number) => {
+    const nextDrafts = stageBudgetDrafts(bulkDrafts, level, [budgetEditItem(node, level)], amountMajor)
+    replaceBulkDrafts(nextDrafts)
+    setActionToast({ kind: "success", message: `Saved budget draft for ${node.name}` })
+  }
+
+  const handlePublishBudget = async (node: Campaign | AdSet, level: "campaign" | "adset", amountMajor: number) => {
+    const nextDrafts = stageBudgetDrafts(bulkDrafts, level, [budgetEditItem(node, level)], amountMajor)
+    const key = bulkDraftKey(level, node.id)
+    replaceBulkDrafts(nextDrafts)
+    await publishBulkDrafts([key], nextDrafts)
+  }
+
   // Totals
   const totalResultsCount = useMemo(() => currentData.reduce((sum, item) => {
     const objective = tab === "campaigns"
@@ -2525,6 +2686,77 @@ function AdsManagerContent() {
 
       case "budget": {
         const daily = (row as any).daily_budget
+        const lifetime = (row as any).lifetime_budget
+        const key = bulkDraftKey(level, row.id)
+        const draft = bulkDrafts[key]
+        const displayDaily = draft?.node.daily_budget ?? daily
+        const displayLifetime = draft?.node.lifetime_budget ?? lifetime
+
+        if (tab === "campaigns") {
+          const campaign = row as Campaign
+          const budgetEligible = Boolean(daily || lifetime)
+          if (budgetEligible) {
+            return (
+              <BudgetQuickEditCell
+                targetNode={campaign}
+                targetLevel="campaign"
+                displayMinor={displayDaily ?? displayLifetime}
+                displayType={displayDaily !== undefined ? "Daily" : "Lifetime"}
+                canMutate={workspaceAccess.canMutate}
+                publishing={bulkPublishing}
+                onSaveDraft={handleSaveBudgetDraft}
+                onPublish={handlePublishBudget}
+              />
+            )
+          }
+        }
+        if (tab === "adsets") {
+          const adSet = row as AdSet
+          const campaign = campaigns.find(c => c.id === adSet.campaign_id)
+          const budgetEligible = Boolean(daily || lifetime) && !Boolean(campaign?.daily_budget || campaign?.lifetime_budget)
+          if (budgetEligible) {
+            return (
+              <BudgetQuickEditCell
+                targetNode={adSet}
+                targetLevel="adset"
+                displayMinor={displayDaily ?? displayLifetime}
+                displayType={displayDaily !== undefined ? "Daily" : "Lifetime"}
+                canMutate={workspaceAccess.canMutate}
+                publishing={bulkPublishing}
+                onSaveDraft={handleSaveBudgetDraft}
+                onPublish={handlePublishBudget}
+              />
+            )
+          }
+        }
+        if (tab === "ads") {
+          const ad = row as Ad
+          const adSet = adSets.find(as => as.id === ad.adset_id)
+          if (adSet) {
+            const campaign = campaigns.find(c => c.id === adSet.campaign_id)
+            const adsetDaily = adSet.daily_budget
+            const adsetLifetime = adSet.lifetime_budget
+            const adsetBudgetEligible = Boolean(adsetDaily || adsetLifetime) && !Boolean(campaign?.daily_budget || campaign?.lifetime_budget)
+            const adsetDraft = bulkDrafts[bulkDraftKey("adset", adSet.id)]
+            const adsetDisplayDaily = adsetDraft?.node.daily_budget ?? adsetDaily
+            const adsetDisplayLifetime = adsetDraft?.node.lifetime_budget ?? adsetLifetime
+
+            if (adsetBudgetEligible) {
+              return (
+                <BudgetQuickEditCell
+                  targetNode={adSet}
+                  targetLevel="adset"
+                  displayMinor={adsetDisplayDaily ?? adsetDisplayLifetime}
+                  displayType={adsetDisplayDaily !== undefined ? "Daily" : "Lifetime"}
+                  canMutate={workspaceAccess.canMutate}
+                  publishing={bulkPublishing}
+                  onSaveDraft={handleSaveBudgetDraft}
+                  onPublish={handlePublishBudget}
+                />
+              )
+            }
+          }
+        }
         if (daily) {
           return (
             <>
@@ -2533,7 +2765,14 @@ function AdsManagerContent() {
             </>
           )
         }
-        // No object-level daily budget → inherits from parent (campaign CBO / adset-level)
+        if (lifetime) {
+          return (
+            <>
+              <span className="text-sm font-medium tabular-nums leading-5">{fmtBudget(lifetime)}</span>
+              <p className="text-[#65676b] text-xs">Lifetime</p>
+            </>
+          )
+        }
         return <span className="text-xs text-[#65676b]">Using ad set budget</span>
       }
 
