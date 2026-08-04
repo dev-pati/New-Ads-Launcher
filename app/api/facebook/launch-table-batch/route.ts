@@ -3,6 +3,7 @@ import { notifyLaunchOutcome } from "@/lib/notifications/launch"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createScheduledActivation } from "@/lib/scheduled-activations"
 import { createAd, getVideoThumbnail, getResourceAccountId, getAdSetCampaignsAndNames, copyAdSet, pollVideoReady } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "@/app/api/facebook/_utils"
 
@@ -290,7 +291,12 @@ export async function POST(request: NextRequest) {
     )] as string[]
 
     const firstRow    = rows[0] || {}
-    const batchStatus = allErrors.length === 0 ? "success" : allCreated.length > 0 ? "partial" : "failed"
+    const hasScheduledRows = rowResults.some(row => row.scheduledStart && row.created.length > 0)
+    const batchStatus = allCreated.length === 0
+      ? "failed"
+      : allErrors.length > 0
+        ? "partial"
+        : (hasScheduledRows ? "scheduled" : "success")
 
     const { data: batchRecord, error: batchErr } = await adminDb.from("launch_batches").insert({
       org_id: ctx.orgId,
@@ -323,13 +329,12 @@ export async function POST(request: NextRequest) {
       if (row.scheduledStart && row.created.length > 0) {
         const adIds = row.created.map((c: any) => c.adId).filter(Boolean) as string[]
         if (adIds.length > 0) {
-          await adminDb.from("scheduled_activations").insert({
-            org_id: ctx.orgId,
-            ad_account_id: adAccountId,
-            ad_ids: adIds,
-            scheduled_at: row.scheduledStart,
-            end_time: row.scheduledEnd || null,
-            status: "pending",
+          await createScheduledActivation({
+            orgId: ctx.orgId,
+            adAccountId,
+            adIds,
+            scheduledAt: row.scheduledStart,
+            endTime: row.scheduledEnd || null,
           })
         }
       }

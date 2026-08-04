@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const accountId = url.searchParams.get("account_id")
     const userId = url.searchParams.get("user_id")
     const status = url.searchParams.get("status")
+    const tab = url.searchParams.get("tab")
     const batchId = url.searchParams.get("id")
     const limit = parseInt(url.searchParams.get("limit") || "50")
     const trash = url.searchParams.get("trash") === "1"
@@ -26,7 +27,18 @@ export async function GET(request: NextRequest) {
     if (batchId) query = query.eq("id", batchId)
     if (accountId) query = query.eq("ad_account_id", accountId)
     if (userId) query = query.eq("user_id", userId)
-    if (status && status !== "all") query = query.eq("status", status)
+    // The Scheduled tab shows batches queued for a future activation via scheduled_activations.
+    // Those batches are stamped `status = 'scheduled'` by create-campaign / launch-direct /
+    // launch-table-batch when a schedule is set, so filter on it instead of the lifecycle status.
+    if (tab === "scheduled") {
+      query = query.eq("status", "scheduled")
+    } else if (status && status !== "all") {
+      query = query.eq("status", status)
+    } else if (!batchId && !trash) {
+      // The Launched tab lists past launches; keep scheduled-queued batches out so they
+      // live only in the Scheduled tab until cron activates them.
+      query = query.neq("status", "scheduled")
+    }
     if (trash) {
       query = query.not("deleted_at", "is", null)
     } else {
@@ -71,6 +83,24 @@ export async function GET(request: NextRequest) {
     }
 
     const batches = finalData || []
+    let scheduledByAdId = new Map<string, any>()
+
+    if (tab === "scheduled" && batches.length > 0) {
+      const { data: scheduledRows, error: scheduledError } = await supabase
+        .from("scheduled_activations")
+        .select("id, ad_account_id, ad_ids, scheduled_at, end_time, status, error, created_at")
+        .eq("org_id", ctx.orgId)
+        .order("scheduled_at", { ascending: true })
+
+      if (scheduledError) {
+        console.warn("[launch-history] Failed to enrich scheduled activations:", scheduledError.message)
+      } else {
+        for (const row of scheduledRows || []) {
+          for (const adId of row.ad_ids || []) scheduledByAdId.set(adId, row)
+        }
+      }
+    }
+
     const userIds = [...new Set(batches.map((b: any) => b.user_id).filter(Boolean))]
     let accountById = new Map<string, any>()
 
@@ -90,11 +120,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       batches: batches.map((batch: any) => {
         const launcher = accountById.get(batch.user_id)
-        return {
+        const enriched: any = {
           ...batch,
           launcher: launcher || null,
           user_name: batch.user_name || launcher?.full_name || launcher?.email || "Unknown",
         }
+
+        // Scheduled tab: attach the matching scheduled_activations row so the UI can show
+        // countdown, end time and activation status. Match by any overlapping ad id —
+        // a scheduled batch and its scheduled_activations row share the same created ad ids.
+        if (tab === "scheduled") {
+          const batchAdIds = (batch.created_ads || []).map((c: any) => c.adId).filter(Boolean)
+          const match = batchAdIds
+            .map((id: string) => scheduledByAdId.get(id))
+            .find(Boolean)
+          enriched.scheduled_at = match?.scheduled_at ?? null
+          enriched.end_time = match?.end_time ?? null
+          enriched.scheduled_status = match?.status ?? null
+          enriched.scheduled_error = match?.error ?? null
+        }
+
+        return enriched
       }),
     })
   } catch (err: any) {
