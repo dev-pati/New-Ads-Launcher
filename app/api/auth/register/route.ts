@@ -12,6 +12,10 @@ function slugify(value: string) {
 
 export async function POST(request: Request) {
   try {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "Sign up is disabled in production." }, { status: 403 })
+    }
+
     const { email, fullName, password } = await request.json()
     if (!email || !fullName) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -19,6 +23,7 @@ export async function POST(request: Request) {
 
     const db = createAdminClient()
     const normalizedEmail = String(email).trim().toLowerCase()
+
 
     const { data: existing } = await db
       .from("accounts")

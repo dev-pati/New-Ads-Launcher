@@ -25,6 +25,7 @@ function RegisterForm() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const signupEnabled = process.env.NODE_ENV !== "production"
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setError("")
@@ -61,66 +62,78 @@ function RegisterForm() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Create an account</CardTitle>
+            <CardTitle>{signupEnabled ? "Create an account" : "Sign up is disabled"}</CardTitle>
             <CardDescription>
-              Create your account, then verify your email to sign in.
+              {signupEnabled
+                ? "Create your account, then verify your email to sign in."
+                : "Registration is restricted to authorized company members."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleRegister} className="space-y-4">
-              {error && (
-                <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-                  {error}
+            {signupEnabled ? (
+              <form onSubmit={handleRegister} className="space-y-4">
+                {error && (
+                  <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                    {error}
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">Full Name</Label>
+                  <Input
+                    id="fullName"
+                    type="text"
+                    placeholder="Your name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                  />
                 </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  type="text"
-                  placeholder="Your name"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password (Optional)</Label>
-                  <span className="text-xs text-muted-foreground">For Meta App Review</span>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength={6}
-                />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password (Optional)</Label>
+                    <span className="text-xs text-muted-foreground">For Meta App Review</span>
+                  </div>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    minLength={6}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? "Creating account..." : "Create account"}
+                </Button>
+              </form>
+            ) : (
+              <div className="py-4 text-center">
+                <Button asChild className="w-full">
+                  <Link href="/auth/login">Go to Login</Link>
+                </Button>
               </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? "Creating account..." : "Create account"}
-              </Button>
-            </form>
+            )}
             <p className="mt-4 text-center text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <Link
-                href={inviteToken ? `/auth/login?redirect=${encodeURIComponent(`/invite?token=${inviteToken}`)}` : "/auth/login"}
-                className="text-primary underline-offset-4 hover:underline"
-              >
-                Sign in
-              </Link>
+              {signupEnabled ? "Already have an account? " : null}
+              {signupEnabled && (
+                <Link
+                  href={inviteToken ? `/auth/login?redirect=${encodeURIComponent(`/invite?token=${inviteToken}`)}` : "/auth/login"}
+                  className="text-primary underline-offset-4 hover:underline"
+                >
+                  Sign in
+                </Link>
+              )}
             </p>
           </CardContent>
         </Card>

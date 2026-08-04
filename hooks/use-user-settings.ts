@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react"
 
 export interface UserSettings {
-  theme: string // 'light' | 'dark' | 'system'
+  theme: string // 'light' | 'dark' | 'dark-premium' | 'system'
   ads_filter: {
     status?: string // 'all' | 'draft' | 'ready' | 'launched'
     search?: string
@@ -12,7 +12,7 @@ export interface UserSettings {
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
-  theme: "system",
+  theme: "light",
   ads_filter: {},
   ads_column_widths: {},
 }

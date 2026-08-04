@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createSession } from "@/lib/custom-auth"
+import { isEmailAllowed } from "@/lib/auth-allowlist"
 
 const LARK_BASE = "https://open.larksuite.com"
 
@@ -95,6 +96,10 @@ export async function GET(request: NextRequest) {
         },
       }).eq("id", accountId)
     } else {
+      if (process.env.NODE_ENV === "production" && !(await isEmailAllowed(email))) {
+        return NextResponse.redirect(`${appUrl}/auth/login?error=restricted`)
+      }
+
       const { data: created, error } = await db
         .from("accounts")
         .insert({

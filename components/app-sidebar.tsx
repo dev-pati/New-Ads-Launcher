@@ -28,7 +28,9 @@ import {
   IconCreditCard,
   IconSun,
   IconMoon,
+  IconDeviceDesktop,
   IconSparkles,
+  IconCheck,
   IconLogout,
 } from "@tabler/icons-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -38,6 +40,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 
 type SubItem = { label: string; href: string }
@@ -46,6 +51,12 @@ type NavSection = {
   label: string
   icon: React.ElementType
   subItems: SubItem[]
+}
+
+type ThemeMode = "system" | "light" | "dark" | "dark-premium"
+function normalizeThemeMode(value?: string | null): ThemeMode {
+  if (value === "system" || value === "dark" || value === "dark-premium") return value
+  return "light"
 }
 
 const navSections: NavSection[] = [
@@ -151,7 +162,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
   const pathname = usePathname()
   const router = useRouter()
   const { activeOrg } = useOrg()
-  const { resolvedTheme, setTheme } = useTheme()
+  const { theme, setTheme } = useTheme()
   const { settings, updateSettings } = useUserSettings()
   const [collapsed, setCollapsed] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -177,9 +188,10 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
       .catch(() => {})
   }, [activeOrg?.id])
 
+  const selectedTheme: ThemeMode = normalizeThemeMode(theme ?? settings?.theme)
   useEffect(() => {
-    if (settings?.theme && settings.theme !== "system") setTheme(settings.theme)
-  }, [settings?.theme, setTheme])
+    setTheme(selectedTheme)
+  }, [selectedTheme, setTheme])
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" })
@@ -187,10 +199,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
     router.refresh()
   }
 
-  const cycleTheme = () => {
-    const next = resolvedTheme === "light" ? "dark"
-      : resolvedTheme === "dark" ? "dark-premium"
-      : "light"
+  const setAppTheme = (next: ThemeMode) => {
     setUserMenuOpen(false)
     setTheme(next)
     updateSettings({ theme: next })
@@ -433,12 +442,49 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
               <Link href="/settings"><IconSettings className="size-4" /> Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={cycleTheme}>
-              {resolvedTheme === "light" && <IconSun className="size-4" />}
-              {resolvedTheme === "dark" && <IconMoon className="size-4" />}
-              {resolvedTheme === "dark-premium" && <IconSparkles className="size-4 text-primary" />}
-              {resolvedTheme === "light" ? "Light Mode" : resolvedTheme === "dark" ? "Classic Dark" : "Pro Max Dark"}
-            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                {selectedTheme === "system" && <IconDeviceDesktop className="size-4" />}
+                {selectedTheme === "light" && <IconSun className="size-4" />}
+                {selectedTheme === "dark" && <IconMoon className="size-4" />}
+                {selectedTheme === "dark-premium" && <IconSparkles className="size-4 text-primary" />}
+                Theme: {selectedTheme === "system" ? "Auto" : selectedTheme === "dark" ? "Dark" : selectedTheme === "dark-premium" ? "Pro Max" : "Light"}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-64 p-2">
+                <DropdownMenuItem onClick={() => setAppTheme("system")} className="items-start gap-3 py-3">
+                  <IconDeviceDesktop className="mt-0.5 size-5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">Auto</div>
+                    <div className="text-xs text-muted-foreground">Use the same theme as your device</div>
+                  </div>
+                  {selectedTheme === "system" && <IconCheck className="mt-0.5 size-4" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAppTheme("light")} className="items-start gap-3 py-3">
+                  <IconSun className="mt-0.5 size-5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">Light</div>
+                    <div className="text-xs text-muted-foreground">Light background with dark text</div>
+                  </div>
+                  {selectedTheme === "light" && <IconCheck className="mt-0.5 size-4" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAppTheme("dark")} className="items-start gap-3 py-3">
+                  <IconMoon className="mt-0.5 size-5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">Dark</div>
+                    <div className="text-xs text-muted-foreground">Dark background with light text</div>
+                  </div>
+                  {selectedTheme === "dark" && <IconCheck className="mt-0.5 size-4" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAppTheme("dark-premium")} className="items-start gap-3 py-3">
+                  <IconSparkles className="mt-0.5 size-5 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-primary">Pro Max</div>
+                    <div className="text-xs text-muted-foreground">Deep premium dark background</div>
+                  </div>
+                  {selectedTheme === "dark-premium" && <IconCheck className="mt-0.5 size-4" />}
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               <IconLogout className="size-4" /> Log out

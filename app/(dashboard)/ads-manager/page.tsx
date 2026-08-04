@@ -676,16 +676,16 @@ function formatBidStrategy(raw: string | null | undefined): string {
   return raw.replace(/_/g, " ").toLowerCase()
 }
 
-function DeliveryBadge({ effective_status, learning }: { effective_status: string; budget_remaining?: string; learning?: LearningStageInfo }) {
+function DeliveryBadge({ effective_status, learning, allAdsOff }: { effective_status: string; budget_remaining?: string; learning?: LearningStageInfo; allAdsOff?: boolean }) {
   // Campaigns have no learning state here → Active / Off only.
   // Ad sets and ads pass learning_stage_info → keep Meta's Learning state.
   // Budget remaining (including $0.00 remaining) must not turn Active into a warning state.
-  const isActive = effective_status === "ACTIVE"
+  const isActive = effective_status === "ACTIVE" && !allAdsOff
   const learnStatus = isActive ? learning?.status : undefined
   const isLearning = learnStatus === "LEARNING"
   const isLearningLimited = learnStatus === "LEARNING_LIMITED"
   const dot = isLearning || isLearningLimited ? "bg-[#1877f2]" : isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]"
-  const label = isLearning ? "Learning" : isLearningLimited ? "Learning limited" : isActive ? "Active" : "Off"
+  const label = allAdsOff ? "Ad OFF" : isLearning ? "Learning" : isLearningLimited ? "Learning limited" : isActive ? "Active" : "Off"
   return (
     <span className="flex items-center gap-1.5 text-sm font-medium text-[#1c2b33] dark:text-gray-300">
       <span className={cn("size-[7px] rounded-full shrink-0", dot)} />
@@ -847,6 +847,8 @@ function AdsManagerContent() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [adSets, setAdSets] = useState<AdSet[]>([])
   const [ads, setAds] = useState<Ad[]>([])
+  const [adSetHasActiveAds, setAdSetHasActiveAds] = useState<Record<string, boolean>>({})
+  const fetchedAdsetAdsRef = useRef<Set<string>>(new Set())
   const [accountSummary, setAccountSummary] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingProgress, setLoadingProgress] = useState(0)
@@ -1049,7 +1051,7 @@ function AdsManagerContent() {
     return columnWidths[id] || def
   }
   const isTextCol = (id: string) => [
-    "delivery", "effective_status", "attribution_setting", "budget", "lifetime_budget",
+    "delivery", "effective_status", "attribution_setting",
     "schedule_start", "schedule_end", "bid_strategy", "boosted_object_id", "buying_type",
     "objective", "smart_promotion_type", "special_ad_category", "account_id", "date_created",
     "issues_info", "optimization_goal", "updated_time",
@@ -1808,6 +1810,41 @@ function AdsManagerContent() {
 
   const pagedData = currentData
 
+  useEffect(() => {
+    if (tab !== "adsets" || !pagedData.length) return
+
+    let cancelled = false
+    const adsetIds = pagedData.map(a => a.id)
+    const toFetch = adsetIds.filter(id => !fetchedAdsetAdsRef.current.has(id))
+
+    if (toFetch.length === 0) return
+
+    toFetch.forEach(id => fetchedAdsetAdsRef.current.add(id))
+
+    async function fetchAdsetAds() {
+      await Promise.all(toFetch.map(async (id) => {
+        try {
+          const res = await fetch(`/api/facebook/adsets/${id}/ads`)
+          if (!res.ok) return
+          const data = await res.json()
+          const adsList = data.ads || []
+          const hasActive = adsList.some((ad: any) => ad.effective_status === "ACTIVE")
+          if (!cancelled) {
+            setAdSetHasActiveAds(prev => ({ ...prev, [id]: hasActive }))
+          }
+        } catch (e) {
+          console.error("Failed to fetch ads for adset", id, e)
+        }
+      }))
+    }
+
+    fetchAdsetAds()
+
+    return () => {
+      cancelled = true
+    }
+  }, [tab, pagedData])
+
   const selectedBulkItems: BulkEditableItem[] = useMemo(() => {
     const selected = currentData.filter(item => selectedIds.has(item.id))
     return selected.map(item => {
@@ -2447,6 +2484,7 @@ function AdsManagerContent() {
         let budgetRemaining: string | undefined = (row as any).budget_remaining
         // Learning is an ad-set-level delivery state; ads inherit it from their parent ad set.
         let learning: LearningStageInfo | undefined
+        let allAdsOff = false
         if (tab === "adsets") {
           const adset = row as AdSet
           learning = adset.learning_stage_info
@@ -2455,12 +2493,15 @@ function AdsManagerContent() {
             const parentCampaign = campaigns.find(c => c.id === adset.campaign_id)
             budgetRemaining = parentCampaign?.budget_remaining
           }
+          const adsetAds = ads.filter(ad => ad.adset_id === adset.id)
+          const hasActiveAds = adSetHasActiveAds[adset.id] ?? (adsetAds.length > 0 ? adsetAds.some(ad => ad.effective_status === "ACTIVE") : undefined)
+          allAdsOff = hasActiveAds === false
         } else if (tab === "ads") {
           // Ads don't show budget status — delivery is based solely on their own effective_status
           budgetRemaining = undefined
           learning = (row as Ad).adset?.learning_stage_info
         }
-        return <DeliveryBadge effective_status={row.effective_status} budget_remaining={budgetRemaining} learning={learning} />
+        return <DeliveryBadge effective_status={row.effective_status} budget_remaining={budgetRemaining} learning={learning} allAdsOff={allAdsOff} />
       }
 
       case "effective_status":
@@ -3337,8 +3378,8 @@ function AdsManagerContent() {
                   const colWidth = getColWidth(colId)
 
                   return (
-                    <th key={colId} style={{ width: colWidth, minWidth: colWidth, maxWidth: colWidth }} className="group/header relative px-3 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground">
-                      <div className="flex items-start gap-1">
+                    <th key={colId} style={{ width: colWidth, minWidth: colWidth, maxWidth: colWidth }} className={cn("group/header relative px-3 text-xs font-bold text-[#1c2b33] dark:text-foreground", isTextCol(colId) ? "text-left" : "text-right")}>
+                      <div className={cn("flex items-start gap-1", !isTextCol(colId) && "justify-end")}>
                         <div className="cursor-pointer hover:text-foreground transition-colors flex items-start gap-0.5 min-w-0" onClick={() => handleSort(sortFieldObj)}>
                           <span className="line-clamp-2 break-words leading-tight">{col.headerLabel}</span>
                           {active
@@ -3456,7 +3497,7 @@ function AdsManagerContent() {
                             </div>
                           )}
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, c)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, c)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -3465,7 +3506,7 @@ function AdsManagerContent() {
                           <td className={cn("px-3 sticky z-10", FROZEN_LEFT.name, FROZEN_BAND_BG, FROZEN_DIVIDER)}>
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, c.objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -3509,7 +3550,7 @@ function AdsManagerContent() {
                             </div>
                           )}
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, a)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, a)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -3518,7 +3559,7 @@ function AdsManagerContent() {
                           <td className={cn("px-3 sticky z-10", FROZEN_LEFT.name, FROZEN_BAND_BG, FROZEN_DIVIDER)}>
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -3585,7 +3626,7 @@ function AdsManagerContent() {
                             )}
                           </div>
                         </td>
-                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderCellContent(colId, a)}</td>)}
+                        {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderCellContent(colId, a)}</td>)}
                       </tr>
                       {rowBDs.map((br, i) => (
                         <tr key={`bd-${i}`} className="border-b border-[#e4e6eb] dark:border-gray-800 bg-[#f5f6f7] dark:bg-muted/10">
@@ -3595,7 +3636,7 @@ function AdsManagerContent() {
                             <span className="pl-6 text-xs text-[#1c2b33] dark:text-foreground">{br.breakdownLabel}</span>
                           </td>
                           <td className="px-3 bg-[#f5f6f7] dark:bg-muted/10" />
-                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden", isTextCol(colId) ? "text-right" : "text-left")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
+                          {columnOrder.map(colId => <td key={colId} style={{ width: getColWidth(colId), maxWidth: getColWidth(colId) }} className={cn("px-2 align-top overflow-hidden whitespace-nowrap", isTextCol(colId) ? "text-left" : "text-right")}>{renderBreakdownCell(colId, br.ins, objective)}</td>)}
                         </tr>
                       ))}
                     </Fragment>
@@ -3612,7 +3653,7 @@ function AdsManagerContent() {
                     Results from {currentData.length} {tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"}
                   </td>
                   {columnOrder.map(colId => (
-                    <td key={colId} className={cn("px-2 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", isTextCol(colId) ? "text-right" : "text-left")}>
+                    <td key={colId} className={cn("px-2 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", isTextCol(colId) ? "text-left" : "text-right")}>
                       {renderTotalCell(colId)}
                     </td>
                   ))}

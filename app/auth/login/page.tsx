@@ -255,7 +255,7 @@ function LoginForm() {
             )}
             <div className="mt-5 flex justify-between text-sm text-muted-foreground">
               <button type="button" onClick={() => switchMode(!usePassword)} className="hover:text-foreground">{usePassword ? "Use login code instead" : "Use password instead"}</button>
-              <Link href="/auth/register" className="font-medium text-link">Create account</Link>
+              {process.env.NODE_ENV !== "production" && <Link href="/auth/register" className="font-medium text-link">Create account</Link>}
             </div>
             <p className="mt-10 flex items-center gap-2 text-xs text-muted-foreground"><IconLock className="size-4" /> Secure access · Code expires after 10 minutes</p>
           </div>
