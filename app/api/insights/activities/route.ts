@@ -42,7 +42,7 @@ const DELIVERY_EVENTS: Record<string, string> = {
 }
 
 function summarize(raw: MetaActivity): string {
-  const label = DELIVERY_EVENTS[raw.event_type] || raw.event_type || "Edit"
+  const label = (raw.event_type && DELIVERY_EVENTS[raw.event_type]) || raw.event_type || "Edit"
   const extra = raw.extra_data
   if (!extra) return label
   const values = Array.isArray(extra) ? extra[0] : extra
@@ -109,7 +109,7 @@ export async function GET(request: NextRequest) {
         objectName: e.object_name || null,
         summary: summarize(e),
       }))
-      .filter(e => e.time)
+      .filter((e): e is typeof e & { time: string } => Boolean(e.time))
       .sort((a, b) => (a.time < b.time ? 1 : -1))
 
     return NextResponse.json({ events, available: true, level, id })
