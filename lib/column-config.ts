@@ -14,6 +14,9 @@ export type ColumnSection =
 export type CustomMetricFormat = "numeric" | "percentage" | "currency"
 export type CustomMetricAccess = "only_you" | "business"
 
+export type ColumnFilterType = "text" | "enum" | "number" | "currency" | "percent" | "date" | "none"
+export type ColumnFilterLevel = "campaigns" | "adsets" | "ads"
+
 export interface ColumnDef {
   id: string
   label: string        // shown in modal checkbox list
@@ -23,11 +26,16 @@ export interface ColumnDef {
   section: ColumnSection
   sectionLabel: string
   sortKey?: string
+  // A column becomes filterable in the Ads Manager chip bar by gaining a filterType.
+  // Absent or "none" means not filterable — that is how v1 exposes a handful of the
+  // 60 columns without a second catalog to keep in sync. See lib/ads-manager-filters.ts.
+  filterType?: ColumnFilterType
+  filterLevels?: ColumnFilterLevel[]   // default: all three
 }
 
 export const COLUMN_DEFS: ColumnDef[] = [
   // ── Key metrics: Results and spend ────────────────────────────────────────
-  { id: "spend",             label: "Amount spent",                         headerLabel: "Amount spent",                         description: "The estimated total amount of money you've spent on your campaign, ad set or ad during its schedule.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend", sortKey: "spend"  },
+  { id: "spend",             label: "Amount spent",                         headerLabel: "Amount spent",                         description: "The estimated total amount of money you've spent on your campaign, ad set or ad during its schedule.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend", sortKey: "spend", filterType: "currency"  },
   { id: "results",           label: "Results",                              headerLabel: "Results",                              description: "The number of times your ads achieved an outcome, based on the objective and settings you selected.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
   { id: "cost_per_result",   label: "Cost per result",                      headerLabel: "Cost per result",                      description: "The average cost per result from your ads, calculated as amount spent divided by results.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
   { id: "budget",            label: "Ad set budget",                        headerLabel: "Ad set budget",                        description: "The budget assigned to this ad set, or the budget inherited from the parent campaign when campaign budget is used.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend", sortKey: "budget" },
@@ -35,7 +43,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
   { id: "purchases",         label: "Purchases",                            headerLabel: "Purchases",                            description: "The number of purchase events attributed to your ads.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
   { id: "purchase_value",    label: "Purchases conversion value",            headerLabel: "Purchases conversion value",            description: "The total value returned from purchase conversion events attributed to your ads.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
   { id: "avg_order_value",   label: "Average order value",                  headerLabel: "Average order value",                  description: "The average value of each purchase, calculated as purchases conversion value divided by purchases.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
-  { id: "roas",              label: "Purchase ROAS (return on ad spend)",    headerLabel: "Purchase ROAS (return on ad spend)",    description: "The total return on ad spend from purchases. Calculated as purchases conversion value divided by amount spent.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
+  { id: "roas",              label: "Purchase ROAS (return on ad spend)",    headerLabel: "Purchase ROAS (return on ad spend)",    description: "The total return on ad spend from purchases. Calculated as purchases conversion value divided by amount spent.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend", filterType: "number" },
   { id: "cost_per_purchase", label: "Cost per purchase",                    headerLabel: "Cost per purchase",                    description: "The average cost for each purchase attributed to your ads.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
   { id: "cost_per_lead",     label: "Cost per lead",                        headerLabel: "Cost per lead",                        description: "The average cost for each lead attributed to your ads.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
   { id: "shopify_score",     label: "Shopify score",                        headerLabel: "Shopify score",                        description: "Shopify-derived performance score. Requires a Shopify data source integration.", tab: "key_metrics", section: "results_spend", sectionLabel: "Results and spend" },
@@ -45,7 +53,7 @@ export const COLUMN_DEFS: ColumnDef[] = [
   { id: "effective_status",  label: "Delivery status",                      headerLabel: "Delivery status",                      description: "The current effective delivery status returned by Meta.", tab: "key_metrics", section: "delivery", sectionLabel: "Delivery" },
 
   // ── Key metrics: Distribution ─────────────────────────────────────────────
-  { id: "impressions",       label: "Impressions",                          headerLabel: "Impressions",                          description: "The number of times your ads were on screen.", tab: "key_metrics", section: "distribution", sectionLabel: "Distribution" },
+  { id: "impressions",       label: "Impressions",                          headerLabel: "Impressions",                          description: "The number of times your ads were on screen.", tab: "key_metrics", section: "distribution", sectionLabel: "Distribution", filterType: "number" },
   { id: "reach",             label: "Reach",                                headerLabel: "Reach",                                description: "The number of Meta accounts that saw your ads at least once.", tab: "key_metrics", section: "distribution", sectionLabel: "Distribution" },
   { id: "cpm",               label: "CPM (cost per 1,000 impressions)",      headerLabel: "CPM (cost per 1,000 impressions)",      description: "The average cost for 1,000 impressions.", tab: "key_metrics", section: "distribution", sectionLabel: "Distribution" },
   { id: "frequency",         label: "Frequency",                            headerLabel: "Frequency",                            description: "The average number of times that each Meta account saw your ad.", tab: "key_metrics", section: "distribution", sectionLabel: "Distribution" },
@@ -85,14 +93,14 @@ export const COLUMN_DEFS: ColumnDef[] = [
   { id: "bid_strategy",         label: "Bid strategy",                       headerLabel: "Bid strategy",                       description: "The strategy Meta uses to bid for this campaign or ad set.", tab: "ad_settings", section: "ad_settings_section", sectionLabel: "Ad settings" },
   { id: "boosted_object_id",    label: "Boosted object ID",                  headerLabel: "Boosted object ID",                  description: "The ID of the object being boosted.", tab: "ad_settings", section: "ad_settings_section", sectionLabel: "Ad settings" },
   { id: "buying_type",          label: "Buying type",                        headerLabel: "Buying type",                        description: "The method by which you pay for and target ads in your campaign.", tab: "ad_settings", section: "ad_settings_section", sectionLabel: "Ad settings" },
-  { id: "objective",            label: "Objective",                          headerLabel: "Objective",                          description: "The campaign objective selected for your ads.", tab: "ad_settings", section: "ad_settings_section", sectionLabel: "Ad settings" },
+  { id: "objective",            label: "Objective",                          headerLabel: "Objective",                          description: "The campaign objective selected for your ads.", tab: "ad_settings", section: "ad_settings_section", sectionLabel: "Ad settings", filterType: "enum", filterLevels: ["campaigns"] },
   { id: "smart_promotion_type", label: "Smart promotion type",               headerLabel: "Smart promotion type",               description: "The smart promotion type configured for the campaign.", tab: "ad_settings", section: "ad_settings_section", sectionLabel: "Ad settings" },
   { id: "special_ad_category",  label: "Special ad category",                headerLabel: "Special ad category",                description: "The special ad category declared for regulated ad content.", tab: "ad_settings", section: "ad_settings_section", sectionLabel: "Ad settings" },
 
   // ── Advanced ──────────────────────────────────────────────────────────────
   { id: "account_id",        label: "Account ID",        headerLabel: "Account ID",        description: "The Meta ad account ID associated with this row.", tab: "advanced", section: "advanced_section", sectionLabel: "Advanced" },
   { id: "budget_remaining",  label: "Budget remaining",  headerLabel: "Budget remaining",  description: "The amount of budget remaining, when returned by Meta.", tab: "advanced", section: "advanced_section", sectionLabel: "Advanced" },
-  { id: "date_created",      label: "Created",           headerLabel: "Created",           description: "The date this object was created.", tab: "advanced", section: "advanced_section", sectionLabel: "Advanced" },
+  { id: "date_created",      label: "Created",           headerLabel: "Created",           description: "The date this object was created.", tab: "advanced", section: "advanced_section", sectionLabel: "Advanced", filterType: "date" },
   { id: "issues_info",       label: "Issues",            headerLabel: "Issues",            description: "Delivery or review issues returned by Meta.", tab: "advanced", section: "advanced_section", sectionLabel: "Advanced" },
   { id: "optimization_goal", label: "Optimization goal", headerLabel: "Optimization goal", description: "The optimization goal used by Meta to deliver this ad set.", tab: "advanced", section: "advanced_section", sectionLabel: "Advanced" },
   { id: "spend_cap",         label: "Spend cap",         headerLabel: "Spend cap",         description: "The maximum amount that can be spent by the campaign.", tab: "advanced", section: "advanced_section", sectionLabel: "Advanced" },

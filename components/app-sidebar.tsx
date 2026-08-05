@@ -62,7 +62,9 @@ function normalizeThemeMode(value?: string | null): ThemeMode {
 }
 
 // ponytail: hover-to-expand overlay sidebar. Only the nav area expands on hover.
-// Footer (settings/help/search/profile) stays collapsed â€” no expand on hover.
+// Footer (settings/help/search/profile) stays collapsed — no expand on hover.
+// Outer aside is w-16 but inner collapsed nav is w-14, leaving an 8px non-hover
+// gutter so accidental page-edge hover doesn't trigger expansion.
 // Upgrade path: add a "pin" toggle to lock expanded state if users request it.
 
 const navSections: NavSection[] = [
@@ -208,7 +210,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
   const healthNeedsAttention = selectedAccount?.account_status !== undefined && selectedAccount.account_status !== 1
 
   return (
-    <aside className="relative w-14 shrink-0 z-40" onMouseLeave={() => setHovered(false)}>
+    <aside className="relative w-16 shrink-0 z-40" onMouseLeave={() => setHovered(false)}>
       <div
         className={cn(
           "absolute inset-y-0 left-0 flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden transition-[width] duration-200 ease-in-out",

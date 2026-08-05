@@ -6,7 +6,7 @@ import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { useAdAccount } from "@/lib/ad-account-context"
 import { cn } from "@/lib/utils"
 import {
-  IconSearch, IconPlus, IconCopy, IconPencil, IconRefresh,
+  IconPlus, IconCopy, IconPencil, IconRefresh,
   IconLoader2, IconChevronDown, IconChevronLeft, IconChevronRight,
   IconTrash, IconSettings, IconCalendar, IconArrowsUpDown,
   IconArrowUp, IconArrowDown, IconHistory, IconTable, IconCheck,
@@ -22,7 +22,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { AdsDateRangePicker, getPresetRange } from "@/components/ads-manager/AdsDateRangePicker"
+import { AdsDateRangePicker, DATE_PICKER_PRESETS, getPresetRange } from "@/components/ads-manager/AdsDateRangePicker"
 import type { WorkspaceNode } from "@/components/ads-manager/UnifiedWorkspaceEditor"
 import type {
   CampaignFormState,
@@ -49,6 +49,17 @@ import {
   type BulkEditHierarchy,
 } from "@/components/ads-manager/BulkEditDraftDialogs"
 import { BulkEditFieldMenu } from "@/components/ads-manager/BulkEditFieldMenu"
+import { FilterBar } from "@/components/ads-manager/FilterBar"
+import {
+  type ChipEvalContext,
+  type FilterChip,
+  type FilterLevel,
+  SELECTED_ROWS_FIELD,
+  isChipValidAt,
+  matchesChip,
+  newChipId,
+  orderChipsForEval,
+} from "@/lib/ads-manager-filters"
 import {
   type BulkDraftField,
   type BulkDraftMap,
@@ -241,6 +252,17 @@ const ACTION_ALIASES: Record<string, string[]> = {
 }
 
 const PAGE_SIZE = 20
+
+/**
+ * Ceiling on the drain that sorting and filtering trigger. One Graph round trip per
+ * PAGE_SIZE rows, so 1,000 rows is ~50 sequential calls — already slow, and past the
+ * point where a buyer is scanning rather than working. A judgement call, not a
+ * measurement: it is owed a timing on the largest real account (BL-43, ticket 04).
+ */
+const DRAIN_ROW_LIMIT = 1000
+
+/** Above this many objects, bulk delete requires the count to be typed. */
+const TYPED_DELETE_CONFIRM_THRESHOLD = 20
 
 function mergeById<T extends { id: string }>(prev: T[], next: T[]) {
   const seen = new Set(prev.map(item => item.id))
@@ -1026,6 +1048,13 @@ function AdsManagerContent() {
   // Filters & search
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "PAUSED">("ACTIVE")
+  /**
+   * Filter chips, AND-ed with each other and with `search` / `statusFilter`.
+   * One array across all three tabs on purpose: a chip that does not apply at the
+   * current level is greyed rather than dropped, so switching Campaigns → Ads and
+   * back does not silently lose the filter (spec D7).
+   */
+  const [chips, setChips] = useState<FilterChip[]>([])
   const [datePreset,     setDatePreset]     = useState("last_7d")
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | null>(null)
 
@@ -1038,6 +1067,9 @@ function AdsManagerContent() {
   })
   const pageCursorsRef = useRef(pageCursors)
   const [paging, setPaging] = useState<{ after?: string; hasNext: boolean }>({ hasNext: false })
+  /** Sorting and the filter bar can both request a drain; only one may run. */
+  const drainingRef = useRef(false)
+  const [drainTruncated, setDrainTruncated] = useState(false)
   useEffect(() => { pageCursorsRef.current = pageCursors }, [pageCursors])
   const colsDropRef = useRef<HTMLDivElement>(null)
 
@@ -1054,6 +1086,13 @@ function AdsManagerContent() {
   const setSelectedIdsByTab: Record<Tab, React.Dispatch<React.SetStateAction<Set<string>>>> = { campaigns: setSelectedCampaignIds, adsets: setSelectedAdSetIds, ads: setSelectedAdIds }
   const selectedIds = selectedIdsByTab[tab]
   const setSelectedIds = setSelectedIdsByTab[tab]
+
+  /**
+   * Shift-range anchor, per tab. Stored as an **id, not an index** — a filter or a
+   * sort change renumbers every row, so an index anchor would silently select a
+   * different range than the one the user pointed at.
+   */
+  const [anchorIdByTab, setAnchorIdByTab] = useState<Record<Tab, string | null>>({ campaigns: null, adsets: null, ads: null })
 
   // Account-scoped bulk edit drafts. V1 persists within the current browser tab,
   // which keeps drafts across dialog closes/navigation without leaking them across accounts.
@@ -1125,6 +1164,10 @@ function AdsManagerContent() {
   const [actionToast, setActionToast] = useState<{ kind: "success" | "error"; message: string; href?: string } | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  /** "all" = everything selected, including rows a filter is hiding. Never auto-narrowed. */
+  const [deleteScope, setDeleteScope] = useState<"all" | "visible">("all")
+  const [deleteListExpanded, setDeleteListExpanded] = useState(false)
+  const [deleteTypedConfirm, setDeleteTypedConfirm] = useState("")
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyBatches, setHistoryBatches] = useState<any[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -1191,6 +1234,15 @@ function AdsManagerContent() {
   const usesCustomRange = (datePreset === "custom" || datePreset === "maximum") && customDateRange
   const drawerSince = usesCustomRange ? formatMetaDate(customDateRange.start) : ""
   const drawerUntil = usesCustomRange ? formatMetaDate(customDateRange.end) : ""
+  /**
+   * Human name for the active range. A metric chip means "in this range" and its own
+   * text never says so — change the preset and the same chip matches different rows.
+   * Meta behaves the same way; naming the range in the chip tooltip is what keeps it
+   * from reading as a bug.
+   */
+  const dateRangeLabel = usesCustomRange
+    ? `${formatMetaDate(customDateRange.start)} – ${formatMetaDate(customDateRange.end)}`
+    : DATE_PICKER_PRESETS.find(p => p.value === datePreset)?.label ?? datePreset.replace(/_/g, " ")
   const toReportRow = (node: { id: string; name: string }): ReportRow =>
     ({ id: node.id, name: node.name, adId: tab === "ads" ? node.id : undefined })
   const customColumnMap = useMemo(() => ({ ...COLUMN_MAP, ...Object.fromEntries(customMetrics.map(m => [m.id, toColumnDef(m)])) }), [customMetrics])
@@ -1822,10 +1874,12 @@ function AdsManagerContent() {
   // ─── Delete ───────────────────────────────────────────────────────────────────
 
   const handleDelete = async () => {
-    if (selectedIds.size === 0) return
+    // Whatever the dialog last showed is what gets deleted. `deleteScope` is only
+    // ever "visible" because the user pressed the narrow-to-visible button.
+    const ids = deleteScope === "visible" ? visibleSelectedIds : Array.from(selectedIds)
+    if (ids.length === 0) return
     setIsDeleting(true)
     try {
-      const ids = Array.from(selectedIds)
       const r = await fetch("/api/facebook/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1845,7 +1899,9 @@ function AdsManagerContent() {
         } else {
           setAds(prev => prev.filter(a => !deletedSet.has(a.id)))
         }
-        setSelectedIds(new Set())
+        // Drop only what was actually deleted — after a narrowed delete the hidden
+        // rows are still selected, and pretending otherwise would hide that.
+        setSelectedIds(prev => new Set(Array.from(prev).filter(id => !deletedSet.has(id))))
       }
       setDeleteConfirmOpen(false)
     } catch (err) {
@@ -1857,17 +1913,32 @@ function AdsManagerContent() {
 
   // ─── Sort ────────────────────────────────────────────────────────────────────
 
-  const fetchRemainingRowsForSort = useCallback(async () => {
+  /**
+   * Drains every remaining cursor page into memory.
+   *
+   * Sorting needed this first — a sort over one page is a lie. Filtering and the
+   * filter bar's entity suggestions need the same thing for the same reason, hence
+   * the rename from `fetchRemainingRowsForSort`. Two callers can now fire it at
+   * once (click a column header while the bar is draining), so it is reentrant-safe.
+   *
+   * It stops at DRAIN_ROW_LIMIT and says so rather than walking an account with tens
+   * of thousands of ads. Meta's paging is the cost here: one round trip per page.
+   */
+  const fetchAllRemainingRows = useCallback(async () => {
     if (!selectedAccountId || !paging.hasNext) return
+    if (drainingRef.current) return
+    drainingRef.current = true
 
     setLoading(true)
     setError("")
     const dateParam = buildDateParam()
     let cursorPage = page
     let hasNext: boolean = paging.hasNext
+    let loadedCount = (tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads).length
 
     try {
       while (hasNext) {
+        if (loadedCount >= DRAIN_ROW_LIMIT) break
         const after = pageCursorsRef.current[tab][cursorPage]
         if (!after) break
 
@@ -1901,6 +1972,7 @@ function AdsManagerContent() {
         if (tab === "campaigns") setCampaigns(prev => mergeById(prev, d.campaigns || []))
         else if (tab === "adsets") setAdSets(prev => mergeById(prev, d.adSets || []))
         else setAds(prev => mergeById(prev, d.ads || []))
+        loadedCount += ((tab === "campaigns" ? d.campaigns : tab === "adsets" ? d.adSets : d.ads) || []).length
 
         cursorPage += 1
         hasNext = Boolean(d.paging?.hasNext)
@@ -1914,13 +1986,17 @@ function AdsManagerContent() {
         }
       }
       setPage(cursorPage)
-      setPaging({ hasNext: false })
+      setPaging({ hasNext })
+      // Never silently truncate: filters and sorts below this banner are over a
+      // partial set, and the user has to be told which.
+      setDrainTruncated(hasNext)
     } catch (e: any) {
       setError(e.message || "Failed to load remaining rows")
     } finally {
+      drainingRef.current = false
       setLoading(false)
     }
-  }, [selectedAccountId, paging.hasNext, buildDateParam, page, tab, statusFilter, hierarchyParentIds, hierarchyParentId, hierarchyParentType])
+  }, [selectedAccountId, paging.hasNext, buildDateParam, page, tab, statusFilter, campaigns, adSets, ads, hierarchyParentIds, hierarchyParentId, hierarchyParentType])
 
   /**
    * Three states per column: ascending → descending → default.
@@ -1930,7 +2006,7 @@ function AdsManagerContent() {
    * means — the currentData memo falls through to `byNewestFirst`.
    */
   const handleSort = async (field: string) => {
-    await fetchRemainingRowsForSort()
+    await fetchAllRemainingRows()
     if (sortField !== field) { setSortField(field); setSortDir("asc"); return }
     if (sortDir === "asc") { setSortDir("desc"); return }
     setSortField(null)
@@ -2006,6 +2082,40 @@ function AdsManagerContent() {
         list = list.filter(item => item.name.toLowerCase().includes(q) || item.id.includes(q))
       }
     }
+
+    // Filter chips — AND-ed with each other and with everything above. Chips that do
+    // not apply at this level are inactive, not dropped (they stay greyed in the bar).
+    const activeChips = orderChipsForEval(chips.filter(c => isChipValidAt(c, tab as FilterLevel)))
+    if (activeChips.length > 0) {
+      list = list.filter(row => {
+        // One structural view over the three row shapes: the evaluator reads fields that
+        // exist at only some levels, and the `text` accessor answers "" for the rest.
+        const r = row as Partial<Campaign & AdSet & Ad>
+        const objective = tab === "campaigns" ? r.objective : campaigns.find(c => c.id === r.campaign_id)?.objective
+        const ins = getInsight(row)
+        const ctx: ChipEvalContext = {
+          rowId: row.id,
+          // `resolveMetricNumber` reports 0 for a row Meta returned no insights for,
+          // so "spent nothing" and "no data" are indistinguishable downstream. This
+          // flag is what keeps `spend < 100` from sweeping in everything undelivered.
+          hasInsights: ins !== null,
+          createdAt: r.created_time || null,
+          text: fieldId => {
+            switch (fieldId) {
+              case "name": return r.name ?? ""
+              case "id": return r.id ?? ""
+              case "campaign_name": return tab === "campaigns" ? r.name ?? "" : campaignNameById.get(r.campaign_id ?? "") ?? ""
+              case "adset_name": return tab === "adsets" ? r.name ?? "" : adSetNameById.get(r.adset_id ?? "") ?? ""
+              case "objective": return (r.objective ?? objective ?? "").toString()
+              default: return ""
+            }
+          },
+          number: fieldId => resolveMetricNumber(fieldId, ins, row, objective),
+        }
+        return activeChips.every(chip => matchesChip(chip, ctx))
+      })
+    }
+
     if (sortField) {
       list = [...list].sort((a, b) => {
         const av = sortValue(sortField, a)
@@ -2026,9 +2136,86 @@ function AdsManagerContent() {
       list = [...list].sort(byNewestFirst)
     }
     return list
-  }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, statusFilter, sortField, sortDir, campaignNameById, adSetNameById, activeLaunchFilter, launchAdIds])
+  }, [tab, campaigns, adSets, ads, campaignFilter, adSetFilter, search, statusFilter, chips, sortField, sortDir, campaignNameById, adSetNameById, activeLaunchFilter, launchAdIds])
 
   const pagedData = currentData
+
+  /**
+   * Hidden selection — the number that makes a bulk action honest.
+   *
+   * Bulk Duplicate / Edit / Delete all read the whole `selectedIds` set, and the
+   * selection deliberately survives filter changes. Without this count, "select 9 →
+   * filter to 6 → Delete" destroys 9 Meta objects with nothing on screen saying so.
+   *
+   * Computed over `currentData`, not `pagedData`: a row further down the same
+   * filtered list is not hidden. Hidden means *excluded by a filter*.
+   */
+  const visibleSelectedIds = useMemo(
+    () => currentData.filter(r => selectedIds.has(r.id)).map(r => r.id),
+    [currentData, selectedIds]
+  )
+  const hiddenSelectedCount = selectedIds.size - visibleSelectedIds.length
+
+  /**
+   * Row selection, including the Meta-style range gesture.
+   *
+   * | Gesture           | Result                                            |
+   * |-------------------|---------------------------------------------------|
+   * | click             | toggle that row, and make it the anchor           |
+   * | Shift + click     | add every row between the anchor and here (union) |
+   * | Shift + Ctrl/⌘    | remove every row in that range                    |
+   *
+   * The range is taken over `currentData` — what is on screen, in the order it is on
+   * screen. Sorting or filtering between the two clicks therefore changes the range,
+   * which is why the anchor is an id: it still points at the row the user clicked.
+   * A shift-click does not move the anchor, so the range can be re-extended.
+   */
+  const toggleRowSelection = (rowId: string, shiftKey: boolean, ctrlKey: boolean) => {
+    const anchorId = anchorIdByTab[tab]
+    if (shiftKey && anchorId && anchorId !== rowId) {
+      const ids = currentData.map(r => r.id)
+      const from = ids.indexOf(anchorId)
+      const to = ids.indexOf(rowId)
+      if (from !== -1 && to !== -1) {
+        const range = ids.slice(Math.min(from, to), Math.max(from, to) + 1)
+        setSelectedIds(prev => {
+          const s = new Set(prev)
+          for (const id of range) ctrlKey ? s.delete(id) : s.add(id)
+          return s
+        })
+        return
+      }
+      // Anchor no longer in view (filtered out, or on a page not loaded) — fall
+      // through to a plain toggle rather than guessing at a range.
+    }
+    setSelectedIds(prev => {
+      const s = new Set(prev)
+      if (s.has(rowId)) s.delete(rowId); else s.add(rowId)
+      return s
+    })
+    setAnchorIdByTab(prev => ({ ...prev, [tab]: rowId }))
+  }
+
+  /** Narrows the selection to the rows the current filters leave visible. */
+  const keepOnlyVisibleSelected = () => setSelectedIds(new Set(visibleSelectedIds))
+
+  /** Distinct enum values present in the loaded rows, for the chip editor. */
+  const chipEnumOptions = useMemo(() => {
+    const objectives = new Set<string>()
+    for (const c of campaigns) if (c.objective) objectives.add(c.objective)
+    return { objective: Array.from(objectives).sort() }
+  }, [campaigns])
+
+  /** Entity names present in the loaded rows, for the chip dropdown's exact-match group. */
+  const chipSuggestions = useMemo(() => {
+    const rows = tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads
+    const uniq = (xs: string[]) => Array.from(new Set(xs.filter(Boolean))).sort()
+    return {
+      name: uniq(rows.map(r => r.name)),
+      campaign_name: uniq(campaigns.map(c => c.name)),
+      adset_name: uniq(adSets.map(a => a.name)),
+    }
+  }, [tab, campaigns, adSets, ads])
 
   useEffect(() => {
     if (tab !== "adsets" || !pagedData.length) return
@@ -2386,8 +2573,15 @@ function AdsManagerContent() {
   const allSelected = pagedData.length > 0 && pagedData.every(r => selectedIds.has(r.id))
   const someSelected = !allSelected && pagedData.some(r => selectedIds.has(r.id))
   const toggleAll = () => {
-    if (allSelected) setSelectedIds(new Set())
-    else setSelectedIds(new Set(pagedData.map(r => r.id)))
+    const visible = pagedData.map(r => r.id)
+    // Union / subtract rather than replace: the header checkbox governs the rows on
+    // screen, and must not quietly discard a selection a filter is hiding.
+    setSelectedIds(prev => {
+      const s = new Set(prev)
+      for (const id of visible) allSelected ? s.delete(id) : s.add(id)
+      return s
+    })
+    setAnchorIdByTab(prev => ({ ...prev, [tab]: null }))
   }
 
   // Header checkbox ref for indeterminate state
@@ -3315,28 +3509,30 @@ function AdsManagerContent() {
 
       {/* ── Search + Status filter bar ── */}
       <div className="px-4 py-2 border-b shrink-0 flex items-center gap-3 flex-wrap">
-        {/* Search input */}
-        <div className="relative flex-1 min-w-[220px] max-w-lg">
-          <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            onKeyDown={e => e.key === "Escape" && setSearch("")}
-            placeholder="Search by name, ID, campaign or ad set..."
-            className="w-full pl-9 pr-8 py-1.5 text-sm bg-muted/30 border rounded-lg outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground"
-            >
-              <IconX className="size-3.5" />
-            </button>
-          )}
-        </div>
+        {/* Search + filter chips. Same slot as the old input, no width ceiling —
+            chips live inside the box, so a narrow field ran out of room immediately. */}
+        <FilterBar
+          level={tab as FilterLevel}
+          chips={chips}
+          onChipsChange={setChips}
+          search={search}
+          onSearchChange={setSearch}
+          enumOptions={chipEnumOptions}
+          suggestions={chipSuggestions}
+          loadedRowCount={(tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads).length}
+          dateRangeLabel={dateRangeLabel}
+          selectedCount={selectedIds.size}
+          onFilterSelectedRows={() => setChips(prev => [
+            ...prev,
+            // Snapshot, not a live binding: changing the selection afterwards must
+            // not change which rows this chip matches. Matches Meta's behaviour.
+            { id: newChipId(), field: SELECTED_ROWS_FIELD, operator: "is", values: [], snapshotIds: Array.from(selectedIds) },
+          ])}
+        />
 
-        {/* Status filter chips */}
-        <div className="flex items-center gap-1 shrink-0">
+        {/* Delivery — still a server-side filter (`active_only`), so it stays a pill
+            rather than a chip. One control, one source of truth. */}
+        <div className="flex items-center shrink-0 gap-0.5 p-0.5 rounded-full border bg-muted/30">
           {(["all", "ACTIVE", "PAUSED"] as const).map(s => (
             <button
               key={s}
@@ -3346,14 +3542,14 @@ function AdsManagerContent() {
                 setStatusFilter(s)
               }}
               className={cn(
-                "px-2.5 py-1 text-xs rounded-full border font-medium transition-colors",
+                "px-2.5 py-1 text-xs rounded-full font-medium transition-colors",
                 statusFilter === s
                   ? s === "ACTIVE"
-                    ? "bg-emerald-100 border-emerald-300 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-400"
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
                     : s === "PAUSED"
-                    ? "bg-gray-100 border-gray-300 text-gray-600 dark:bg-gray-800/60 dark:border-gray-700 dark:text-gray-300"
-                    : "bg-primary/10 border-primary/30 text-primary"
-                  : "border-border text-muted-foreground hover:bg-muted/50"
+                    ? "bg-gray-100 text-gray-600 dark:bg-gray-800/60 dark:text-gray-300"
+                    : "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted/60"
               )}
             >
               {s === "all" ? "All" : s === "ACTIVE" ? "Active" : "Paused"}
@@ -3362,12 +3558,37 @@ function AdsManagerContent() {
         </div>
 
         {/* Result count */}
-        {(search || statusFilter !== "all") && (
+        {(search || chips.length > 0 || statusFilter !== "all") && (
           <span className="text-xs text-muted-foreground shrink-0">
             {currentData.length} result{currentData.length !== 1 ? "s" : ""}
           </span>
         )}
+
+        {drainTruncated && (
+          <span className="text-xs text-amber-700 dark:text-amber-500 shrink-0">
+            Showing the first {DRAIN_ROW_LIMIT.toLocaleString()} rows — filters and sorting cover these only.
+          </span>
+        )}
       </div>
+
+      {/* Hidden-selection guard. Bulk actions operate on the whole selection, so a
+          selected row that a filter has hidden is about to be acted on unseen. */}
+      {hiddenSelectedCount > 0 && (
+        <div className="flex items-center gap-2 px-4 py-1.5 border-b shrink-0 bg-amber-50 dark:bg-amber-950/20 text-xs text-amber-900 dark:text-amber-300">
+          <span>
+            <span className="font-semibold">{selectedIds.size} selected</span> · {hiddenSelectedCount} hidden by filters
+          </span>
+          {visibleSelectedIds.length > 0 ? (
+            <button onClick={keepOnlyVisibleSelected} className="underline underline-offset-2 hover:no-underline font-medium">
+              Keep only the {visibleSelectedIds.length} visible
+            </button>
+          ) : (
+            <span className="text-amber-700 dark:text-amber-400">
+              None of the selected rows are on screen. Clear the filters to review them.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* ── Tabs + Pagination + Date range ── */}
       <div className="flex items-center px-4 border-b shrink-0 bg-background">
@@ -3404,8 +3625,10 @@ function AdsManagerContent() {
                   </span>
                 )}
 
-                {/* Hierarchical filter badge */}
-                {!search && statusFilter === "all" && badge && (
+                {/* Hierarchical filter badge. Shown whenever the hierarchy filter is
+                    on — it used to hide as soon as anything was typed in the search
+                    box, leaving an active drill-down with no visible indicator. */}
+                {badge && (
                   <span className="flex items-center gap-px px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full font-bold leading-none">
                     {badge.count}
                     <span
@@ -3677,7 +3900,7 @@ function AdsManagerContent() {
                 moment they are. Opaque here and on the three frozen cells below. */}
             <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted border-b border-[#e4e6eb] dark:border-gray-800">
               <tr>
-                <th className={cn(FROZEN_W.check, "px-2 sticky z-20", FROZEN_LEFT.check, FROZEN_HEAD_BG)}>
+                <th className={cn(FROZEN_W.check, "px-2 text-left sticky z-20", FROZEN_LEFT.check, FROZEN_HEAD_BG)}>
                   <input ref={headerCheckRef} type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
                 </th>
                 <th className={cn(FROZEN_W.toggle, "px-3 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground resize-x overflow-auto sticky z-20", FROZEN_LEFT.toggle, FROZEN_HEAD_BG)}>Off/On</th>
@@ -3796,8 +4019,10 @@ function AdsManagerContent() {
                     <Fragment key={c.id}>
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
                         <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                          {/* onClick, not onChange — the range gesture needs shiftKey/ctrlKey off the mouse event. */}
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
-                            onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(c.id) : s.add(c.id); return s })} />
+                            onChange={() => {}}
+                            onClick={e => toggleRowSelection(c.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
                         <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(c.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />}
@@ -3850,7 +4075,8 @@ function AdsManagerContent() {
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
                         <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
-                            onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
+                            onChange={() => {}}
+                            onClick={e => toggleRowSelection(a.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
                         <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
@@ -3905,7 +4131,8 @@ function AdsManagerContent() {
                       <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
                         <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
-                            onChange={() => setSelectedIds(prev => { const s = new Set(prev); isSel ? s.delete(a.id) : s.add(a.id); return s })} />
+                            onChange={() => {}}
+                            onClick={e => toggleRowSelection(a.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
                         <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
@@ -4122,24 +4349,115 @@ function AdsManagerContent() {
         </SheetContent>
       </Sheet>
 
-      {/* ── Delete Confirm Dialog ── */}
-      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              Delete {selectedIds.size} {tab === "campaigns" ? "campaign" : tab === "adsets" ? "ad set" : "ad"}{selectedIds.size > 1 ? "s" : ""}?
-            </DialogTitle>
-            <DialogDescription>
-              This will permanently delete the selected {tab === "campaigns" ? "campaign(s)" : tab === "adsets" ? "ad set(s)" : "ad(s)"} from Facebook. This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)} disabled={isDeleting}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-              {isDeleting && <IconLoader2 className="mr-2 size-4 animate-spin" />}
-              Delete{selectedIds.size > 1 ? ` (${selectedIds.size})` : ""}
-            </Button>
-          </DialogFooter>
+      {/* ── Delete Confirm Dialog ──
+          The old version named a count and a level and nothing else. It could not
+          show that some of those objects were off screen, which is exactly the state
+          a range selection plus a filter produces. Meta deletion is irreversible and
+          there is no feature flag to stage it behind (TD-12), so this dialog is the
+          only brake: it names the objects, states the hidden ones, and — above
+          TYPED_DELETE_CONFIRM_THRESHOLD — asks for the count to be typed. */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={open => {
+        setDeleteConfirmOpen(open)
+        if (open) { setDeleteScope("all"); setDeleteListExpanded(false); setDeleteTypedConfirm("") }
+      }}>
+        <DialogContent className="max-w-md">
+          {(() => {
+            const targetIds = deleteScope === "visible" ? visibleSelectedIds : Array.from(selectedIds)
+            const count = targetIds.length
+            const noun = tab === "campaigns" ? "campaign" : tab === "adsets" ? "ad set" : "ad"
+            const nouns = `${noun}${count === 1 ? "" : "s"}`
+            // From the whole loaded tab, not `currentData` — the hidden rows are the
+            // ones whose names matter most here, and they are not in `currentData`.
+            const nameById = new Map(
+              (tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads).map(r => [r.id, r.name])
+            )
+            const rows = targetIds.map(id => ({
+              id,
+              name: nameById.get(id) ?? id,
+              hidden: !visibleSelectedIds.includes(id),
+            }))
+            const shown = deleteListExpanded ? rows : rows.slice(0, 3)
+            const hiddenInTarget = rows.filter(r => r.hidden).length
+            const needsTyped = count > TYPED_DELETE_CONFIRM_THRESHOLD
+            const confirmBlocked = isDeleting || count === 0 || (needsTyped && deleteTypedConfirm.trim() !== String(count))
+
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-destructive">
+                    <IconTrash className="size-4 shrink-0" />
+                    Delete {count} {nouns} from Meta?
+                  </DialogTitle>
+                  <DialogDescription>
+                    This cannot be undone. Meta deletes these permanently and AdLauncher cannot restore them.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {hiddenInTarget > 0 && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-300 space-y-1.5">
+                    <p>
+                      <span className="font-semibold">{hiddenInTarget} of these are hidden by your filters</span> — they are not on
+                      screen, but they will be deleted.
+                    </p>
+                    {visibleSelectedIds.length > 0 && (
+                      <button
+                        onClick={() => { setDeleteScope("visible"); setDeleteTypedConfirm("") }}
+                        className="underline underline-offset-2 hover:no-underline font-medium"
+                      >
+                        Delete only the {visibleSelectedIds.length} visible
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="text-sm space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Will be deleted</p>
+                  <ul className="max-h-40 overflow-y-auto space-y-0.5">
+                    {shown.map(r => (
+                      <li key={r.id} className="flex items-center gap-2 text-xs">
+                        <span className="truncate">{r.name}</span>
+                        {r.hidden && <span className="shrink-0 text-[10px] text-amber-700 dark:text-amber-500">hidden</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  {rows.length > shown.length && (
+                    <button onClick={() => setDeleteListExpanded(true)} className="text-xs text-primary hover:underline">
+                      … and {rows.length - shown.length} more — show all
+                    </button>
+                  )}
+                </div>
+
+                {tab === "campaigns" && (
+                  // No number: child counts are not loaded on this tab, and a guessed
+                  // one would be worse than none.
+                  <p className="text-xs text-muted-foreground">
+                    Every ad set and ad inside these campaigns will also be deleted on Meta.
+                  </p>
+                )}
+
+                {needsTyped && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground">Type <span className="font-semibold text-foreground">{count}</span> to confirm</label>
+                    <Input
+                      value={deleteTypedConfirm}
+                      onChange={e => setDeleteTypedConfirm(e.target.value)}
+                      placeholder={String(count)}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                )}
+
+                <DialogFooter>
+                  {/* Cancel is the default focus and Enter must not reach Delete. */}
+                  <Button variant="outline" autoFocus onClick={() => setDeleteConfirmOpen(false)} disabled={isDeleting}>Cancel</Button>
+                  <Button variant="destructive" onClick={handleDelete} disabled={confirmBlocked}>
+                    {isDeleting && <IconLoader2 className="mr-2 size-4 animate-spin" />}
+                    Delete {count} {nouns}
+                  </Button>
+                </DialogFooter>
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 
