@@ -814,15 +814,22 @@ function formatBidStrategy(raw: string | null | undefined): string {
 }
 
 function DeliveryBadge({ effective_status, learning, allAdsOff }: { effective_status: string; budget_remaining?: string; learning?: LearningStageInfo; allAdsOff?: boolean }) {
-  // Campaigns have no learning state here → Active / Off only.
-  // Ad sets and ads pass learning_stage_info → keep Meta's Learning state.
-  // Budget remaining (including $0.00 remaining) must not turn Active into a warning state.
-  const isActive = effective_status === "ACTIVE" && !allAdsOff
-  const learnStatus = isActive ? learning?.status : undefined
+  const status = effective_status || "UNKNOWN"
+  const normalizedStatus = status.toUpperCase()
+  const learnStatus = normalizedStatus === "ACTIVE" && !allAdsOff ? learning?.status : undefined
   const isLearning = learnStatus === "LEARNING"
   const isLearningLimited = learnStatus === "LEARNING_LIMITED"
-  const dot = isLearning || isLearningLimited ? "bg-[#1877f2]" : isActive ? "bg-[#31a24c]" : "bg-[#8a8d91]"
-  const label = allAdsOff ? "Ad OFF" : isLearning ? "Learning" : isLearningLimited ? "Learning limited" : isActive ? "Active" : "Off"
+  const titleCase = (s: string) => s.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+  const label = isLearning || isLearningLimited ? titleCase(learnStatus!) : titleCase(status)
+  const dot = isLearning
+    ? "bg-[#1877f2]"
+    : isLearningLimited || normalizedStatus === "PENDING_REVIEW" || normalizedStatus === "IN_PROCESS"
+      ? "bg-[#f59e0b]"
+      : normalizedStatus === "ACTIVE" && !allAdsOff
+        ? "bg-[#31a24c]"
+        : normalizedStatus === "DISAPPROVED" || normalizedStatus === "WITH_ISSUES" || normalizedStatus === "PENDING_BILLING_INFO"
+          ? "bg-[#e41e3f]"
+          : "bg-[#8a8d91]"
   return (
     <span className="flex items-center gap-1.5 text-sm font-medium text-[#1c2b33] dark:text-gray-300">
       <span className={cn("size-[7px] rounded-full shrink-0", dot)} />
@@ -2001,14 +2008,13 @@ function AdsManagerContent() {
     }
     if (sortField) {
       list = [...list].sort((a, b) => {
-        let av = 0, bv = 0
-        if (sortField === "spend") { av = getSpend(a); bv = getSpend(b) }
-        else if (sortField === "name") return sortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
-        else if (sortField === "budget") {
-          const getBudget = (x: any) => parseInt(x.daily_budget || x.lifetime_budget || "0")
-          av = getBudget(a); bv = getBudget(b)
+        const av = sortValue(sortField, a)
+        const bv = sortValue(sortField, b)
+        if (typeof av === "string" || typeof bv === "string") {
+          const as = String(av ?? ""), bs = String(bv ?? "")
+          return sortDir === "asc" ? as.localeCompare(bs) : bs.localeCompare(as)
         }
-        return sortDir === "asc" ? av - bv : bv - av
+        return sortDir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number)
       })
     } else {
       // Default order = newest created first, at all three levels. Meta returns campaigns,
@@ -2625,6 +2631,7 @@ function AdsManagerContent() {
       case "cost_per_result": { const count = getResults(row, objective).count; return count ? spend / count : null }
       case "budget": return parseFloat((row as any).daily_budget || (row as any).lifetime_budget || "0") / 100
       case "lifetime_budget": return parseFloat((row as any).lifetime_budget || "0") / 100
+      case "budget_remaining": return parseFloat((row as any).budget_remaining || "0") / 100
       case "impressions": return parseFloat(ins?.impressions || "0")
       case "reach": return parseFloat(ins?.reach || "0")
       case "clicks": return parseFloat(ins?.clicks || "0")
@@ -2640,7 +2647,54 @@ function AdsManagerContent() {
       case "content_views": return getActionValue(ins, "view_content")
       case "video_views_3s": return getActionValue(ins, "video_view")
       case "post_engagements": return getActionValue(ins, "post_engagement")
+      case "cpm": { const imp = parseFloat(ins?.impressions || "0"); return imp ? spend / imp * 1000 : null }
+      case "cpc": { const cl = parseFloat(ins?.clicks || "0"); return cl ? spend / cl : null }
+      case "ctr": { const imp = parseFloat(ins?.impressions || "0"); return imp ? parseFloat(ins?.clicks || "0") / imp : null }
+      case "cost_per_link_click": { const lc = parseFloat(ins?.inline_link_clicks || "0"); return lc ? spend / lc : null }
+      case "cost_per_unique_click": { const uc = parseFloat(ins?.unique_clicks || "0"); return uc ? spend / uc : null }
+      case "unique_link_ctr": { const r = parseFloat(ins?.reach || "0"); return r ? parseFloat(ins?.unique_inline_link_clicks || "0") / r : null }
+      case "frequency": return parseFloat(ins?.frequency || "0")
+      case "roas": { const v = getActionValueAmount(ins, "omni_purchase"); return spend ? v / spend : null }
+      case "cost_per_purchase": { const p = getActionValue(ins, "omni_purchase"); return p ? spend / p : null }
+      case "avg_order_value": { const p = getActionValue(ins, "omni_purchase"); const v = getActionValueAmount(ins, "omni_purchase"); return p ? v / p : null }
+      case "cost_per_lead": { const l = getActionValue(ins, "lead"); return l ? spend / l : null }
+      case "cost_per_add_to_cart": { const a = getActionValue(ins, "add_to_cart"); return a ? spend / a : null }
+      case "cost_per_initiate_checkout": { const c = getActionValue(ins, "initiate_checkout"); return c ? spend / c : null }
+      case "purchase_conv_rate": { const cl = parseFloat(ins?.clicks || "0"); const p = getActionValue(ins, "omni_purchase"); return cl ? p / cl : null }
+      case "lpv_rate": { const lc = parseFloat(ins?.inline_link_clicks || "0"); const lpv = getActionValue(ins, "landing_page_view"); return lc ? lpv / lc : null }
+      case "video_25": return getActionValue(ins, "video_p25_watched_actions")
+      case "video_50": return getActionValue(ins, "video_p50_watched_actions")
+      case "video_75": return getActionValue(ins, "video_p75_watched_actions")
+      case "video_100": return getActionValue(ins, "video_p100_watched_actions")
+      case "avg_watch_time": return getActionValue(ins, "video_avg_time_watched_actions")
       default: return null
+    }
+  }
+
+  function sortValue(field: string, row: Campaign | AdSet | Ad): number | string | null {
+    const r = row as any
+    switch (field) {
+      case "name": return r.name ?? ""
+      case "delivery":
+      case "effective_status": return (r.effective_status || r.status || "").toString()
+      case "objective": return (r.objective || "").toString()
+      case "bid_strategy": return (r.bid_strategy || "").toString()
+      case "buying_type": return (r.buying_type || "").toString()
+      case "optimization_goal": return (r.optimization_goal || "").toString()
+      case "attribution_setting": return (r.attribution_setting || "").toString()
+      case "schedule_start": return r.start_time || r.start || ""
+      case "schedule_end": return r.end_time || r.end || ""
+      case "date_created": return r.created_time || ""
+      case "updated_time": return r.updated_time || ""
+      case "account_id": return (r.account_id || "").toString()
+      case "results": {
+        const obj = tab === "campaigns" ? r.objective : campaigns.find(c => c.id === r.campaign_id)?.objective
+        return getResults(row, obj).count
+      }
+      default: {
+        const obj = tab === "campaigns" ? r.objective : campaigns.find(c => c.id === r.campaign_id)?.objective
+        return resolveMetricNumber(field, getInsight(row), row, obj)
+      }
     }
   }
 

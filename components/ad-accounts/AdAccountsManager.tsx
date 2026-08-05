@@ -1,7 +1,8 @@
-"use client"
+﻿"use client"
 
 import { useCallback, useEffect, useState } from "react"
 import { AdAccountPill } from "@/components/shared/ad-account-pill"
+import { AccountOverviewCards } from "@/components/ad-accounts/AccountOverviewCards"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -18,7 +19,7 @@ import {
 type AccountStatusFilter = "all" | "active" | "disabled"
 type AccountOwnershipFilter = "all" | "own" | "agency"
 type AccountOwnership = "own" | "agency" | "unknown"
-type AccountTab = "accounts" | "spending-limit"
+type AccountTab = "accounts" | "overview"
 
 interface ManagedAdAccount {
   id: string
@@ -114,7 +115,7 @@ export function AdAccountsManager() {
   const [accounts, setAccounts] = useState<ManagedAdAccount[]>([])
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<AccountStatusFilter>("active")
-  const [ownershipFilter, setOwnershipFilter] = useState<AccountOwnershipFilter>("agency")
+  const [ownershipFilter, setOwnershipFilter] = useState<AccountOwnershipFilter>("all")
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [error, setError] = useState("")
@@ -170,7 +171,7 @@ export function AdAccountsManager() {
   }, [])
 
   useEffect(() => {
-    if (activeTab === "spending-limit" && selectedAccountId) {
+    if (activeTab === "overview" && selectedAccountId) {
       fetchLimitSnapshots(selectedAccountId)
     }
   }, [activeTab, selectedAccountId, fetchLimitSnapshots])
@@ -276,29 +277,29 @@ export function AdAccountsManager() {
 
   const FILTER_BTN = (active: boolean) =>
     cn("flex h-8 items-center px-3.5 text-sm font-medium transition-all rounded-full",
-      active ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground")
+      active ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground")
 
   return (
     <div className="mx-auto w-full max-w-[1440px] space-y-4">
 
-      {/* ── Top card ─────────────────────────────────────────────── */}
-      <div className="relative z-10 overflow-visible rounded-2xl bg-card shadow-sm ring-1 ring-ring/10">
+      {/* â”€â”€ Top card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <div className="relative z-10 overflow-visible rounded-xl border border-border bg-card">
 
         {/* Tabs */}
         <div className="flex h-11 items-center gap-6 border-b border-border px-6">
-          {(["accounts", "spending-limit"] as AccountTab[]).map(tab => (
+          {(["accounts", "overview"] as AccountTab[]).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)}
               className={cn("flex h-full items-center gap-1.5 border-b-2 text-sm font-semibold transition-colors",
                 activeTab === tab
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               )}>
-              {tab === "accounts" ? "Ad Accounts" : "Account Spending Limit"}
+              {tab === "accounts" ? "Ad Accounts" : "Account Overview"}
             </button>
           ))}
         </div>
 
-        {/* ── Ad Accounts controls ── */}
+        {/* â”€â”€ Ad Accounts controls â”€â”€ */}
         {activeTab === "accounts" ? (
           <div className="px-6 py-4 space-y-3">
             {/* Row 1: title + search + sync */}
@@ -347,7 +348,7 @@ export function AdAccountsManager() {
 
               {/* TYPE filter */}
               <div className="flex items-center gap-0.5 rounded-full border border-border bg-muted/50 p-0.5">
-                <span className="px-2.5 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">Type</span>
+                <span className="px-2.5 text-xs font-medium text-muted-foreground">Type</span>
                 {(["all", "agency", "own"] as AccountOwnershipFilter[]).map(t => (
                   <button key={t} onClick={() => setOwnershipFilter(t)} className={FILTER_BTN(ownershipFilter === t)}>
                     {t === "all" ? "All" : t === "agency" ? "Agency" : "Own"}
@@ -357,7 +358,7 @@ export function AdAccountsManager() {
 
               {/* STATUS filter */}
               <div className="flex items-center gap-0.5 rounded-full border border-border bg-muted/50 p-0.5">
-                <span className="px-2.5 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">Status</span>
+                <span className="px-2.5 text-xs font-medium text-muted-foreground">Status</span>
                 {(["all", "active", "disabled"] as AccountStatusFilter[]).map(s => (
                   <button key={s} onClick={() => setStatusFilter(s)}
                     className={cn(FILTER_BTN(statusFilter === s), "gap-1.5")}>
@@ -372,14 +373,14 @@ export function AdAccountsManager() {
 
               <div className="mx-1 h-4 w-px bg-border" />
 
-              {/* DATE filter — keep FROM/TO/Clear together so they never wrap apart */}
+              {/* DATE filter â€” keep FROM/TO/Clear together so they never wrap apart */}
               <div className="flex shrink-0 items-center gap-2">
                 <div className={cn(
                   "flex items-center gap-2 rounded-full border px-3 py-1.5 transition-colors",
                   hasAcctDateFilter ? "border-primary bg-primary/10" : "border-border bg-muted/50"
                 )}>
                   <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")} />
-                  <span className={cn("text-xs font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")}>From</span>
+                  <span className={cn("text-xs font-medium", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")}>From</span>
                   <input
                     type="date"
                     value={acctDateFrom}
@@ -394,7 +395,7 @@ export function AdAccountsManager() {
                   hasAcctDateFilter ? "border-primary bg-primary/10" : "border-border bg-muted/50"
                 )}>
                   <IconCalendar className={cn("size-3.5 shrink-0", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")} />
-                  <span className={cn("text-xs font-extrabold uppercase tracking-wide", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")}>To</span>
+                  <span className={cn("text-xs font-medium", hasAcctDateFilter ? "text-primary" : "text-muted-foreground")}>To</span>
                   <input
                     type="date"
                     value={acctDateTo}
@@ -419,18 +420,18 @@ export function AdAccountsManager() {
           </div>
 
         ) : (
-        /* ── Spending Limit controls ── */
+        /* ── Account Overview controls ── */
           <div className="px-6 py-4 space-y-3">
             {/* Row 1: title + account selector + sync */}
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
-                <h2 className="text-lg font-bold text-foreground">Account Spending Limit</h2>
+                <h2 className="text-lg font-bold text-foreground">Account Overview</h2>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {selectedAccount ? `${selectedAccount.name} · ${selectedAccount.account_id}` : "Select an ad account"}
                 </p>
               </div>
 
-              {/* Account dropdown — the shared pill in controlled mode. This page is the one
+              {/* Account dropdown â€” the shared pill in controlled mode. This page is the one
                   consumer that does not read the AdAccountProvider: it owns its own `accounts`
                   list (the Meta sync result, including accounts the provider filters out) and it
                   keys the selection by `account_id`, not `id`. Hence the explicit props. */}
@@ -460,7 +461,7 @@ export function AdAccountsManager() {
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5">
                 <IconCalendar className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">From</span>
+                <span className="text-xs font-medium text-muted-foreground">From</span>
                 <input
                   type="date"
                   value={dateFrom}
@@ -472,7 +473,7 @@ export function AdAccountsManager() {
 
               <div className="flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1.5">
                 <IconCalendar className="size-3.5 shrink-0 text-muted-foreground" />
-                <span className="text-xs font-extrabold uppercase tracking-wide text-muted-foreground">To</span>
+                <span className="text-xs font-medium text-muted-foreground">To</span>
                 <input
                   type="date"
                   value={dateTo}
@@ -503,7 +504,7 @@ export function AdAccountsManager() {
         )}
       </div>
 
-      {/* ── Error ── */}
+      {/* â”€â”€ Error â”€â”€ */}
       {error && (
         <div className="flex items-center gap-2 rounded-xl border border-[#E41E3F]/20 bg-[#FFF0F3] px-4 py-3 text-sm font-medium text-[#C80A28]">
           <IconAlertCircle className="size-4 shrink-0" />
@@ -511,10 +512,10 @@ export function AdAccountsManager() {
         </div>
       )}
 
-      {/* ── Ad Accounts table ── */}
+      {/* â”€â”€ Ad Accounts table â”€â”€ */}
       {activeTab === "accounts" ? (
         <>
-          <div className="overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-ring/10">
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
             <table data-table="comfortable" className="w-full min-w-[1100px]">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
@@ -535,7 +536,7 @@ export function AdAccountsManager() {
                   <tr>
                     <td colSpan={11} className="py-16 text-center">
                       <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-primary" />
-                      <p className="text-sm text-muted-foreground">{historicalLoading ? "Loading historical data…" : "Loading ad accounts…"}</p>
+                      <p className="text-sm text-muted-foreground">{historicalLoading ? "Loading historical dataâ€¦" : "Loading ad accountsâ€¦"}</p>
                     </td>
                   </tr>
                 ) : displayRows.length === 0 ? (
@@ -636,9 +637,16 @@ export function AdAccountsManager() {
         </>
 
       ) : (
-      /* ── Spending Limit table ── */
-        <div className="overflow-x-auto rounded-2xl bg-card shadow-sm ring-1 ring-ring/10">
-          <table data-table="comfortable" className="w-full min-w-[640px]">
+        <>
+          <AccountOverviewCards account={selectedAccount} />
+          <div className="flex items-center justify-between px-1 pt-2">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Spending Limit History</h2>
+              <p className="text-xs text-muted-foreground">Snapshot history saved by AdLauncher sync.</p>
+            </div>
+          </div>
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
+            <table data-table="comfortable" className="w-full min-w-[640px]">
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 {["Start date", "End date", "Activity"].map(label => (
@@ -653,7 +661,7 @@ export function AdAccountsManager() {
                 <tr>
                   <td colSpan={3} className="py-16 text-center">
                     <IconLoader2 className="mx-auto mb-2 size-5 animate-spin text-primary" />
-                    <p className="text-sm text-muted-foreground">Loading spending limit history…</p>
+                    <p className="text-sm text-muted-foreground">Loading spending limit historyâ€¦</p>
                   </td>
                 </tr>
               ) : spendingLimitRows.length === 0 ? (
@@ -684,6 +692,7 @@ export function AdAccountsManager() {
             </tbody>
           </table>
         </div>
+      </>
       )}
     </div>
   )

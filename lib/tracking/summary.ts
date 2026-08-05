@@ -9,6 +9,8 @@ export type TrackingBatch = {
   created_at?: string | null
   ad_account_name?: string | null
   errors?: unknown
+  created_ads?: unknown
+  creative_ids?: string[]
 }
 
 export type TrackingMemberSummary = {
@@ -18,6 +20,7 @@ export type TrackingMemberSummary = {
   fullSuccess: number
   nonSuccess: number
   adsCreated: number
+  averageSessionDurationMs: number | null
 }
 
 export type TrackingCreative = {
@@ -32,6 +35,7 @@ function createdAds(batch: TrackingBatch) {
 
 export function summarizeLaunchBatches(batches: TrackingBatch[]) {
   const team = new Map<string, TrackingMemberSummary>()
+  const memberDurations = new Map<string, number[]>()
   const durations = batches.flatMap(batch => batch.duration_ms === null ? [] : [batch.duration_ms])
   const fullSuccess = batches.filter(batch => batch.status === "success").length
   const adsCreated = batches.reduce((total, batch) => total + createdAds(batch), 0)
@@ -44,12 +48,19 @@ export function summarizeLaunchBatches(batches: TrackingBatch[]) {
       fullSuccess: 0,
       nonSuccess: 0,
       adsCreated: 0,
+      averageSessionDurationMs: null,
     }
     member.batches += 1
     member.fullSuccess += Number(batch.status === "success")
     member.nonSuccess += Number(batch.status !== "success")
     member.adsCreated += createdAds(batch)
+    if (batch.duration_ms !== null) memberDurations.set(batch.user_id, [...(memberDurations.get(batch.user_id) || []), batch.duration_ms])
     team.set(batch.user_id, member)
+  }
+
+  for (const member of team.values()) {
+    const values = memberDurations.get(member.userId) || []
+    member.averageSessionDurationMs = values.length ? Math.round(values.reduce((total, duration) => total + duration, 0) / values.length) : null
   }
 
   return {
@@ -131,4 +142,50 @@ export function summarizeFailureReasons(batches: TrackingBatch[]) {
   return [...counts.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label))
+}
+
+export function isoWeekMonday(value: Date | string) {
+  const date = new Date(`${toVietnamDateKey(value)}T00:00:00.000Z`)
+  const day = date.getUTCDay()
+  const offset = (day + 6) % 7
+  date.setUTCDate(date.getUTCDate() - offset)
+  return date.toISOString().slice(0, 10)
+}
+
+export type TrackingTimeSeriesPoint = {
+  bucket: string
+  batches: number
+  fullSuccess: number
+  nonSuccess: number
+  adsCreated: number
+  avgDurationMs: number | null
+}
+
+export function summarizeLaunchBatchesTimeSeries(batches: TrackingBatch[], days: number): TrackingTimeSeriesPoint[] {
+  const weekly = days >= 90
+  const buckets = new Map<string, { batches: number; fullSuccess: number; nonSuccess: number; adsCreated: number; durations: number[] }>()
+  const bucketKey = (value: Date | string) => (weekly ? isoWeekMonday(value) : toVietnamDateKey(value))
+
+  for (const batch of batches) {
+    if (!batch.created_at) continue
+    const key = bucketKey(batch.created_at)
+    const point = buckets.get(key) || { batches: 0, fullSuccess: 0, nonSuccess: 0, adsCreated: 0, durations: [] }
+    point.batches += 1
+    point.fullSuccess += Number(batch.status === "success")
+    point.nonSuccess += Number(batch.status !== "success")
+    point.adsCreated += createdAds(batch)
+    if (batch.duration_ms !== null) point.durations.push(batch.duration_ms)
+    buckets.set(key, point)
+  }
+
+  return [...buckets.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([bucket, point]) => ({
+      bucket,
+      batches: point.batches,
+      fullSuccess: point.fullSuccess,
+      nonSuccess: point.nonSuccess,
+      adsCreated: point.adsCreated,
+      avgDurationMs: point.durations.length ? Math.round(point.durations.reduce((total, duration) => total + duration, 0) / point.durations.length) : null,
+    }))
 }
