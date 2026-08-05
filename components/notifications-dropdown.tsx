@@ -126,11 +126,12 @@ export function NotificationsDropdown({
   onRefresh,
   onClose,
 }: Props) {
+  const router = useRouter()
   const ref = useRef<HTMLDivElement>(null)
   // The sidebar is `overflow-hidden`, so an absolutely-positioned panel would be
   // clipped. Fixed + measured beats the old hardcoded `left-[210px] top-12`, which
   // broke the moment the sidebar was collapsed.
-  const [pos, setPos] = useState<{ left: number; bottom: number } | null>(null)
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
   useLayoutEffect(() => {
     const place = () => {
@@ -139,7 +140,7 @@ export function NotificationsDropdown({
       const left = Math.min(rect.right + GAP, window.innerWidth - PANEL_WIDTH - GAP)
       setPos({
         left: Math.max(GAP, left),
-        bottom: Math.max(GAP, window.innerHeight - rect.bottom),
+        top: Math.min(rect.bottom + GAP, window.innerHeight - GAP),
       })
     }
     place()
@@ -187,18 +188,17 @@ export function NotificationsDropdown({
       ref={ref}
       role="dialog"
       aria-label="Notifications"
-      // Anchored to the bell in the sidebar footer: opens upward and to the right, so
-      // it never covers the button and never runs off the bottom of the viewport.
+      // The bell is at the top of the sidebar nav, so the preview opens down-right.
       className={cn(
         "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl",
         !pos && "invisible"
       )}
       style={{
         left: pos?.left ?? 0,
-        bottom: pos?.bottom ?? 0,
+        top: pos?.top ?? 0,
         width: PANEL_WIDTH,
         maxWidth: "calc(100vw - 16px)",
-        maxHeight: "min(480px, calc(100vh - 32px))",
+        maxHeight: pos ? `calc(100vh - ${pos.top + GAP}px)` : "480px",
       }}
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
@@ -253,6 +253,18 @@ export function NotificationsDropdown({
             </div>
           ))
         )}
+      </div>
+
+      <div className="border-t border-border px-4 py-2.5 shrink-0">
+        <button
+          onClick={() => {
+            router.push("/notifications")
+            onClose()
+          }}
+          className="w-full text-center text-xs font-medium text-primary hover:underline"
+        >
+          View all notifications
+        </button>
       </div>
     </div>
   )

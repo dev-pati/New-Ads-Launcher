@@ -20,7 +20,10 @@ export type AppNotification = {
   action?: string | null
   changes?: FieldChange[] | null
   read_at?: string | null
+  archived_at?: string | null
 }
+
+type NotificationView = "inbox" | "archived"
 
 /**
  * Live notification feed.
@@ -40,24 +43,30 @@ export type AppNotification = {
  */
 const SAFETY_REFETCH_MS = 60_000
 
-export function useNotifications() {
+export function useNotifications({ view = "inbox" }: { view?: NotificationView } = {}) {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [loading, setLoading] = useState(false)
   const [live, setLive] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const fetchNotifications = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true)
     try {
-      const res = await fetch("/api/notifications", { cache: "no-store" })
-      if (!res.ok) return
+      const res = await fetch(`/api/notifications?view=${view}`, { cache: "no-store" })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        throw new Error(data?.error || "Failed to load notifications")
+      }
       const data = await res.json()
       setNotifications(data.notifications || [])
+      setError(null)
     } catch (err) {
       console.error("[notifications] fetch error:", err)
+      setError(err instanceof Error ? err.message : "Failed to load notifications")
     } finally {
       if (!options?.silent) setLoading(false)
     }
-  }, [])
+  }, [view])
 
   const fetchRef = useRef(fetchNotifications)
   fetchRef.current = fetchNotifications
@@ -107,7 +116,12 @@ export function useNotifications() {
               if (gone) setNotifications(prev => prev.filter(n => n.id !== gone))
               return
             }
-            merge(payload.new as AppNotification)
+            const row = payload.new as AppNotification
+            if ((view === "inbox" && row.archived_at) || (view === "archived" && !row.archived_at)) {
+              setNotifications(prev => prev.filter(n => n.id !== row.id))
+              return
+            }
+            merge(row)
           }
         )
         .subscribe(status => {
@@ -123,7 +137,7 @@ export function useNotifications() {
       cancelled = true
       if (channel) createClient().removeChannel(channel)
     }
-  }, [])
+  }, [view])
 
   // Safety net, not the delivery mechanism: covers a socket that reports SUBSCRIBED
   // but has gone quiet, and any row written while the tab was in the background.
@@ -163,7 +177,39 @@ export function useNotifications() {
     }).catch(() => {})
   }, [])
 
+  const updateLifecycle = useCallback(async (id: string, action: "archive" | "restore") => {
+    setNotifications(prev => prev.filter(n => n.id !== id))
+    const res = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, action }),
+    }).catch(() => null)
+    if (!res?.ok) fetchNotifications({ silent: true })
+  }, [fetchNotifications])
+
+  const deleteNotification = useCallback(async (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id))
+    const res = await fetch("/api/notifications", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    }).catch(() => null)
+    if (!res?.ok) fetchNotifications({ silent: true })
+  }, [fetchNotifications])
+
   const unreadCount = notifications.filter(n => !n.is_read).length
 
-  return { notifications, unreadCount, loading, live, markRead, markAllRead, refresh: fetchNotifications }
+  return {
+    notifications,
+    unreadCount,
+    loading,
+    live,
+    error,
+    markRead,
+    markAllRead,
+    archive: (id: string) => updateLifecycle(id, "archive"),
+    restore: (id: string) => updateLifecycle(id, "restore"),
+    deleteNotification,
+    refresh: fetchNotifications,
+  }
 }

@@ -7,6 +7,7 @@ import {
   type NotificationType,
   type ObjectType,
 } from "./types"
+import { notificationCategoryForType } from "./category"
 
 /**
  * The single write path for notifications and the audit log.
@@ -177,7 +178,41 @@ export async function emitNotification(input: EmitInput): Promise<EmitResult> {
   }
 
   // ── Delivery: one row per recipient, idempotent on (user_id, dedupe_key) ───────
-  const v2Rows = recipients.map(userId => ({
+  // Preferences are enforced at the shared delivery seam. Missing schema fails open
+  // so a rollout never silently drops notifications.
+  let deliveryRecipients = recipients
+  const category = notificationCategoryForType(input.type)
+  const { data: preferences, error: preferencesErr } = await db
+    .from("notification_preferences")
+    .select("user_id, in_app_enabled")
+    .eq("org_id", input.orgId)
+    .eq("category", category)
+    .in("user_id", recipients)
+
+  if (preferencesErr) {
+    if (isSchemaGap(preferencesErr)) degraded = true
+    else errors.push(`notification_preferences: ${preferencesErr.message}`)
+  } else {
+    const optedOut = new Set(
+      (preferences ?? [])
+        .filter(preference => !preference.in_app_enabled)
+        .map(preference => preference.user_id as string)
+    )
+    deliveryRecipients = recipients.filter(userId => !optedOut.has(userId))
+  }
+
+  if (deliveryRecipients.length === 0) {
+    return {
+      ...base,
+      ok: errors.length === 0,
+      skipped: true,
+      reason: "all eligible recipients disabled this category",
+      activityLogged: !auditErr,
+      degraded,
+    }
+  }
+
+  const v2Rows = deliveryRecipients.map(userId => ({
     org_id: input.orgId,
     user_id: userId,
     actor_id: input.actorId,
@@ -204,7 +239,7 @@ export async function emitNotification(input: EmitInput): Promise<EmitResult> {
     inserted = data?.length ?? 0
   } else if (isSchemaGap(error)) {
     degraded = true
-    const legacyRows = recipients.map(userId => ({
+    const legacyRows = deliveryRecipients.map(userId => ({
       org_id: input.orgId,
       user_id: userId,
       actor_id: input.actorId,
@@ -224,7 +259,7 @@ export async function emitNotification(input: EmitInput): Promise<EmitResult> {
   return {
     ok: errors.length === 0,
     skipped: false,
-    recipients: recipients.length,
+    recipients: deliveryRecipients.length,
     inserted,
     activityLogged: !auditErr,
     degraded,
