@@ -35,6 +35,35 @@ export interface ClientCreativeMedia {
   // Not a column on `creatives` itself — the row that actually carries "when was this
   // claimed for this ad account" is the assignment, not the creative.
   portal_media_assignments?: { created_at: string }[] | { created_at: string } | null
+  // Portal registry metadata snapshot, populated when the query joined portal_media_items.
+  // Preserves brand/product/format metadata after the asset leaves Creative Portal's
+  // `creative_storage_catalog` view (which only exposes 'available' assets).
+  portal_media_items?: PortalMediaItemRow[] | PortalMediaItemRow | null
+}
+
+export interface PortalMediaItemRow {
+  object_key: string
+  portal_asset_id: string | null
+  file_name: string | null
+  media_type: string | null
+  mime_type: string | null
+  file_size: number | null
+  portal_created_at: string | null
+  brand_id: string | null
+  brand_name: string | null
+  brand_slug: string | null
+  product_id: string | null
+  product_name: string | null
+  language: string | null
+  width: number | null
+  height: number | null
+  duration_seconds: number | null
+  pdp_url: string | null
+  sales_page_url: string | null
+  landing_url: string | null
+  checkout_funnel_url: string | null
+  brief_type: string | null
+  voice_variant: string | null
 }
 
 export function sortCreativesByLatestAssignment<

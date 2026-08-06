@@ -4,6 +4,8 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { listApprovedAssetsByKeys } from "@/lib/supabase/portal-registry"
 import { mediaNodeFromAsset, type MediaNode } from "@/lib/portal-media/tree"
 import { isMissingTable } from "@/lib/tracking/missing-table"
+import { mapCreativeForClient } from "@/lib/creative-media"
+import { getVideoSource } from "@/lib/facebook"
 import type { CreativeMediaStatus } from "@/lib/tracking/creative-table"
 
 export const runtime = "nodejs"
@@ -91,8 +93,7 @@ export async function GET(request: NextRequest) {
 
   const { data: creatives, error: creativeError } = await supabase
     .from("creatives")
-    .select("id,file_name,file_url,media_type,created_at")
-    .eq("org_id", ctx.orgId)
+    .select("id,org_id,file_name,file_url,storage_path,media_type,fb_thumbnail_url,fb_video_id,created_at")
     .or(filters)
     .order("created_at", { ascending: true })
     .limit(1)
@@ -101,22 +102,46 @@ export async function GET(request: NextRequest) {
 
   const creativeRow = creatives?.[0]
   if (!creativeRow) {
-    // The ad runs on an asset this org never uploaded through AdLauncher.
-    return NextResponse.json({ ...base, status: "not_in_adlauncher", file: null, creative: null } satisfies TrackingCreativeMedia)
+    const sourceUrl = videoId ? await getVideoSource(videoId, connection.access_token) : null
+    return NextResponse.json({
+      ...base,
+      status: "not_in_adlauncher",
+      file: null,
+      creative: sourceUrl ? {
+        id: metaBody.creative?.id || videoId || adId,
+        fileName: metaBody.creative?.id || adId,
+        mediaType: "video",
+        fileUrl: sourceUrl,
+        createdAt: null,
+      } : null,
+    } satisfies TrackingCreativeMedia)
   }
 
-  const creative = {
+  // Run the same mapper /api/creatives uses, so R2 storage_path resolves to a playable
+  // media route instead of a raw `r2://...` locator, and Meta CDN URLs are blanked.
+  const mapped = mapCreativeForClient({
     id: creativeRow.id as string,
+    media_type: creativeRow.media_type as "image" | "video",
+    file_url: (creativeRow.file_url as string) ?? "",
+    storage_path: (creativeRow.storage_path as string | null) ?? null,
+    fb_thumbnail_url: (creativeRow.fb_thumbnail_url as string | null) ?? null,
+    fb_video_id: (creativeRow.fb_video_id as string | null) ?? null,
+  })
+  const directVideoUrl = videoId ? await getVideoSource(videoId, connection.access_token) : null
+  const fallbackVideoUrl = directVideoUrl || mapped.file_url || null
+
+  const creative = {
+    id: mapped.id,
     fileName: creativeRow.file_name as string,
     mediaType: (creativeRow.media_type as string) ?? null,
-    fileUrl: (creativeRow.file_url as string) ?? null,
+    fileUrl: fallbackVideoUrl || null,
     createdAt: (creativeRow.created_at as string) ?? null,
   }
 
   const { data: assignments, error: assignmentError } = await supabase
     .from("portal_media_assignments")
     .select("object_key")
-    .eq("org_id", ctx.orgId)
+    .eq("org_id", creativeRow.org_id)
     .eq("creative_id", creative.id)
     .limit(1)
 

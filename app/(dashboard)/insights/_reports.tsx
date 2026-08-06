@@ -16,6 +16,9 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts"
+import { MediaDetailSheet, portalMediaHref } from "@/components/shared/media-detail-sheet"
+import type { TrackingCreativeMedia } from "@/app/api/tracking/creative-media/route"
+import type { MediaDetailFile } from "@/components/shared/media-detail-sheet"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -576,30 +579,229 @@ function EmptyState({ icon: Icon, title, desc }: { icon: any; title: string; des
   )
 }
 
-function ReportAdCard({ ad, metricKeys }: { ad: ReportAd; metricKeys: string[] }) {
+function insightMediaHref(media?: TrackingCreativeMedia | null) {
+  if (!media) return null
+  return media.creative?.fileUrl || (media.file?.assetId ? portalMediaHref(media.file) : null)
+}
+
+function insightMediaDetailHref(media?: TrackingCreativeMedia | null) {
+  if (!media) return null
+  if (media.file?.assetId) return portalMediaHref(media.file)
+  return media.creative?.fileUrl || null
+}
+
+function mediaDetailFileFor(ad: ReportAd | null, media: TrackingCreativeMedia | null): MediaDetailFile | null {
+  if (media?.file) return media.file
+  if (!ad || !media?.creative) return null
+  return {
+    kind: "file",
+    assetId: "",
+    objectKey: "—",
+    name: media.creative.fileName || ad.adName || "—",
+    mimeType: media.creative.mediaType,
+    sizeBytes: null,
+    createdAt: media.creative.createdAt,
+    fileUrl: media.creative.fileUrl,
+    brandId: null,
+    brandName: null,
+    brandSlug: null,
+    productId: null,
+    productName: null,
+    pdpUrl: null,
+    salesPageUrl: null,
+    landingUrl: null,
+    checkoutFunnelUrl: null,
+    language: null,
+    briefType: null,
+    voiceVariant: null,
+    mediaType: media.creative.mediaType,
+    width: null,
+    height: null,
+    durationSeconds: null,
+  }
+}
+
+function mediaDetailNotice(ad: ReportAd | null, media: TrackingCreativeMedia | null, loading?: boolean) {
+  if (loading) return <p className="text-sm text-muted-foreground">Loading synced media data…</p>
+  if (!ad) return null
+  const text = !media
+    ? "No synced media data yet."
+    : media.status === "linked"
+      ? null
+      : media.status === "not_from_portal"
+        ? "AdLauncher creative found. Portal metadata not linked."
+        : media.status === "not_in_adlauncher"
+          ? "This Meta ad was not launched from AdLauncher."
+          : media.status === "no_media_key"
+            ? "Meta did not expose a video ID or image hash for this ad."
+            : media.status === "portal_missing"
+              ? "AdLauncher creative found. Portal metadata no longer available."
+              : null
+  return text ? <p className="text-sm text-muted-foreground">{text}</p> : null
+}
+
+function useInsightMediaDetail() {
+  const [mediaByAdId, setMediaByAdId] = useState<Record<string, TrackingCreativeMedia>>({})
+  const [loadingByAdId, setLoadingByAdId] = useState<Record<string, boolean>>({})
+  const mediaRef = useRef<Record<string, TrackingCreativeMedia>>({})
+  const requestsRef = useRef<Record<string, Promise<TrackingCreativeMedia | null>>>({})
+  const detailSeq = useRef(0)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [detailAd, setDetailAd] = useState<ReportAd | null>(null)
+  const [detailData, setDetailData] = useState<TrackingCreativeMedia | null>(null)
+
+  const loadMedia = useCallback((ad: ReportAd) => {
+    if (!ad.adId || ad.adId.startsWith("lp:")) return Promise.resolve(null)
+    const cached = mediaRef.current[ad.adId]
+    if (cached) return Promise.resolve(cached)
+    const pending = requestsRef.current[ad.adId]
+    if (pending) return pending
+
+    setLoadingByAdId(prev => ({ ...prev, [ad.adId]: true }))
+    const request = fetch(`/api/tracking/creative-media?adId=${encodeURIComponent(ad.adId)}`)
+      .then(async r => {
+        const body = await r.json()
+        if (!r.ok || body.error) throw new Error(body.error || "Could not load media")
+        const data = body as TrackingCreativeMedia
+        mediaRef.current = { ...mediaRef.current, [ad.adId]: data }
+        setMediaByAdId(mediaRef.current)
+        return data
+      })
+      .catch(() => null)
+      .finally(() => {
+        delete requestsRef.current[ad.adId]
+        setLoadingByAdId(prev => ({ ...prev, [ad.adId]: false }))
+      })
+    requestsRef.current[ad.adId] = request
+    return request
+  }, [])
+
+  const openMediaDetail = useCallback((ad: ReportAd) => {
+    const seq = ++detailSeq.current
+    setDetailAd(ad)
+    setDetailData(mediaRef.current[ad.adId] ?? null)
+    setDetailOpen(true)
+    void loadMedia(ad).then(data => { if (detailSeq.current === seq) setDetailData(data) })
+  }, [loadMedia])
+
+  const detailLoading = detailAd ? loadingByAdId[detailAd.adId] && !mediaRef.current[detailAd.adId] : false
+  const detailFile = mediaDetailFileFor(detailAd, detailData)
+  const detailHref = insightMediaDetailHref(detailData)
+
+  return {
+    mediaByAdId,
+    loadingByAdId,
+    loadMedia,
+    openMediaDetail,
+    sheet: (
+      <MediaDetailSheet
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        file={detailFile}
+        notice={mediaDetailNotice(detailAd, detailData, detailLoading)}
+        viewMediaHref={detailHref}
+      />
+    ),
+  }
+}
+
+function HoverVideo({ src }: { src: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const el = videoRef.current
+    if (el) {
+      el.load()
+      el.play().catch(() => {})
+    }
+  }, [src])
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      className="w-full h-full object-cover"
+      muted
+      loop
+      playsInline
+      preload="auto"
+    />
+  )
+}
+
+function AdMediaThumbnail({
+  ad, media, loading, className, iconClassName, onPrime, onOpen,
+}: {
+  ad: ReportAd
+  media?: TrackingCreativeMedia
+  loading?: boolean
+  className: string
+  iconClassName: string
+  onPrime: (ad: ReportAd) => Promise<TrackingCreativeMedia | null>
+  onOpen: (ad: ReportAd) => void
+}) {
+  const [hovered, setHovered] = useState(false)
+  const href = insightMediaHref(media)
+  const showVideo = ad.isVideo && hovered && href
+
+  return (
+    <button
+      type="button"
+      className={cn("relative bg-muted overflow-hidden cursor-pointer group/media", className)}
+      title="Open media details"
+      onMouseEnter={() => { setHovered(true); void onPrime(ad) }}
+      onMouseLeave={() => setHovered(false)}
+      onClick={e => { e.stopPropagation(); onOpen(ad) }}
+    >
+      {showVideo ? (
+        <HoverVideo src={href} />
+      ) : ad.thumbnail ? (
+        <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" loading="lazy" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          {ad.isVideo
+            ? <IconPlayerPlay className={cn("text-muted-foreground/30", iconClassName)} />
+            : <IconPhoto className={cn("text-muted-foreground/30", iconClassName)} />}
+        </div>
+      )}
+      {loading && <IconLoader2 className="absolute right-2 top-2 size-3 animate-spin text-white drop-shadow" />}
+    </button>
+  )
+}
+
+function ReportAdCard({
+  ad, metricKeys, media, loadingMedia, onPrimeMedia, onOpenMedia,
+}: {
+  ad: ReportAd
+  metricKeys: string[]
+  media?: TrackingCreativeMedia
+  loadingMedia?: boolean
+  onPrimeMedia: (ad: ReportAd) => Promise<TrackingCreativeMedia | null>
+  onOpenMedia: (ad: ReportAd) => void
+}) {
   const medal = getRankMedal(ad.rank)
   const defs = metricKeys.map(k => ALL_METRICS.find(m => m.key === k)).filter(Boolean) as MetricDef[]
   return (
     <div className="rounded-xl border bg-card overflow-hidden hover:shadow-md transition-shadow group">
       <div className="relative aspect-[4/5] bg-muted">
-        {ad.thumbnail
-          ? <img src={ad.thumbnail} alt={ad.adName} className="w-full h-full object-cover" loading="lazy" />
-          : <div className="w-full h-full flex items-center justify-center">
-              {ad.isVideo
-                ? <IconPlayerPlay className="size-8 text-muted-foreground/30" />
-                : <IconPhoto       className="size-8 text-muted-foreground/30" />}
-            </div>}
+        <AdMediaThumbnail
+          ad={ad}
+          media={media}
+          loading={loadingMedia}
+          className="w-full h-full"
+          iconClassName="size-8"
+          onPrime={onPrimeMedia}
+          onOpen={onOpenMedia}
+        />
         <div className={cn(
-          "absolute top-2 left-2 size-7 rounded-full flex items-center justify-center text-xs font-bold shadow",
+          "absolute top-2 left-2 size-7 rounded-full flex items-center justify-center text-xs font-bold shadow pointer-events-none",
           medal ? "text-black" : "bg-black/60 text-white"
         )} style={medal ? { backgroundColor: medal } : undefined}>
           #{ad.rank}
         </div>
         {ad.isVideo && (
-          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-xs font-bold bg-violet-600 text-white">Video</div>
+          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-xs font-bold bg-violet-600 text-white pointer-events-none">Video</div>
         )}
         {!ad.isVideo && ad.thumbnail && (
-          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-xs font-bold bg-blue-600 text-white">Image</div>
+          <div className="absolute bottom-2 left-2 px-1.5 py-0.5 rounded text-xs font-bold bg-blue-600 text-white pointer-events-none">Image</div>
         )}
       </div>
       <div className="p-3 space-y-2">
@@ -628,6 +830,7 @@ function ReportAdCard({ ad, metricKeys }: { ad: ReportAd; metricKeys: string[] }
 function TableView({
   ads, metricKeys, onSort, sortKey, sortDir,
   selectedIds, onToggle, onToggleAll,
+  mediaByAdId, loadingByAdId, onPrimeMedia, onOpenMedia,
 }: {
   ads: ReportAd[]
   metricKeys: string[]
@@ -637,6 +840,10 @@ function TableView({
   selectedIds?: Set<string>
   onToggle?: (id: string) => void
   onToggleAll?: (ids: string[], allChecked: boolean) => void
+  mediaByAdId: Record<string, TrackingCreativeMedia>
+  loadingByAdId: Record<string, boolean>
+  onPrimeMedia: (ad: ReportAd) => Promise<TrackingCreativeMedia | null>
+  onOpenMedia: (ad: ReportAd) => void
 }) {
   const selectable  = !!onToggle
   const allChecked  = selectable && ads.length > 0 && ads.every(a => selectedIds!.has(a.adId))
@@ -743,13 +950,15 @@ function TableView({
               </td>
               <td className="px-3">
                 <div className="flex items-center gap-2">
-                  <div className="size-8 rounded bg-muted shrink-0 overflow-hidden">
-                    {ad.thumbnail
-                      ? <img src={ad.thumbnail} alt="" className="w-full h-full object-cover" loading="lazy" />
-                      : <div className="w-full h-full flex items-center justify-center">
-                          {ad.isVideo ? <IconPlayerPlay className="size-3 text-muted-foreground/40" /> : <IconPhoto className="size-3 text-muted-foreground/40" />}
-                        </div>}
-                  </div>
+                  <AdMediaThumbnail
+                    ad={ad}
+                    media={mediaByAdId[ad.adId]}
+                    loading={loadingByAdId[ad.adId]}
+                    className="size-8 rounded shadow-sm shrink-0 border border-border/20"
+                    iconClassName="size-3"
+                    onPrime={onPrimeMedia}
+                    onOpen={onOpenMedia}
+                  />
                   <div className="min-w-0">
                     <p className="font-medium truncate max-w-[260px]" title={ad.adName}>{ad.adName}</p>
                     <p className="text-muted-foreground/60 text-xs">Rank #{ad.rank} · {ad.adsetName ? "1 ad" : "—"}</p>
@@ -842,6 +1051,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
   const groupRef  = useRef<HTMLDivElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
   const metricRef = useRef<HTMLDivElement>(null)
+  const mediaDetail = useInsightMediaDetail()
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (dateRef.current   && !dateRef.current.contains(e.target as Node))   setDateOpen(false)
@@ -1375,7 +1585,15 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
             </p>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {paginated.map(ad => (
-                <ReportAdCard key={ad.adId} ad={ad} metricKeys={metricKeys} />
+                <ReportAdCard
+                  key={ad.adId}
+                  ad={ad}
+                  metricKeys={metricKeys}
+                  media={mediaDetail.mediaByAdId[ad.adId]}
+                  loadingMedia={mediaDetail.loadingByAdId[ad.adId]}
+                  onPrimeMedia={mediaDetail.loadMedia}
+                  onOpenMedia={mediaDetail.openMediaDetail}
+                />
               ))}
             </div>
             {displayed.length > perPage && (
@@ -1420,7 +1638,17 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
                 <input type="checkbox" className="size-3.5 rounded" />
                 <span className="text-xs text-muted-foreground font-medium ml-1">{displayed.length}/{ads.length} {displayed.length} ads selected</span>
               </div>
-              <TableView ads={paginated} metricKeys={metricKeys} onSort={handleSort} sortKey={sortKey} sortDir={sortDir} />
+              <TableView
+                ads={paginated}
+                metricKeys={metricKeys}
+                onSort={handleSort}
+                sortKey={sortKey}
+                sortDir={sortDir}
+                mediaByAdId={mediaDetail.mediaByAdId}
+                loadingByAdId={mediaDetail.loadingByAdId}
+                onPrimeMedia={mediaDetail.loadMedia}
+                onOpenMedia={mediaDetail.openMediaDetail}
+              />
             </div>
             <div className="flex items-center justify-between mt-4">
               <p className="text-xs text-muted-foreground">Showing {Math.min(perPage, displayed.length)} results</p>
@@ -1438,6 +1666,7 @@ function StandardReportView({ type }: { type: Exclude<ReportSection, "vs-mode" |
           </div>
         )}
       </div>
+      {mediaDetail.sheet}
     </div>
   )
 }
@@ -1684,6 +1913,7 @@ function VSModeView() {
   const [p2Value, setP2Value]         = useState("")
   const [f2Search, setF2Search]       = useState("")
   const f2Ref = useRef<HTMLDivElement>(null)
+  const mediaDetail = useInsightMediaDetail()
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -1970,7 +2200,15 @@ function VSModeView() {
                   {seg.ads.length > 0 ? (
                     <div className="grid grid-cols-2 gap-3">
                       {seg.ads.slice(0, 2).map(ad => (
-                        <ReportAdCard key={ad.adId} ad={ad} metricKeys={["spend", "results", "costPerResult"]} />
+                        <ReportAdCard
+                          key={ad.adId}
+                          ad={ad}
+                          metricKeys={["spend", "results", "costPerResult"]}
+                          media={mediaDetail.mediaByAdId[ad.adId]}
+                          loadingMedia={mediaDetail.loadingByAdId[ad.adId]}
+                          onPrimeMedia={mediaDetail.loadMedia}
+                          onOpenMedia={mediaDetail.openMediaDetail}
+                        />
                       ))}
                     </div>
                   ) : (
@@ -2003,6 +2241,10 @@ function VSModeView() {
                         selectedIds={seg.sel}
                         onToggle={seg.onToggle}
                         onToggleAll={seg.onToggleAll}
+                        mediaByAdId={mediaDetail.mediaByAdId}
+                        loadingByAdId={mediaDetail.loadingByAdId}
+                        onPrimeMedia={mediaDetail.loadMedia}
+                        onOpenMedia={mediaDetail.openMediaDetail}
                       />
                     : <div className="py-8 text-center text-sm text-muted-foreground">No ads in this segment</div>}
                   <div className="px-4 py-2 border-t bg-muted/5 text-xs text-muted-foreground">
@@ -2014,6 +2256,7 @@ function VSModeView() {
           </>
         )}
       </div>
+      {mediaDetail.sheet}
     </div>
   )
 }
