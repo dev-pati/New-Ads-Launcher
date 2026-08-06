@@ -12,6 +12,10 @@ interface AdAccount {
   amount_spent?: string
   balance?: string
   timezone_name?: string
+  owner_business?: {
+    id: string
+    name?: string
+  }
 }
 
 interface AdAccountContextType {

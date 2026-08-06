@@ -407,6 +407,47 @@ export function RuleFormDialog({
             </p>
           </div>
 
+          {/* Subscribers — Meta user IDs that receive rule results */}
+          <div>
+            <label className="text-sm font-medium mb-1.5 block">Subscribers</label>
+            <div className="flex flex-wrap items-center gap-1.5 border rounded-lg px-2 py-2 text-sm bg-background focus-within:ring-2 focus-within:ring-primary/30 focus-within:border-primary">
+              {(draft.subscribers ?? []).map((id, i) => (
+                <span
+                  key={`${id}-${i}`}
+                  className="inline-flex items-center gap-1 bg-muted rounded-full pl-2.5 pr-1 py-0.5 text-xs"
+                >
+                  {id}
+                  <button
+                    type="button"
+                    onClick={() => patch({ subscribers: (draft.subscribers ?? []).filter((_, idx) => idx !== i) })}
+                    className="rounded-full hover:bg-muted-foreground/20 p-0.5"
+                    aria-label={`Remove ${id}`}
+                  >
+                    <IconX className="size-3" />
+                  </button>
+                </span>
+              ))}
+              <input
+                className="flex-1 min-w-[120px] bg-transparent outline-none text-sm py-0.5"
+                placeholder={((draft.subscribers ?? []).length ? "" : "Meta user IDs, comma or Enter to add")}
+                onKeyDown={e => {
+                  const v = (e.target as HTMLInputElement).value.trim()
+                  if (!v) return
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault()
+                    patch({ subscribers: Array.from(new Set([...(draft.subscribers ?? []), v])) })
+                    ;(e.target as HTMLInputElement).value = ""
+                  } else if (e.key === "Backspace" && !v && (draft.subscribers ?? []).length) {
+                    patch({ subscribers: (draft.subscribers ?? []).slice(0, -1) })
+                  }
+                }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Paste Meta user IDs. They get an in-Facebook notification when the rule runs.
+            </p>
+          </div>
+
           {/* Trap guards — Meta only prints a passive note; we say it where it matters */}
           {warnings.map(w => (
             <div

@@ -893,10 +893,15 @@ const FROZEN_LEFT = {
  *   · selected   bg-blue-950/30 → #1d2235      (#172554 at 30% over #1f2127, computed)
  */
 const FROZEN_HEAD_BG = "bg-[#f5f6f7] dark:bg-muted"
-const FROZEN_BODY_BG = "bg-white dark:bg-background"
+const ROW_BG = {
+  even: "bg-white dark:bg-background",
+  odd: "bg-[#f7f8fa] dark:bg-[#1b1d23]",
+} as const
+const rowBg = (i: number) => (i % 2 === 0 ? ROW_BG.even : ROW_BG.odd)
 const FROZEN_BODY_SEL = "bg-[#e3f0fe] dark:bg-[#1d2235]"
 const FROZEN_BAND_BG = "bg-[#f5f6f7] dark:bg-background"
-const FROZEN_DIVIDER = "border-r border-[#e4e6eb] dark:border-gray-800"
+const FROZEN_DIVIDER = "border-r-2 border-[#d8dadf] dark:border-gray-700"
+const FOOTER_BG = "bg-[#f7f8fa] dark:bg-[#1b1d23]"
 
 function SortTh({ label, field, sortField, sortDir, onSort, width, onResize, className }: {
   label: string; field: string; sortField: string | null; sortDir: SortDir
@@ -3884,7 +3889,7 @@ function AdsManagerContent() {
       </div>
 
       {/* ── Table ── */}
-      <div className="flex-1 overflow-auto" aria-busy={isDataLoading}>
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden bg-background" aria-busy={isDataLoading}>
         {error && (
           <div className="m-4 px-4 py-3 bg-destructive/10 border border-destructive/30 rounded-lg text-xs text-destructive">{error}</div>
         )}
@@ -3894,11 +3899,12 @@ function AdsManagerContent() {
           </div>
         )}
 
+        <div className="min-h-0 max-h-full overflow-auto border border-[#d8dadf] bg-white dark:border-gray-700 dark:bg-background">
           <table data-table="compact" className="w-full text-sm border-collapse" style={{ minWidth: 1100, tableLayout: "fixed" }}>
             {/* `dark:bg-muted/80` was translucent, which is invisible while nothing is pinned
                 horizontally but shows the scrolling columns through the frozen header cells the
                 moment they are. Opaque here and on the three frozen cells below. */}
-            <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted border-b border-[#e4e6eb] dark:border-gray-800">
+            <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted border-b-2 border-[#d8dadf] dark:border-gray-700">
               <tr>
                 <th className={cn(FROZEN_W.check, "px-2 text-left sticky z-20", FROZEN_LEFT.check, FROZEN_HEAD_BG)}>
                   <input ref={headerCheckRef} type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
@@ -3912,7 +3918,7 @@ function AdsManagerContent() {
                   onSort={handleSort}
                   width={columnWidths.__name || 320}
                   onResize={w => setColWidth("__name", w)}
-                  className={cn("sticky z-20 border-r border-[#e4e6eb] dark:border-gray-800", FROZEN_LEFT.name, FROZEN_HEAD_BG)}
+                  className={cn("sticky z-20", FROZEN_DIVIDER, FROZEN_LEFT.name, FROZEN_HEAD_BG)}
                 />
                 {tab === "ads" && (
                   <th className="w-20 px-3 text-left text-xs font-bold text-[#1c2b33] dark:text-foreground resize-x overflow-auto">Preview</th>
@@ -4011,23 +4017,24 @@ function AdsManagerContent() {
                   </td>
                 </tr>
               ) : tab === "campaigns" ? (
-                (pagedData as Campaign[]).map(c => {
+                (pagedData as Campaign[]).map((c, idx) => {
+                  const bg = rowBg(idx)
                   const isSel = selectedIds.has(c.id)
                   const hasDraft = Boolean(bulkDrafts[bulkDraftKey("campaign", c.id)])
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === c.id) : []
                   return (
                     <Fragment key={c.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", bg, hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, bg, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           {/* onClick, not onChange — the range gesture needs shiftKey/ctrlKey off the mouse event. */}
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => {}}
                             onClick={e => toggleRowSelection(c.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, bg, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           {toggling.has(c.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, bg, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           {inlineEditingId === c.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(c.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -4065,23 +4072,24 @@ function AdsManagerContent() {
                   )
                 })
               ) : tab === "adsets" ? (
-                (pagedData as AdSet[]).map(a => {
+                (pagedData as AdSet[]).map((a, idx) => {
+                  const bg = rowBg(idx)
                   const isSel = selectedIds.has(a.id)
                   const hasDraft = Boolean(bulkDrafts[bulkDraftKey("adset", a.id)])
                   const objective = campaigns.find(c => c.id === a.campaign_id)?.objective
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
                     <Fragment key={a.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", bg, hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, bg, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => {}}
                             onClick={e => toggleRowSelection(a.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, bg, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, bg, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -4119,7 +4127,8 @@ function AdsManagerContent() {
                   )
                 })
               ) : (
-                (pagedData as Ad[]).map(a => {
+                (pagedData as Ad[]).map((a, idx) => {
+                  const bg = rowBg(idx)
                   const adSet = adSets.find(s => s.id === a.adset_id)
                   const isSel = selectedIds.has(a.id)
                   const hasDraft = Boolean(bulkDrafts[bulkDraftKey("ad", a.id)])
@@ -4128,16 +4137,16 @@ function AdsManagerContent() {
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
                     <Fragment key={a.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", bg, hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, bg, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => {}}
                             onClick={e => toggleRowSelection(a.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, bg, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, bg, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7] dark:group-hover/row:bg-white/5")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -4222,12 +4231,15 @@ function AdsManagerContent() {
             {/* ── Totals row ── */}
             {pagedData.length > 0 && (
               <tfoot>
-                <tr className="border-t-2 border-[#e4e6eb] dark:border-gray-800 bg-[#f7f8fa] dark:bg-muted/20">
-                  <td colSpan={tab === "ads" ? 4 : 3} className="px-3 text-xs text-muted-foreground font-medium">
+                <tr className="sticky bottom-0 z-20 border-t-2 border-[#d8dadf] dark:border-gray-700">
+                  <td colSpan={3} className={cn("sticky left-0 bottom-0 z-10 px-3 text-xs text-muted-foreground font-medium", FOOTER_BG, FROZEN_DIVIDER)}>
                     Showing {currentData.length} loaded {tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"}
                   </td>
+                  {tab === "ads" && (
+                    <td className={cn("px-3 sticky bottom-0", FOOTER_BG)} />
+                  )}
                   {columnOrder.map(colId => (
-                    <td key={colId} className={cn("px-2 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", isTextCol(colId) ? "text-left" : "text-right")}>
+                    <td key={colId} className={cn("px-2 sticky bottom-0 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", FOOTER_BG, isTextCol(colId) ? "text-left" : "text-right")}>
                       {renderTotalCell(colId)}
                     </td>
                   ))}
@@ -4235,6 +4247,7 @@ function AdsManagerContent() {
               </tfoot>
             )}
           </table>
+        </div>
       </div>
 
       {/* ── Duplicate Dialog ── */}

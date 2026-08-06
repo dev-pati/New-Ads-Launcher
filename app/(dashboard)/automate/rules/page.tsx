@@ -6,9 +6,10 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   IconBolt, IconPlus, IconSearch, IconRefresh, IconLoader2, IconX,
-  IconExternalLink, IconCalendar, IconClock, IconTrash,
+  IconCalendar, IconClock, IconTrash,
   IconAlertCircle, IconHistory, IconInfoCircle, IconMapPin,
-  IconArrowUp, IconArrowDown, IconEqual,
+  IconArrowUp, IconArrowDown, IconEqual, IconBuildingStore, IconChevronDown,
+  IconSettings, IconUsers, IconCheckbox, IconTargetArrow,
 } from "@tabler/icons-react"
 import { ruleToDraft, type RuleDraft } from "@/lib/meta-ad-rules"
 import { RuleFormDialog } from "./_components/rule-form-dialog"
@@ -82,6 +83,176 @@ function localTimezone() {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return "UTC" }
 }
 
+type AdAccountOption = {
+  id: string
+  account_id?: string
+  name: string
+  owner_business?: { id: string; name?: string }
+}
+
+function initials(name?: string) {
+  return (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]?.toUpperCase()).join("") || "?"
+}
+
+function AdAccountSelector({
+  accounts, value, onChange,
+}: {
+  accounts: AdAccountOption[]
+  value: string
+  onChange: (next: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState("")
+  const selected = accounts.find(a => a.account_id === value || a.id === value)
+  const groups = Array.from(new Map(accounts.map(a => {
+    const business = a.owner_business?.name || "Individual accounts"
+    return [business, accounts.filter(x => (x.owner_business?.name || "Individual accounts") === business)] as const
+  })).entries())
+  const [activeGroup, setActiveGroup] = useState(groups[0]?.[0] || "")
+  const filtered = (groups.find(([name]) => name === (activeGroup || groups[0]?.[0]))?.[1] || accounts)
+    .filter(a => `${a.name} ${a.account_id || a.id} ${a.owner_business?.name || ""}`.toLowerCase().includes(query.toLowerCase()))
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="flex max-w-[320px] items-center gap-2 rounded-lg border bg-background px-3 py-1.5 text-sm shadow-sm hover:bg-muted/40"
+      >
+        <span className="flex size-6 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
+          {initials(selected?.name)}
+        </span>
+        <span className="min-w-0 truncate">{selected?.name || "Select ad account"}</span>
+        <IconChevronDown className="size-4 text-muted-foreground" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-10 z-40 w-[640px] max-w-[calc(100vw-2rem)] rounded-xl border bg-background shadow-2xl">
+            <div className="border-b p-3">
+              <div className="relative">
+                <IconSearch className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Search for an ad account"
+                  className="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+            </div>
+            <div className="grid max-h-[420px] grid-cols-[240px_1fr] overflow-hidden">
+              <div className="border-r bg-muted/30 p-3">
+                <p className="mb-2 flex items-center gap-1 text-sm font-semibold">
+                  Business portfolios <IconInfoCircle className="size-3.5 text-muted-foreground" />
+                </p>
+                <div className="space-y-1">
+                  {groups.map(([name, list]) => (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => setActiveGroup(name)}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-background",
+                        (activeGroup || groups[0]?.[0]) === name && "bg-background shadow-sm"
+                      )}
+                    >
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-slate-300 text-xs font-bold text-slate-700">
+                        {initials(name)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{name}</span>
+                        <span className="block text-xs text-muted-foreground">{list.length} ad accounts</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="overflow-y-auto p-4">
+                <p className="mb-3 text-sm font-semibold">{activeGroup || groups[0]?.[0] || "Ad accounts"}</p>
+                <div className="space-y-1">
+                  {filtered.map(a => {
+                    const id = a.account_id || a.id
+                    const isSelected = selected?.id === a.id
+                    return (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => { onChange(id); setOpen(false) }}
+                        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left hover:bg-muted"
+                      >
+                        <span className={cn("size-4 rounded-full border", isSelected ? "border-primary bg-primary" : "border-muted-foreground/30")} />
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                          {initials(a.name)}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold">{a.name}</span>
+                          <span className="block text-xs text-muted-foreground">Ad account ID: {id}</span>
+                          {a.owner_business?.name && (
+                            <span className="mt-0.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                              Owned by {a.owner_business.name}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    )
+                  })}
+                  {filtered.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">No accounts match.</p>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function AutoApplyDialog({ accountName, accountId, onClose }: { accountName?: string; accountId?: string; onClose: () => void }) {
+  const rows = [
+    ["Campaign structure", "Ad sets may be combined or ads that are underperforming could be turned off."],
+    ["Audience", "Targeting settings may be adjusted to reach more people who might be interested in your ads."],
+    ["Creative and format", "Ad creative may be enhanced across media, text, and format."],
+    ["Delivery and engagement", "Placements may be added or removed. Settings for outcomes may be adjusted."],
+  ] as const
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="w-full max-w-3xl rounded-xl border bg-background shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <h2 className="text-lg font-semibold">Auto-apply</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Ad account: {accountName || accountId || "—"}</p>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1 hover:bg-muted"><IconX className="size-5" /></button>
+        </div>
+        <div className="max-h-[60vh] overflow-y-auto px-6 py-5 space-y-5">
+          <label className="flex items-center gap-2 text-sm">
+            <span className="relative h-5 w-9 rounded-full bg-muted-foreground/30"><span className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow" /></span>
+            Auto-apply
+          </label>
+          <p className="text-sm text-muted-foreground">
+            Automatically apply Meta recommendations when there&apos;s a chance to improve performance.
+            AdLauncher does not run a separate engine for this slice; Meta owns execution.
+          </p>
+          {rows.map(([title, copy]) => (
+            <div key={title} className="flex items-center gap-4 border-b pb-4 last:border-b-0">
+              <input type="checkbox" className="size-4 accent-primary" />
+              <span className="flex size-12 items-center justify-center rounded-full bg-muted text-primary"><IconTargetArrow className="size-6" /></span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">{title}</p>
+                <p className="text-sm text-muted-foreground">{copy}</p>
+              </div>
+              <IconChevronDown className="size-5 text-muted-foreground" />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-end gap-2 border-t px-6 py-4">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button disabled>Save</Button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -112,6 +283,7 @@ export default function RulesPage() {
 
   // Dialog state — one form serves create and edit; `editing` decides which
   const [formOpen, setFormOpen] = useState(false)
+  const [autoApplyOpen, setAutoApplyOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | undefined>()
   const [formInitial, setFormInitial] = useState<Partial<RuleDraft> | null>(null)
   const [previewRule, setPreviewRule] = useState<RuleRow | null>(null)
@@ -357,10 +529,6 @@ export default function RulesPage() {
     { key: "budget", label: "Budget Scheduling" },
   ]
 
-  const metaRulesUrl = normAccountId
-    ? `https://www.facebook.com/adsmanager/automation?act=${normAccountId.replace("act_", "")}`
-    : "https://www.facebook.com/adsmanager/automation"
-
   return (
     <div className="flex flex-col h-full">
       {/* Page header */}
@@ -373,26 +541,11 @@ export default function RulesPage() {
         {/* Ad account selector */}
         <div className="flex items-center gap-2 ml-auto">
           <span className="text-sm text-muted-foreground">Ad Account:</span>
-          <select
-            className="border rounded-lg px-3 py-1.5 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none max-w-[260px]"
-            value={accountId}
-            onChange={e => setAccountId(e.target.value)}
-          >
-            {adAccounts.length === 0 && <option value="">No accounts</option>}
-            {adAccounts.map(a => (
-              <option key={a.id} value={a.account_id || a.id}>
-                {a.name} ({a.account_id || a.id})
-              </option>
-            ))}
-          </select>
-          <a
-            href={metaRulesUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors border rounded-lg px-3 py-1.5"
-          >
-            <IconExternalLink className="size-4" /> View in Meta
-          </a>
+          {adAccounts.length === 0 ? (
+            <span className="text-sm text-muted-foreground">No accounts</span>
+          ) : (
+            <AdAccountSelector accounts={adAccounts} value={accountId} onChange={setAccountId} />
+          )}
         </div>
       </div>
 
@@ -437,6 +590,9 @@ export default function RulesPage() {
                 disabled={rulesLoading}
               >
                 <IconRefresh className={cn("size-4", rulesLoading && "animate-spin")} />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setAutoApplyOpen(true)}>
+                <IconSettings className="size-4 mr-1" /> Manage auto-apply
               </Button>
               <Button size="sm" onClick={openCreate}>
                 <IconPlus className="size-4 mr-1" /> Create Rule
@@ -504,6 +660,7 @@ export default function RulesPage() {
                 rules={filteredRules}
                 summary={ruleSummary}
                 busyId={busyRuleId}
+                accountId={normAccountId}
                 onToggle={toggleRule}
                 onPreview={setPreviewRule}
                 onEdit={openEdit}
@@ -967,6 +1124,14 @@ export default function RulesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {autoApplyOpen && (
+        <AutoApplyDialog
+          accountName={selectedAccount?.name}
+          accountId={normAccountId}
+          onClose={() => setAutoApplyOpen(false)}
+        />
       )}
     </div>
   )
