@@ -115,10 +115,7 @@ const navSections: NavSection[] = [
     id: "automate",
     label: "Automation",
     icon: IconBolt,
-    subItems: [
-      // { label: "Automations", href: "/automate" },
-      { label: "Rules", href: "/automate/rules" },
-    ],
+    subItems: [{ label: "Automation", href: "/automate/rules" }],
   },
   {
     id: "inspo",
@@ -210,7 +207,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
   const healthNeedsAttention = selectedAccount?.account_status !== undefined && selectedAccount.account_status !== 1
 
   return (
-    <aside className="relative w-16 shrink-0 z-40" onMouseLeave={() => setHovered(false)}>
+    <aside className="relative w-16 shrink-0 z-50" onMouseLeave={() => setHovered(false)}>
       <div
         className={cn(
           "absolute inset-y-0 left-0 flex flex-col h-full bg-sidebar border-r border-sidebar-border overflow-hidden transition-[width] duration-200 ease-in-out",
