@@ -4,6 +4,8 @@ import { useEffect, useCallback } from "react"
 import {
   IconX, IconChevronLeft, IconChevronRight, IconShare,
 } from "@tabler/icons-react"
+import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { DiscoveryAd, InspoBoard } from "@/types/inspo"
 import { AdDetailLeftPanel } from "./AdDetailLeftPanel"
 import { AdMediaPreview } from "./AdMediaPreview"
@@ -15,14 +17,13 @@ function BrandAvatar({ name, src }: { name: string; src?: string }) {
     "bg-orange-500", "bg-pink-500", "bg-teal-500", "bg-red-500", "bg-amber-500",
   ]
   const color = colors[name.charCodeAt(0) % colors.length]
-  if (src) return (
-    <img src={src} alt={name} className="size-8 rounded-full object-cover ring-2 ring-border shrink-0"
-      onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-  )
   return (
-    <div className={`${color} size-8 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-      {name.charAt(0).toUpperCase()}
-    </div>
+    <Avatar size="sm" className="ring-2 ring-border shrink-0">
+      {src && <AvatarImage src={src} alt={name} />}
+      <AvatarFallback className={cn(color, "text-white text-xs font-bold")}>
+        {name.charAt(0).toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
   )
 }
 

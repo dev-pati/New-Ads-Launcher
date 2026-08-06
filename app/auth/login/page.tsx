@@ -22,7 +22,7 @@ function LoginForm() {
   const requestedRedirect = searchParams.get("redirect")
   const redirectTo = requestedRedirect?.startsWith("/") && !requestedRedirect.startsWith("//")
     ? requestedRedirect
-    : "/projects"
+    : "/launch"
   const otpRefs = useRef<Array<HTMLInputElement | null>>([])
   const [email, setEmail] = useState(() => searchParams.get("email") || "")
   const [otp, setOtp] = useState("")

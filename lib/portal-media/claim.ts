@@ -53,10 +53,6 @@ export async function claimPortalAsset(params: ClaimPortalAssetParams) {
       media_type: asset.mime_type?.startsWith("image/") ? "image" : "video",
       file_size: asset.actual_size_bytes,
       ad_account_id: adAccountId,
-      // Meta upload lifecycle starts here — `pending` is the only value
-      // cron/upload-to-facebook picks up. Writing `ready` here means "the file is
-      // ready", which is not what this column models, and is what made v1 produce
-      // nothing. See CONTEXT.md §"Two status columns".
       status: CREATIVE_STATUS.PENDING,
       created_at: asset.created_at || new Date().toISOString(),
     })
@@ -64,5 +60,38 @@ export async function claimPortalAsset(params: ClaimPortalAssetParams) {
     .single()
 
   if (error) throw error
+
+  await supabase
+    .from("portal_media_items")
+    .upsert({
+      object_key: asset.object_key,
+      portal_asset_id: asset.id,
+      brand_slug: asset.brand_slug,
+      file_name: asset.original_file_name || asset.object_key.split("/").pop() || asset.id,
+      media_type: asset.media_type,
+      mime_type: asset.mime_type,
+      file_size: asset.actual_size_bytes,
+      org_id: orgId,
+      ad_account_id: adAccountId,
+      mapped_by: userId,
+      creative_id: data.id,
+      status: "imported",
+      portal_created_at: asset.created_at || null,
+      brand_id: asset.brand_id,
+      brand_name: asset.brand_name,
+      product_id: asset.product_id,
+      product_name: asset.product_name,
+      language: asset.language,
+      width: asset.width,
+      height: asset.height,
+      duration_seconds: asset.duration_seconds,
+      pdp_url: asset.product_catalog_pdp_url,
+      sales_page_url: asset.product_catalog_sales_page_url,
+      landing_url: asset.product_catalog_landing_url,
+      checkout_funnel_url: asset.product_catalog_checkoutchamp_funnel_url,
+      brief_type: asset.brief_type,
+      voice_variant: asset.voice_variant,
+    }, { onConflict: "object_key" })
+
   return { creativeId: data.id as string, reused: false }
 }

@@ -1,16 +1,12 @@
 "use client"
 
-import Image from "next/image"
 import { useCallback, useEffect, useState } from "react"
-import { IconAlertTriangle, IconArrowsSort, IconChartBar, IconCheck, IconChevronRight, IconCopy, IconDownload, IconInfoCircle, IconLoader2, IconMinus, IconNote, IconPlus, IconPrinter, IconRefresh, IconRocket, IconSortAscending, IconSortDescending } from "@tabler/icons-react"
+import { IconAlertTriangle, IconChartBar, IconCheck, IconChevronRight, IconCopy, IconDownload, IconInfoCircle, IconLoader2, IconMinus, IconNote, IconPlus, IconPrinter, IconRefresh, IconRocket } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { MediaDetailSheet } from "@/components/shared/media-detail-sheet"
-import type { TrackingCreativeMedia } from "@/app/api/tracking/creative-media/route"
-import { useAdAccount } from "@/lib/ad-account-context"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { CLASS_DESCRIPTION, CLASS_LABEL, CLASS_ORDER, type ActivityClass } from "@/lib/tracking/activity-catalog"
 import { mergeUsageRows } from "@/lib/tracking/activity"
-import { CREATIVE_SORTS, CREATIVE_SORT_KEYS, MEDIA_STATUS_NOTE, formatMoney, sortCreatives, type CreativeSortKey } from "@/lib/tracking/creative-table"
 import { FALLBACK_HINT, FALLBACK_LABEL, FALLBACK_REASONS, type FallbackReason } from "@/lib/tracking/fallback"
 import { readWeek, toScoreFallbacks, totalCount, writeWeek, type LocalFallbackWeek } from "@/lib/tracking/fallback-local"
 import { buildProbationReport, scoreProbationWeek } from "@/lib/tracking/probation"
@@ -21,6 +17,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 type TeamMember = {
   userId: string
   name: string
+  avatarUrl?: string | null
   batches: number
   fullSuccess: number
   nonSuccess: number
@@ -47,29 +44,11 @@ type TimeSeriesPoint = {
   avgDurationMs: number | null
 }
 
-type CreativePerfRow = {
-  rank: number
-  adId: string
-  adName: string
-  adsetName: string
-  campaignName: string
-  spend: number
-  results: number
-  costPerResult: number
-  purchaseValue: number
-  roas: number
-  impressions: number
-  linkClicks: number
-  ctr: number
-  dateStart: string
-  createdTime: string | null
-  thumbnail: string | null
-  isVideo: boolean
-}
 
 
 type MemberDetail = {
   userId: string
+  avatarUrl?: string | null
   days: number
   summary: TrackingSummary
   streak: number
@@ -206,6 +185,15 @@ function getLabelName(key: string) {
   }
 }
 
+function TrackingMemberAvatar({ name, avatarUrl, size = "sm" }: { name?: string | null; avatarUrl?: string | null; size?: "sm" | "default" | "lg" }) {
+  return (
+    <Avatar size={size}>
+      {avatarUrl && <AvatarImage src={avatarUrl} alt={name || ""} />}
+      <AvatarFallback>{name?.charAt(0)?.toUpperCase() || "?"}</AvatarFallback>
+    </Avatar>
+  )
+}
+
 function TrendChart({ series, dataKey, days, color = "#3987e5" }: { series: TimeSeriesPoint[]; dataKey: keyof TimeSeriesPoint; days: number; color?: string }) {
   if (series.length === 0) {
     return <p className="py-10 text-center text-sm text-muted-foreground">No data in this period.</p>
@@ -231,7 +219,6 @@ function TrendChart({ series, dataKey, days, color = "#3987e5" }: { series: Time
   )
 }
 
-const DATE_PRESET: Record<7 | 30 | 90, string> = { 7: "last_7d", 30: "last_30d", 90: "last_90d" }
 
 const CLASS_BAR: Record<ActivityClass, string> = {
   produce: "bg-primary",
@@ -634,25 +621,16 @@ function isProbationMonth(now = new Date()) {
 }
 
 export default function TrackingPage() {
-  const { selectedAccount } = useAdAccount()
   const [data, setData] = useState<TrackingData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const isAdminView = data?.role === "admin"
-  const [view, setView] = useState<"admin" | "mine" | "creative">("admin")
+  const [view, setView] = useState<"admin" | "mine">("admin")
   const [days, setDays] = useState<7 | 30 | 90>(7)
   const [openMetric, setOpenMetric] = useState<null | "successRate" | "adsCreated" | "needsReview" | "avgDuration">(null)
-  const [memberDetail, setMemberDetail] = useState<{ userId: string; name: string } | null>(null)
+  const [memberDetail, setMemberDetail] = useState<{ userId: string; name: string; avatarUrl?: string | null } | null>(null)
   const [memberData, setMemberData] = useState<MemberDetail | null>(null)
   const [memberLoading, setMemberLoading] = useState(false)
-  const [creativePerf, setCreativePerf] = useState<CreativePerfRow[] | null>(null)
-  const [creativeCurrency, setCreativeCurrency] = useState<string | null>(null)
-  const [creativeLoading, setCreativeLoading] = useState(false)
-  const [creativeSort, setCreativeSort] = useState<{ key: CreativeSortKey; direction: "asc" | "desc" }>({ key: "spend", direction: "desc" })
-  const [mediaAd, setMediaAd] = useState<CreativePerfRow | null>(null)
-  const [mediaDetail, setMediaDetail] = useState<TrackingCreativeMedia | null>(null)
-  const [mediaError, setMediaError] = useState<string | null>(null)
-  const [mediaLoading, setMediaLoading] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [fallbackWeek, setFallbackWeek] = useState<LocalFallbackWeek | null>(null)
@@ -675,48 +653,6 @@ export default function TrackingPage() {
   }, [days, view])
 
   useEffect(() => { void load() }, [load])
-
-  useEffect(() => {
-    if (view !== "creative") return
-    const adAccountId = selectedAccount?.account_id
-    if (!adAccountId) { setCreativePerf(null); return }
-    if (creativePerf !== null) return
-    void (async () => {
-      setCreativeLoading(true)
-      try {
-        const params = new URLSearchParams({ adAccountId, datePreset: DATE_PRESET[days], limit: "20" })
-        const res = await fetch(`/api/insights/top-creatives?${params}`, { cache: "no-store" })
-        const body = await res.json()
-        if (res.ok && Array.isArray(body.ads)) {
-          setCreativePerf(body.ads)
-          // A cached payload written before this field existed has no currency; that is
-          // the one case the table prints bare numbers and says so.
-          setCreativeCurrency(typeof body.currency === "string" ? body.currency : null)
-        } else setCreativePerf([])
-      } catch { setCreativePerf([]) }
-      finally { setCreativeLoading(false) }
-    })()
-  }, [view, days, creativePerf, selectedAccount?.account_id])
-
-  /**
-   * The Portal asset behind one ad, fetched only when a row is opened — it costs a Meta
-   * call plus two reads, and 20 of those on table load would buy nothing.
-   */
-  useEffect(() => {
-    if (!mediaAd) { setMediaDetail(null); setMediaError(null); return }
-    void (async () => {
-      setMediaLoading(true)
-      setMediaError(null)
-      try {
-        const res = await fetch(`/api/tracking/creative-media?adId=${encodeURIComponent(mediaAd.adId)}`, { cache: "no-store" })
-        const body = await res.json()
-        if (res.ok) setMediaDetail(body)
-        else setMediaError(body.error || "Could not resolve this ad's media.")
-      } catch {
-        setMediaError("Could not resolve this ad's media.")
-      } finally { setMediaLoading(false) }
-    })()
-  }, [mediaAd])
 
   useEffect(() => {
     if (!memberDetail) { setMemberData(null); return }
@@ -763,9 +699,9 @@ export default function TrackingPage() {
 
   const summary = view === "admin" ? data?.admin : data?.mine
   const series = data?.adminTimeSeries || []
-  const tabs: Array<["admin" | "mine" | "creative", string]> = isAdminView
-    ? [["admin", "Team usage"], ["mine", "My usage"], ["creative", "Creative"]]
-    : [["mine", "My usage"], ["creative", "Creative"]]
+  const tabs: Array<["admin" | "mine", string]> = isAdminView
+    ? [["admin", "Team usage"], ["mine", "My usage"]]
+    : [["mine", "My usage"]]
 
   // Deltas describe the whole org; on My usage the tile still shows the org trend, so
   // only the team view claims them. Better no comparison than a wrong one.
@@ -908,7 +844,7 @@ export default function TrackingPage() {
             <IconNote className="size-4" />
             Report
           </Button>
-          <Button variant="outline" onClick={() => { setCreativePerf(null); void load() }} disabled={loading}>
+          <Button variant="outline" onClick={() => void load()} disabled={loading}>
             {loading ? <IconLoader2 className="size-4 animate-spin" /> : <IconRefresh className="size-4" />}
             Refresh
           </Button>
@@ -924,7 +860,7 @@ export default function TrackingPage() {
             {tabs.map(([id, label]) => <button key={id} type="button" onClick={() => setView(id)} className={`rounded-md px-3 py-1.5 text-sm ${view === id ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}>{label}</button>)}
           </div>
           <label className="flex items-center gap-2 text-sm text-muted-foreground">Reporting period
-            <select value={days} onChange={event => { setDays(Number(event.target.value) as 7 | 30 | 90); setCreativePerf(null) }} className="rounded-md border bg-background px-2 py-1 text-foreground">
+            <select value={days} onChange={event => setDays(Number(event.target.value) as 7 | 30 | 90)} className="rounded-md border bg-background px-2 py-1 text-foreground">
               <option value={7}>Last 7 days</option>
               <option value={30}>Last 30 days</option>
               <option value={90}>Last 90 days</option>
@@ -932,7 +868,7 @@ export default function TrackingPage() {
           </label>
         </div>
 
-        {view !== "creative" && summary && (
+        {summary && (
           <div className="space-y-3">
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Delivery</h2>
@@ -985,8 +921,13 @@ export default function TrackingPage() {
                     {usageRows.map(member => {
                       const isSelf = member.userId === data.currentUserId
                       return (
-                        <tr key={member.userId} className={`border-b last:border-0 ${isSelf ? "opacity-60" : "cursor-pointer hover:bg-muted/30"}`} onClick={() => { if (!isSelf) setMemberDetail({ userId: member.userId, name: member.name }) }} title={isSelf ? "See My usage tab" : "Open member detail"}>
-                          <td className="px-5 font-medium">{member.name}{isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}</td>
+                        <tr key={member.userId} className={`border-b last:border-0 ${isSelf ? "opacity-60" : "cursor-pointer hover:bg-muted/30"}`} onClick={() => { if (!isSelf) setMemberDetail({ userId: member.userId, name: member.name, avatarUrl: member.avatarUrl }) }} title={isSelf ? "See My usage tab" : "Open member detail"}>
+                          <td className="px-5 font-medium">
+                            <div className="flex items-center gap-2">
+                              <TrackingMemberAvatar name={member.name} avatarUrl={member.avatarUrl} />
+                              <span>{member.name}{isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}</span>
+                            </div>
+                          </td>
                           <td className="px-5 text-right font-medium tabular-nums">{member.adsCreated}</td>
                           <td className="px-5 text-right tabular-nums text-muted-foreground">{member.batches}</td>
                           <td className="px-5 text-right tabular-nums">{activity?.available ? member.actions : "—"}</td>
@@ -1137,84 +1078,6 @@ export default function TrackingPage() {
           <ActivityPanel payload={activity} block={activityBlock} scope="mine" />
         )}
 
-        {view === "creative" && (
-          <section className="rounded-xl border bg-card shadow-sm">
-            <div className="border-b p-5">
-              <h2 className="font-semibold">Creative performance</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Top 20 ads by spend on {selectedAccount?.name || "the selected ad account"}, from Ads Manager insights.
-                Sorting reorders those 20 — it does not re-query Meta.
-                {creativePerf && creativePerf.length > 0 && !creativeCurrency && " Currency unknown for this account, so money is shown as a plain number."}
-              </p>
-            </div>
-            {!selectedAccount ? (
-              <p className="p-5 text-sm text-muted-foreground">Select an ad account to see creative performance.</p>
-            ) : creativeLoading ? (
-              <div className="flex min-h-32 items-center justify-center"><IconLoader2 className="size-5 animate-spin text-muted-foreground" /></div>
-            ) : !creativePerf || creativePerf.length === 0 ? (
-              <p className="p-5 text-sm text-muted-foreground">No ad performance in this period for this ad account.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table data-table="comfortable" className="w-full text-sm">
-                  <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-5 font-medium">Ad</th>
-                      {CREATIVE_SORT_KEYS.map(key => {
-                        const active = creativeSort.key === key
-                        return (
-                          <th key={key} className="px-5 text-right font-medium">
-                            <button
-                              type="button"
-                              // Clicking the active column flips it; a new column starts on
-                              // descending, which is what "top by X" means every time.
-                              onClick={() => setCreativeSort(current => current.key === key
-                                ? { key, direction: current.direction === "desc" ? "asc" : "desc" }
-                                : { key, direction: "desc" })}
-                              className={`inline-flex w-full items-center justify-end gap-1 transition hover:text-foreground ${active ? "text-foreground" : ""}`}
-                              title={`Sort by ${CREATIVE_SORTS[key].label}`}
-                            >
-                              {CREATIVE_SORTS[key].label}
-                              {!active
-                                ? <IconArrowsSort className="size-3.5 opacity-40" />
-                                : creativeSort.direction === "desc"
-                                  ? <IconSortDescending className="size-3.5" />
-                                  : <IconSortAscending className="size-3.5" />}
-                            </button>
-                          </th>
-                        )
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortCreatives(creativePerf, creativeSort.key, creativeSort.direction).map(row => (
-                      <tr
-                        key={row.adId}
-                        onClick={() => setMediaAd(row)}
-                        className="cursor-pointer border-b transition last:border-0 hover:bg-muted/40"
-                        title="Open media detail"
-                      >
-                        <td className="px-5 font-medium">
-                          <div className="flex items-center gap-3">
-                            {row.thumbnail ? <Image src={row.thumbnail} alt="" width={36} height={36} unoptimized className="size-9 rounded object-cover" /> : <div className="size-9 rounded bg-muted" />}
-                            <span className="truncate">{row.adName}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 text-right tabular-nums">{formatMoney(row.spend, creativeCurrency)}</td>
-                        {/* ROAS is revenue ÷ spend — a ratio, not a percentage. */}
-                        <td className="px-5 text-right tabular-nums">{row.roas ? `${row.roas.toFixed(2)}×` : "—"}</td>
-                        <td className="px-5 text-right tabular-nums">{row.results.toLocaleString()}</td>
-                        {/* Meta already sends inline_link_click_ctr as a percentage. */}
-                        <td className="px-5 text-right tabular-nums">{row.ctr.toFixed(2)}%</td>
-                        <td className="px-5 text-right tabular-nums">{row.costPerResult ? formatMoney(row.costPerResult, creativeCurrency) : "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        )}
-
         <p className="flex items-center gap-2 text-xs text-muted-foreground"><IconChartBar className="size-3.5" />Updated {new Date(data.generatedAt).toLocaleString()}</p>
       </>}
 
@@ -1305,7 +1168,10 @@ export default function TrackingPage() {
       <Dialog open={memberDetail !== null} onOpenChange={open => { if (!open) { setMemberDetail(null); setMemberData(null) } }}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{memberDetail?.name}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              {memberData && <TrackingMemberAvatar name={memberDetail?.name} avatarUrl={memberData.avatarUrl ?? memberDetail?.avatarUrl} size="default" />}
+              {memberDetail?.name}
+            </DialogTitle>
             <DialogDescription>Delivery and app activity in the last {days} days.</DialogDescription>
           </DialogHeader>
           {memberLoading ? (
@@ -1412,43 +1278,6 @@ export default function TrackingPage() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/*
-        The same Media Detail sheet Portal Vault and Assets render — imported, not copied
-        (components/shared/media-detail-sheet.tsx says why). Tracking adds only the notice:
-        this surface starts from a Meta ad, so unlike the other two it can arrive at a row
-        whose asset it cannot identify, and that has to be said rather than shown as blank
-        metadata.
-      */}
-      <MediaDetailSheet
-        open={mediaAd !== null}
-        onOpenChange={open => { if (!open) setMediaAd(null) }}
-        file={mediaDetail?.file || null}
-        viewMediaHref={mediaDetail?.file ? undefined : (mediaDetail?.creative?.fileUrl || null)}
-        notice={
-          <div className="space-y-2">
-            <div className="rounded-lg border bg-muted/20 p-3">
-              <p className="text-sm font-medium">{mediaAd?.adName}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {mediaAd && `${formatMoney(mediaAd.spend, creativeCurrency)} spend · ${mediaAd.results.toLocaleString()} results · ${mediaAd.ctr.toFixed(2)}% CTR`}
-              </p>
-            </div>
-            {mediaLoading && <p className="text-xs text-muted-foreground">Resolving this ad&apos;s media…</p>}
-            {mediaError && <p className="text-xs text-amber-600">{mediaError}</p>}
-            {mediaDetail && mediaDetail.status !== "linked" && (
-              <p className="text-xs text-amber-600">{MEDIA_STATUS_NOTE[mediaDetail.status]}</p>
-            )}
-            {mediaDetail?.creative && mediaDetail.status !== "linked" && (
-              <p className="text-xs text-muted-foreground">AdLauncher creative: {mediaDetail.creative.fileName}</p>
-            )}
-            {mediaDetail && (
-              <p className="text-xs text-muted-foreground">
-                Creator: awaiting Creative Portal — the catalog view exposes no creator id or name, and the AdLauncher uploader is a different person.
-              </p>
-            )}
-          </div>
-        }
-      />
     </div>
   )
 }

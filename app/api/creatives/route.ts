@@ -15,6 +15,35 @@ export const runtime = "nodejs"
 export const maxDuration = 300 // 5 minutes for big videos
 export const dynamic = "force-dynamic"
 
+const CREATIVE_SELECT = `
+  *,
+  portal_media_assignments(created_at),
+  portal_media_items(
+    object_key,
+    portal_asset_id,
+    file_name,
+    media_type,
+    mime_type,
+    file_size,
+    portal_created_at,
+    brand_id,
+    brand_name,
+    brand_slug,
+    product_id,
+    product_name,
+    language,
+    width,
+    height,
+    duration_seconds,
+    pdp_url,
+    sales_page_url,
+    landing_url,
+    checkout_funnel_url,
+    brief_type,
+    voice_variant
+  )
+`
+
 function sanitizeFileName(fileName: string) {
   return fileName.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-")
 }
@@ -89,7 +118,7 @@ export async function GET(request: NextRequest) {
       const rows = await collectAllCreativePages(async (from, to) => {
         let pageQuery = supabase
           .from("creatives")
-          .select("*, portal_media_assignments(created_at)")
+          .select(CREATIVE_SELECT)
           .eq("org_id", ctx.orgId)
           .order("created_at", { ascending: false })
           .order("id", { ascending: false })
@@ -118,7 +147,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from("creatives")
-      .select("*, portal_media_assignments(created_at)")
+      .select(CREATIVE_SELECT)
       .eq("org_id", ctx.orgId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })

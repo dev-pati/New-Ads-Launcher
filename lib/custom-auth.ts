@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs"
 import crypto from "crypto"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { sendEmail } from "@/lib/send-email"
+import { provisionCompanyAccount } from "@/lib/auth-allowlist"
 
 export type AuthAccount = {
   id: string
@@ -159,7 +160,7 @@ export async function generateAndSendOtp(email: string): Promise<{
   OTP_LIMITS.send.set(normEmail, sendLimit)
 
   const db = createAdminClient()
-  const { data: account, error } = await db
+  let { data: account, error } = await db
     .from("accounts")
     .select("id, email, disabled_at")
     .ilike("email", normEmail)
@@ -169,7 +170,16 @@ export async function generateAndSendOtp(email: string): Promise<{
     return { ok: false, error: "Database error", status: 500 }
   }
   if (!account) {
-    return { ok: false, error: "Email not registered", status: 404 }
+    await provisionCompanyAccount(normEmail)
+    const { data: provisioned } = await db
+      .from("accounts")
+      .select("id, email, disabled_at")
+      .ilike("email", normEmail)
+      .maybeSingle()
+    if (!provisioned) {
+      return { ok: false, error: "Email not registered", status: 404 }
+    }
+    account = provisioned
   }
   if (account.disabled_at) {
     return { ok: false, error: "Account disabled", status: 403 }

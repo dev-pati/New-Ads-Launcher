@@ -6,6 +6,7 @@ import { useOrg } from "@/lib/org-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Card,
   CardContent,
@@ -54,25 +55,15 @@ import {
   IconUserPlus,
   IconBuilding,
   IconPencil,
+  IconArrowUp,
 } from "@tabler/icons-react"
 
 function MemberAvatar({ name, avatarUrl }: { name?: string | null; avatarUrl?: string | null }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const initial = name?.charAt(0)?.toUpperCase() || "?"
-  if (avatarUrl && !imgFailed) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name || ""}
-        className="size-8 rounded-full object-cover"
-        onError={() => setImgFailed(true)}
-      />
-    )
-  }
   return (
-    <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-      {initial}
-    </div>
+    <Avatar>
+      {avatarUrl && <AvatarImage src={avatarUrl} alt={name || ""} />}
+      <AvatarFallback>{name?.charAt(0)?.toUpperCase() || "?"}</AvatarFallback>
+    </Avatar>
   )
 }
 
@@ -85,6 +76,12 @@ const ROLES = [
   { value: "commenter", label: "Commenter", description: "Can view and write comments. Cannot launch, edit, or delete ads." },
 ]
 
+const ROLE_REQUEST_REASONS = [
+  "Need to edit campaigns",
+  "Need to manage integrations or workspace settings",
+  "Need to manage team access",
+  "Other business need",
+]
 function RoleBadge({ role }: { role: string }) {
   const cls: Record<string, string> = {
     admin:     "bg-primary text-primary-foreground",
@@ -169,6 +166,35 @@ function SettingsContent() {
   const [message, setMessage] = useState("")
   const [messageType, setMessageType] = useState<"success" | "error">("success")
   const isAdmin = activeOrg?.role === "admin"
+  // Role request: only a non-admin sees this. The role selector stays admin-only, so a
+  // request with a reason is the one path upward and it lands in the PM's inbox.
+  const [roleRequestOpen, setRoleRequestOpen] = useState(false)
+  const [roleRequestReason, setRoleRequestReason] = useState(ROLE_REQUEST_REASONS[0])
+  const [roleRequestSending, setRoleRequestSending] = useState(false)
+  const [roleRequestError, setRoleRequestError] = useState("")
+  const [roleRequestSent, setRoleRequestSent] = useState(false)
+
+  async function sendRoleRequest() {
+    setRoleRequestSending(true)
+    setRoleRequestError("")
+    try {
+      const res = await fetch("/api/role-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: roleRequestReason }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setRoleRequestError(data?.error || "Could not send the request")
+        return
+      }
+      setRoleRequestSent(true)
+    } catch {
+      setRoleRequestError("Could not send the request")
+    } finally {
+      setRoleRequestSending(false)
+    }
+  }
 
   // AI Keys
   const [geminiKey, setGeminiKey] = useState("")
@@ -549,6 +575,18 @@ function SettingsContent() {
             </CardHeader>
           </Card>
 
+          {!isAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><IconArrowUp className="size-5" />Request a higher role</CardTitle>
+                <CardDescription>Role changes are made by an admin. Send the PM a request with a reason.</CardDescription>
+              </CardHeader>
+              <CardContent className="flex items-center justify-between">
+                <RoleBadge role={activeOrg?.role || "member"} />
+                <Button variant="outline" size="sm" onClick={() => setRoleRequestOpen(true)}><IconArrowUp className="size-4" />Request</Button>
+              </CardContent>
+            </Card>
+          )}
           {isAdmin && (
             <Card>
               <CardHeader>
@@ -1219,6 +1257,62 @@ function SettingsContent() {
                 </Button>
               </div>
             </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={roleRequestOpen}
+        onOpenChange={(open) => {
+          setRoleRequestOpen(open)
+          if (!open) {
+            setRoleRequestSent(false)
+            setRoleRequestError("")
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request a higher role</DialogTitle>
+            <DialogDescription>
+              This goes to the PM with your email and current role. Pick the reason that fits best.
+            </DialogDescription>
+          </DialogHeader>
+          {roleRequestSent ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <IconCheck className="size-4" />
+              Request sent. The PM will follow up by email.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Reason</Label>
+                <Select value={roleRequestReason} onValueChange={setRoleRequestReason}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLE_REQUEST_REASONS.map((reason) => (
+                      <SelectItem key={reason} value={reason}>
+                        {reason}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {roleRequestError && (
+                <p className="text-sm text-destructive">{roleRequestError}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setRoleRequestOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={sendRoleRequest} disabled={roleRequestSending}>
+                  {roleRequestSending ? <IconLoader2 className="size-4 animate-spin" /> : <IconArrowUp className="size-4" />}
+                  Send request
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

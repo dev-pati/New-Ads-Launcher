@@ -104,8 +104,15 @@ export async function GET(request: NextRequest) {
     .sort((left, right) => right.at.localeCompare(left.at))
     .slice(0, TIMELINE_LIMIT)
 
+  const [{ data: profile }, { data: account }] = await Promise.all([
+    db.from("profiles").select("avatar_url").eq("id", userId).maybeSingle(),
+    db.from("accounts").select("avatar_url").eq("id", userId).maybeSingle(),
+  ])
+  const avatarUrl = profile?.avatar_url || account?.avatar_url || null
+
   return NextResponse.json({
     userId,
+    avatarUrl,
     days,
     summary,
     streak: workingDayStreak(batches.flatMap(batch => batch.created_at ? [batch.created_at] : [])),

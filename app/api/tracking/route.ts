@@ -211,6 +211,18 @@ export async function GET(request: NextRequest) {
 
   if (isAdmin) {
     const admin = summarizeLaunchBatches(batches)
+    const memberIds = [...new Set(admin.team.map(member => member.userId))]
+    if (memberIds.length > 0) {
+      const [{ data: profiles }, { data: accounts }] = await Promise.all([
+        db.from("profiles").select("id, avatar_url").in("id", memberIds),
+        db.from("accounts").select("id, avatar_url").in("id", memberIds),
+      ])
+      const avatarById = new Map([
+        ...((accounts || []) as Array<{ id: string; avatar_url: string | null }>).map(row => [row.id, row.avatar_url] as const),
+        ...((profiles || []) as Array<{ id: string; avatar_url: string | null }>).map(row => [row.id, row.avatar_url] as const),
+      ])
+      admin.team = admin.team.map(member => ({ ...member, avatarUrl: avatarById.get(member.userId) || null }))
+    }
     baseResponse.admin = admin
     baseResponse.adminTimeSeries = summarizeLaunchBatchesTimeSeries(batches, days)
     baseResponse.teamStreaks = Object.fromEntries(

@@ -260,6 +260,7 @@ export function delta(current: number, previous: number): number | null {
 export type UsageRow = {
   userId: string
   name: string
+  avatarUrl?: string | null
   adsCreated: number
   batches: number
   actions: number
@@ -279,7 +280,7 @@ export type UsageRow = {
  * question the page exists to answer. It is a sort, not a score.
  */
 export function mergeUsageRows(
-  delivery: Array<{ userId: string; name: string; adsCreated: number; batches: number }>,
+  delivery: Array<{ userId: string; name: string; avatarUrl?: string | null; adsCreated: number; batches: number }>,
   activity: Array<{ userId: string; name: string; actions: number; activeDays: number; breadth: number }>,
 ): UsageRow[] {
   const rows = new Map<string, UsageRow>()
@@ -288,6 +289,7 @@ export function mergeUsageRows(
     rows.set(member.userId, {
       userId: member.userId,
       name: member.name,
+      avatarUrl: member.avatarUrl,
       adsCreated: member.adsCreated,
       batches: member.batches,
       actions: 0,
@@ -308,6 +310,7 @@ export function mergeUsageRows(
     rows.set(member.userId, {
       userId: member.userId,
       name: member.name,
+      avatarUrl: null,
       adsCreated: 0,
       batches: 0,
       actions: member.actions,

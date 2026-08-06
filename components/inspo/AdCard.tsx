@@ -8,6 +8,7 @@ import {
   IconStarFilled,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import type { DiscoveryAd, InspoBoard } from "@/types/inspo"
 import { formatSpend, formatViews, timeAgo } from "@/lib/inspo-mock-data"
 import { SaveToBoardButton } from "./SaveToBoardButton"
@@ -19,18 +20,13 @@ function BrandAvatar({ name, src }: { name: string; src?: string }) {
     "bg-red-500", "bg-amber-500",
   ]
   const color = colors[name.charCodeAt(0) % colors.length]
-  if (src) return (
-    <img
-      src={src}
-      alt={name}
-      className="size-12 rounded-full object-cover shadow-sm ring-1 ring-slate-200 shrink-0"
-      onError={e => { (e.target as HTMLImageElement).style.display = "none" }}
-    />
-  )
   return (
-    <div className={cn("size-12 rounded-full flex items-center justify-center text-white text-sm font-bold shadow-sm shrink-0", color)}>
-      {name.charAt(0).toUpperCase()}
-    </div>
+    <Avatar className="size-12 ring-1 ring-slate-200 shrink-0 shadow-sm">
+      {src && <AvatarImage src={src} alt={name} />}
+      <AvatarFallback className={cn(color, "text-white text-sm font-bold")}>
+        {name.charAt(0).toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
   )
 }
 

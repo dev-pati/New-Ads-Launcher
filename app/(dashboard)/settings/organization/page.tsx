@@ -5,6 +5,7 @@ import { useOrg } from "@/lib/org-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Card,
   CardContent,
@@ -39,22 +40,11 @@ const ROLES = [
 ]
 
 function MemberAvatar({ name, avatarUrl }: { name?: string | null; avatarUrl?: string | null }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const initial = name?.charAt(0)?.toUpperCase() || "?"
-  if (avatarUrl && !imgFailed) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name || ""}
-        className="size-8 rounded-full object-cover"
-        onError={() => setImgFailed(true)}
-      />
-    )
-  }
   return (
-    <div className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-      {initial}
-    </div>
+    <Avatar>
+      {avatarUrl && <AvatarImage src={avatarUrl} alt={name || ""} />}
+      <AvatarFallback>{name?.charAt(0)?.toUpperCase() || "?"}</AvatarFallback>
+    </Avatar>
   )
 }
 

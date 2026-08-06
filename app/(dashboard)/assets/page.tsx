@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import { DismissibleBanner } from "@/components/ui/dismissible-banner"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import {
@@ -18,7 +17,7 @@ import {
   IconChevronDown, IconPlus, IconCheck, IconDotsVertical,
   IconX, IconTrash, IconArrowLeft,
   IconClipboardList, IconUser, IconAlertCircle,
-  IconCloudDownload, IconArrowBackUp,
+  IconCloudDownload, IconArrowBackUp, IconCalendar,
 } from "@tabler/icons-react"
 import {
   MediaDetailSheet,
@@ -30,7 +29,7 @@ import {
 import type { FolderNode } from "@/lib/portal-media/tree"
 import { MetaAssignmentStatus } from "@/components/shared/meta-assignment-status"
 import { useMetaAssignmentProgress } from "@/hooks/use-meta-assignment-progress"
-import { sortCreativesByLatestAssignment } from "@/lib/creative-media"
+import { sortCreativesByLatestAssignment, type PortalMediaItemRow } from "@/lib/creative-media"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +53,7 @@ interface Creative {
   ad_account_id?: string
   storage_path?: string
   status?: "pending" | "processing" | "ready" | "error"
+  portal_media_items?: PortalMediaItemRow[] | PortalMediaItemRow | null
 }
 
 interface Board {
@@ -98,6 +98,13 @@ const PORTAL_PAGE_SIZE = 24
 
 type PortalSortKey = "name" | "brand" | "product" | "language" | "dimensions" | "size" | "approved" | "assigned"
 type PortalSort = { key: PortalSortKey; dir: "asc" | "desc" } | null
+
+type AssetSortKey = "name" | "brand" | "product" | "language" | "dimensions" | "type" | "status" | "date"
+type AssetSort = { key: AssetSortKey; dir: "asc" | "desc" } | null
+
+type DateRangeFilter = "" | "today" | "7d" | "30d" | "90d"
+const DATE_RANGE_DAYS: Record<Exclude<DateRangeFilter, "">, number> = { today: 1, "7d": 7, "30d": 30, "90d": 90 }
+const DATE_RANGE_LABEL: Record<DateRangeFilter, string> = { "": "All time", today: "Today", "7d": "Last 7 days", "30d": "Last 30 days", "90d": "Last 90 days" }
 
 type Section = "all" | "boards" | "requests" | "my-uploads" | "portal" | `board_${string}`
 
@@ -161,7 +168,7 @@ function RowCheckbox({ checked, onToggle, label, className }: {
   )
 }
 
-function PortalSortTh({ label, keyId, sort, onSort }: { label: string; keyId: PortalSortKey; sort: PortalSort; onSort: (key: PortalSortKey) => void }) {
+function SortTh<K extends string>({ label, keyId, sort, onSort }: { label: string; keyId: K; sort: { key: K; dir: "asc" | "desc" } | null; onSort: (key: K) => void }) {
   const active = sort?.key === keyId
   return (
     <button
@@ -176,6 +183,9 @@ function PortalSortTh({ label, keyId, sort, onSort }: { label: string; keyId: Po
   )
 }
 
+const PortalSortTh = SortTh<PortalSortKey>
+const AssetSortTh = SortTh<AssetSortKey>
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function AssetsPage() {
@@ -189,6 +199,8 @@ export default function AssetsPage() {
   const [portalVisible, setPortalVisible] = useState(PORTAL_PAGE_SIZE)
   const [portalSelected, setPortalSelected] = useState<Set<string>>(new Set())
   const [portalSort, setPortalSort] = useState<PortalSort>(null)
+  const [assetSort, setAssetSort] = useState<AssetSort>({ key: "date", dir: "desc" })
+  const [dateRange, setDateRange] = useState<DateRangeFilter>("")
   const [portalAccountId, setPortalAccountId] = useState("")
   /**
    * The provider's accounts reshaped for AdAccountPill's `showAccountId`, which reads
@@ -613,7 +625,39 @@ export default function AssetsPage() {
   const resolvePortalMetadata = useCallback((creative: Creative): PortalMediaFile | null => {
     if (!creative.storage_path?.startsWith("r2://pati-videos/")) return null
     const objectKey = creative.storage_path.slice(17) // remove prefix
-    return portalFileMap.get(objectKey) || null
+    const mapMatch = portalFileMap.get(objectKey)
+    if (mapMatch) return mapMatch
+
+    const items = creative.portal_media_items
+    const dbItem = Array.isArray(items) ? items[0] : items
+    if (!dbItem) return null
+
+    return {
+      kind: "file",
+      assetId: dbItem.portal_asset_id || "",
+      objectKey: dbItem.object_key,
+      name: dbItem.file_name || creative.file_name,
+      mimeType: dbItem.mime_type,
+      sizeBytes: dbItem.file_size,
+      createdAt: dbItem.portal_created_at,
+      fileUrl: creative.file_url,
+      brandId: dbItem.brand_id,
+      brandName: dbItem.brand_name,
+      brandSlug: dbItem.brand_slug,
+      productId: dbItem.product_id,
+      productName: dbItem.product_name,
+      pdpUrl: dbItem.pdp_url,
+      salesPageUrl: dbItem.sales_page_url,
+      landingUrl: dbItem.landing_url,
+      checkoutFunnelUrl: dbItem.checkout_funnel_url,
+      language: dbItem.language,
+      briefType: dbItem.brief_type,
+      voiceVariant: dbItem.voice_variant,
+      mediaType: dbItem.media_type,
+      width: dbItem.width,
+      height: dbItem.height,
+      durationSeconds: dbItem.duration_seconds ? Number(dbItem.duration_seconds) : null,
+    }
   }, [portalFileMap])
 
 
@@ -635,7 +679,7 @@ export default function AssetsPage() {
     }
   }, [creatives, portalFileMap])
 
-  const filterCreatives = (list: Creative[]) => {
+  const filterCreatives = useCallback((list: Creative[]) => {
     const q = search.toLowerCase()
     // The account filter is ANY-match (OR): a media item shows when it is assigned to at
     // least one selected account. Empty selection = every account in the org.
@@ -661,19 +705,54 @@ export default function AssetsPage() {
       if (filterProduct && pm?.productName !== filterProduct) return false
       if (filterLanguage && pm?.language !== filterLanguage) return false
 
+      if (dateRange) {
+        const days = DATE_RANGE_DAYS[dateRange]
+        const dateLimit = new Date()
+        dateLimit.setDate(dateLimit.getDate() - days)
+        const itemDateStr = c.assigned_at || c.created_at
+        if (!itemDateStr) return false
+        if (new Date(itemDateStr) < dateLimit) return false
+      }
+
       return true
     })
-  }
+  }, [search, filterType, filterStatus, resolvePortalMetadata, filterBrand, filterProduct, filterLanguage, dateRange])
 
-  const displayList = (() => {
+  const displayList = useMemo(() => {
     const filtered = section === "my-uploads"
       ? filterCreatives(creatives.filter(c => c.user_id === currentUserId))
       : currentBoardId
         ? filterCreatives(boardCreatives)
         : filterCreatives(creatives)
 
-    return section === "all" ? sortCreativesByLatestAssignment(filtered) : filtered
-  })()
+    if (!assetSort) {
+      return section === "all" ? sortCreativesByLatestAssignment(filtered) : filtered
+    }
+
+    const { key, dir } = assetSort
+    const sign = dir === "asc" ? 1 : -1
+
+    const val = (c: Creative): string | number => {
+      const pm = resolvePortalMetadata(c)
+      switch (key) {
+        case "name": return c.file_name.toLowerCase()
+        case "brand": return (pm?.brandName || "").toLowerCase()
+        case "product": return (pm?.productName || "").toLowerCase()
+        case "language": return (pm?.language || "").toLowerCase()
+        case "dimensions": return (pm?.width || 0) * (pm?.height || 0) || pm?.durationSeconds || 0
+        case "type": return c.media_type
+        case "status": return c.status || ""
+        case "date": return c.assigned_at ? new Date(c.assigned_at).getTime() : c.created_at ? new Date(c.created_at).getTime() : 0
+      }
+    }
+
+    return [...filtered].sort((a, b) => {
+      const va = val(a), vb = val(b)
+      if (va < vb) return -1 * sign
+      if (va > vb) return 1 * sign
+      return 0
+    })
+  }, [section, creatives, boardCreatives, currentUserId, currentBoardId, filterCreatives, assetSort, resolvePortalMetadata])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
   const adAccountName = adAccounts?.find((a: any) => a.id === selectedAccountId)?.name || selectedAccountId || "—"
@@ -746,6 +825,12 @@ export default function AssetsPage() {
       return 0
     })
   }, [portalFiles, portalSort, portalAssignedBy])
+
+  const cycleAssetSort = (key: AssetSortKey) => setAssetSort(prev => {
+    if (!prev || prev.key !== key) return { key, dir: "asc" }
+    if (prev.dir === "asc") return { key, dir: "desc" }
+    return null
+  })
 
   const openPortalFolder = (label: string) => {
     setPortalPath(prev => [...prev, label])
@@ -1805,8 +1890,30 @@ export default function AssetsPage() {
                   </div>
                 )}
 
-                {(filterType || filterStatus || filterBrand || filterProduct || filterLanguage) && (
-                  <button onClick={() => { setFilterType(""); setFilterStatus(""); setFilterBrand(""); setFilterProduct(""); setFilterLanguage("") }}
+                {/* Time Filter */}
+                <div className="relative group">
+                  <button className={cn(
+                    "flex items-center gap-1 h-8 px-3 text-xs rounded-lg border shadow-sm transition-colors",
+                    dateRange ? "border-primary bg-primary/10 text-link font-semibold shadow" : "border-border bg-background text-foreground/80 hover:text-foreground hover:bg-muted/60"
+                  )}>
+                    <IconCalendar className="size-3" />
+                    <span>{DATE_RANGE_LABEL[dateRange]}</span> <IconChevronDown className="size-3" />
+                  </button>
+                  <div className="absolute top-full left-0 mt-1 z-20 bg-popover border rounded-lg shadow-md p-1 min-w-[120px] hidden group-hover:block group-focus-within:block">
+                    {(["", "today", "7d", "30d", "90d"] as const).map(v => (
+                      <button key={v} onClick={() => setDateRange(v)}
+                        className={cn("w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted flex items-center gap-2",
+                          dateRange === v && "text-link"
+                        )}>
+                        {dateRange === v && <IconCheck className="size-3" />}
+                        {DATE_RANGE_LABEL[v]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {(filterType || filterStatus || filterBrand || filterProduct || filterLanguage || dateRange) && (
+                  <button onClick={() => { setFilterType(""); setFilterStatus(""); setFilterBrand(""); setFilterProduct(""); setFilterLanguage(""); setDateRange("") }}
                     className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 border rounded-lg">
                     <IconX className="size-3" /> Clear
                   </button>
@@ -1917,14 +2024,30 @@ export default function AssetsPage() {
                             onToggle={() => allDisplayedSelected ? clearSelected() : selectAll()}
                           />
                         </th>
-                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Name</th>
-                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Brand</th>
-                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Product</th>
-                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Lang</th>
-                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Dims / Dur</th>
-                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Type</th>
-                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Status</th>
-                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">Date Assigned</th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                          <AssetSortTh label="Name" keyId="name" sort={assetSort} onSort={cycleAssetSort} />
+                        </th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                          <AssetSortTh label="Brand" keyId="brand" sort={assetSort} onSort={cycleAssetSort} />
+                        </th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                          <AssetSortTh label="Product" keyId="product" sort={assetSort} onSort={cycleAssetSort} />
+                        </th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                          <AssetSortTh label="Lang" keyId="language" sort={assetSort} onSort={cycleAssetSort} />
+                        </th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                          <AssetSortTh label="Dims / Dur" keyId="dimensions" sort={assetSort} onSort={cycleAssetSort} />
+                        </th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                          <AssetSortTh label="Type" keyId="type" sort={assetSort} onSort={cycleAssetSort} />
+                        </th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                          <AssetSortTh label="Status" keyId="status" sort={assetSort} onSort={cycleAssetSort} />
+                        </th>
+                        <th className="px-3 text-left text-sm font-bold text-muted-foreground uppercase tracking-wide">
+                          <AssetSortTh label="Date Assigned" keyId="date" sort={assetSort} onSort={cycleAssetSort} />
+                        </th>
                         <th className="w-8 px-2"></th>
                       </tr>
                     </thead>

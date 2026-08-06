@@ -13,6 +13,7 @@ import { useAdAccount } from "@/lib/ad-account-context"
 import { useOrg } from "@/lib/org-context"
 import { cn, proxyFbImage } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
 import {
   Dialog,
@@ -9524,21 +9525,15 @@ function ThumbStack({ thumbs, count }: { thumbs: string[]; count: number }) {
 // ─── User Avatar ──────────────────────────────────────────────────────────────
 
 function UserAvatar({ name, url }: { name: string; url?: string | null }) {
-  if (url) {
-    return (
-      <div className="size-6 rounded-full overflow-hidden shrink-0">
-        <img src={url} alt={name} className="size-full object-cover" />
-      </div>
-    )
-  }
   const initials = name ? name.slice(0, 1).toUpperCase() : "?"
   const colors = ["bg-teal-500", "bg-primary/100", "bg-purple-500", "bg-orange-500", "bg-pink-500"]
-  const color = colors[name.charCodeAt(0) % colors.length]
+  const colorClass = name ? colors[name.charCodeAt(0) % colors.length] : "bg-muted"
 
   return (
-    <div className={cn("size-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0", color)}>
-      {initials}
-    </div>
+    <Avatar size="sm">
+      {url && <AvatarImage src={url} alt={name} />}
+      <AvatarFallback className={cn("text-white font-bold", colorClass)}>{initials}</AvatarFallback>
+    </Avatar>
   )
 }
 

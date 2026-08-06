@@ -2,6 +2,7 @@
 
 import { IconEye, IconBrandFacebook, IconBrandInstagram, IconBrandTiktok, IconPhoto, IconVideo } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { formatViews, formatSpend } from "@/lib/inspo-mock-data"
 import type { BrandSummary } from "@/lib/brand-spy-analytics"
 
@@ -9,14 +10,11 @@ function BrandAvatar({ name, src, size = "md" }: { name: string; src?: string; s
   const colors = ["bg-blue-500", "bg-violet-500", "bg-emerald-500", "bg-orange-500", "bg-pink-500", "bg-teal-500", "bg-red-500", "bg-amber-500"]
   const color = colors[name.charCodeAt(0) % colors.length]
   const sz = size === "sm" ? "size-8 text-xs" : size === "lg" ? "size-14 text-xl" : "size-11 text-sm"
-  if (src) return (
-    <img src={src} alt={name} className={cn(sz, "rounded-full object-cover ring-2 ring-border shrink-0")}
-      onError={e => { (e.target as HTMLImageElement).style.display = "none" }} />
-  )
   return (
-    <div className={cn(sz, color, "rounded-full flex items-center justify-center text-white font-bold shrink-0")}>
-      {name.charAt(0).toUpperCase()}
-    </div>
+    <Avatar className={cn(sz, "ring-2 ring-border shrink-0")}>
+      {src && <AvatarImage src={src} alt={name} />}
+      <AvatarFallback className={cn(color, "text-white font-bold")}>{name.charAt(0).toUpperCase()}</AvatarFallback>
+    </Avatar>
   )
 }
 

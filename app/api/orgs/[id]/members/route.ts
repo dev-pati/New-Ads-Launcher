@@ -364,6 +364,23 @@ export async function PATCH(
       return NextResponse.json({ error: "Only admins can change roles" }, { status: 403 })
     }
 
+    // An admin must not edit their own role: self-demotion can leave an org with no
+    // admin and cannot be undone without another admin. Everyone else reaches a higher
+    // role through a request, never by editing the selector.
+    const { data: targetMember } = await supabase
+      .from("org_members")
+      .select("user_id")
+      .eq("id", memberId)
+      .eq("org_id", orgId)
+      .maybeSingle()
+
+    if (targetMember?.user_id === user.id) {
+      return NextResponse.json(
+        { error: "You cannot change your own role. Ask another admin." },
+        { status: 403 }
+      )
+    }
+
     const actorName = user.user_metadata?.full_name || user.email?.split("@")[0] || "Someone"
     const outcome = await updateWithVersion<{ id: string; user_id: string; role: string }>({
       db: supabase,

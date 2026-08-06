@@ -16,6 +16,7 @@ export type TrackingBatch = {
 export type TrackingMemberSummary = {
   userId: string
   name: string
+  avatarUrl?: string | null
   batches: number
   fullSuccess: number
   nonSuccess: number
@@ -44,6 +45,7 @@ export function summarizeLaunchBatches(batches: TrackingBatch[]) {
     const member = team.get(batch.user_id) || {
       userId: batch.user_id,
       name: batch.user_name || "Unknown",
+      avatarUrl: null,
       batches: 0,
       fullSuccess: 0,
       nonSuccess: 0,
