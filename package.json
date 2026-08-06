@@ -11,7 +11,8 @@
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "onboard": "node scripts/generate-onboarding.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
