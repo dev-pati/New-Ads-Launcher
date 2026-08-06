@@ -6,43 +6,28 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
   IconBolt, IconPlus, IconSearch, IconRefresh, IconLoader2, IconX,
-  IconCheck, IconChevronDown, IconExternalLink, IconCalendar,
-  IconClock, IconTrash, IconAlertCircle, IconHistory, IconEdit,
-  IconSettings, IconChartBar, IconInfoCircle, IconMapPin,
-  IconArrowUp, IconArrowDown, IconEqual, IconFilter,
+  IconExternalLink, IconCalendar, IconClock, IconTrash,
+  IconAlertCircle, IconHistory, IconInfoCircle, IconMapPin,
+  IconArrowUp, IconArrowDown, IconEqual,
 } from "@tabler/icons-react"
+import { ruleToDraft, type RuleDraft } from "@/lib/meta-ad-rules"
+import { RuleFormDialog } from "./_components/rule-form-dialog"
+import { RulePreviewDialog } from "./_components/rule-preview-dialog"
+import { RulesTable, type RuleRow, type RuleSummary } from "./_components/rules-table"
+import { DismissibleNotice } from "./_components/dismissible-notice"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 type RulesTab = "custom" | "history" | "budget"
 type ChangeType = "absolute" | "percentage_increase" | "percentage_decrease"
 
-interface FbRule {
-  id: string
-  name: string
-  status: "ENABLED" | "DISABLED" | "DELETED"
-  schedule_spec?: { schedule_type: string }
-  trigger_subscriptions?: { type: string }[]
-  actions?: { type: string; value?: string }[]
-  evaluation_spec?: {
-    filters?: { field: string; value: string; operator: string }[]
-    schedule_spec?: { schedule_type: string }
-  }
-  created_time?: string
-}
-
 interface RuleHistoryEntry {
-  id: string
+  id?: string
   rule_id: string
   rule_name: string
-  rule_status: string
-  results?: string
-  is_applicable?: boolean
-  timestamp_start?: string
-  timestamp_stop?: string
-  error_code?: number
-  num_entity_affected?: number
-  num_api_call?: number
+  timestamp?: string
+  is_manual?: boolean
+  entities: { id: string; name?: string; type?: string }[]
 }
 
 interface BudgetSchedule {
@@ -72,12 +57,6 @@ interface AdSet {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function ruleBadge(status: string) {
-  if (status === "ENABLED") return "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400"
-  if (status === "DISABLED") return "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-  return "bg-muted text-muted-foreground"
-}
-
 function scheduleBadge(status: string) {
   if (status === "active") return "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400"
   if (status === "executed") return "bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400"
@@ -103,223 +82,6 @@ function localTimezone() {
   try { return Intl.DateTimeFormat().resolvedOptions().timeZone } catch { return "UTC" }
 }
 
-// ─── Create Rule Modal ─────────────────────────────────────────────────────────
-
-const FB_RULE_FIELDS = [
-  { value: "spent_today", label: "Spend Today ($)" },
-  { value: "spend", label: "Total Spend ($)" },
-  { value: "cpc", label: "CPC ($)" },
-  { value: "cpm", label: "CPM ($)" },
-  { value: "ctr", label: "CTR (%)" },
-  { value: "roas", label: "ROAS" },
-  { value: "impressions", label: "Impressions" },
-  { value: "frequency", label: "Frequency" },
-  { value: "cost_per_result", label: "Cost per Result ($)" },
-  { value: "results", label: "Results" },
-]
-
-const FB_OPERATORS = [
-  { value: "GREATER_THAN", label: ">" },
-  { value: "LESS_THAN", label: "<" },
-  { value: "EQUAL", label: "=" },
-  { value: "NOT_EQUAL", label: "≠" },
-  { value: "GREATER_THAN_OR_EQUAL_TO", label: "≥" },
-  { value: "LESS_THAN_OR_EQUAL_TO", label: "≤" },
-]
-
-const FB_ACTIONS = [
-  { value: "PAUSE_AD", label: "Pause Ad" },
-  { value: "PAUSE_ADSET", label: "Pause Ad Set" },
-  { value: "PAUSE_CAMPAIGN", label: "Pause Campaign" },
-  { value: "TURN_ON_AD", label: "Turn On Ad" },
-  { value: "TURN_ON_ADSET", label: "Turn On Ad Set" },
-  { value: "TURN_ON_CAMPAIGN", label: "Turn On Campaign" },
-  { value: "INCREASE_DAILY_BUDGET", label: "Increase Daily Budget" },
-  { value: "DECREASE_DAILY_BUDGET", label: "Decrease Daily Budget" },
-  { value: "INCREASE_LIFETIME_BUDGET", label: "Increase Lifetime Budget" },
-  { value: "DECREASE_LIFETIME_BUDGET", label: "Decrease Lifetime Budget" },
-  { value: "SEND_NOTIFICATION", label: "Send Notification" },
-]
-
-const FB_SCHEDULES = [
-  { value: "SEMI_HOURLY", label: "Every 30 minutes" },
-  { value: "HOURLY", label: "Every hour" },
-  { value: "EVERY_12_HOURS", label: "Every 12 hours" },
-  { value: "DAILY", label: "Daily" },
-  { value: "WEEKLY", label: "Weekly" },
-]
-
-interface Condition { field: string; operator: string; value: string }
-
-function CreateRuleModal({
-  open, onClose, adAccountId, token, onCreated,
-}: {
-  open: boolean
-  onClose: () => void
-  adAccountId: string
-  token?: string
-  onCreated: () => void
-}) {
-  const [name, setName] = useState("")
-  const [conditions, setConditions] = useState<Condition[]>([{ field: "cpc", operator: "GREATER_THAN", value: "2" }])
-  const [action, setAction] = useState("PAUSE_AD")
-  const [actionValue, setActionValue] = useState("")
-  const [schedule, setSchedule] = useState("DAILY")
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState("")
-
-  function addCondition() {
-    setConditions(c => [...c, { field: "cpc", operator: "GREATER_THAN", value: "1" }])
-  }
-  function removeCondition(i: number) {
-    setConditions(c => c.filter((_, idx) => idx !== i))
-  }
-  function updateCondition(i: number, key: keyof Condition, val: string) {
-    setConditions(c => c.map((item, idx) => idx === i ? { ...item, [key]: val } : item))
-  }
-
-  const needsValue = action.includes("BUDGET")
-
-  async function handleCreate() {
-    if (!name.trim()) { setError("Rule name required"); return }
-    if (!adAccountId) { setError("Select an ad account"); return }
-    setSaving(true); setError("")
-    try {
-      const res = await fetch("/api/facebook/rules", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          adAccountId,
-          name: name.trim(),
-          conditions,
-          action: { type: action, value: needsValue ? actionValue : undefined },
-          schedule: { type: schedule, count: 1 },
-        }),
-      })
-      const d = await res.json()
-      if (!res.ok) { setError(d.error || "Failed"); return }
-      onCreated()
-      onClose()
-      setName(""); setConditions([{ field: "cpc", operator: "GREATER_THAN", value: "2" }])
-      setAction("PAUSE_AD"); setActionValue(""); setSchedule("DAILY")
-    } catch (e: any) { setError(e.message) }
-    finally { setSaving(false) }
-  }
-
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-background rounded-xl shadow-2xl border w-full max-w-xl mx-4 flex flex-col max-h-[90vh]">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="font-semibold text-lg">Create Automation Rule</h2>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><IconX className="size-5" /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Rule Name */}
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">Rule Name</label>
-            <input
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
-              placeholder="e.g. Pause high CPC ads"
-              value={name}
-              onChange={e => setName(e.target.value)}
-            />
-          </div>
-
-          {/* Conditions */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium">Conditions</label>
-              <button onClick={addCondition} className="text-xs text-primary hover:underline flex items-center gap-1">
-                <IconPlus className="size-3.5" /> Add condition
-              </button>
-            </div>
-            <div className="space-y-2">
-              {conditions.map((c, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
-                    className="flex-1 border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
-                    value={c.field}
-                    onChange={e => updateCondition(i, "field", e.target.value)}
-                  >
-                    {FB_RULE_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
-                  </select>
-                  <select
-                    className="border rounded-lg px-2 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
-                    value={c.operator}
-                    onChange={e => updateCondition(i, "operator", e.target.value)}
-                  >
-                    {FB_OPERATORS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  <input
-                    type="number"
-                    className="w-24 border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
-                    value={c.value}
-                    onChange={e => updateCondition(i, "value", e.target.value)}
-                  />
-                  {conditions.length > 1 && (
-                    <button onClick={() => removeCondition(i)} className="text-muted-foreground hover:text-red-500">
-                      <IconX className="size-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Action */}
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">Action</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
-              value={action}
-              onChange={e => setAction(e.target.value)}
-            >
-              {FB_ACTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-            </select>
-            {needsValue && (
-              <div className="mt-2">
-                <label className="text-xs text-muted-foreground mb-1 block">Budget change amount (%)</label>
-                <input
-                  type="number"
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
-                  placeholder="e.g. 20"
-                  value={actionValue}
-                  onChange={e => setActionValue(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Schedule */}
-          <div>
-            <label className="text-sm font-medium mb-1.5 block">Run Frequency</label>
-            <select
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
-              value={schedule}
-              onChange={e => setSchedule(e.target.value)}
-            >
-              {FB_SCHEDULES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          </div>
-
-          {error && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-sm">
-              <IconAlertCircle className="size-4 flex-shrink-0" />{error}
-            </div>
-          )}
-        </div>
-        <div className="px-6 py-4 border-t flex justify-end gap-2">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleCreate} disabled={saving}>
-            {saving ? <IconLoader2 className="size-4 animate-spin mr-1" /> : <IconCheck className="size-4 mr-1" />}
-            Create Rule
-          </Button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
@@ -341,11 +103,19 @@ export default function RulesPage() {
   const normAccountId = accountId.startsWith("act_") ? accountId : accountId ? `act_${accountId}` : ""
 
   // ── Custom Rules tab ──────────────────────────────────────────────────────────
-  const [rules, setRules] = useState<FbRule[]>([])
+  const [rules, setRules] = useState<RuleRow[]>([])
+  const [ruleSummary, setRuleSummary] = useState<Record<string, RuleSummary>>({})
   const [rulesLoading, setRulesLoading] = useState(false)
   const [rulesError, setRulesError] = useState("")
-  const [showCreateRule, setShowCreateRule] = useState(false)
   const [rulesSearch, setRulesSearch] = useState("")
+  const [busyRuleId, setBusyRuleId] = useState<string | null>(null)
+
+  // Dialog state — one form serves create and edit; `editing` decides which
+  const [formOpen, setFormOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | undefined>()
+  const [formInitial, setFormInitial] = useState<Partial<RuleDraft> | null>(null)
+  const [previewRule, setPreviewRule] = useState<RuleRow | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<RuleRow | null>(null)
 
   const fetchRules = useCallback(async () => {
     if (!accountId) return
@@ -359,15 +129,82 @@ export default function RulesPage() {
     finally { setRulesLoading(false) }
   }, [accountId, normAccountId])
 
-  useEffect(() => { if (tab === "custom" && accountId) fetchRules() }, [tab, accountId, fetchRules])
+  // "Rule results" comes from history, not from the rule object — a separate, slower call,
+  // so the table renders first and fills the column in when it lands.
+  const fetchRuleSummary = useCallback(async () => {
+    if (!accountId) return
+    try {
+      const res = await fetch(`/api/facebook/rules/history?adAccountId=${normAccountId}`)
+      const d = await res.json()
+      if (res.ok) setRuleSummary(d.summary || {})
+    } catch { /* the column falls back to "Never" */ }
+  }, [accountId, normAccountId])
+
+  useEffect(() => {
+    if (tab === "custom" && accountId) { fetchRules(); fetchRuleSummary() }
+  }, [tab, accountId, fetchRules, fetchRuleSummary])
 
   const filteredRules = rules.filter(r =>
-    !rulesSearch || r.name.toLowerCase().includes(rulesSearch.toLowerCase())
+    !rulesSearch ||
+    r.name.toLowerCase().includes(rulesSearch.toLowerCase()) ||
+    r.conditionText.toLowerCase().includes(rulesSearch.toLowerCase())
   )
+
+  function openCreate() {
+    setEditingId(undefined); setFormInitial(null); setFormOpen(true)
+  }
+  function openEdit(rule: RuleRow) {
+    setEditingId(rule.id); setFormInitial(ruleToDraft(rule.raw ?? rule)); setFormOpen(true)
+  }
+  function openDuplicate(rule: RuleRow) {
+    const draft = ruleToDraft(rule.raw ?? rule)
+    setEditingId(undefined)
+    setFormInitial({ ...draft, name: `${draft.name} (copy)` })
+    setFormOpen(true)
+  }
+
+  async function toggleRule(rule: RuleRow, next: boolean) {
+    setBusyRuleId(rule.id); setRulesError("")
+    try {
+      const res = await fetch(`/api/facebook/rules/${rule.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          adAccountId: normAccountId,
+          statusOnly: true,
+          status: next ? "ENABLED" : "DISABLED",
+        }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setRulesError(d.error || "Failed to change rule status"); return }
+      setRules(rs => rs.map(r =>
+        r.id === rule.id
+          // hasIssues has to be cleared too — Meta answered the status write, so whatever
+          // it was complaining about is no longer what this row says.
+          ? { ...r, enabled: next, hasIssues: false, status: next ? "ENABLED" : "DISABLED" }
+          : r
+      ))
+    } catch (e: any) { setRulesError(e.message) }
+    finally { setBusyRuleId(null) }
+  }
+
+  async function deleteRule(rule: RuleRow) {
+    setBusyRuleId(rule.id); setRulesError("")
+    try {
+      const res = await fetch(`/api/facebook/rules/${rule.id}?adAccountId=${normAccountId}`, {
+        method: "DELETE",
+      })
+      const d = await res.json()
+      if (!res.ok) { setRulesError(d.error || "Failed to delete rule"); return }
+      setRules(rs => rs.filter(r => r.id !== rule.id))
+      setConfirmDelete(null)
+    } catch (e: any) { setRulesError(e.message) }
+    finally { setBusyRuleId(null) }
+  }
 
   // ── Rule History tab ──────────────────────────────────────────────────────────
   const [history, setHistory] = useState<RuleHistoryEntry[]>([])
-  const [historyRules, setHistoryRules] = useState<FbRule[]>([])
+  const [historyRules, setHistoryRules] = useState<{ id: string; name: string }[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState("")
   const [historySearch, setHistorySearch] = useState("")
@@ -582,7 +419,7 @@ export default function RulesPage() {
 
         {/* ── Custom Rules ─────────────────────────────────────────────────────── */}
         {tab === "custom" && (
-          <div className="p-6 space-y-4 max-w-6xl">
+          <div className="p-6 space-y-4">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="relative flex-1 min-w-[200px]">
                 <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -593,19 +430,53 @@ export default function RulesPage() {
                   onChange={e => setRulesSearch(e.target.value)}
                 />
               </div>
-              <Button variant="outline" size="sm" onClick={fetchRules} disabled={rulesLoading}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => { fetchRules(); fetchRuleSummary() }}
+                disabled={rulesLoading}
+              >
                 <IconRefresh className={cn("size-4", rulesLoading && "animate-spin")} />
               </Button>
-              <Button size="sm" onClick={() => setShowCreateRule(true)}>
+              <Button size="sm" onClick={openCreate}>
                 <IconPlus className="size-4 mr-1" /> Create Rule
               </Button>
             </div>
 
-            {/* Info banner */}
-            <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 text-sm text-blue-700 dark:text-blue-400">
-              <IconInfoCircle className="size-4 flex-shrink-0 mt-0.5" />
-              <span>Rules are created and managed directly via the Facebook Ads API. Changes here sync with Meta Ads Manager in real time.</span>
-            </div>
+            {/* Explanation, read once — dismissing it is permanent */}
+            <DismissibleNotice
+              id="meta-owns-these-rules"
+              tone="info"
+              icon={<IconInfoCircle className="size-4 flex-shrink-0 mt-0.5" />}
+            >
+              These are Meta&apos;s own automated rules — Meta stores and runs them, so anything
+              you change here appears in Ads Manager too. Rule times are Pacific Time on Meta&apos;s side.
+            </DismissibleNotice>
+
+            {/* Dead rules are the failure this page exists to make visible (trap T7) */}
+            {(() => {
+              const broken = filteredRules.filter(r => r.hasIssues).length
+              const dead = filteredRules.filter(r => !r.enabled && !r.hasIssues).length
+              if (!dead && !broken) return null
+              return (
+                <DismissibleNotice
+                  id="rules-not-running"
+                  // Closing this says "I know about these N". If N grows it is news again.
+                  level={dead + broken}
+                  tone="warn"
+                  icon={<IconAlertCircle className="size-4 flex-shrink-0 mt-0.5" />}
+                >
+                  {/* Built as strings, not JSX text: JSX trims every line of a multi-line
+                      literal, which silently eats the space next to an interpolation. */}
+                  {[
+                    dead > 0 &&
+                      `${dead} ${dead === 1 ? "rule is" : "rules are"} turned off and not being checked. A disabled rule protects nothing.`,
+                    broken > 0 &&
+                      `${broken} ${broken === 1 ? "rule has" : "rules have"} issues on Meta's side — the switch is on but Meta cannot run ${broken === 1 ? "it" : "them"}. Open the rule in Ads Manager to see why.`,
+                  ].filter(Boolean).join(" ")}
+                </DismissibleNotice>
+              )
+            })()}
 
             {rulesError && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 text-sm">
@@ -629,43 +500,16 @@ export default function RulesPage() {
                 )}
               </div>
             ) : (
-              <div className="border rounded-xl overflow-hidden">
-                <table data-table="comfortable" className="w-full text-sm">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left px-3 font-medium text-muted-foreground">Rule Name</th>
-                      <th className="text-left px-3 font-medium text-muted-foreground">Status</th>
-                      <th className="text-left px-3 font-medium text-muted-foreground">Schedule</th>
-                      <th className="text-left px-3 font-medium text-muted-foreground">Action</th>
-                      <th className="text-left px-3 font-medium text-muted-foreground">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredRules.map(rule => {
-                      const ruleActions = rule.actions || []
-                      const schedType = rule.evaluation_spec?.schedule_spec?.schedule_type || rule.schedule_spec?.schedule_type
-                      const schedLabel = FB_SCHEDULES.find(s => s.value === schedType)?.label || schedType || "—"
-                      const actionLabel = FB_ACTIONS.find(a => a.value === ruleActions[0]?.type)?.label || ruleActions[0]?.type || "—"
-                      return (
-                        <tr key={rule.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="px-3">
-                            <div className="font-medium">{rule.name}</div>
-                            <div className="text-xs text-muted-foreground font-mono">{rule.id}</div>
-                          </td>
-                          <td className="px-3">
-                            <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium", ruleBadge(rule.status))}>
-                              {rule.status}
-                            </span>
-                          </td>
-                          <td className="px-3 text-muted-foreground">{schedLabel}</td>
-                          <td className="px-3 text-muted-foreground">{actionLabel}</td>
-                          <td className="px-3 text-muted-foreground">{fmtDate(rule.created_time)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <RulesTable
+                rules={filteredRules}
+                summary={ruleSummary}
+                busyId={busyRuleId}
+                onToggle={toggleRule}
+                onPreview={setPreviewRule}
+                onEdit={openEdit}
+                onDuplicate={openDuplicate}
+                onDelete={setConfirmDelete}
+              />
             )}
 
             {/* Rule count */}
@@ -679,7 +523,7 @@ export default function RulesPage() {
 
         {/* ── Rule History ──────────────────────────────────────────────────────── */}
         {tab === "history" && (
-          <div className="p-6 space-y-4 max-w-6xl">
+          <div className="p-6 space-y-4">
             <div className="flex items-center gap-3 flex-wrap">
               <div className="relative flex-1 min-w-[200px]">
                 <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -721,41 +565,39 @@ export default function RulesPage() {
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="text-left px-3 font-medium text-muted-foreground">Rule</th>
-                      <th className="text-right px-3 font-medium text-muted-foreground">Entities Affected</th>
-                      <th className="text-right px-3 font-medium text-muted-foreground">API Calls</th>
-                      <th className="text-left px-3 font-medium text-muted-foreground">Result</th>
-                      <th className="text-left px-3 font-medium text-muted-foreground">Applicable</th>
-                      <th className="text-left px-3 font-medium text-muted-foreground">Executed</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">What it changed</th>
+                      <th className="text-right px-3 font-medium text-muted-foreground">Entities</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">Trigger</th>
+                      <th className="text-left px-3 font-medium text-muted-foreground">When</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {filteredHistory.map((h, idx) => (
-                      <tr key={`${h.rule_id}-${idx}`} className="hover:bg-muted/30 transition-colors">
+                      <tr key={`${h.rule_id}-${h.id ?? idx}`} className="hover:bg-muted/30 transition-colors align-top">
                         <td className="px-3">
                           <div className="font-medium">{h.rule_name}</div>
                           <div className="text-xs text-muted-foreground font-mono">{h.rule_id}</div>
                         </td>
-                        <td className="px-3 text-right tabular-nums">{h.num_entity_affected ?? "—"}</td>
-                        <td className="px-3 text-right tabular-nums">{h.num_api_call ?? "—"}</td>
-                        <td className="px-3">
-                          {h.error_code ? (
-                            <span className="text-red-600 dark:text-red-400 text-xs">Error {h.error_code}</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">{h.results || "—"}</span>
-                          )}
+                        {/* Named entities, so "who turned my ad off?" is answerable here */}
+                        <td className="px-3 max-w-[380px]">
+                          <div className="space-y-0.5">
+                            {h.entities.slice(0, 4).map(e => (
+                              <div key={e.id} className="text-xs truncate">
+                                <span className="text-muted-foreground">{e.type || "entity"}:</span> {e.name || e.id}
+                              </div>
+                            ))}
+                            {h.entities.length > 4 && (
+                              <div className="text-xs text-muted-foreground">
+                                +{h.entities.length - 4} more
+                              </div>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-3">
-                          {h.is_applicable === true ? (
-                            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 text-xs">
-                              <IconCheck className="size-3.5" /> Yes
-                            </span>
-                          ) : h.is_applicable === false ? (
-                            <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
-                              <IconX className="size-3.5" /> No
-                            </span>
-                          ) : "—"}
+                        <td className="px-3 text-right tabular-nums">{h.entities.length}</td>
+                        <td className="px-3 text-xs text-muted-foreground">
+                          {h.is_manual ? "Run manually" : "Scheduled"}
                         </td>
-                        <td className="px-3 text-muted-foreground text-xs">{fmtDate(h.timestamp_stop)}</td>
+                        <td className="px-3 text-muted-foreground text-xs">{fmtDate(h.timestamp)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1070,13 +912,62 @@ export default function RulesPage() {
         )}
       </div>
 
-      {/* Create Rule Modal */}
-      <CreateRuleModal
-        open={showCreateRule}
-        onClose={() => setShowCreateRule(false)}
+      <RuleFormDialog
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
         adAccountId={normAccountId}
-        onCreated={() => { fetchRules() }}
+        initial={formInitial}
+        ruleId={editingId}
+        onSaved={() => { fetchRules(); fetchRuleSummary() }}
       />
+
+      {previewRule && (
+        <RulePreviewDialog
+          open
+          onClose={() => setPreviewRule(null)}
+          ruleId={previewRule.id}
+          ruleName={previewRule.name}
+          actionLabel={previewRule.actionLabel}
+          conditionText={previewRule.conditionText}
+          adAccountId={normAccountId}
+          onExecuted={() => { fetchRules(); fetchRuleSummary() }}
+        />
+      )}
+
+      {/* Delete confirm — Meta has no undo, so the count is stated before the button */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-background rounded-xl shadow-2xl border w-full max-w-md">
+            <div className="px-6 py-4 border-b">
+              <h2 className="font-semibold text-lg">Delete rule</h2>
+            </div>
+            <div className="p-6 space-y-3 text-sm">
+              <p>
+                Delete <span className="font-medium">{confirmDelete.name}</span> from Meta?
+              </p>
+              <p className="text-muted-foreground">
+                {confirmDelete.actionLabel} — {confirmDelete.conditionText}
+              </p>
+              <p className="text-muted-foreground">
+                This removes the rule in Ads Manager too. Entities it already changed stay as they are.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setConfirmDelete(null)}>Cancel</Button>
+              <Button
+                variant="destructive"
+                onClick={() => deleteRule(confirmDelete)}
+                disabled={busyRuleId === confirmDelete.id}
+              >
+                {busyRuleId === confirmDelete.id
+                  ? <IconLoader2 className="size-4 animate-spin mr-1" />
+                  : <IconTrash className="size-4 mr-1" />}
+                Delete rule
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

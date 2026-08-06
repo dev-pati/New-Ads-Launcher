@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { findRoadmapOnlyAutomationApp } from "@/lib/automation-capabilities"
 import { getAuthContext, requireRole } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { recordActivity } from "@/lib/notifications/emit"
 
 export const dynamic = "force-dynamic"
 
@@ -76,6 +77,19 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) throw error
+
+    // automations has no actor column (TD-31): without this row, "who automated what"
+    // is unanswerable. Audit-only — /api/automations/[id] already notifies on edits.
+    void recordActivity({
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName: ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone",
+      objectType: "automation",
+      objectId: data.id,
+      objectName: data.name,
+      action: "created",
+    })
+
     return NextResponse.json({ automation: data }, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

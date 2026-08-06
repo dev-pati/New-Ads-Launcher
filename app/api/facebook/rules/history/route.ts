@@ -1,63 +1,111 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getFacebookConnection } from "@/lib/auth"
+import { GRAPH, graphError, isErrorResponse, resolveRuleRequest } from "../_shared"
 
 export const dynamic = "force-dynamic"
 
-const GRAPH = "https://graph.facebook.com/v25.0"
+const HISTORY_FIELDS = [
+  "id",
+  "results",
+  "is_manual",
+  "timestamp",
+  "evaluation_spec",
+  "execution_spec",
+].join(",")
 
+interface HistoryEntry {
+  id?: string
+  rule_id: string
+  rule_name: string
+  timestamp?: string
+  is_manual?: boolean
+  /** entities this run actually changed */
+  entities: { id: string; name?: string; type?: string }[]
+}
+
+/**
+ * GET /api/facebook/rules/history?adAccountId=...[&ruleId=...][&entityId=...]
+ *
+ * Serves two different questions from the same edge:
+ *   - "what has this rule done?"      → ruleId
+ *   - "who turned my ad off?"         → entityId  (workflow W3; Meta cannot answer this,
+ *                                       its history is only searchable by rule)
+ *
+ * `summary` is what the list needs for the "Rule results" and "When rule runs" columns:
+ * executions are runs that changed something, which is not the same as evaluations. A
+ * continuous rule evaluates ~48x/day and may execute never — showing evaluations there
+ * would make every healthy rule look like it is destroying the account.
+ */
 export async function GET(request: NextRequest) {
   try {
-    const ctx = await getAuthContext()
-    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const connection = await getFacebookConnection(ctx.orgId)
-    if (!connection) return NextResponse.json({ error: "Facebook not connected" }, { status: 400 })
+    const resolved = await resolveRuleRequest(request, "read")
+    if (isErrorResponse(resolved)) return resolved
+    const { token, accountPath } = resolved
 
     const sp = request.nextUrl.searchParams
-    const adAccountId = sp.get("adAccountId") || ""
-    if (!adAccountId) return NextResponse.json({ error: "adAccountId required" }, { status: 400 })
+    const ruleIdFilter = sp.get("ruleId")
+    const entityIdFilter = sp.get("entityId")
 
-    const accountPath = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
-    const token = connection.access_token
-
-    // First get all rules, then get history for each
     const rulesRes = await fetch(
-      `${GRAPH}/${accountPath}/adrules_library?fields=id,name,status&limit=50&access_token=${token}`
+      `${GRAPH}/${accountPath}/adrules_library?fields=id,name,status&limit=100&access_token=${token}`
     )
     const rulesData = await rulesRes.json()
-    if (rulesData.error) return NextResponse.json({ error: rulesData.error.message }, { status: 400 })
+    if (rulesData.error) return graphError(rulesData)
 
-    const rules: any[] = rulesData.data || []
+    let rules: any[] = rulesData.data || []
+    if (ruleIdFilter) rules = rules.filter(r => String(r.id) === ruleIdFilter)
 
-    // Batch fetch history for all rules
-    const historyEntries: any[] = []
+    const entries: HistoryEntry[] = []
+    const summary: Record<string, { executions: number; lastRun: string | null; entitiesAffected: number }> = {}
+
     await Promise.all(
-      rules.slice(0, 10).map(async (rule) => {
+      rules.map(async rule => {
+        summary[rule.id] = { executions: 0, lastRun: null, entitiesAffected: 0 }
         try {
-          const hRes = await fetch(
-            `${GRAPH}/${rule.id}/history?fields=id,results,is_applicable,timestamp_start,timestamp_stop,error_code,num_entity_affected,num_api_call&limit=20&access_token=${token}`
+          const res = await fetch(
+            `${GRAPH}/${rule.id}/history?fields=${HISTORY_FIELDS}&limit=50&access_token=${token}`
           )
-          const hData = await hRes.json()
-          if (hData.data) {
-            hData.data.forEach((h: any) => {
-              historyEntries.push({
-                ...h,
-                rule_id: rule.id,
-                rule_name: rule.name,
-                rule_status: rule.status,
-              })
+          const data = await res.json()
+          // A single rule failing (deleted, permission) must not empty the whole page.
+          if (!data?.data) return
+
+          for (const h of data.data as any[]) {
+            const entities = (h.results || [])
+              .filter((r: any) => r?.object_id)
+              .map((r: any) => ({
+                id: String(r.object_id),
+                name: r.object_name,
+                type: r.object_type,
+              }))
+
+            if (!entities.length) continue // an evaluation that changed nothing
+            summary[rule.id].executions += 1
+            summary[rule.id].entitiesAffected += entities.length
+            if (!summary[rule.id].lastRun) summary[rule.id].lastRun = h.timestamp ?? null
+
+            entries.push({
+              id: h.id,
+              rule_id: String(rule.id),
+              rule_name: rule.name,
+              timestamp: h.timestamp,
+              is_manual: h.is_manual,
+              entities,
             })
           }
-        } catch {}
+        } catch {
+          // leave this rule's summary at zero rather than failing the request
+        }
       })
     )
 
-    // Sort by timestamp descending
-    historyEntries.sort((a, b) =>
-      new Date(b.timestamp_stop || 0).getTime() - new Date(a.timestamp_stop || 0).getTime()
+    const filtered = entityIdFilter
+      ? entries.filter(e => e.entities.some(x => x.id === entityIdFilter))
+      : entries
+
+    filtered.sort(
+      (a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
     )
 
-    return NextResponse.json({ history: historyEntries, rules })
+    return NextResponse.json({ history: filtered, summary, rules })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
