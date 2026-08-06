@@ -599,7 +599,7 @@ function SpendHoverValue({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <div
-        className="group/spend inline-flex items-center gap-1.5"
+        className="group/spend flex items-center justify-between w-full"
         onMouseEnter={() => enterTarget("triggerPointer")}
         onMouseLeave={() => leaveTarget("triggerPointer")}
         onFocusCapture={() => enterTarget("triggerFocus")}
@@ -900,7 +900,16 @@ const ROW_BG = {
 const rowBg = (i: number) => (i % 2 === 0 ? ROW_BG.even : ROW_BG.odd)
 const FROZEN_BODY_SEL = "bg-[#e3f0fe] dark:bg-[#1d2235]"
 const FROZEN_BAND_BG = "bg-[#f5f6f7] dark:bg-background"
-const FROZEN_DIVIDER = "border-r-2 border-[#d8dadf] dark:border-gray-700"
+/**
+ * A border on a sticky cell goes hairline-thin or vanishes at odd horizontal scroll offsets
+ * (subpixel rounding leaves a gap between adjacent <td> borders). box-shadow paints on the
+ * cell's own layer regardless of scroll position, so the frozen-pane edge reads as one solid
+ * line from header through every body row to the footer, not a border that flickers while
+ * scrolling.
+ */
+const FROZEN_DIVIDER = "border-r border-[#d4d8e0] dark:border-[#3f4654]"
+const FOOTER_CELL_SHADOW = "border-t border-[#d4d8e0] dark:border-[#3f4654]"
+const FOOTER_STICKY_SHADOW = "border-t border-r border-[#d4d8e0] dark:border-[#3f4654]"
 const FOOTER_BG = "bg-[#f7f8fa] dark:bg-[#1b1d23]"
 
 function SortTh({ label, field, sortField, sortDir, onSort, width, onResize, className }: {
@@ -3900,11 +3909,11 @@ function AdsManagerContent() {
         )}
 
         <div className="min-h-0 max-h-full overflow-auto border border-[#d8dadf] bg-white dark:border-gray-700 dark:bg-background">
-          <table data-table="compact" className="w-full text-sm border-collapse" style={{ minWidth: 1100, tableLayout: "fixed" }}>
+          <table data-table="compact" data-sticky-grid className="w-full text-sm border-separate border-spacing-0" style={{ minWidth: 1100, tableLayout: "fixed" }}>
             {/* `dark:bg-muted/80` was translucent, which is invisible while nothing is pinned
                 horizontally but shows the scrolling columns through the frozen header cells the
                 moment they are. Opaque here and on the three frozen cells below. */}
-            <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted border-b-2 border-[#d8dadf] dark:border-gray-700">
+            <thead className="sticky top-0 z-30 bg-[#f5f6f7] dark:bg-muted shadow-[0_1px_0_0_#d4d8e0] dark:shadow-[0_1px_0_0_#3f4654]">
               <tr>
                 <th className={cn(FROZEN_W.check, "px-2 text-left sticky z-20", FROZEN_LEFT.check, FROZEN_HEAD_BG)}>
                   <input ref={headerCheckRef} type="checkbox" className="rounded size-3.5 accent-blue-600" checked={allSelected} onChange={toggleAll} />
@@ -4231,15 +4240,15 @@ function AdsManagerContent() {
             {/* ── Totals row ── */}
             {pagedData.length > 0 && (
               <tfoot>
-                <tr className="sticky bottom-0 z-20 border-t-2 border-[#d8dadf] dark:border-gray-700">
-                  <td colSpan={3} className={cn("sticky left-0 bottom-0 z-10 px-3 text-xs text-muted-foreground font-medium", FOOTER_BG, FROZEN_DIVIDER)}>
+                <tr className="sticky bottom-0 z-40">
+                  <td colSpan={3} className={cn("sticky left-0 bottom-0 z-40 px-3 text-xs text-muted-foreground font-medium", FOOTER_BG, FOOTER_STICKY_SHADOW)}>
                     Showing {currentData.length} loaded {tab === "campaigns" ? "campaigns" : tab === "adsets" ? "ad sets" : "ads"}
                   </td>
                   {tab === "ads" && (
-                    <td className={cn("px-3 sticky bottom-0", FOOTER_BG)} />
+                    <td className={cn("px-3 sticky bottom-0", FOOTER_BG, FOOTER_CELL_SHADOW)} />
                   )}
                   {columnOrder.map(colId => (
-                    <td key={colId} className={cn("px-2 sticky bottom-0 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", FOOTER_BG, isTextCol(colId) ? "text-left" : "text-right")}>
+                    <td key={colId} className={cn("px-2 sticky bottom-0 text-xs font-semibold tabular-nums text-[#1c2b33] dark:text-white", FOOTER_BG, FOOTER_CELL_SHADOW, isTextCol(colId) ? "text-left" : "text-right")}>
                       {renderTotalCell(colId)}
                     </td>
                   ))}

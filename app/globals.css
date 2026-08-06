@@ -306,6 +306,15 @@
     vertical-align: middle;
   }
 
+  /* border-collapse + position:sticky is broken in Chromium — borders on sticky cells
+     (frozen columns, sticky header/footer) vanish when the cell detaches during scroll.
+     Tables that need sticky pinned cells use border-separate + border-spacing:0, and get
+     their horizontal row separators painted on td here because border-separate does not
+     render borders declared on tr. */
+  [data-sticky-grid] > tbody > tr > td {
+    border-bottom: 1px solid var(--line-soft, rgba(30,40,61,.08));
+  }
+
   /* An empty-state or loading cell spans the table and must not be held to the row floor. */
   [data-table] td[colspan] {
     height: auto;
