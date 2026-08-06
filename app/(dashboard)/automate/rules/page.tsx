@@ -108,7 +108,13 @@ function AdAccountSelector({
     const business = a.owner_business?.name || "Individual accounts"
     return [business, accounts.filter(x => (x.owner_business?.name || "Individual accounts") === business)] as const
   })).entries())
-  const [activeGroup, setActiveGroup] = useState(groups[0]?.[0] || "")
+  const selectedBusiness = selected?.owner_business?.name || groups[0]?.[0] || ""
+  const [activeGroup, setActiveGroup] = useState(selectedBusiness)
+
+  useEffect(() => {
+    if (selectedBusiness) setActiveGroup(selectedBusiness)
+  }, [selectedBusiness])
+
   const filtered = (groups.find(([name]) => name === (activeGroup || groups[0]?.[0]))?.[1] || accounts)
     .filter(a => `${a.name} ${a.account_id || a.id} ${a.owner_business?.name || ""}`.toLowerCase().includes(query.toLowerCase()))
 
@@ -127,8 +133,8 @@ function AdAccountSelector({
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-10 z-40 w-[640px] max-w-[calc(100vw-2rem)] rounded-xl border bg-background shadow-2xl">
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-10 z-50 w-[640px] max-w-[calc(100vw-2rem)] rounded-xl border bg-background shadow-2xl">
             <div className="border-b p-3">
               <div className="relative">
                 <IconSearch className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -532,7 +538,7 @@ export default function RulesPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Page header */}
-      <div className="border-b bg-background/95 backdrop-blur px-6 py-4 flex items-center gap-4 flex-wrap">
+      <div className="relative z-40 border-b bg-background/95 backdrop-blur px-6 py-4 flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <IconBolt className="size-5 text-primary flex-shrink-0" />
           <h1 className="text-xl font-semibold">Rules</h1>

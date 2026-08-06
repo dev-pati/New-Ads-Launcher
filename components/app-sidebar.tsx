@@ -116,7 +116,7 @@ const navSections: NavSection[] = [
     label: "Automation",
     icon: IconBolt,
     subItems: [
-      { label: "Automations", href: "/automate" },
+      // { label: "Automations", href: "/automate" },
       { label: "Rules", href: "/automate/rules" },
     ],
   },
