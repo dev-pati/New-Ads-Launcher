@@ -16,7 +16,7 @@ import {
   IconSearch, IconFolder, IconFolderPlus, IconRefresh,
   IconLoader2, IconPhoto, IconLayoutGrid,
   IconChevronDown, IconPlus, IconCheck, IconDotsVertical,
-  IconPlayerPlay, IconX, IconTrash, IconArrowLeft,
+  IconX, IconTrash, IconArrowLeft,
   IconClipboardList, IconUser, IconAlertCircle,
   IconCloudDownload, IconArrowBackUp,
 } from "@tabler/icons-react"
@@ -1507,10 +1507,20 @@ export default function AssetsPage() {
                                     />
                                   </td>
                                   <td className="px-3">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      {isVideo
-                                        ? <IconPlayerPlay className="size-3.5 shrink-0 text-muted-foreground" />
-                                        : <IconPhoto className="size-3.5 shrink-0 text-muted-foreground" />}
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <div className="size-9 rounded-lg overflow-hidden bg-muted shrink-0">
+                                        <CreativeCardMedia
+                                          creative={{
+                                            id: file.assetId,
+                                            file_name: file.name,
+                                            file_url: file.fileUrl || "",
+                                            media_type: isVideo ? "video" : "image",
+                                          }}
+                                          className="h-full w-full object-cover"
+                                          compact
+                                          eager
+                                        />
+                                      </div>
                                       <span className="text-base font-medium truncate max-w-[220px]">{file.name}</span>
                                     </div>
                                   </td>
@@ -1948,7 +1958,7 @@ export default function AssetsPage() {
                             <td className="px-3">
                               <div className="flex items-center gap-3">
                                 <div className="size-9 rounded-lg overflow-hidden bg-muted shrink-0">
-                                  <CreativeCardMedia creative={c} className="h-full w-full object-cover" compact />
+                                  <CreativeCardMedia creative={c} className="h-full w-full object-cover" compact eager />
                                 </div>
                                 <span className="text-base font-medium truncate max-w-[200px]">{c.file_name}</span>
                               </div>

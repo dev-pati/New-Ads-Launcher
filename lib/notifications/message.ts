@@ -20,6 +20,11 @@ const OBJECT_LABEL: Record<ObjectType, string> = {
   template: "Template",
   automation: "Automation",
   member: "Member",
+  preset: "Ad set preset",
+  draft: "Launch draft",
+  painpoint: "Weekly painpoint",
+  fallback: "Meta Ads Manager fallback",
+  report: "Tracking report",
 }
 
 /** Field names whose *values* must never reach a notification or the audit log. */

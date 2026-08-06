@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { recordActivity } from "@/lib/notifications/emit"
 
 // ── GET /api/launch-drafts            → list all drafts (no data JSONB)
 // ── GET /api/launch-drafts?id=xxx     → load one draft + enrich creatives
@@ -152,6 +153,18 @@ export async function POST(request: NextRequest) {
       if (error.code === "42P01") return NextResponse.json({ error: "Run migration: 20260515_launch_drafts.sql" }, { status: 503 })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+
+    // Saving a draft is real preparation work — Tracking counts it as Reuse. Audit-only:
+    // the org does not need a notification every time somebody parks a launch.
+    void recordActivity({
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName: ctx.user.full_name || ctx.user.email?.split("@")[0] || "Someone",
+      objectType: "draft",
+      objectId: data.id,
+      objectName: data.name,
+      action: "created",
+    })
 
     return NextResponse.json({ draft: data })
   } catch (err: any) {

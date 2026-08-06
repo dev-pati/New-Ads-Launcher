@@ -22,6 +22,8 @@ const read = path => readFileSync(join(root, path), "utf8")
 const SHEET = "components/shared/media-detail-sheet.tsx"
 const ASSETS = "app/(dashboard)/assets/page.tsx"
 const MODAL = "components/shared/load-media-modal.tsx"
+/** Fourth surface: Creative performance opens the same sheet from a Meta ad row. */
+const TRACKING = "app/(dashboard)/tracking/page.tsx"
 
 describe("shared Media Detail sheet", () => {
   it("exists and exports the component, its type and the shared formatters", () => {
@@ -45,8 +47,8 @@ describe("shared Media Detail sheet", () => {
       "a value import would pull server-only Supabase code into the client bundle")
   })
 
-  it("all three surfaces render it and none keeps its own Sheet", () => {
-    for (const path of [ASSETS, MODAL]) {
+  it("every surface renders it and none keeps its own Sheet", () => {
+    for (const path of [ASSETS, MODAL, TRACKING]) {
       const source = read(path)
       assert.match(source, /<MediaDetailSheet/, `${path} must render the shared sheet`)
       assert.doesNotMatch(source, /<SheetContent/, `${path} must not carry a second sidebar`)

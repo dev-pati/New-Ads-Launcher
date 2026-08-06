@@ -88,7 +88,7 @@ export function summarizeCreativeCoverage(creatives: TrackingCreative[], launche
   }
 }
 
-function toVietnamDateKey(value: Date | string) {
+export function toVietnamDateKey(value: Date | string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Ho_Chi_Minh",
     year: "numeric",

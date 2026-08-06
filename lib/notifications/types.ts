@@ -48,6 +48,15 @@ export type ObjectType =
   | "template"
   | "automation"
   | "member"
+  // Audit-only object types. Added for Tracking's App Activity block: these acts are
+  // real work but nobody needs to be told about them, so they are written with
+  // recordActivity() and never with emitNotification(). No NOTIFICATION_TYPE maps to
+  // them on purpose — a notification for "someone saved a preset" is spam.
+  | "preset"
+  | "draft"
+  | "painpoint"
+  | "fallback"
+  | "report"
 
 /** One field that actually changed. `from`/`to` are already display-formatted. */
 export type FieldChange = {

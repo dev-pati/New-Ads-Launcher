@@ -48,3 +48,4 @@ scratch/
 
 # Supabase CLI local link metadata - never commit (see supabase/config.toml)
 supabase/.temp/
+.env*

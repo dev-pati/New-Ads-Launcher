@@ -1,25 +1,14 @@
 import type { PortalRegistryAsset } from "@/lib/supabase/portal-registry"
 
 /**
- * Turns Portal object keys into a browsable folder tree.
+ * Turns Portal object keys into a browsable R2 tree.
  *
- * The keys are the real R2 paths, so the tree is the bucket's own structure — nothing
- * is invented. The problem is that only one level is named by a human:
+ * The fixed `creative-portal/approved` prefix is omitted from the UI. Every remaining
+ * segment stays visible, so the hierarchy is always `brand/year/month/...` and a month
+ * holding a single asset never disappears.
  *
- *   creative-portal/approved/shilasource/2026/07/imports/<uuid>/broll_23-job14-vid03-var1.mp4
- *   └── constant ──┘└──brand──┘└─date─┘└─const─┘└─1 file─┘
- *
- * Rendered literally that is seven clicks to reach one file, five of them with a single
- * option and the last a fan-out of uuid folders holding exactly one file each. So two
- * symmetrical collapses run, both of which remove a click that had no choice in it:
- *
- *   - a folder with no files and exactly one subfolder merges into it (labels join with "/")
- *   - a folder with exactly one file and no subfolders hands that file to its parent
- *
- * `label` is the collapsed display string; `path` is always the real, uncollapsed key
- * prefix, so callers never have to undo any of this.
+ * `label` is the segment name; `path` is the real object-key prefix an assign acts on.
  */
-
 export type MediaNode = {
   kind: "file"
   assetId: string
@@ -102,26 +91,17 @@ function toMediaNode(asset: PortalRegistryAsset, fileName: string): MediaNode {
   }
 }
 
-/** Post-order: collapse the subtree, then absorb single-file children, then merge a lone child. */
-function compact(node: Draft): Draft {
-  for (const child of node.folders.values()) compact(child)
-
-  for (const [key, child] of [...node.folders]) {
-    if (child.folders.size === 0 && child.files.length === 1) {
-      node.files.push(child.files[0])
-      node.folders.delete(key)
-    }
-  }
-
-  while (node.files.length === 0 && node.folders.size === 1) {
-    const only = [...node.folders.values()][0]
-    node.label = `${node.label}/${only.label}`
-    node.path = only.path
-    node.folders = only.folders
-    node.files = only.files
-  }
-
-  return node
+/**
+ * One registry row as the client shape, outside the tree.
+ *
+ * The tree is not the only reader any more: Tracking resolves a single Meta ad back to
+ * its Portal asset and renders the same Media Detail sheet. Exporting the mapper keeps
+ * the "do not fork the sheet" rule honest at the data layer too — a second hand-written
+ * asset→node map is how the two surfaces would start disagreeing about a field.
+ */
+export function mediaNodeFromAsset(asset: PortalRegistryAsset): MediaNode {
+  const fileName = asset.object_key.split("/").filter(Boolean).pop() || asset.object_key
+  return toMediaNode(asset, fileName)
 }
 
 function finalize(node: Draft): FolderNode {
@@ -161,14 +141,14 @@ export function buildTree(assets: PortalRegistryAsset[]): FolderNode[] {
     node!.files.push(toMediaNode(asset, fileName))
   }
 
-  let top = [...roots.values()].map(compact).map(finalize)
+  let top = [...roots.values()].map(finalize)
 
-  // A single root is a constant prefix, not a choice. Lift its children so the first
-  // thing on screen is the brand — the only level a person named.
-  while (top.length === 1 && top[0].files.length === 0 && top[0].folders.length > 0) {
+  // Only the constant `creative-portal/approved` prefix is hidden: it is not a choice
+  // anyone makes. Everything below it is the bucket's real shape and stays navigable.
+  for (const prefix of ["creative-portal", "approved"]) {
+    if (top.length !== 1 || top[0].label !== prefix || top[0].files.length > 0) break
     top = top[0].folders
   }
-
   return top.sort((a, b) => a.label.localeCompare(b.label))
 }
 

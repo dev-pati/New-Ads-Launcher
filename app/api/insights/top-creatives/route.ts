@@ -9,6 +9,22 @@ export const maxDuration = 60
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
+type InsightRow = {
+  ad_id: string
+  ad_name?: string
+  adset_name?: string
+  campaign_name?: string
+  account_currency?: string
+  spend?: string
+  impressions?: string
+  inline_link_clicks?: string
+  inline_link_click_ctr?: string
+  date_start?: string
+  actions?: { action_type: string; value: string }[]
+  action_values?: { action_type: string; value: string }[]
+  cost_per_action_type?: { action_type: string; value: string }[]
+}
+
 function pickResult(actions?: { action_type: string; value: string }[]) {
   if (!actions?.length) return 0
   const priority = [
@@ -65,7 +81,9 @@ export async function GET(request: NextRequest) {
     // ── Step 1: ad-level insights sorted by spend ────────────────────────
     const insightParamsObj: Record<string, string> = {
       level: "ad",
-      fields: "ad_id,ad_name,adset_name,campaign_name,spend,impressions,inline_link_clicks,inline_link_click_ctr,actions,action_values,cost_per_action_type,date_start,date_stop",
+      // account_currency: spend and cost-per-result are money, and money without its unit
+      // is a number two people read as two different amounts (VND vs USD is ~25,000×).
+      fields: "ad_id,ad_name,adset_name,campaign_name,account_currency,spend,impressions,inline_link_clicks,inline_link_click_ctr,actions,action_values,cost_per_action_type,date_start,date_stop",
       date_preset: datePreset,
       sort: "spend_descending",
       limit: String(limit),
@@ -81,8 +99,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: insightData.error.message, code: insightData.error.code }, { status: 400 })
     }
 
-    const rows: any[] = insightData.data || []
-    if (rows.length === 0) return { ads: [], datePreset, nextCursor: null, hasMore: false }
+    const rows: InsightRow[] = insightData.data || []
+    if (rows.length === 0) return { ads: [], currency: null, datePreset, nextCursor: null, hasMore: false }
+
+    // One ad account, one currency — Meta repeats it on every row.
+    const currency: string | null = rows[0].account_currency || null
 
     const adIds = rows.map(r => r.ad_id)
 
@@ -179,7 +200,7 @@ export async function GET(request: NextRequest) {
     const nextCursor = insightData.paging?.cursors?.after || null
     const hasMore    = !!insightData.paging?.next
 
-    return { ads, datePreset, nextCursor, hasMore }
+    return { ads, currency, datePreset, nextCursor, hasMore }
       },
     })
 
@@ -189,7 +210,7 @@ export async function GET(request: NextRequest) {
       stale: result.stale,
       retryAfterMs: result.retryAfterMs,
     })
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("[insights/top-creatives]", err)
     try {
       const sp2 = request.nextUrl.searchParams
@@ -201,6 +222,6 @@ export async function GET(request: NextRequest) {
         if (snapshot) return NextResponse.json(snapshot)
       }
     } catch {}
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Internal Server Error" }, { status: 500 })
   }
 }

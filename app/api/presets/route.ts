@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getAdDetails } from "@/lib/facebook"
+import { recordActivity } from "@/lib/notifications/emit"
 
 export async function GET() {
   try {
@@ -56,6 +57,19 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    // ad_set_presets has no actor column (TD-31), so this is the only record of who
+    // built the preset. Audit-only: saving a preset is not news for the whole org.
+    void recordActivity({
+      orgId: ctx.orgId,
+      actorId: ctx.user.id,
+      actorName: ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone",
+      objectType: "preset",
+      objectId: data.id,
+      objectName: name.trim(),
+      action: "created",
+    })
+
     return NextResponse.json({ preset: data }, { status: 201 })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })

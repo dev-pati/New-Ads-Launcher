@@ -156,8 +156,14 @@ export function MediaDetailSheet({
         </SheetHeader>
 
         {!file ? (
-          <div className="flex-1 flex items-center justify-center p-6 text-sm text-muted-foreground">
-            No metadata for this media yet.
+          // The notice renders here too: a surface that opens the sheet from something
+          // other than a Portal row (Tracking opens it from a Meta ad) has to be able to
+          // say *why* there is no metadata. Without this the empty state answered
+          // "no metadata yet" to four different situations, one of which is "Portal is
+          // fine, this ad was simply never launched from AdLauncher".
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {notice}
+            <p className="text-sm text-muted-foreground">No metadata for this media yet.</p>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-6 space-y-8">

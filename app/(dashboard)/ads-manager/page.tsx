@@ -4017,17 +4017,17 @@ function AdsManagerContent() {
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === c.id) : []
                   return (
                     <Fragment key={c.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           {/* onClick, not onChange — the range gesture needs shiftKey/ctrlKey off the mouse event. */}
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => {}}
                             onClick={e => toggleRowSelection(c.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(c.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={c.id} status={c.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === c.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(c.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(c.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -4072,16 +4072,16 @@ function AdsManagerContent() {
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
                     <Fragment key={a.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => {}}
                             onClick={e => toggleRowSelection(a.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (
@@ -4128,16 +4128,16 @@ function AdsManagerContent() {
                   const rowBDs = breakdowns.length > 0 ? breakdownRows.filter(br => br.parentId === a.id) : []
                   return (
                     <Fragment key={a.id}>
-                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
-                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                      <tr className={cn("border-b border-[#e4e6eb] dark:border-gray-800 hover:bg-[#f5f6f7] dark:hover:bg-white/5 transition-colors group/row", hasDraft && !isSel && "bg-emerald-50/80 dark:bg-emerald-950/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-950/20", isSel && "bg-[#e3f0fe] dark:bg-blue-950/30 hover:bg-[#d8e9fc]")}>
+                        <td className={cn("px-2 sticky z-10 transition-colors", FROZEN_W.check, FROZEN_LEFT.check, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           <input type="checkbox" className="rounded size-[14px] accent-[#1877f2]" checked={isSel}
                             onChange={() => {}}
                             onClick={e => toggleRowSelection(a.id, e.shiftKey, e.ctrlKey || e.metaKey)} />
                         </td>
-                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td className={cn("px-3 sticky z-10 transition-colors", FROZEN_W.toggle, FROZEN_LEFT.toggle, FROZEN_BODY_BG, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           {toggling.has(a.id) ? <IconLoader2 className="size-4 animate-spin text-[#65676b]" /> : <StatusToggle id={a.id} status={a.status} onToggle={toggleStatus} />}
                         </td>
-                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : "group-hover/row:bg-[#f5f6f7]")}>
+                        <td style={{ width: columnWidths.__name || 320, minWidth: columnWidths.__name || 320, maxWidth: columnWidths.__name || 320 }} className={cn("px-3 sticky z-10 transition-colors group/cell overflow-hidden", FROZEN_LEFT.name, FROZEN_BODY_BG, FROZEN_DIVIDER, hasDraft && !isSel && "bg-emerald-50 dark:bg-emerald-950/30", isSel ? cn(FROZEN_BODY_SEL, "group-hover/row:bg-[#d8e9fc]") : hasDraft ? "group-hover/row:bg-emerald-50 dark:group-hover/row:bg-emerald-950/30" : "group-hover/row:bg-[#f5f6f7]")}>
                           {inlineEditingId === a.id ? (
                             <div className="flex items-center gap-2"><Input value={inlineEditingName} onChange={e => setInlineEditingName(e.target.value)} onBlur={() => saveInlineRename(a.id)} onKeyDown={e => e.key === "Enter" && saveInlineRename(a.id)} className="h-7 text-xs py-1" autoFocus /></div>
                           ) : (

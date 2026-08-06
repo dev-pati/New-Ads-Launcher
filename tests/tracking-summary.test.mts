@@ -17,8 +17,10 @@ test("summarizes successful, non-successful, and created ads once per batch", ()
     successRate: 33,
     averageSessionDurationMs: 2_000,
     team: [
-      { userId: "buyer-a", name: "Kevin", batches: 2, fullSuccess: 1, nonSuccess: 1, adsCreated: 6 },
-      { userId: "buyer-b", name: "Seth", batches: 1, fullSuccess: 0, nonSuccess: 1, adsCreated: 0 },
+      { userId: "buyer-a", name: "Kevin", batches: 2, fullSuccess: 1, nonSuccess: 1, adsCreated: 6, averageSessionDurationMs: 2_000 },
+      // A member whose only batch recorded no duration averages to null, not to 0 —
+      // "not timed" and "instant" are different facts.
+      { userId: "buyer-b", name: "Seth", batches: 1, fullSuccess: 0, nonSuccess: 1, adsCreated: 0, averageSessionDurationMs: null },
     ],
   })
 })

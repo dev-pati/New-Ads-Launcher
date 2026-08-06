@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { summarizeLaunchBatches, workingDayStreak, isoWeekMonday, type TrackingBatch } from "@/lib/tracking/summary"
+import { estimatedHoursSaved, leverageRatio, summarizeActivity, type ActivityRow, type PageActivityRow } from "@/lib/tracking/activity"
+import { activityFor, EXCLUDED_MATCHES } from "@/lib/tracking/activity-catalog"
+import { isMissingTable } from "@/lib/tracking/missing-table"
 
 export const dynamic = "force-dynamic"
+
+const ACTIVITY_ROW_LIMIT = 5_000
+const TIMELINE_LIMIT = 40
 
 export async function GET(request: NextRequest) {
   const context = await getAuthContext()
@@ -19,7 +25,7 @@ export async function GET(request: NextRequest) {
   const since = new Date(Date.now() - days * 86_400_000).toISOString()
 
   const db = createAdminClient()
-  const [batchesResult, painpointResult] = await Promise.all([
+  const [batchesResult, painpointResult, activityResult, pageActivityResult] = await Promise.all([
     db
       .from("launch_batches")
       .select("id,user_id,user_name,status,total_ads,failed_ads,duration_ms,created_at,ad_account_name,errors")
@@ -34,6 +40,23 @@ export async function GET(request: NextRequest) {
       .eq("user_id", userId)
       .eq("week_start", isoWeekMonday(new Date()))
       .maybeSingle(),
+    // Scoped to this actor in the query, not filtered in Node: an admin drill-down
+    // should not pull the whole org's log to show one person's work.
+    db
+      .from("activity_log")
+      .select("actor_id,actor_name,object_type,action,object_name,created_at,source")
+      .eq("org_id", context.orgId)
+      .eq("actor_id", userId)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(ACTIVITY_ROW_LIMIT),
+    db
+      .from("page_manage_activity")
+      .select("actor_id,module,created_at")
+      .eq("org_id", context.orgId)
+      .eq("actor_id", userId)
+      .gte("created_at", since)
+      .limit(ACTIVITY_ROW_LIMIT),
   ])
 
   if (batchesResult.error) {
@@ -41,8 +64,45 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Member data unavailable." }, { status: 500 })
   }
 
+  const activityUnavailable = isMissingTable(activityResult.error)
+  if (activityResult.error && !activityUnavailable) console.error("[tracking/member:activity]", activityResult.error)
+
   const batches = (batchesResult.data || []) as TrackingBatch[]
   const summary = summarizeLaunchBatches(batches)
+
+  type LoggedRow = ActivityRow & { object_name?: string | null }
+  const activityRows = (activityResult.data || []) as LoggedRow[]
+  const pageRows = (pageActivityResult.data || []) as PageActivityRow[]
+
+  const activity = summarizeActivity({ rows: activityRows, pageRows, batches, onlyUserId: userId })
+
+  /**
+   * What the person actually did, in order — the answer to "click a member and see
+   * their activity detail". Launches come from launch_batches so the timeline is
+   * complete even before activity_log is applied; catalog-unknown rows are dropped
+   * rather than shown as a raw object_type nobody can interpret.
+   */
+  const timeline = [
+    ...batches.flatMap(batch => batch.created_at ? [{
+      at: batch.created_at,
+      label: "Launch submitted",
+      class: "produce" as const,
+      detail: `${batch.ad_account_name || "Unknown ad account"} · ${Math.max(0, (batch.total_ads || 0) - (batch.failed_ads || 0))} ads · ${batch.status}`,
+    }] : []),
+    ...activityRows.flatMap(row => {
+      const pair = `${row.object_type}:${row.action}`
+      if (EXCLUDED_MATCHES.has(pair)) return []
+      const definition = activityFor(row.object_type, row.action)
+      if (!definition) return []
+      return [{ at: row.created_at, label: definition.label, class: definition.class, detail: row.object_name || "" }]
+    }),
+    ...pageRows.flatMap(row => {
+      const definition = activityFor("page_manage", row.module)
+      return definition ? [{ at: row.created_at, label: definition.label, class: definition.class, detail: "" }] : []
+    }),
+  ]
+    .sort((left, right) => right.at.localeCompare(left.at))
+    .slice(0, TIMELINE_LIMIT)
 
   return NextResponse.json({
     userId,
@@ -51,5 +111,15 @@ export async function GET(request: NextRequest) {
     streak: workingDayStreak(batches.flatMap(batch => batch.created_at ? [batch.created_at] : [])),
     recentBatches: batches.slice(0, 10),
     painpoint: painpointResult.data?.note || "",
+    activity: {
+      available: !activityUnavailable,
+      unavailableReason: activityUnavailable
+        ? "activity_log is not applied on this project yet — only launches are recorded for this member."
+        : null,
+      ...activity,
+      leverageRatio: leverageRatio(activity.byClass.reuse, summary.batches),
+      estimatedHoursSaved: estimatedHoursSaved(activity.estimatedMinutesSaved, 0),
+    },
+    timeline,
   })
 }

@@ -68,7 +68,7 @@ async function captureFrameFromUrl(videoUrl: string, creativeId: string): Promis
   })
 }
 
-export function CreativeCardMedia({ creative, className = "h-full w-full object-cover", compact = false }: { creative: Creative, className?: string, compact?: boolean }) {
+export function CreativeCardMedia({ creative, className = "h-full w-full object-cover", compact = false, eager = false }: { creative: Creative, className?: string, compact?: boolean, eager?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [imgFailed, setImgFailed] = useState(false)
   const [capturedPoster, setCapturedPoster] = useState<string | null>(null)
@@ -137,7 +137,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
     return (
       <div className="relative h-full w-full">
         {imgSrc && !imgFailed ? (
-          <img src={imgSrc} alt={creative.file_name} className={className} loading="lazy" onError={() => setImgFailed(true)} />
+          <img src={imgSrc} alt={creative.file_name} className={className} loading={eager ? "eager" : "lazy"} onError={() => setImgFailed(true)} />
         ) : (
           <div className={`${className} flex items-center justify-center bg-muted`}>
             <IconPhoto className="size-6 text-muted-foreground/40" />
@@ -232,7 +232,7 @@ export function CreativeCardMedia({ creative, className = "h-full w-full object-
   if (metaThumb && !imgFailed) {
     return (
       <div className="relative h-full w-full">
-        <img src={metaThumb} alt={creative.file_name} className={className} loading="lazy" onError={() => setImgFailed(true)} />
+        <img src={metaThumb} alt={creative.file_name} className={className} loading={eager ? "eager" : "lazy"} onError={() => setImgFailed(true)} />
         {isGDrive && (
           <div className="absolute bottom-1.5 right-1.5 rounded bg-white/90 p-1 shadow-sm backdrop-blur-sm">
             <IconBrandGoogleDrive className="size-4 text-[#4285F4]" />
