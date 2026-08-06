@@ -288,7 +288,6 @@ export const TRIGGER_VARIABLES: VariableToken[] = [
   { key: "trigger.qualifyingCount", label: "Qualifying Count",           group: "trigger" },
   { key: "trigger.qualifyingEntityIds", label: "Qualifying Entity IDs",  group: "trigger" },
   { key: "trigger.qualifyingEntities", label: "Qualifying Entities (full data)", group: "trigger" },
-  { key: "trigger.adsManagerLink", label: "Ads Manager Link (filtered to ads)", group: "trigger" },
 ]
 
 export const SYSTEM_VARIABLES: VariableToken[] = [

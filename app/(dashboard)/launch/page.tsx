@@ -6332,10 +6332,6 @@ function DuplicateCampaignModal({
                       <p className="text-sm font-bold truncate">{c.name}</p>
                       <p className="text-xs text-muted-foreground font-mono">Campaign ID: {c.id}</p>
                     </div>
-                    <a href={`https://www.facebook.com/adsmanager/manage/campaigns?act=${adAccountId}&selected_campaign_ids=${c.id}`} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline flex items-center gap-1 shrink-0">
-                      View Campaign <IconExternalLink className="size-3" />
-                    </a>
                   </div>
                   <p className="text-xs font-bold text-muted-foreground uppercase px-3 py-1.5">AD SETS ({c.adSets?.length || 0})</p>
                   {(c.adSets || []).map((a: any) => (
@@ -6343,14 +6339,6 @@ function DuplicateCampaignModal({
                       <span className="size-1.5 rounded-full bg-emerald-500" />
                       <span className="font-medium truncate flex-1">{a.name}</span>
                       <span className="text-muted-foreground font-mono">ID: {a.id}</span>
-                      <a
-                        href={`https://www.facebook.com/adsmanager/manage/adsets?act=${adAccountId}&selected_adset_ids=${a.id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline flex items-center gap-0.5"
-                      >
-                        View <IconExternalLink className="size-2.5" />
-                      </a>
                     </div>
                   ))}
                 </div>

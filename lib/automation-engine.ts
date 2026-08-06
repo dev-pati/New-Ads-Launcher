@@ -32,7 +32,6 @@ export interface TriggerPayload {
   comparisonWindow?: string   // {{trigger.comparisonWindow}}
   monitoringLevel?: string    // {{trigger.monitoringLevel}} — "Campaign" | "Ad Set"
   qualifyingCount?: string    // {{trigger.qualifyingCount}}
-  adsManagerLink?: string     // {{trigger.adsManagerLink}}
   // System
   currentDate?: string        // {{trigger.currentDate}}
   currentDateTime?: string    // {{trigger.currentDateTime}}
@@ -338,7 +337,6 @@ async function execNotification(
       .replace(/\{\{trigger\.qualifyingCount\}\}/g,     payload.qualifyingCount    ?? "")
       .replace(/\{\{trigger\.entityName\}\}/g,          payload.fileName           ?? payload.entityNames?.[0] ?? "")
       .replace(/\{\{trigger\.qualifyingEntityIDs\}\}/g, (payload.entityIds ?? []).join(", "))
-      .replace(/\{\{trigger\.adsManagerLink\}\}/g,      payload.adsManagerLink     ?? "")
       .replace(/\{\{trigger\.currentDate\}\}/g,         payload.currentDate        ?? now.toLocaleDateString("en-US"))
       .replace(/\{\{trigger\.currentDateTime\}\}/g,     payload.currentDateTime    ?? now.toLocaleString("en-US"))
       .replace(/\{\{filename\}\}/g,                     payload.fileName           ?? "")
@@ -783,7 +781,6 @@ export async function executeAutomation(
     comparisonWindow?: string
     monitoringLevel?: string
     qualifyingCount?: string
-    adsManagerLink?: string
     currentDate?: string
     currentDateTime?: string
   } = {}
@@ -813,7 +810,6 @@ export async function executeAutomation(
     comparisonWindow:  options.comparisonWindow,
     monitoringLevel:   options.monitoringLevel,
     qualifyingCount:   options.qualifyingCount,
-    adsManagerLink:    options.adsManagerLink,
     currentDate:       options.currentDate ?? now.toLocaleDateString("en-US"),
     currentDateTime:   options.currentDateTime ?? now.toLocaleString("en-US"),
   }

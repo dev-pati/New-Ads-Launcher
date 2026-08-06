@@ -451,7 +451,6 @@ export async function checkPerformanceMonitoring(
     comparisonWindow,
     monitoringLevel:   levelLabel[monitoringLevel] ?? monitoringLevel,
     qualifyingCount:   "1",
-    adsManagerLink:    `https://www.facebook.com/adsmanager/manage/ads?act=${adAccountId.replace("act_","")}`,
     currentDate:       now.toLocaleDateString("en-US"),
     currentDateTime:   now.toLocaleString("en-US"),
   }

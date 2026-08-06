@@ -177,7 +177,6 @@ export async function GET(request: NextRequest) {
           comparisonWindow:  tv.comparisonWindow,
           monitoringLevel:   tv.monitoringLevel,
           qualifyingCount:   tv.qualifyingCount,
-          adsManagerLink:    tv.adsManagerLink,
           currentDate:       tv.currentDate,
           currentDateTime:   tv.currentDateTime,
         }
