@@ -6,6 +6,7 @@ import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import { useOrg } from "@/lib/org-context"
 import { useAdAccount } from "@/lib/ad-account-context"
+import { useHelp } from "@/lib/help-context"
 import { useTheme } from "next-themes"
 import { useUserSettings } from "@/hooks/use-user-settings"
 import { useNotifications } from "@/hooks/use-notifications"
@@ -157,6 +158,7 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
   const router = useRouter()
   const { activeOrg } = useOrg()
   const { selectedAccount } = useAdAccount()
+  const { openHelp } = useHelp()
   const { theme, setTheme } = useTheme()
   const { settings, updateSettings } = useUserSettings()
   const [hovered, setHovered] = useState(false)
@@ -445,16 +447,13 @@ export function AppSidebar({ userName, userEmail, userAvatarUrl }: AppSidebarPro
             >
               <IconSettings className="size-[18px]" />
             </Link>
-            <Link
-              href="/help"
-              aria-current={isFooterActive("/help") ? "page" : undefined}
-              className={cn(
-                "flex size-9 items-center justify-center rounded-lg text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                isFooterActive("/help") && "bg-sidebar-primary text-sidebar-primary-foreground"
-              )}
+            <button
+              aria-label="Help"
+              onClick={() => openHelp()}
+              className="flex size-9 items-center justify-center rounded-lg text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
             >
               <IconHelp className="size-[18px]" />
-            </Link>
+            </button>
             <Link
               href="/search"
               aria-current={isFooterActive("/search") ? "page" : undefined}

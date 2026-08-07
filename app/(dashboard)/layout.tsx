@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { AppSidebar } from "@/components/app-sidebar"
+import { HelpSidebar } from "@/components/help-sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { OrgProvider, useOrg } from "@/lib/org-context"
 import { AdAccountProvider } from "@/lib/ad-account-context"
+import { HelpProvider } from "@/lib/help-context"
 import { FeedbackBubble } from "@/components/feedback-bubble"
 import { IconLoader2, IconAlertTriangle, IconX } from "@tabler/icons-react"
 
@@ -82,6 +84,7 @@ function DashboardContent({
           {children}
         </main>
       </div>
+      <HelpSidebar />
       <FeedbackBubble />
     </div>
   )
@@ -116,11 +119,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <OrgProvider>
       <AdAccountProvider>
-        <TooltipProvider>
-          <DashboardContent userName={user?.name} userEmail={user?.email} userAvatarUrl={user?.avatarUrl}>
-            {children}
-          </DashboardContent>
-        </TooltipProvider>
+        <HelpProvider>
+          <TooltipProvider>
+            <DashboardContent userName={user?.name} userEmail={user?.email} userAvatarUrl={user?.avatarUrl}>
+              {children}
+            </DashboardContent>
+          </TooltipProvider>
+        </HelpProvider>
       </AdAccountProvider>
     </OrgProvider>
   )
