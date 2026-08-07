@@ -1,17 +1,17 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { IconAlertTriangle, IconChartBar, IconCheck, IconChevronRight, IconCopy, IconDownload, IconInfoCircle, IconLoader2, IconMinus, IconNote, IconPlus, IconPrinter, IconRefresh, IconRocket } from "@tabler/icons-react"
+import { IconAlertTriangle, IconChartBar, IconCheck, IconChevronRight, IconCopy, IconInfoCircle, IconLoader2, IconMinus, IconNote, IconPlus, IconRefresh, IconRocket } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { CLASS_DESCRIPTION, CLASS_LABEL, CLASS_ORDER, type ActivityClass } from "@/lib/tracking/activity-catalog"
 import { mergeUsageRows } from "@/lib/tracking/activity"
 import { FALLBACK_HINT, FALLBACK_LABEL, FALLBACK_REASONS, type FallbackReason } from "@/lib/tracking/fallback"
-import { readWeek, toScoreFallbacks, totalCount, writeWeek, type LocalFallbackWeek } from "@/lib/tracking/fallback-local"
-import { buildProbationReport, scoreProbationWeek } from "@/lib/tracking/probation"
-import { buildTrackingReport, reportToHtml } from "@/lib/tracking/report"
-import { isoWeekMonday } from "@/lib/tracking/summary"
+import { readWeek, totalCount, writeWeek, type LocalFallbackWeek } from "@/lib/tracking/fallback-local"
+import type { FallbackKind } from "@/lib/tracking/fallback"
+import { buildProbationReport, scoreProbationWeek, type ProbationScore } from "@/lib/tracking/probation"
+import { buildTrackingReport } from "@/lib/tracking/report"
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 type TeamMember = {
@@ -601,16 +601,64 @@ function FallbackCard({
   )
 }
 
+function KrCard({ score, week, scoreAvailable, loggingAvailable, unavailableReason, busy, error, onRecord, onUndo }: {
+  score: ProbationScore
+  week: ProbationPayload["weeks"][number]
+  scoreAvailable: boolean
+  loggingAvailable: boolean
+  unavailableReason: string | null
+  busy: boolean
+  error: string | null
+  onRecord: (kind: FallbackKind) => void
+  onUndo: () => void
+}) {
+  const last = week.fallbacks[0]
+  const status = score.verdict === "on_track" ? "On track" : score.verdict === "warning" ? "Warning" : "Off track"
+  return (
+    <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      <div className="grid gap-4 border-b p-5 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div>
+          <p className="text-sm text-muted-foreground">This week</p>
+          <h2 className="mt-1 text-xl font-semibold">KR score <span className="tabular-nums">{scoreAvailable ? `${score.total}/100` : "unavailable"}</span></h2>
+          <p className="mt-1 text-sm text-muted-foreground">{scoreAvailable ? `${status}. Completed launches plus recorded Meta fallbacks.` : "Required evidence is unavailable, so no score is claimed."}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-center">
+          <div className="rounded-lg bg-muted/40 px-4 py-3"><p className="text-xs text-muted-foreground">KR1 Launch</p><p className="mt-1 text-2xl font-semibold tabular-nums">{scoreAvailable ? `${score.kr1}/80` : "-"}</p></div>
+          <div className="rounded-lg bg-muted/40 px-4 py-3"><p className="text-xs text-muted-foreground">KR2 Control</p><p className="mt-1 text-2xl font-semibold tabular-nums">{scoreAvailable ? `${score.kr2}/20` : "-"}</p></div>
+        </div>
+      </div>
+      <div className="p-5">
+        <p className="text-sm font-medium">Had to use Meta Ads Manager</p>
+        <p className="mt-1 text-xs text-muted-foreground">One tap after AdLauncher could not finish the job. Zero means zero recorded, not guaranteed zero fallback.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button onClick={() => onRecord("launch")} disabled={!loggingAvailable || busy}>Launch</Button>
+          <Button variant="outline" onClick={() => onRecord("control")} disabled={!loggingAvailable || busy}>Control</Button>
+          {last && <Button variant="ghost" onClick={onUndo} disabled={busy}>Undo last</Button>}
+        </div>
+        <p className="mt-3 text-sm text-muted-foreground">Recorded: Launch {score.launchFallbacks} - Control {score.controlFallbacks}</p>
+        {!scoreAvailable && <p className="mt-3 text-sm text-amber-600">{unavailableReason}</p>}
+        {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+      </div>
+    </section>
+  )
+}
+
 /** What the probation route can prove: who launched, in which ISO week. */
 type ProbationPayload = {
   monthStart: string
   monthEnd: string
   currentWeek: string
+  fallbackAvailable: boolean
+  fallbackUnavailableReason: string | null
+  controlAvailable: boolean
+  controlUnavailableReason: string | null
   weeks: Array<{
     week: string
     index: number
     isCurrent: boolean
     launchers: Array<{ name: string; batches: number }>
+    controlActors: Array<{ name: string; actions: number }>
+    fallbacks: Array<{ id: string; kind: FallbackKind; occurredAt: string }>
   }>
 }
 
@@ -633,8 +681,9 @@ export default function TrackingPage() {
   const [memberLoading, setMemberLoading] = useState(false)
   const [reportOpen, setReportOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [fallbackWeek, setFallbackWeek] = useState<LocalFallbackWeek | null>(null)
   const [probation, setProbation] = useState<ProbationPayload | null>(null)
+  const [fallbackBusy, setFallbackBusy] = useState(false)
+  const [fallbackError, setFallbackError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -668,36 +717,60 @@ export default function TrackingPage() {
   }, [memberDetail, days])
 
   /** The hand-kept tally lives on this machine, keyed by user so a shared PC stays honest. */
-  const userId = data?.currentUserId || null
-  const thisWeek = isoWeekMonday(new Date())
-
-  useEffect(() => {
-    if (!userId) { setFallbackWeek(null); return }
-    setFallbackWeek(readWeek(window.localStorage, userId, thisWeek))
-  }, [userId, thisWeek])
-
-  function saveFallbackWeek(next: LocalFallbackWeek) {
-    setFallbackWeek(next)
-    if (userId) writeWeek(window.localStorage, userId, next)
-  }
-
   /**
    * Only inside the probation month, and only for the person the plan is about — the
    * route answers 403 to everyone else, so who sees the block is decided on the server
    * and this effect never has to know a name.
    */
-  useEffect(() => {
+  const loadProbation = useCallback(async () => {
     if (!isProbationMonth()) { setProbation(null); return }
-    void (async () => {
-      try {
-        const res = await fetch("/api/tracking/probation", { cache: "no-store" })
-        if (!res.ok) { setProbation(null); return }
-        setProbation(await res.json())
-      } catch { /* the block simply does not appear in the report */ }
-    })()
+    try {
+      const res = await fetch("/api/tracking/probation", { cache: "no-store" })
+      if (!res.ok) { setProbation(null); return }
+      setProbation(await res.json())
+    } catch { setProbation(null) }
   }, [])
 
-  const summary = view === "admin" ? data?.admin : data?.mine
+  useEffect(() => { void loadProbation() }, [loadProbation])
+
+  async function recordFallback(kind: FallbackKind) {
+    setFallbackBusy(true)
+    setFallbackError(null)
+    try {
+      const res = await fetch("/api/tracking/probation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || "Could not record fallback.")
+      await loadProbation()
+    } catch (cause) {
+      setFallbackError(cause instanceof Error ? cause.message : "Could not record fallback.")
+    } finally {
+      setFallbackBusy(false)
+    }
+  }
+
+  async function undoFallback() {
+    const current = probation?.weeks.find(week => week.isCurrent) || probation?.weeks.at(-1)
+    const last = current?.fallbacks[0]
+    if (!last) return
+    setFallbackBusy(true)
+    setFallbackError(null)
+    try {
+      const res = await fetch(`/api/tracking/probation?id=${last.id}`, { method: "DELETE" })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || "Could not undo fallback.")
+      await loadProbation()
+    } catch (cause) {
+      setFallbackError(cause instanceof Error ? cause.message : "Could not undo fallback.")
+    } finally {
+      setFallbackBusy(false)
+    }
+  }
+
+  const summary = view === "admin" ? data?.admin : undefined
   const series = data?.adminTimeSeries || []
   const tabs: Array<["admin" | "mine", string]> = isAdminView
     ? [["admin", "Team usage"], ["mine", "My usage"]]
@@ -749,48 +822,29 @@ export default function TrackingPage() {
    * the two weekly answers) is read from this machine and scored here, so there is still
    * exactly one scoring path — `scoreProbationWeek`.
    */
-  const probationReport = (() => {
-    if (!probation || !userId || typeof window === "undefined") return ""
+  const scoredProbation = probation?.weeks.map(week => ({
+    ...week,
+    score: scoreProbationWeek({ launchers: week.launchers, controlActors: week.controlActors, fallbacks: week.fallbacks }),
+  })) || []
+  const currentProbation = scoredProbation.find(week => week.isCurrent) || scoredProbation.at(-1) || null
+  const currentProbationIndex = currentProbation ? scoredProbation.findIndex(week => week.week === currentProbation.week) : -1
+  const previousProbation = currentProbationIndex > 0 ? scoredProbation[currentProbationIndex - 1] : null
+  const probationWeeksToDate = probation ? scoredProbation.filter(week => week.week <= probation.currentWeek) : []
+  const probationEvidenceAvailable = Boolean(probation?.fallbackAvailable && probation?.controlAvailable)
+  const probationUnavailableReason = probation?.fallbackUnavailableReason || probation?.controlUnavailableReason || null
+  const probationReport = currentProbation && probationEvidenceAvailable ? `${buildProbationReport({
+    score: currentProbation.score,
+    week: currentProbation.index,
+    reportDate: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }),
+    monthToDate: probationWeeksToDate.length === 0 ? null : Math.round((probationWeeksToDate.reduce((sum, week) => sum + week.score.total, 0) / probationWeeksToDate.length) * 10) / 10,
+  })}\n**Vs previous week** ${previousProbation ? `${currentProbation.score.total - previousProbation.score.total >= 0 ? "+" : ""}${currentProbation.score.total - previousProbation.score.total} points` : "no prior data"}` : probation ? `## Probation\n**Score:** unavailable - ${probationUnavailableReason || "required evidence is unavailable"}` : ""
 
-    const scored = probation.weeks.map(week => {
-      const local = readWeek(window.localStorage, userId, week.week)
-      return {
-        ...week,
-        local,
-        score: scoreProbationWeek({
-          launchers: week.launchers,
-          fallbacks: toScoreFallbacks(local),
-          creativeAggregate: local.creativeAggregate,
-          spotCheckMatched: local.spotCheckMatched,
-          spotCheckTotal: local.spotCheckTotal,
-        }),
-      }
-    })
-
-    const current = scored.find(week => week.isCurrent) || scored[scored.length - 1]
-    if (!current) return ""
-
-    const monthToDate = scored.length === 0
-      ? null
-      : Math.round((scored.reduce((sum, week) => sum + week.score.total, 0) / scored.length) * 10) / 10
-
-    return buildProbationReport({
-      score: current.score,
-      week: current.index,
-      reportDate: new Date().toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" }),
-      monthToDate,
-      note: current.local.note,
-    })
-  })()
-
-  const reportMarkdown = [baseReport, probationReport].filter(Boolean).join("\n\n")
+  const reportMarkdown = view === "mine" && probationReport ? probationReport : baseReport
 
   /** Adoption of Tracking itself is otherwise unmeasurable — see /api/tracking/export. */
   function recordExport() {
     void fetch("/api/tracking/export", { method: "POST" })
   }
-
-  const reportFileName = `tracking-${isAdminView ? "org" : "me"}-${days}d-${new Date().toISOString().slice(0, 10)}`
 
   async function copyReport() {
     if (!reportMarkdown) return
@@ -804,33 +858,11 @@ export default function TrackingPage() {
     }
   }
 
-  function downloadMarkdown() {
-    if (!reportMarkdown) return
-    const url = URL.createObjectURL(new Blob([reportMarkdown], { type: "text/markdown;charset=utf-8" }))
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `${reportFileName}.md`
-    link.click()
-    URL.revokeObjectURL(url)
-    recordExport()
-  }
-
   /**
    * PDF via the browser's own print dialog — "Save as PDF" is a destination there on
    * every platform we run on. No renderer to keep in step with the report format, and
    * what prints is the text the dashboard already showed.
    */
-  function printReport() {
-    if (!reportMarkdown) return
-    const printWindow = window.open("", "_blank", "width=900,height=1200")
-    if (!printWindow) return
-    printWindow.document.write(reportToHtml(reportMarkdown, reportFileName))
-    printWindow.document.close()
-    printWindow.focus()
-    printWindow.print()
-    recordExport()
-  }
-
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6 lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -992,53 +1024,24 @@ export default function TrackingPage() {
           />
         )}
 
-        {view === "mine" && (
-          <section className="rounded-xl border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b p-5">
-              <div><h2 className="font-semibold">My launches</h2><p className="mt-1 text-sm text-muted-foreground">Your launch batches in the active organization.</p></div>
-              <IconRocket className="size-5 text-muted-foreground" />
-            </div>
-            {data.myBatches.length === 0 ? (
-              <p className="p-5 text-sm text-muted-foreground">You have no launch batches in the selected reporting period.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table data-table="comfortable" className="w-full text-sm">
-                  <thead className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-5 font-medium">Launched</th>
-                      <th className="px-5 font-medium">Ad account</th>
-                      <th className="px-5 text-right font-medium">Created</th>
-                      <th className="px-5 text-right font-medium">Failed</th>
-                      <th className="px-5 text-right font-medium">Duration</th>
-                      <th className="px-5 text-right font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.myBatches.map(batch => (
-                      <tr key={batch.id} className="border-b last:border-0">
-                        <td className="px-5 text-muted-foreground">{batch.created_at ? new Date(batch.created_at).toLocaleString() : "-"}</td>
-                        <td className="px-5 font-medium">{batch.ad_account_name || "Unknown"}</td>
-                        <td className="px-5 text-right tabular-nums">{Math.max(0, (batch.total_ads || 0) - (batch.failed_ads || 0))}</td>
-                        <td className="px-5 text-right tabular-nums">{batch.failed_ads || 0}</td>
-                        <td className="px-5 text-right tabular-nums">{formatDuration(batch.duration_ms)}</td>
-                        <td className="px-5 text-right"><span className={batch.status === "success" ? "text-emerald-600" : "text-amber-600"}>{batch.status}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        )}
-
         {/*
           Hand-logged, so it lives where the hand is: the person who left the app is the
           only one who can record it. On Team usage it would have been a read-only tile of
           somebody else's self-report — a number with no owner, which is how a
           self-reported metric stops being questioned.
         */}
-        {view === "mine" && fallbackWeek && (
-          <FallbackCard week={fallbackWeek} onChange={saveFallbackWeek} />
+        {view === "mine" && currentProbation && probation && (
+          <KrCard
+            score={currentProbation.score}
+            week={currentProbation}
+            scoreAvailable={probationEvidenceAvailable}
+            loggingAvailable={probation.fallbackAvailable}
+            unavailableReason={probationUnavailableReason}
+            busy={fallbackBusy}
+            error={fallbackError}
+            onRecord={kind => void recordFallback(kind)}
+            onUndo={() => void undoFallback()}
+          />
         )}
 
         {/*
@@ -1046,37 +1049,6 @@ export default function TrackingPage() {
           Report — a review of one person should travel by being sent, not by sitting on
           a screen someone else can read over their shoulder. See lib/tracking/probation.ts.
         */}
-
-        {view === "mine" && (
-          <details className="rounded-xl border bg-card shadow-sm">
-            <summary className="cursor-pointer list-none p-5 text-sm text-muted-foreground transition hover:text-foreground">
-              <span className="inline-flex items-center gap-1.5">
-                <IconChevronRight className="size-3.5 transition-transform [details[open]_&]:rotate-90" />
-                My funnel and failure reasons
-              </span>
-            </summary>
-            <div className="grid gap-4 border-t p-5 lg:grid-cols-2">
-              <div>
-                <h3 className="text-sm font-medium">My launch funnel</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Measured from your submitted batches.</p>
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex justify-between"><span>Submitted launch</span><strong>{data.mine.batches}</strong></div>
-                  <div className="flex justify-between"><span>Full success</span><strong>{data.mine.fullSuccess}</strong></div>
-                </div>
-                <p className="mt-4 text-xs text-muted-foreground">Setup-stage events are unavailable.</p>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium">My failure reasons</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Unclassified stored error messages.</p>
-                {data.myFailureReasons.length === 0 ? <p className="mt-4 text-sm text-muted-foreground">No stored failure reasons in this period.</p> : <div className="mt-4 space-y-2">{data.myFailureReasons.slice(0, 5).map(reason => <div key={reason.label} className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 px-3 py-2 text-sm"><span className="truncate">{reason.label}</span><strong className="tabular-nums">{reason.count}</strong></div>)}</div>}
-              </div>
-            </div>
-          </details>
-        )}
-
-        {view === "mine" && activity && activityBlock && (
-          <ActivityPanel payload={activity} block={activityBlock} scope="mine" />
-        )}
 
         <p className="flex items-center gap-2 text-xs text-muted-foreground"><IconChartBar className="size-3.5" />Updated {new Date(data.generatedAt).toLocaleString()}</p>
       </>}
@@ -1104,6 +1076,17 @@ export default function TrackingPage() {
             {/* The numbers first, then the text that quotes them. Same source either way —
                 metricConfig is what the tiles on the page read. */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {view === "mine" && currentProbation && [
+                { label: "KR total", value: probationEvidenceAvailable ? `${currentProbation.score.total}/100` : "-" },
+                { label: "KR1 Launch", value: probationEvidenceAvailable ? `${currentProbation.score.kr1}/80` : "-" },
+                { label: "KR2 Control", value: probationEvidenceAvailable ? `${currentProbation.score.kr2}/20` : "-" },
+                { label: "Vs previous", value: probationEvidenceAvailable && previousProbation ? `${currentProbation.score.total - previousProbation.score.total >= 0 ? "+" : ""}${currentProbation.score.total - previousProbation.score.total}` : "n/a" },
+              ].map(metric => (
+                <div key={metric.label} className="rounded-lg border bg-muted/20 p-3">
+                  <p className="text-xs text-muted-foreground">{metric.label}</p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums">{metric.value}</p>
+                </div>
+              ))}
               {metricConfig.map(metric => (
                 <div key={metric.key} className="rounded-lg border bg-muted/20 p-3">
                   <p className="text-xs text-muted-foreground">{metric.label}</p>
@@ -1140,7 +1123,16 @@ export default function TrackingPage() {
             {/* Copy lives on the text it copies, not in the footer — the button and the
                 thing it acts on were two scroll-lengths apart. */}
             <div className="relative">
-              <pre className="whitespace-pre-wrap rounded-lg border bg-muted/30 p-4 pr-12 text-xs leading-relaxed">{reportMarkdown}</pre>
+              <div className="rounded-lg border bg-muted/20 p-4 pr-12">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Analysis</p>
+                {view === "mine" && currentProbation ? (
+                  <p className="mt-2 text-sm">{probationEvidenceAvailable ? `KR ${currentProbation.score.total}/100${previousProbation ? ` (${currentProbation.score.total - previousProbation.score.total >= 0 ? "+" : ""}${currentProbation.score.total - previousProbation.score.total} vs previous week)` : ""}. ${currentProbation.score.launchFallbacks} launch and ${currentProbation.score.controlFallbacks} control fallbacks recorded.` : probationUnavailableReason}</p>
+                ) : data?.admin ? (
+                  <p className="mt-2 text-sm">{data.admin.adsCreated} ads created at {data.admin.successRate}% full-batch success. {data.admin.nonSuccess} batches need review.</p>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">No measurable analysis for this period.</p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => void copyReport()}
@@ -1150,17 +1142,6 @@ export default function TrackingPage() {
                 {copied ? <IconCheck className="size-4 text-emerald-600" /> : <IconCopy className="size-4" />}
               </button>
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={downloadMarkdown}>
-              <IconDownload className="size-4" />
-              .md
-            </Button>
-            <Button variant="outline" onClick={printReport}>
-              <IconPrinter className="size-4" />
-              PDF
-            </Button>
-            <span className="w-full text-xs text-muted-foreground sm:w-auto">PDF mở hộp thoại in — chọn &quot;Save as PDF&quot;. Mỗi lần copy/tải đều được ghi nhận, để câu hỏi &quot;có ai dùng Tracking không&quot; có câu trả lời.</span>
           </div>
         </DialogContent>
       </Dialog>

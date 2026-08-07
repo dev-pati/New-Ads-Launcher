@@ -108,15 +108,12 @@ test("counts turn back into the rows the score expects", () => {
   // table or from a number somebody typed.
   const score = scoreProbationWeek({
     launchers: [{ name: "Kevin Nguyen", batches: 1 }, { name: "Seth Tran", batches: 1 }],
-    fallbacks,
-    creativeAggregate: "works",
-    spotCheckMatched: 5,
-    spotCheckTotal: 5,
+    controlActors: [{ name: "Seth Tran", actions: 1 }],
+    fallbacks: fallbacks.map(event => ({ kind: event.reason === "launch" ? "launch" as const : "control" as const })),
   })
 
   assert.equal(score.launchFallbacks, 2)
   assert.equal(score.kr1, 60)
-  assert.equal(score.unverified, false)
 })
 
 // ---------------------------------------------------------------------------
