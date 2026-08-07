@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/auth"
+import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // Get a single ad
@@ -8,8 +8,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -25,7 +25,7 @@ export async function GET(
         ad_account:ad_accounts (id, fb_ad_account_id, name, currency)
       `)
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("org_id", ctx.orgId)
       .single()
 
     if (error) {
@@ -45,8 +45,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -74,7 +74,7 @@ export async function PATCH(
       .from("ads")
       .update(updates)
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("org_id", ctx.orgId)
       .select()
       .single()
 
@@ -96,8 +96,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -108,7 +108,7 @@ export async function DELETE(
       .from("ads")
       .delete()
       .eq("id", id)
-      .eq("user_id", user.id)
+      .eq("org_id", ctx.orgId)
 
     if (error) {
       console.error("Failed to delete ad:", error)

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/auth"
+import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 // Add media to an ad
@@ -8,20 +8,20 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id: adId } = await params
     const supabase = createAdminClient()
 
-    // Verify ad belongs to user
+    // Verify ad belongs to the caller's org
     const { data: ad } = await supabase
       .from("ads")
       .select("id")
       .eq("id", adId)
-      .eq("user_id", user.id)
+      .eq("org_id", ctx.orgId)
       .single()
 
     if (!ad) {
@@ -42,7 +42,7 @@ export async function POST(
 
     // Upload to Supabase Storage
     const fileExt = file.name.split(".").pop()
-    const storagePath = `${user.id}/${adId}/${Date.now()}.${fileExt}`
+    const storagePath = `${ctx.orgId}/${adId}/${Date.now()}.${fileExt}`
 
     const { error: uploadError } = await supabase.storage
       .from("ad-media")
@@ -64,8 +64,9 @@ export async function POST(
     const { data, error } = await supabase
       .from("ad_media")
       .insert({
+        org_id: ctx.orgId,
         ad_id: adId,
-        user_id: user.id,
+        user_id: ctx.user.id,
         media_type: mediaType,
         storage_path: storagePath,
         url: urlData.publicUrl,
@@ -100,8 +101,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const user = await getAuthUser()
-    if (!user) {
+    const ctx = await getAuthContext()
+    if (!ctx) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -123,7 +124,7 @@ export async function DELETE(
       .select("storage_path")
       .eq("id", mediaId)
       .eq("ad_id", adId)
-      .eq("user_id", user.id)
+      .eq("org_id", ctx.orgId)
       .single()
 
     if (!media) {
@@ -138,7 +139,7 @@ export async function DELETE(
       .from("ad_media")
       .delete()
       .eq("id", mediaId)
-      .eq("user_id", user.id)
+      .eq("org_id", ctx.orgId)
 
     return NextResponse.json({ success: true })
   } catch (err) {
