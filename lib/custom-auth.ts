@@ -20,14 +20,13 @@ export type AuthAccount = {
 const COOKIE_NAME = "adlauncher_session"
 const CLIENT_COOKIE_NAME = "adlauncher_client_token"
 const encoder = new TextEncoder()
+const customAuthSecret = process.env.CUSTOM_AUTH_SECRET
 
-function authSecret() {
-  const secret = process.env.CUSTOM_AUTH_SECRET || process.env.JWT_SECRET
-  if (!secret || secret.length < 32) {
-    throw new Error("CUSTOM_AUTH_SECRET must be set to a secure string >= 32 characters.")
-  }
-  return encoder.encode(secret)
+if (!customAuthSecret || customAuthSecret.length < 32) {
+  throw new Error("CUSTOM_AUTH_SECRET must be set to a secure string >= 32 characters.")
 }
+
+const authSecret = encoder.encode(customAuthSecret)
 
 export async function createSession(account: AuthAccount) {
   const token = await new SignJWT({
@@ -42,7 +41,7 @@ export async function createSession(account: AuthAccount) {
     .setSubject(account.id)
     .setIssuedAt()
     .setExpirationTime("30d")
-    .sign(authSecret())
+    .sign(authSecret)
 
   const cookieStore = await cookies()
   cookieStore.set(COOKIE_NAME, token, {
@@ -73,8 +72,22 @@ export async function getSessionAccount(): Promise<AuthAccount | null> {
   if (!token) return null
 
   try {
-    const { payload } = await jwtVerify(token, authSecret())
+    const { payload } = await jwtVerify(token, authSecret)
     if (!payload.sub || !payload.email) return null
+
+    // SEC-011: re-check disabled_at on every request so disabling an account takes
+    // effect immediately, not at the next login. The 30-day JWT carries no revocation
+    // claim; this DB lookup is the revocation surface. ponytail: if this indexed PK
+    // lookup shows up in p95 latency, add a short-TTL (e.g. 10s) in-process cache keyed
+    // by sub, invalidated by disabled_at writes. Do not add the cache before measuring.
+    const db = createAdminClient()
+    const { data: account } = await db
+      .from("accounts")
+      .select("disabled_at")
+      .eq("id", payload.sub)
+      .maybeSingle()
+    if (!account || account.disabled_at) return null
+
     return {
       id: payload.sub,
       email: String(payload.email),
@@ -160,11 +173,13 @@ export async function generateAndSendOtp(email: string): Promise<{
   OTP_LIMITS.send.set(normEmail, sendLimit)
 
   const db = createAdminClient()
-  let { data: account, error } = await db
+  const accountResult = await db
     .from("accounts")
     .select("id, email, disabled_at")
     .ilike("email", normEmail)
     .maybeSingle()
+  let account = accountResult.data
+  const error = accountResult.error
 
   if (error) {
     return { ok: false, error: "Database error", status: 500 }
