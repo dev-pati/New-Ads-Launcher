@@ -57,6 +57,8 @@ export type ObjectType =
   | "painpoint"
   | "fallback"
   | "report"
+  | "facebook_connection"
+  | "organization"
 
 /** One field that actually changed. `from`/`to` are already display-formatted. */
 export type FieldChange = {

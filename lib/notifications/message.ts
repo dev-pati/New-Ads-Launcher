@@ -25,6 +25,8 @@ const OBJECT_LABEL: Record<ObjectType, string> = {
   painpoint: "Weekly painpoint",
   fallback: "Meta Ads Manager fallback",
   report: "Tracking report",
+  facebook_connection: "Facebook connection",
+  organization: "Organization",
 }
 
 /** Field names whose *values* must never reach a notification or the audit log. */

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { recordActivity } from "@/lib/notifications/emit"
 
 // Update an organization (admin only)
 export async function PATCH(
@@ -53,6 +54,18 @@ export async function PATCH(
       return NextResponse.json({ error: "Failed to update organization" }, { status: 500 })
     }
 
+    const actorName = user.full_name || user.email?.split("@")[0] || "Someone"
+    await recordActivity({
+      orgId,
+      actorId: user.id,
+      actorName,
+      objectType: "organization",
+      objectId: orgId,
+      objectName: org.name,
+      action: "updated",
+      source: "org-update",
+    })
+
     return NextResponse.json({ org })
   } catch (err) {
     console.error("Failed to update organization:", err)
@@ -104,6 +117,18 @@ export async function DELETE(
     if (org.name !== confirmName) {
       return NextResponse.json({ error: "Organization name does not match" }, { status: 400 })
     }
+
+    const actorName = user.full_name || user.email?.split("@")[0] || "Someone"
+    await recordActivity({
+      orgId,
+      actorId: user.id,
+      actorName,
+      objectType: "organization",
+      objectId: orgId,
+      objectName: org.name,
+      action: "deleted",
+      source: "org-delete",
+    })
 
     // Delete the organization (CASCADE will handle members, invitations, etc.)
     const { error } = await supabase
