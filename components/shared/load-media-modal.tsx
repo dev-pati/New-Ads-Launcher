@@ -36,6 +36,7 @@ import { CreativeCardMedia } from "@/components/creative-card-media"
 import { formatNumberShort, formatCurrency } from "@/lib/format"
 import { MetaAssignmentStatus } from "@/components/shared/meta-assignment-status"
 import { useMetaAssignmentProgress } from "@/hooks/use-meta-assignment-progress"
+import { getRangeToggledIds } from "@/lib/range-selection"
 
 // ─── Drive Link Tab ───────────────────────────────────────────────────────────
 
@@ -330,6 +331,10 @@ export function LoadMediaModal({
   const [fbMediaSort, setFbMediaSort] = useState<{ field: string; dir: "asc" | "desc" }>({ field: "date", dir: "desc" })
   const FB_MEDIA_PAGE = 20
   const [selected, setSelected] = useState<Set<string>>(new Set(alreadySelected))
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null)
+  // Range anchor is only valid against the currently rendered row order — reset on
+  // tab switch so a stray anchor from library/vault's differing lists can't leak in.
+  useEffect(() => { setSelectionAnchorId(null) }, [mediaTab])
   /**
    * Filter chip values. `uploader`, `channels`, `workspace` and `source` used to sit here too;
    * they had no options and no predicate, so the keys went with the chips — leaving them would
@@ -1052,6 +1057,7 @@ export function LoadMediaModal({
 
   const toggleAllVault = () => {
     setSelected(prev => prev.size === vaultSorted.length ? new Set() : new Set(vaultSorted.map(m => m.id)))
+    setSelectionAnchorId(null)
   }
 
   const [portalDetailOpen, setPortalDetailOpen] = useState(false)
@@ -1097,11 +1103,15 @@ export function LoadMediaModal({
     return sortDir === "asc" ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va))
   })
 
-  const toggle = (id: string) => {
-    setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggle = (id: string, shiftKey = false, ctrlKey = false) => {
+    const orderedIds = (mediaTab === "vault" ? vaultSorted : sorted).map(m => m.id)
+    const { nextSelected, nextAnchorId } = getRangeToggledIds(selected, orderedIds, id, selectionAnchorId, shiftKey, ctrlKey)
+    setSelected(nextSelected)
+    setSelectionAnchorId(nextAnchorId)
   }
   const toggleAll = () => {
     setSelected(prev => prev.size === sorted.length ? new Set() : new Set(sorted.map(m => m.id)))
+    setSelectionAnchorId(null)
   }
   const handleConfirm = async () => {
     const selectedMedia = fbMedia.filter(m => selected.has(m.id))
@@ -1780,12 +1790,12 @@ export function LoadMediaModal({
                   const assignmentProgress = vaultProgressById[c.id]
                   return (
                     <div key={c.id}
-                      onClick={() => toggle(c.id)}
+                      onClick={(e) => toggle(c.id, e.shiftKey, e.ctrlKey || e.metaKey)}
                       className={cn("group grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors",
                         isSelected && "bg-primary/5 hover:bg-primary/10")}
                       style={{ gridTemplateColumns: "28px 2.5fr 1fr 1.4fr 60px 1fr 70px 100px 120px 32px" }}>
                       <div className="size-4 rounded border-2 flex items-center justify-center shrink-0"
-                        onClick={e => { e.stopPropagation(); toggle(c.id) }}>
+                        onClick={e => { e.stopPropagation(); toggle(c.id, e.shiftKey, e.ctrlKey || e.metaKey) }}>
                         <div className={cn("size-4 -m-2 rounded border-2 flex items-center justify-center", isSelected ? "bg-primary border-primary" : "border-muted-foreground/30")}>
                           {isSelected && <IconCheck className="size-2.5 text-primary-foreground" />}
                         </div>

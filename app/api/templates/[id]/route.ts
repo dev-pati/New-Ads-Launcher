@@ -81,7 +81,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const data = outcome.row
 
     if (outcome.changes.length > 0) {
-      void emitAndLog("templates.update", {
+      await emitAndLog("templates.update", {
         orgId: ctx.orgId,
         actorId: ctx.user.id,
         actorName: getActorName(ctx.user),

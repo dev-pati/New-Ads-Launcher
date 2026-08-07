@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
 
     // automations has no actor column (TD-31): without this row, "who automated what"
     // is unanswerable. Audit-only — /api/automations/[id] already notifies on edits.
-    void recordActivity({
+    await recordActivity({
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName: ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone",

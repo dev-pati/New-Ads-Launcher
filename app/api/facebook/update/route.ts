@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
     )
 
     if (changes.length > 0) {
-      void emitAndLog("facebook.update", {
+      await emitAndLog("facebook.update", {
         orgId: ctx.orgId,
         actorId: ctx.user.id,
         actorName: ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone",

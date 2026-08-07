@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
-    void emitAndLog("templates.from-ad", {
+    await emitAndLog("templates.from-ad", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,

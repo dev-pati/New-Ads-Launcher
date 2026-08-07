@@ -46,7 +46,7 @@ const scenario = {
     await page.getByRole("heading", { name: "Rules", exact: true }).waitFor()
 
     await capture({
-      target: "select",
+      target: "button:has-text('Demo Ad Account')",
       title: "Chọn đúng Ad Account",
       body: "Rule thuộc Meta ad account đang chọn. Kiểm tra account trước khi tạo hoặc sửa rule.",
     })
@@ -58,23 +58,12 @@ const scenario = {
     })
 
     const createButton = page.getByRole("button", { name: "Create Rule" })
-    await capture({
-      target: "button:has-text('Create Rule')",
-      title: "Mở trình tạo rule",
-      body: "Bấm Create Rule để tạo rule mới. Rule lưu và chạy trực tiếp trên Meta.",
-    })
     await createButton.click()
 
     await capture({
-      target: "h2:has-text('Create a custom rule')",
-      title: "Chọn đối tượng và hành động",
-      body: "Chọn Campaign, Ad Set hoặc Ad; sau đó chọn hành động như Pause, Activate hoặc đổi budget.",
-    })
-
-    await capture({
-      target: "text=Conditions",
-      title: "Đặt điều kiện và lịch kiểm tra",
-      body: "Các điều kiện dùng quan hệ AND. Kiểm tra time range, schedule và cảnh báo trước khi lưu.",
+      target: "div.fixed.inset-0.z-50 > div",
+      title: "Tạo rule hoàn chỉnh từ đầu đến cuối",
+      body: "Bấm Create Rule, rồi hoàn thành toàn bộ form:\n1) Kiểm tra Rule name.\n2) Chọn Campaign, Ad Set hoặc Ad và Active only.\n3) Chọn Action.\n4) Đặt Conditions — mọi dòng dùng quan hệ AND; muốn OR phải tạo rule khác.\n5) Chọn Time range.\n6) Chọn Schedule.\n7) Bật/tắt Notification.\n8) Đọc mọi cảnh báo và kiểm tra lại Ad Account.\n\nChỉ bấm Create sau khi xác nhận rule có thể tác động đúng đối tượng, budget và lịch chạy. Guide không bấm Create thay người dùng.",
     })
   },
 }

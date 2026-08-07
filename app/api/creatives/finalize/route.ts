@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
     }, "immediately").catch(err => console.error("[finalize] media trigger error:", err))
 
     const actorName = getActorName(ctx.user)
-    void emitAndLog("creatives.finalize", {
+    await emitAndLog("creatives.finalize", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,

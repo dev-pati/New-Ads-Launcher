@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
 
     // Saving a draft is real preparation work — Tracking counts it as Reuse. Audit-only:
     // the org does not need a notification every time somebody parks a launch.
-    void recordActivity({
+    await recordActivity({
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName: ctx.user.full_name || ctx.user.email?.split("@")[0] || "Someone",

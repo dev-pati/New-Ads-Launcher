@@ -90,7 +90,7 @@ export async function PATCH(
     const data = outcome.row
 
     if (outcome.changes.length > 0) {
-      void emitAndLog("creatives.update", {
+      await emitAndLog("creatives.update", {
         orgId: ctx.orgId,
         actorId: ctx.user.id,
         actorName: getActorName(ctx.user),

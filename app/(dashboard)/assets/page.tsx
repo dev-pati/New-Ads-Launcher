@@ -30,6 +30,7 @@ import type { FolderNode } from "@/lib/portal-media/tree"
 import { MetaAssignmentStatus } from "@/components/shared/meta-assignment-status"
 import { useMetaAssignmentProgress } from "@/hooks/use-meta-assignment-progress"
 import { sortCreativesByLatestAssignment, type PortalMediaItemRow } from "@/lib/creative-media"
+import { getRangeToggledIds } from "@/lib/range-selection"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -144,7 +145,7 @@ const CONTEXT_MENU_ITEM =
  */
 function RowCheckbox({ checked, onToggle, label, className }: {
   checked: boolean
-  onToggle: () => void
+  onToggle: (e: React.MouseEvent<HTMLButtonElement>) => void
   label: string
   className?: string
 }) {
@@ -155,7 +156,7 @@ function RowCheckbox({ checked, onToggle, label, className }: {
       aria-checked={checked}
       aria-label={label}
       title={label}
-      onClick={(e) => { e.stopPropagation(); onToggle() }}
+      onClick={(e) => { e.stopPropagation(); onToggle(e) }}
       className={cn(
         "size-4 rounded border flex items-center justify-center shrink-0 cursor-pointer transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
@@ -198,6 +199,7 @@ export default function AssetsPage() {
   const [portalPath, setPortalPath]      = useState<string[]>([])
   const [portalVisible, setPortalVisible] = useState(PORTAL_PAGE_SIZE)
   const [portalSelected, setPortalSelected] = useState<Set<string>>(new Set())
+  const [portalAnchorId, setPortalAnchorId] = useState<string | null>(null)
   const [portalSort, setPortalSort] = useState<PortalSort>(null)
   const [assetSort, setAssetSort] = useState<AssetSort>({ key: "date", dir: "desc" })
   const [dateRange, setDateRange] = useState<DateRangeFilter>("")
@@ -243,6 +245,7 @@ export default function AssetsPage() {
   const [boards, setBoards]             = useState<Board[]>([])
   const [requests, setRequests]         = useState<CreativeRequest[]>([])
   const [selected, setSelected]         = useState<Set<string>>(new Set())
+  const [assetAnchorId, setAssetAnchorId] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const [search, setSearch]             = useState(() => searchParams.get("q") || "")
   const [filterType, setFilterType]     = useState<"" | "image" | "video">("")
@@ -521,6 +524,10 @@ export default function AssetsPage() {
     if (section === "requests" && requests.length === 0) loadRequests()
   }, [section, requests.length, loadRequests])
 
+  // Range anchor is only valid against the currently rendered row order — reset on
+  // section switch so a stray anchor from a different list can't produce a bogus range.
+  useEffect(() => { setAssetAnchorId(null) }, [section])
+
   useEffect(() => {
     if (currentBoardId) loadBoardCreatives(currentBoardId)
   }, [currentBoardId, loadBoardCreatives])
@@ -757,14 +764,20 @@ export default function AssetsPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
   const adAccountName = adAccounts?.find((a: any) => a.id === selectedAccountId)?.name || selectedAccountId || "—"
 
-  const toggleSelect = (id: string) => setSelected(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  })
-  const selectAll = () => setSelected(new Set(displayList.map(c => c.id)))
-  const clearSelected = () => setSelected(new Set())
+  const toggleSelect = (id: string, shiftKey = false, ctrlKey = false) => {
+    const { nextSelected, nextAnchorId } = getRangeToggledIds(
+      selected,
+      displayList.map(c => c.id),
+      id,
+      assetAnchorId,
+      shiftKey,
+      ctrlKey
+    )
+    setSelected(nextSelected)
+    setAssetAnchorId(nextAnchorId)
+  }
+  const selectAll = () => { setSelected(new Set(displayList.map(c => c.id))); setAssetAnchorId(null) }
+  const clearSelected = () => { setSelected(new Set()); setAssetAnchorId(null) }
   const allDisplayedSelected = displayList.length > 0 && selected.size === displayList.length
 
   // ── Portal Media: folder navigation ───────────────────────────────────────
@@ -836,20 +849,28 @@ export default function AssetsPage() {
     setPortalPath(prev => [...prev, label])
     setPortalVisible(PORTAL_PAGE_SIZE)
     setPortalSelected(new Set())
+    setPortalAnchorId(null)
   }
   const gotoPortalCrumb = (index: number) => {
     setPortalPath(prev => prev.slice(0, index))
     setPortalVisible(PORTAL_PAGE_SIZE)
     setPortalSelected(new Set())
+    setPortalAnchorId(null)
   }
 
-  const togglePortalSelect = (objectKey: string) => setPortalSelected(prev => {
-    const next = new Set(prev)
-    if (next.has(objectKey)) next.delete(objectKey)
-    else next.add(objectKey)
-    return next
-  })
-  const clearPortalSelected = () => setPortalSelected(new Set())
+  const togglePortalSelect = (objectKey: string, shiftKey = false, ctrlKey = false) => {
+    const { nextSelected, nextAnchorId } = getRangeToggledIds(
+      portalSelected,
+      sortedPortalFiles.slice(0, portalVisible).map(f => f.objectKey),
+      objectKey,
+      portalAnchorId,
+      shiftKey,
+      ctrlKey
+    )
+    setPortalSelected(nextSelected)
+    setPortalAnchorId(nextAnchorId)
+  }
+  const clearPortalSelected = () => { setPortalSelected(new Set()); setPortalAnchorId(null) }
 
   /** Header checkbox acts on the whole folder, not just the rendered page — assigning
    *  costs no resolver requests, so there is no reason to cap it at PORTAL_PAGE_SIZE. */
@@ -1588,7 +1609,7 @@ export default function AssetsPage() {
                                     <RowCheckbox
                                       checked={isSelected}
                                       label={`Select ${file.name}`}
-                                      onToggle={() => togglePortalSelect(file.objectKey)}
+                                      onToggle={(e) => togglePortalSelect(file.objectKey, e.shiftKey, e.ctrlKey || e.metaKey)}
                                     />
                                   </td>
                                   <td className="px-3">
@@ -2075,7 +2096,7 @@ export default function AssetsPage() {
                               <RowCheckbox
                                 checked={isSelected}
                                 label={`Select ${c.file_name}`}
-                                onToggle={() => toggleSelect(c.id)}
+                                onToggle={(e) => toggleSelect(c.id, e.shiftKey, e.ctrlKey || e.metaKey)}
                               />
                             </td>
                             <td className="px-3">

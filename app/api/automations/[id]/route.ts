@@ -101,7 +101,7 @@ export async function PATCH(
     const data = outcome.row
 
     if (outcome.changes.length > 0) {
-      void emitAndLog("automations.update", {
+      await emitAndLog("automations.update", {
         orgId: ctx.orgId,
         actorId: ctx.user.id,
         actorName: getActorName(ctx.user),

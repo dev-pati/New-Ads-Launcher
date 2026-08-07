@@ -257,7 +257,7 @@ export async function POST(
       // The actor is the inviter, not the invitee: the invitee did not do anything.
       // Getting this backwards also suppressed the notification for the one person who
       // most needs it, because the emitter never notifies the actor.
-      void emitAndLog("orgs.members.add", {
+      await emitAndLog("orgs.members.add", {
         orgId,
         actorId: user.id,
         actorName: inviterName,
@@ -411,7 +411,7 @@ export async function PATCH(
       // A role change decides what someone is allowed to do next — including whether
       // they can still launch. Everyone in the org sees it, and the affected member
       // sees it whether or not their role would normally receive ops notifications.
-      void emitAndLog("orgs.members.role", {
+      await emitAndLog("orgs.members.role", {
         orgId,
         actorId: user.id,
         actorName,

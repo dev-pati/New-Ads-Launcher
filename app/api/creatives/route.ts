@@ -346,7 +346,7 @@ export async function POST(request: NextRequest) {
 
     const actorName = ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone"
     // Keyed on the creative row, so a retried upload of the same row delivers once.
-    void emitAndLog("creatives.create", {
+    await emitAndLog("creatives.create", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName,

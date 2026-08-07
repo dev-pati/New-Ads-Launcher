@@ -55,7 +55,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const statusChanged = outcome.changes.some(c => c.field === "status")
 
     if (outcome.changes.length > 0) {
-      void emitAndLog("requests.update", {
+      await emitAndLog("requests.update", {
         orgId: ctx.orgId,
         actorId: ctx.user.id,
         actorName: getActorName(ctx.user),

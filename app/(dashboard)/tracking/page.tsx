@@ -1,14 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { IconAlertTriangle, IconChartBar, IconCheck, IconChevronRight, IconCopy, IconInfoCircle, IconLoader2, IconMinus, IconNote, IconPlus, IconRefresh, IconRocket } from "@tabler/icons-react"
+import { IconAlertTriangle, IconCalendarTime, IconChartBar, IconCheck, IconChevronRight, IconCopy, IconInfoCircle, IconLoader2, IconMail, IconNote, IconRefresh, IconRocket } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { CLASS_DESCRIPTION, CLASS_LABEL, CLASS_ORDER, type ActivityClass } from "@/lib/tracking/activity-catalog"
 import { mergeUsageRows } from "@/lib/tracking/activity"
-import { FALLBACK_HINT, FALLBACK_LABEL, FALLBACK_REASONS, type FallbackReason } from "@/lib/tracking/fallback"
-import { readWeek, totalCount, writeWeek, type LocalFallbackWeek } from "@/lib/tracking/fallback-local"
 import type { FallbackKind } from "@/lib/tracking/fallback"
 import { buildProbationReport, scoreProbationWeek, type ProbationScore } from "@/lib/tracking/probation"
 import { buildTrackingReport } from "@/lib/tracking/report"
@@ -467,180 +465,102 @@ function ActivityPanel({
   )
 }
 
-/**
- * The card that counts what the app could NOT do.
- *
- * Every other number on this page measures work the app absorbed. This one measures the
- * work it pushed back to Meta Ads Manager, which is the only metric that can say the app
- * replaced the old way of working rather than merely being busy. Nothing can record it:
- * leaving the product is invisible from inside it. So it is typed in by hand, and it is
- * stored on the hand's own machine (`lib/tracking/fallback-local.ts`) — a self-count kept
- * in a server table would read as organisational measurement, which it is not.
- *
- * My usage only, for the same reason: on Team usage it would be a read-only tile of
- * somebody else's self-report, and a number with no owner stops being questioned.
- */
-function FallbackCard({
-  week,
-  onChange,
-}: {
-  week: LocalFallbackWeek
-  onChange: (next: LocalFallbackWeek) => void
+type WeeklyPainpoint = {
+  note: string
+  weekStart: string
+  updatedAt: string | null
+  creativeAggregate: "works" | "not_yet" | null
+  dataMismatchCount: number | null
+}
+
+function WeeklyCheckInCard({ value, score, fallbackAvailable, fallbackBusy, fallbackError, canUndoFallback, busy, error, onChange, onRecordFallback, onUndoFallback, onSave }: {
+  value: WeeklyPainpoint
+  score: ProbationScore | null
+  fallbackAvailable: boolean
+  fallbackBusy: boolean
+  fallbackError: string | null
+  canUndoFallback: boolean
+  busy: boolean
+  error: string | null
+  onChange: (next: WeeklyPainpoint) => void
+  onRecordFallback: (kind: FallbackKind) => void
+  onUndoFallback: () => void
+  onSave: () => void
 }) {
-  const total = totalCount(week)
-  const weekLabel = new Date(`${week.weekStart}T00:00:00.000Z`).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })
-
-  const setCount = (reason: FallbackReason, value: number) =>
-    onChange({ ...week, counts: { ...week.counts, [reason]: Math.max(0, Math.floor(value) || 0) } })
-
+  const weekLabel = new Date(`${value.weekStart}T00:00:00.000Z`).toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit" })
   return (
     <section className="rounded-xl border bg-card shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b p-5">
         <div>
-          <h2 className="font-semibold">Fallback về Meta Ads Manager <span className="ml-1 align-middle text-xs font-normal text-muted-foreground">điền tay</span></h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Của bạn, tuần này (từ {weekLabel}). Mỗi lần phải mở Ads Manager để làm nốt việc = 1 lần app chưa thay được cách làm cũ. Bạn tự điền số — chỉ hiện ở My usage.
-          </p>
-          {/* App không nhìn thấy được lúc người ta rời khỏi nó. Con số này chỉ đúng bằng
-              mức chăm điền, nên nó phải tự nói ra điều đó ngay cạnh con số. */}
-          <p className="mt-1 text-xs text-muted-foreground">
-            {total === 0
-              ? "0 = chưa điền, không phải là không có fallback."
-              : "Số tự điền, lưu trên máy bạn — app không tự thấy được lúc ai đó rời khỏi nó."}
-          </p>
+          <h2 className="font-semibold">Weekly check-in</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Week from {weekLabel}. Fallback taps save immediately; Save writes the mismatch count and description.</p>
         </div>
-        <div className="text-right">
-          <p className="text-3xl font-semibold tabular-nums">{total}</p>
-          <p className="text-xs text-muted-foreground">lần</p>
+        {score && <div className="text-right"><p className="text-2xl font-semibold tabular-nums">{score.total}/100</p><p className="text-xs text-muted-foreground">KR points</p></div>}
+      </div>
+      <div className="grid gap-5 border-b p-5 md:grid-cols-2">
+        <div>
+          <span className="text-sm font-medium">Fallback to Meta Ads Manager</span>
+          <span className="mt-1 block text-xs text-muted-foreground">Record when AdLauncher could not finish the work.</span>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => onRecordFallback("launch")} disabled={!fallbackAvailable || fallbackBusy}>Launch +1</Button>
+            <Button size="sm" variant="outline" onClick={() => onRecordFallback("control")} disabled={!fallbackAvailable || fallbackBusy}>Control +1</Button>
+            {canUndoFallback && <Button size="sm" variant="ghost" onClick={onUndoFallback} disabled={!fallbackAvailable || fallbackBusy}>Undo last</Button>}
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">Launch {score?.launchFallbacks ?? 0} · Control {score?.controlFallbacks ?? 0}</p>
+          {fallbackError && <p className="mt-2 text-sm text-destructive">{fallbackError}</p>}
         </div>
-      </div>
-
-      <div className="divide-y">
-        {FALLBACK_REASONS.map(reason => (
-          <div key={reason} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium">{FALLBACK_LABEL[reason]}</p>
-              <p className="text-xs text-muted-foreground">{FALLBACK_HINT[reason]}</p>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Button size="icon" variant="outline" className="size-8" onClick={() => setCount(reason, week.counts[reason] - 1)} disabled={week.counts[reason] === 0} title="Bớt 1">
-                <IconMinus className="size-3.5" />
-              </Button>
-              <input
-                type="number"
-                min={0}
-                value={week.counts[reason]}
-                onChange={event => setCount(reason, Number(event.target.value))}
-                className="w-14 rounded-md border bg-background px-2 py-1 text-center text-sm tabular-nums"
-              />
-              <Button size="icon" variant="outline" className="size-8" onClick={() => setCount(reason, week.counts[reason] + 1)} title="Thêm 1">
-                <IconPlus className="size-3.5" />
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid gap-4 border-t p-5 sm:grid-cols-2">
-          <div>
-            <p className="text-sm font-medium">Creative aggregate</p>
-            <p className="mt-1 text-xs text-muted-foreground">Xem creative gộp theo nhóm đã dùng được chưa?</p>
-            <div className="mt-2 flex gap-2">
-              {(["works", "not_yet"] as const).map(value => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => onChange({ ...week, creativeAggregate: week.creativeAggregate === value ? null : value })}
-                  className={`rounded-full border px-3 py-1 text-xs ${week.creativeAggregate === value ? "border-primary bg-primary/10 font-medium text-primary" : "text-muted-foreground"}`}
-                >
-                  {value === "works" ? "work" : "chưa"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium">Data accuracy</p>
-            <p className="mt-1 text-xs text-muted-foreground">Spot check: bao nhiêu số khớp với Ads Manager?</p>
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                max={week.spotCheckTotal}
-                value={week.spotCheckMatched ?? ""}
-                placeholder="—"
-                onChange={event => {
-                  const raw = event.target.value
-                  onChange({ ...week, spotCheckMatched: raw === "" ? null : Math.max(0, Math.min(week.spotCheckTotal, Number(raw))) })
-                }}
-                className="w-16 rounded-md border bg-background px-2 py-1 text-sm tabular-nums"
-              />
-              <span className="text-sm text-muted-foreground">/ {week.spotCheckTotal} khớp</span>
-            </div>
-          </div>
-      </div>
-
-      <details className="border-t">
-          <summary className="cursor-pointer list-none p-5 text-sm text-muted-foreground hover:text-foreground">
-            <span className="inline-flex items-center gap-1.5">
-              <IconChevronRight className="size-3.5 transition-transform [details[open]_&]:rotate-90" />
-              Ghi chú tuần (không bắt buộc)
-            </span>
-          </summary>
-          <div className="px-5 pb-5">
-            <textarea
-              value={week.note}
-              onChange={event => onChange({ ...week, note: event.target.value })}
-              rows={3}
-              placeholder="Ví dụ: launch table đơ khi dán 40 dòng…"
-              className="w-full resize-y rounded-md border bg-background px-3 py-2 text-sm"
+        <label className="block">
+          <span className="text-sm font-medium">Data mismatch count</span>
+          <span className="mt-1 block text-xs text-muted-foreground">Times you used the app and its data did not align with Meta Ads Manager.</span>
+          <span className="mt-3 flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              max={1000}
+              value={value.dataMismatchCount ?? ""}
+              placeholder="0"
+              onChange={event => {
+                const raw = event.target.value
+                onChange({ ...value, dataMismatchCount: raw === "" ? null : Math.max(0, Math.min(1000, Math.floor(Number(raw) || 0))) })
+              }}
+              className="w-20 rounded-md border bg-background px-3 py-2 text-center text-lg font-semibold tabular-nums"
             />
-            <p className="mt-2 text-xs text-muted-foreground">Lưu trên máy bạn, và đi kèm khi bạn copy Report.</p>
-          </div>
-      </details>
+            <span className="text-sm text-muted-foreground">mismatches</span>
+          </span>
+        </label>
+      </div>
+      <div className="p-5">
+        <label className="block">
+          <span className="text-sm font-medium">Painpoint description</span>
+          <span className="mt-1 block text-xs text-muted-foreground">Describe the problem, impact, and workaround. Up to 2,000 characters.</span>
+          <textarea
+            value={value.note}
+            maxLength={2000}
+            rows={5}
+            onChange={event => onChange({ ...value, note: event.target.value })}
+            placeholder="Example: Bulk assignment failed for video assets, so I assigned them individually in Ads Manager..."
+            className="mt-3 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm"
+          />
+          <span className="mt-1 block text-right text-xs text-muted-foreground">{value.note.length}/2000</span>
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
+        <p className="text-xs text-muted-foreground">{value.updatedAt ? `Saved ${new Date(value.updatedAt).toLocaleString()}` : "Not saved this week."}</p>
+        <Button onClick={onSave} disabled={busy}>{busy && <IconLoader2 className="size-4 animate-spin" />}Save all changes</Button>
+      </div>
+      {error && <p className="border-t px-5 py-3 text-sm text-destructive">{error}</p>}
     </section>
   )
 }
 
-function KrCard({ score, week, scoreAvailable, loggingAvailable, unavailableReason, busy, error, onRecord, onUndo }: {
-  score: ProbationScore
-  week: ProbationPayload["weeks"][number]
-  scoreAvailable: boolean
-  loggingAvailable: boolean
-  unavailableReason: string | null
-  busy: boolean
-  error: string | null
-  onRecord: (kind: FallbackKind) => void
-  onUndo: () => void
-}) {
-  const last = week.fallbacks[0]
-  const status = score.verdict === "on_track" ? "On track" : score.verdict === "warning" ? "Warning" : "Off track"
-  return (
-    <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="grid gap-4 border-b p-5 sm:grid-cols-[1fr_auto] sm:items-center">
-        <div>
-          <p className="text-sm text-muted-foreground">This week</p>
-          <h2 className="mt-1 text-xl font-semibold">KR score <span className="tabular-nums">{scoreAvailable ? `${score.total}/100` : "unavailable"}</span></h2>
-          <p className="mt-1 text-sm text-muted-foreground">{scoreAvailable ? `${status}. Completed launches plus recorded Meta fallbacks.` : "Required evidence is unavailable, so no score is claimed."}</p>
-        </div>
-        <div className="grid grid-cols-2 gap-2 text-center">
-          <div className="rounded-lg bg-muted/40 px-4 py-3"><p className="text-xs text-muted-foreground">KR1 Launch</p><p className="mt-1 text-2xl font-semibold tabular-nums">{scoreAvailable ? `${score.kr1}/80` : "-"}</p></div>
-          <div className="rounded-lg bg-muted/40 px-4 py-3"><p className="text-xs text-muted-foreground">KR2 Control</p><p className="mt-1 text-2xl font-semibold tabular-nums">{scoreAvailable ? `${score.kr2}/20` : "-"}</p></div>
-        </div>
-      </div>
-      <div className="p-5">
-        <p className="text-sm font-medium">Had to use Meta Ads Manager</p>
-        <p className="mt-1 text-xs text-muted-foreground">One tap after AdLauncher could not finish the job. Zero means zero recorded, not guaranteed zero fallback.</p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button onClick={() => onRecord("launch")} disabled={!loggingAvailable || busy}>Launch</Button>
-          <Button variant="outline" onClick={() => onRecord("control")} disabled={!loggingAvailable || busy}>Control</Button>
-          {last && <Button variant="ghost" onClick={onUndo} disabled={busy}>Undo last</Button>}
-        </div>
-        <p className="mt-3 text-sm text-muted-foreground">Recorded: Launch {score.launchFallbacks} - Control {score.controlFallbacks}</p>
-        {!scoreAvailable && <p className="mt-3 text-sm text-amber-600">{unavailableReason}</p>}
-        {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
-      </div>
-    </section>
-  )
+async function readJsonResponse<T = Record<string, unknown>>(response: Response): Promise<T> {
+  const text = await response.text()
+  if (!text) throw new Error(`Server returned an empty response (${response.status}).`)
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    throw new Error(`Server returned an invalid response (${response.status}).`)
+  }
 }
 
 /** What the probation route can prove: who launched, in which ISO week. */
@@ -660,6 +580,30 @@ type ProbationPayload = {
     controlActors: Array<{ name: string; actions: number }>
     fallbacks: Array<{ id: string; kind: FallbackKind; occurredAt: string }>
   }>
+}
+
+type WeeklyReportConfig = {
+  to: string[]
+  cc: string | null
+  scheduleAvailable: boolean
+  schedule: {
+    enabled: boolean
+    weekday: number
+    send_time: string
+    timezone: string
+    pending_review: boolean
+    last_due_local_date: string | null
+    last_sent_at: string | null
+  }
+}
+
+type WeeklyEmailPreview = {
+  to: string[]
+  cc: string
+  subject: string
+  html: string
+  text: string
+  previewToken: string
 }
 
 /** The plan covers one month. Outside it the block is noise, so it never renders. */
@@ -684,6 +628,13 @@ export default function TrackingPage() {
   const [probation, setProbation] = useState<ProbationPayload | null>(null)
   const [fallbackBusy, setFallbackBusy] = useState(false)
   const [fallbackError, setFallbackError] = useState<string | null>(null)
+  const [weeklyConfig, setWeeklyConfig] = useState<WeeklyReportConfig | null>(null)
+  const [weeklyBusy, setWeeklyBusy] = useState(false)
+  const [weeklyError, setWeeklyError] = useState<string | null>(null)
+  const [emailPreview, setEmailPreview] = useState<WeeklyEmailPreview | null>(null)
+  const [weeklyPainpoint, setWeeklyPainpoint] = useState<WeeklyPainpoint | null>(null)
+  const [painpointBusy, setPainpointBusy] = useState(false)
+  const [painpointError, setPainpointError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -702,6 +653,38 @@ export default function TrackingPage() {
   }, [days, view])
 
   useEffect(() => { void load() }, [load])
+
+  const loadPainpoint = useCallback(async () => {
+    setPainpointError(null)
+    try {
+      const response = await fetch("/api/tracking/painpoint", { cache: "no-store" })
+      const body = await readJsonResponse<WeeklyPainpoint & { error?: string }>(response)
+      if (!response.ok) throw new Error(body.error || "Weekly check-in is unavailable.")
+      setWeeklyPainpoint(body)
+    } catch (cause) {
+      setPainpointError(cause instanceof Error ? cause.message : "Weekly check-in is unavailable.")
+    }
+  }, [])
+
+  useEffect(() => {
+    if (view === "mine") void loadPainpoint()
+  }, [view, loadPainpoint])
+
+  const loadWeeklyConfig = useCallback(async () => {
+    if (!isAdminView) return
+    try {
+      const response = await fetch("/api/tracking/weekly-report", { cache: "no-store" })
+      const body = await readJsonResponse<WeeklyReportConfig & { error?: string }>(response)
+      if (!response.ok) throw new Error(body.error || "Weekly report settings are unavailable.")
+      setWeeklyConfig(body)
+    } catch (cause) {
+      setWeeklyError(cause instanceof Error ? cause.message : "Weekly report settings are unavailable.")
+    }
+  }, [isAdminView])
+
+  useEffect(() => {
+    if (reportOpen && isAdminView) void loadWeeklyConfig()
+  }, [reportOpen, isAdminView, loadWeeklyConfig])
 
   useEffect(() => {
     if (!memberDetail) { setMemberData(null); return }
@@ -770,6 +753,30 @@ export default function TrackingPage() {
     }
   }
 
+  async function savePainpoint() {
+    if (!weeklyPainpoint) return
+    setPainpointBusy(true)
+    setPainpointError(null)
+    try {
+      const response = await fetch("/api/tracking/painpoint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          note: weeklyPainpoint.note,
+          creativeAggregate: weeklyPainpoint.creativeAggregate,
+          dataMismatchCount: weeklyPainpoint.dataMismatchCount,
+        }),
+      })
+      const body = await readJsonResponse<{ error?: string }>(response)
+      if (!response.ok) throw new Error(body.error || "Could not save weekly check-in.")
+      await loadPainpoint()
+    } catch (cause) {
+      setPainpointError(cause instanceof Error ? cause.message : "Could not save weekly check-in.")
+    } finally {
+      setPainpointBusy(false)
+    }
+  }
+
   const summary = view === "admin" ? data?.admin : undefined
   const series = data?.adminTimeSeries || []
   const tabs: Array<["admin" | "mine", string]> = isAdminView
@@ -797,7 +804,7 @@ export default function TrackingPage() {
    * The report is built from the payload already on screen, so the number a PM pastes
    * into a message and the number the dashboard shows can never disagree.
    */
-  const baseReport = data && activity ? buildTrackingReport({
+  const reportInput = data && activity ? {
     days: data.days,
     generatedAt: data.generatedAt,
     orgName: null,
@@ -810,7 +817,32 @@ export default function TrackingPage() {
     instrumentedSince: activity.instrumentedSince,
     automationRuns: activity.automationRuns,
     automationCoverage: activity.automationCoverage,
-  }) : ""
+  } : null
+  const baseReport = reportInput ? buildTrackingReport(reportInput) : ""
+  const weeklyBaseSnapshot = data && data.admin && activity?.team ? {
+    report: {
+      days: data.days,
+      generatedAt: data.generatedAt,
+      orgName: null,
+      delivery: data.admin,
+      previous: data.previous,
+      creative: data.creative,
+      failureReasons: data.failureReasons || [],
+      activity: activity.team,
+      activityAvailable: activity.available,
+      instrumentedSince: activity.instrumentedSince,
+      automationRuns: activity.automationRuns,
+      automationCoverage: activity.automationCoverage,
+    },
+    team: usageRows.map(member => ({
+      name: member.name,
+      adsCreated: member.adsCreated,
+      batches: member.batches,
+      actions: member.actions,
+      activeDays: member.activeDays,
+      breadth: member.breadth,
+    })),
+  } : null
 
   /**
    * The probation week rides inside this person's own report instead of standing as a
@@ -832,6 +864,13 @@ export default function TrackingPage() {
   const probationWeeksToDate = probation ? scoredProbation.filter(week => week.week <= probation.currentWeek) : []
   const probationEvidenceAvailable = Boolean(probation?.fallbackAvailable && probation?.controlAvailable)
   const probationUnavailableReason = probation?.fallbackUnavailableReason || probation?.controlUnavailableReason || null
+  const probationAggregate = currentProbation && probationEvidenceAvailable ? {
+    totalPoints: currentProbation.score.total,
+    monthToDatePoints: probationWeeksToDate.length === 0 ? currentProbation.score.total : Math.round((probationWeeksToDate.reduce((sum, week) => sum + week.score.total, 0) / probationWeeksToDate.length) * 10) / 10,
+    launchFallbacks: probationWeeksToDate.reduce((sum, week) => sum + week.score.launchFallbacks, 0),
+    controlFallbacks: probationWeeksToDate.reduce((sum, week) => sum + week.score.controlFallbacks, 0),
+  } : null
+  const weeklySnapshot = weeklyBaseSnapshot ? { ...weeklyBaseSnapshot, ...(probationAggregate ? { kr: probationAggregate } : {}) } : null
   const probationReport = currentProbation && probationEvidenceAvailable ? `${buildProbationReport({
     score: currentProbation.score,
     week: currentProbation.index,
@@ -858,11 +897,74 @@ export default function TrackingPage() {
     }
   }
 
-  /**
-   * PDF via the browser's own print dialog — "Save as PDF" is a destination there on
-   * every platform we run on. No renderer to keep in step with the report format, and
-   * what prints is the text the dashboard already showed.
-   */
+  async function previewWeeklyEmail() {
+    if (!weeklySnapshot) return
+    setWeeklyBusy(true)
+    setWeeklyError(null)
+    try {
+      const response = await fetch("/api/tracking/weekly-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "preview", snapshot: weeklySnapshot }),
+      })
+      const body = await readJsonResponse<WeeklyEmailPreview & { error?: string }>(response)
+      if (!response.ok) throw new Error(body.error || "Email preview failed.")
+      setEmailPreview(body)
+      recordExport()
+    } catch (cause) {
+      setWeeklyError(cause instanceof Error ? cause.message : "Email preview failed.")
+    } finally {
+      setWeeklyBusy(false)
+    }
+  }
+
+  async function sendWeeklyEmail() {
+    if (!weeklySnapshot || !emailPreview) return
+    setWeeklyBusy(true)
+    setWeeklyError(null)
+    try {
+      const response = await fetch("/api/tracking/weekly-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", snapshot: weeklySnapshot, previewToken: emailPreview.previewToken }),
+      })
+      const body = await readJsonResponse<{ ok?: boolean; error?: string }>(response)
+      if (!response.ok) throw new Error(body.error || "Email delivery failed.")
+      setEmailPreview(null)
+      await loadWeeklyConfig()
+    } catch (cause) {
+      setWeeklyError(cause instanceof Error ? cause.message : "Email delivery failed.")
+    } finally {
+      setWeeklyBusy(false)
+    }
+  }
+
+  async function saveWeeklySchedule() {
+    if (!weeklyConfig) return
+    setWeeklyBusy(true)
+    setWeeklyError(null)
+    try {
+      const response = await fetch("/api/tracking/weekly-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "schedule",
+          enabled: weeklyConfig.schedule.enabled,
+          weekday: weeklyConfig.schedule.weekday,
+          sendTime: weeklyConfig.schedule.send_time,
+          timezone: weeklyConfig.schedule.timezone,
+        }),
+      })
+      const body = await readJsonResponse<{ schedule: WeeklyReportConfig["schedule"]; error?: string }>(response)
+      if (!response.ok) throw new Error(body.error || "Could not save weekly schedule.")
+      setWeeklyConfig(current => current ? { ...current, schedule: body.schedule } : current)
+    } catch (cause) {
+      setWeeklyError(cause instanceof Error ? cause.message : "Could not save weekly schedule.")
+    } finally {
+      setWeeklyBusy(false)
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6 lg:p-8">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -1024,24 +1126,24 @@ export default function TrackingPage() {
           />
         )}
 
-        {/*
-          Hand-logged, so it lives where the hand is: the person who left the app is the
-          only one who can record it. On Team usage it would have been a read-only tile of
-          somebody else's self-report — a number with no owner, which is how a
-          self-reported metric stops being questioned.
-        */}
-        {view === "mine" && currentProbation && probation && (
-          <KrCard
-            score={currentProbation.score}
-            week={currentProbation}
-            scoreAvailable={probationEvidenceAvailable}
-            loggingAvailable={probation.fallbackAvailable}
-            unavailableReason={probationUnavailableReason}
-            busy={fallbackBusy}
-            error={fallbackError}
-            onRecord={kind => void recordFallback(kind)}
-            onUndo={() => void undoFallback()}
+        {view === "mine" && weeklyPainpoint && (
+          <WeeklyCheckInCard
+            value={weeklyPainpoint}
+            score={currentProbation && probationEvidenceAvailable ? currentProbation.score : null}
+            fallbackAvailable={Boolean(probation?.fallbackAvailable)}
+            fallbackBusy={fallbackBusy}
+            fallbackError={fallbackError || probationUnavailableReason}
+            canUndoFallback={Boolean(currentProbation?.fallbacks[0])}
+            busy={painpointBusy}
+            error={painpointError}
+            onChange={setWeeklyPainpoint}
+            onRecordFallback={kind => void recordFallback(kind)}
+            onUndoFallback={() => void undoFallback()}
+            onSave={() => void savePainpoint()}
           />
+        )}
+        {view === "mine" && !weeklyPainpoint && painpointError && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{painpointError}</div>
         )}
 
         {/*
@@ -1064,17 +1166,20 @@ export default function TrackingPage() {
       </Dialog>
 
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="flex max-h-[90vh] max-w-4xl flex-col overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Period report</DialogTitle>
-            <DialogDescription>
-              {isAdminView ? "Organization-wide" : "Your own"} numbers for the last {days} days, in the shape a PM sends upward. Four lines, every one labelled measured, estimated or unavailable — paste it as-is.
-            </DialogDescription>
+            <div className="flex items-start justify-between gap-4 pr-8">
+              <div>
+                <DialogTitle>Period report</DialogTitle>
+                <DialogDescription>{isAdminView ? "Organization operating view" : "Your KR evidence"} · last {days} days · measured values stay distinct from estimates and unavailable data.</DialogDescription>
+              </div>
+              <button type="button" onClick={() => void copyReport()} title={copied ? "Đã copy" : "Copy markdown"} className="rounded-md border bg-background p-2 text-muted-foreground transition hover:text-foreground">
+                {copied ? <IconCheck className="size-4 text-emerald-600" /> : <IconCopy className="size-4" />}
+              </button>
+            </div>
           </DialogHeader>
 
-          <div className="max-h-[62vh] space-y-4 overflow-auto">
-            {/* The numbers first, then the text that quotes them. Same source either way —
-                metricConfig is what the tiles on the page read. */}
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pb-4 pr-2">
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {view === "mine" && currentProbation && [
                 { label: "KR total", value: probationEvidenceAvailable ? `${currentProbation.score.total}/100` : "-" },
@@ -1098,6 +1203,43 @@ export default function TrackingPage() {
               ))}
             </div>
 
+            {currentProbation && (
+              <section className="rounded-xl border bg-gradient-to-r from-amber-500/8 via-card to-card p-5">
+                <div><h3 className="font-semibold">KR tracking</h3><p className="mt-1 text-xs text-muted-foreground">Current points plus aggregate recorded fallbacks for the tracked month.</p></div>
+                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    { label: "Total points", value: probationAggregate ? `${probationAggregate.totalPoints}/100` : "-" },
+                    { label: "Month to date", value: probationAggregate ? `${probationAggregate.monthToDatePoints}/100` : "-" },
+                    { label: "Launch fallbacks", value: probationAggregate?.launchFallbacks ?? "-" },
+                    { label: "Control fallbacks", value: probationAggregate?.controlFallbacks ?? "-" },
+                  ].map(metric => <div key={metric.label} className="rounded-lg border bg-background/80 p-3"><p className="text-xs text-muted-foreground">{metric.label}</p><p className="mt-1 text-xl font-semibold tabular-nums">{metric.value}</p></div>)}
+                </div>
+                <p className={`mt-3 text-xs ${probationAggregate ? "text-muted-foreground" : "text-amber-700"}`}>{probationAggregate ? `${probationAggregate.launchFallbacks + probationAggregate.controlFallbacks} total recorded fallbacks. Self-reported evidence may be under-counted.` : `Points unavailable: ${probationUnavailableReason || "required KR evidence is unavailable."}`}</p>
+              </section>
+            )}
+
+            {isAdminView && data?.admin && (
+              <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+                <section className="rounded-xl border bg-gradient-to-br from-blue-500/10 via-card to-card p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Executive readout</p>
+                  <p className="mt-3 text-lg font-medium leading-relaxed">
+                    The team delivered <strong>{data.admin.adsCreated} ads</strong> from {data.admin.batches} batches at <strong>{data.admin.successRate}% full-batch success</strong>.
+                  </p>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {activity?.available && activity.team
+                      ? `${activity.team.activeMembers} members recorded ${activity.team.total} measurable app actions across ${activity.team.activeDays} active days. Estimated time saved: ~${activity.team.estimatedHoursSaved}h.`
+                      : "App activity is unavailable; delivery remains fully measured."}
+                  </p>
+                </section>
+                <section className={`rounded-xl border p-5 ${data.admin.nonSuccess > 0 ? "border-amber-500/30 bg-amber-500/5" : "bg-emerald-500/5"}`}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Attention</p>
+                  <p className="mt-3 text-3xl font-semibold tabular-nums">{data.admin.nonSuccess}</p>
+                  <p className="mt-1 text-sm">batches need review</p>
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{data.creative.unlaunched} of {data.creative.ready} ready creatives remain unlaunched. {data.failureReasons?.[0] ? `Top stored error: ${data.failureReasons[0].label} (${data.failureReasons[0].count}).` : "No stored failure reason."}</p>
+                </section>
+              </div>
+            )}
+
             {isAdminView && series.length > 0 && (
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">Ads created — organization, last {days} days</p>
@@ -1120,29 +1262,58 @@ export default function TrackingPage() {
               </div>
             )}
 
-            {/* Copy lives on the text it copies, not in the footer — the button and the
-                thing it acts on were two scroll-lengths apart. */}
-            <div className="relative">
-              <div className="rounded-lg border bg-muted/20 p-4 pr-12">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Analysis</p>
-                {view === "mine" && currentProbation ? (
-                  <p className="mt-2 text-sm">{probationEvidenceAvailable ? `KR ${currentProbation.score.total}/100${previousProbation ? ` (${currentProbation.score.total - previousProbation.score.total >= 0 ? "+" : ""}${currentProbation.score.total - previousProbation.score.total} vs previous week)` : ""}. ${currentProbation.score.launchFallbacks} launch and ${currentProbation.score.controlFallbacks} control fallbacks recorded.` : probationUnavailableReason}</p>
-                ) : data?.admin ? (
-                  <p className="mt-2 text-sm">{data.admin.adsCreated} ads created at {data.admin.successRate}% full-batch success. {data.admin.nonSuccess} batches need review.</p>
-                ) : (
-                  <p className="mt-2 text-sm text-muted-foreground">No measurable analysis for this period.</p>
-                )}
+            {isAdminView && (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <section className="rounded-xl border p-5">
+                  <div className="flex items-center justify-between"><div><h3 className="font-semibold">Team usage</h3><p className="mt-1 text-xs text-muted-foreground">Measurable contribution, not a performance score.</p></div><IconChartBar className="size-5 text-muted-foreground" /></div>
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="border-b text-xs text-muted-foreground"><tr><th className="py-2 text-left font-medium">Member</th><th className="py-2 text-right font-medium">Ads</th><th className="py-2 text-right font-medium">Actions</th><th className="py-2 text-right font-medium">Days</th></tr></thead>
+                      <tbody>{usageRows.slice(0, 8).map(member => <tr key={member.userId} className="border-b last:border-0"><td className="py-2.5 font-medium">{member.name}</td><td className="py-2.5 text-right tabular-nums">{member.adsCreated}</td><td className="py-2.5 text-right tabular-nums">{activity?.available ? member.actions : "-"}</td><td className="py-2.5 text-right tabular-nums text-muted-foreground">{activity?.available ? `${member.activeDays}/${days}` : "-"}</td></tr>)}</tbody>
+                    </table>
+                  </div>
+                </section>
+                <section className="rounded-xl border p-5">
+                  <div><h3 className="font-semibold">App activity</h3><p className="mt-1 text-xs text-muted-foreground">Action mix across the operating workflow.</p></div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    {activity?.available && activity.team ? CLASS_ORDER.map(key => <div key={key} className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">{CLASS_LABEL[key]}</p><p className="mt-1 text-xl font-semibold tabular-nums">{activity.team!.byClass[key]}</p></div>) : <p className="col-span-2 text-sm text-muted-foreground">App activity unavailable. No zero is inferred.</p>}
+                  </div>
+                </section>
               </div>
-              <button
-                type="button"
-                onClick={() => void copyReport()}
-                title={copied ? "Đã copy" : "Copy markdown"}
-                className="absolute right-2 top-2 rounded-md border bg-background/80 p-1.5 text-muted-foreground backdrop-blur transition hover:text-foreground"
-              >
-                {copied ? <IconCheck className="size-4 text-emerald-600" /> : <IconCopy className="size-4" />}
-              </button>
-            </div>
+            )}
+
+            {view === "mine" && currentProbation && <div className="rounded-xl border bg-muted/20 p-5"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Analysis</p><p className="mt-2 text-sm">{probationEvidenceAvailable ? `KR ${currentProbation.score.total}/100${previousProbation ? ` (${currentProbation.score.total - previousProbation.score.total >= 0 ? "+" : ""}${currentProbation.score.total - previousProbation.score.total} vs previous week)` : ""}. ${currentProbation.score.launchFallbacks} launch and ${currentProbation.score.controlFallbacks} control fallbacks recorded.` : probationUnavailableReason}</p></div>}
+
+            {isAdminView && (
+              <section className="rounded-xl border bg-muted/15 p-5">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div><div className="flex items-center gap-2"><IconMail className="size-5" /><h3 className="font-semibold">Weekly email</h3>{weeklyConfig?.schedule.pending_review && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700">Review due</span>}</div><p className="mt-1 text-xs text-muted-foreground">To Kevin, Seth · CC PATI-BOM. Preview approval required before every send.</p></div>
+                  <Button onClick={() => void previewWeeklyEmail()} disabled={weeklyBusy || !weeklySnapshot}><IconMail className="size-4" />Preview email</Button>
+                </div>
+                {weeklyConfig && <div className="mt-4 grid gap-3 rounded-lg border bg-background p-4 sm:grid-cols-[auto_1fr_1fr_auto] sm:items-end">
+                  <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={weeklyConfig.schedule.enabled} onChange={event => setWeeklyConfig(current => current ? { ...current, schedule: { ...current.schedule, enabled: event.target.checked } } : current)} />Weekly</label>
+                  <label className="text-xs text-muted-foreground">Day<select value={weeklyConfig.schedule.weekday} onChange={event => setWeeklyConfig(current => current ? { ...current, schedule: { ...current.schedule, weekday: Number(event.target.value) } } : current)} className="mt-1 block w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground"><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option></select></label>
+                  <label className="text-xs text-muted-foreground">Time · Vietnam<input type="time" value={weeklyConfig.schedule.send_time} onChange={event => setWeeklyConfig(current => current ? { ...current, schedule: { ...current.schedule, send_time: event.target.value } } : current)} className="mt-1 block w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground" /></label>
+                  <Button variant="outline" onClick={() => void saveWeeklySchedule()} disabled={weeklyBusy || !weeklyConfig.scheduleAvailable}><IconCalendarTime className="size-4" />Save</Button>
+                </div>}
+                <p className="mt-3 text-xs text-muted-foreground">Schedule creates a pending preview at the selected time; it never sends unattended. Production evaluation depends on BL-23.</p>
+                {weeklyConfig && !weeklyConfig.scheduleAvailable && <p className="mt-2 text-xs text-amber-700">Apply `20260807_weekly_report_schedules.sql` to enable scheduling.</p>}
+                {weeklyError && <p className="mt-2 text-sm text-destructive">{weeklyError}</p>}
+              </section>
+            )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={emailPreview !== null} onOpenChange={open => { if (!open) setEmailPreview(null) }}>
+        <DialogContent className="flex max-h-[92vh] max-w-4xl flex-col overflow-hidden">
+          <DialogHeader><DialogTitle>Email preview</DialogTitle><DialogDescription>Final gate. Confirm recipients, subject and rendered content before real delivery.</DialogDescription></DialogHeader>
+          {emailPreview && <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-2 pr-2">
+            <div className="grid gap-2 rounded-lg border bg-muted/20 p-4 text-sm"><div><span className="inline-block w-16 text-muted-foreground">To</span>{emailPreview.to.join(", ")}</div><div><span className="inline-block w-16 text-muted-foreground">CC</span>{emailPreview.cc}</div><div><span className="inline-block w-16 text-muted-foreground">Subject</span><strong>{emailPreview.subject}</strong></div></div>
+            <iframe title="Weekly report email preview" sandbox="" srcDoc={emailPreview.html} className="h-[52vh] w-full rounded-lg border bg-white" />
+            {weeklyError && <p className="text-sm text-destructive">{weeklyError}</p>}
+            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEmailPreview(null)}>Back</Button><Button onClick={() => void sendWeeklyEmail()} disabled={weeklyBusy}>{weeklyBusy ? <IconLoader2 className="size-4 animate-spin" /> : <IconMail className="size-4" />}Send email</Button></div>
+          </div>}
         </DialogContent>
       </Dialog>
 

@@ -17,6 +17,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts"
 import { MediaDetailSheet, portalMediaHref } from "@/components/shared/media-detail-sheet"
+import { getRangeToggledIds } from "@/lib/range-selection"
 import type { TrackingCreativeMedia } from "@/app/api/tracking/creative-media/route"
 import type { MediaDetailFile } from "@/components/shared/media-detail-sheet"
 
@@ -838,7 +839,7 @@ function TableView({
   sortKey: string
   sortDir: SortDir
   selectedIds?: Set<string>
-  onToggle?: (id: string) => void
+  onToggle?: (id: string, shiftKey: boolean, ctrlKey: boolean) => void
   onToggleAll?: (ids: string[], allChecked: boolean) => void
   mediaByAdId: Record<string, TrackingCreativeMedia>
   loadingByAdId: Record<string, boolean>
@@ -936,14 +937,14 @@ function TableView({
             <tr key={ad.adId}
               className={cn("border-b transition-colors group",
                 isSelected ? "bg-blue-50/60 dark:bg-blue-950/20" : "hover:bg-muted/20")}
-              onClick={selectable ? () => onToggle?.(ad.adId) : undefined}
+              onClick={selectable ? (e) => onToggle?.(ad.adId, e.shiftKey, e.ctrlKey || e.metaKey) : undefined}
               style={selectable ? { cursor: "pointer" } : undefined}>
-              <td className="px-3 text-muted-foreground" onClick={e => e.stopPropagation()}>
+              <td className="px-3 text-muted-foreground" onClick={e => { e.stopPropagation(); onToggle?.(ad.adId, e.shiftKey, e.ctrlKey || e.metaKey) }}>
                 <div className="flex items-center gap-1">
                   {selectable
                     ? <input type="checkbox" className="size-3.5 rounded cursor-pointer"
                         checked={isSelected}
-                        onChange={() => onToggle?.(ad.adId)} />
+                        onChange={() => {}} />
                     : null}
                   <span className={selectable ? "ml-1" : ""}>{ad.rank}</span>
                 </div>
@@ -1899,6 +1900,8 @@ function VSModeView() {
 
   const [sel1, setSel1] = useState<Set<string>>(new Set())
   const [sel2, setSel2] = useState<Set<string>>(new Set())
+  const [anchor1, setAnchor1] = useState<string | null>(null)
+  const [anchor2, setAnchor2] = useState<string | null>(null)
 
   const [seg1Filters, setSeg1Filters] = useState<ActiveFilter[]>([])
   const [f1Open, setF1Open]           = useState(false)
@@ -1953,8 +1956,8 @@ function VSModeView() {
   }, [allAds, seg2Filters])
 
   // Clear selections when segment content changes
-  useEffect(() => { setSel1(new Set()) }, [seg1Ads])
-  useEffect(() => { setSel2(new Set()) }, [seg2Ads])
+  useEffect(() => { setSel1(new Set()); setAnchor1(null) }, [seg1Ads])
+  useEffect(() => { setSel2(new Set()); setAnchor2(null) }, [seg2Ads])
 
   // Effective ads for KPI: selected subset, or all if nothing checked
   const eff1 = useMemo(
@@ -1966,10 +1969,26 @@ function VSModeView() {
     [seg2Ads, sel2]
   )
 
-  const toggle1     = (id: string) => setSel1(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const toggleAll1  = (ids: string[], checked: boolean) => setSel1(checked ? new Set(ids) : new Set())
-  const toggle2     = (id: string) => setSel2(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
-  const toggleAll2  = (ids: string[], checked: boolean) => setSel2(checked ? new Set(ids) : new Set())
+  const toggle1 = (id: string, shiftKey = false, ctrlKey = false) => {
+    const order = sortReportAds(seg1Ads, sortKey, sortDir).slice(0, 10).map(a => a.adId)
+    const { nextSelected, nextAnchorId } = getRangeToggledIds(sel1, order, id, anchor1, shiftKey, ctrlKey)
+    setSel1(nextSelected)
+    setAnchor1(nextAnchorId)
+  }
+  const toggleAll1 = (ids: string[], checked: boolean) => {
+    setSel1(checked ? new Set(ids) : new Set())
+    setAnchor1(null)
+  }
+  const toggle2 = (id: string, shiftKey = false, ctrlKey = false) => {
+    const order = sortReportAds(seg2Ads, sortKey, sortDir).slice(0, 10).map(a => a.adId)
+    const { nextSelected, nextAnchorId } = getRangeToggledIds(sel2, order, id, anchor2, shiftKey, ctrlKey)
+    setSel2(nextSelected)
+    setAnchor2(nextAnchorId)
+  }
+  const toggleAll2 = (ids: string[], checked: boolean) => {
+    setSel2(checked ? new Set(ids) : new Set())
+    setAnchor2(null)
+  }
 
   const m1   = aggregateAds(eff1)
   const m2   = aggregateAds(eff2)

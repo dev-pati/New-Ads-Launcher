@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to save creative" }, { status: 500 })
     }
 
-    void emitAndLog("creatives.upload-binary", {
+    await emitAndLog("creatives.upload-binary", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName: getActorName(ctx.user),

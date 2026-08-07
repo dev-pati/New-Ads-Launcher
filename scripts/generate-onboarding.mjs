@@ -1,11 +1,12 @@
 import { access, mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import process from "node:process"
-import { pathToFileURL } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 import { chromium } from "playwright"
 
 const REQUIRED_SCENARIO_FIELDS = ["slug", "title", "audience", "summary"]
+const DEFAULT_OUTPUT_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "onboarding-output")
 const SYSTEM_BROWSER_PATHS = [
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
@@ -24,6 +25,15 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;")
+}
+
+function formatBody(value) {
+  return escapeHtml(value)
+    .replaceAll("\n", "<br>")
+    .replace(
+      /https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/commit\/[a-f0-9]{7,40}/g,
+      (url) => `<a href="${url}" target="_blank" rel="noreferrer">${url}</a>`,
+    )
 }
 
 export function validateScenario(scenario) {
@@ -120,18 +130,10 @@ export async function captureOnboardingStep(page, step, stepNumber) {
   const maskId = `onboarding-${Date.now()}-${stepNumber}`
   const redaction = await page.evaluate(({ extraSelectors, maskId }) => {
     const selectors = [
-      "input",
-      "textarea",
-      "[contenteditable='true']",
-      "[data-sensitive]",
       "[data-onboarding-redact]",
-      "[name*='password' i]",
-      "[name*='secret' i]",
-      "[name*='token' i]",
-      "[name*='api-key' i]",
-      "[id*='password' i]",
-      "[id*='secret' i]",
-      "[id*='token' i]",
+      "[data-onboarding-member]",
+      "[data-onboarding-spend]",
+      "[data-onboarding-id]",
       ...extraSelectors,
     ]
     const marked = new Set()
@@ -147,20 +149,52 @@ export async function captureOnboardingStep(page, step, stepNumber) {
 
     const sensitiveText = [
       /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
-      /(?:\+?\d[\d .()-]{8,}\d)/,
-      /\b(?:act_)?\d{10,}\b/i,
-      /\bEAA[A-Za-z0-9_-]{20,}\b/,
-      /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/,
-      /\b(?:sk|pat|xox)[-_][A-Za-z0-9_-]{16,}\b/i,
-      /\b(?=[A-Za-z0-9_-]{24,}\b)(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]+\b/,
+      /(?<![A-Za-z0-9_])(?:\+?\d[\d .()-]{8,}\d)(?![A-Za-z0-9_])/,
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i,
+      /\b(?:ad|adset|campaign|creative|rule|org|user|member|team|workspace|project)[_-][A-Za-z0-9_-]+\b/i,
+      /\b(?:ad|ad set|campaign|creative|rule|org|user|member|team|workspace|project)\s*id\b\s*[:#-]?\s*[A-Za-z0-9_-]{4,}\b/i,
     ]
+    const memberContext = /\b(?:member|email|e-mail|phone|telephone|mobile|assignee|owner|created by|updated by)\b/i
+    const actualSpentText = /\bamount spent\b\s*:?\s*(?:[$€£¥₫]\s*)?\d[\d.,]*/i
+    const idContext = /\b(?:ad|ad set|campaign|creative|rule|org|user|member|team|workspace|project)\s*id\b/i
+
+    for (const control of document.querySelectorAll("input, textarea, select, [contenteditable='true']")) {
+      const selectedText = control instanceof HTMLSelectElement
+        ? Array.from(control.selectedOptions, (option) => option.textContent || "").join(" ")
+        : ""
+      const ownContext = [
+        control.getAttribute("name"),
+        control.getAttribute("aria-label"),
+        control.getAttribute("placeholder"),
+        control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement ? control.value : "",
+        selectedText,
+      ].filter(Boolean).join(" ")
+      if (memberContext.test(ownContext) || idContext.test(ownContext) || sensitiveText.some((pattern) => pattern.test(ownContext))) {
+        mark(control)
+        continue
+      }
+    }
+
+    for (const table of document.querySelectorAll("table")) {
+      const idColumns = Array.from(table.querySelectorAll("thead th"))
+        .map((header, index) => {
+          const text = header.textContent || ""
+          return /\bid\b/i.test(text) && !/\bad\s*account\b|\baccount\b/i.test(text) ? index : -1
+        })
+        .filter((index) => index >= 0)
+      for (const row of table.querySelectorAll("tbody tr")) {
+        const cells = row.querySelectorAll("th, td")
+        for (const index of idColumns) if (cells[index]) mark(cells[index])
+      }
+    }
+
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
     let node = walker.nextNode()
     while (node) {
       const parent = node.parentElement
       if (parent && !["SCRIPT", "STYLE", "NOSCRIPT"].includes(parent.tagName)) {
         const text = node.nodeValue || ""
-        if (sensitiveText.some((pattern) => pattern.test(text))) mark(parent)
+        if (sensitiveText.some((pattern) => pattern.test(text)) || actualSpentText.test(text)) mark(parent)
       }
       node = walker.nextNode()
     }
@@ -169,6 +203,8 @@ export async function captureOnboardingStep(page, step, stepNumber) {
     for (const element of marked) {
       const rect = element.getBoundingClientRect()
       if (rect.width <= 0 || rect.height <= 0) continue
+      const visibleElement = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      if (!visibleElement || !element.contains(visibleElement) && !visibleElement.contains(element)) continue
       const overlay = document.createElement("div")
       overlay.setAttribute("data-onboarding-redaction-overlay", maskId)
       Object.assign(overlay.style, {
@@ -238,16 +274,17 @@ export function renderOnboardingHtml(scenario, steps) {
   `).join("")
   const sections = steps.map((step, index) => {
     const annotation = step.annotation || { left: 8, top: 8, width: 24, height: 12 }
+    const body = formatBody(step.body)
     return `
       <h2 id="s${index + 1}"><span class="num">${index + 1}</span>${escapeHtml(step.title)}</h2>
-      <p>${escapeHtml(step.body)}</p>
+      <p>${body}</p>
       <figure class="shot">
         <img src="data:image/png;base64,${step.imageBase64}" alt="Bước ${index + 1}: ${escapeHtml(step.title)}">
         <span class="z" style="left:${annotation.left.toFixed(2)}%;top:${annotation.top.toFixed(2)}%;width:${annotation.width.toFixed(2)}%;height:${annotation.height.toFixed(2)}%"></span>
         <span class="p" style="left:${annotation.left.toFixed(2)}%;top:${annotation.top.toFixed(2)}%">${index + 1}</span>
       </figure>
       <div class="cap">Ảnh ${String(index + 1).padStart(2, "0")} — ${escapeHtml(step.title)} · ${step.redactedCount} vùng đã che</div>
-      <ul class="pins"><li><span class="k">${index + 1}</span>${escapeHtml(step.body)}</li></ul>
+      <ul class="pins"><li><span class="k">${index + 1}</span>${body}</li></ul>
     `
   }).join("")
   const checklist = steps.map((step) => `<li>${escapeHtml(step.title)}</li>`).join("")
@@ -267,7 +304,7 @@ export function renderOnboardingHtml(scenario, steps) {
     h2{font-size:1.5rem;letter-spacing:-.015em;margin:3rem 0 .3rem;padding-top:1rem;border-top:1px solid var(--line);text-wrap:balance}h2 .num{color:var(--red);font-variant-numeric:tabular-nums;margin-right:.45rem}p{margin:.6rem 0}strong{font-weight:650}
     .rule{background:var(--red-bg);border:1px solid var(--red);border-left-width:5px;border-radius:8px;padding:.9rem 1.1rem;margin:1.4rem 0}.rule .t{font-weight:700;color:var(--red);font-size:.8rem;letter-spacing:.08em;text-transform:uppercase}.rule .f{font-family:var(--mono);font-size:1.02rem;font-weight:700;margin:.4rem 0}
     .toc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:.4rem .3rem;margin:1.6rem 0 0}.toc a{display:flex;gap:.7rem;align-items:baseline;padding:.42rem .8rem;text-decoration:none;color:var(--ink);border-radius:6px;font-size:.94rem}.toc a:hover{background:var(--red-bg)}.toc a .i{color:var(--red);font-weight:700;min-width:1.4rem}.toc a .s{margin-left:auto;color:var(--ink-3);font-size:.78rem;font-family:var(--mono);white-space:nowrap}
-    .shot{position:relative;display:block;margin:1.1rem 0 .5rem;border-radius:10px;overflow:hidden;border:1px solid var(--line-2);background:var(--card)}.shot img{width:100%;display:block}.shot .z{position:absolute;border:2.5px solid #ff3b30;border-radius:5px;box-shadow:0 0 0 9999px rgba(8,10,14,.38);pointer-events:none}.shot .p{position:absolute;width:23px;height:23px;border-radius:50%;background:#ff3b30;color:#fff;font:700 13px/23px var(--sans);text-align:center;transform:translate(-50%,-50%);box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.45);pointer-events:none;z-index:2}.cap{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:.15rem 0 .7rem}.pins{list-style:none;padding:0;margin:.2rem 0 1.6rem;font-size:.94rem}.pins li{margin:.3rem 0;padding-left:2rem;position:relative}.pins .k{position:absolute;left:0;top:.12rem;display:inline-block;min-width:1.45rem;height:1.45rem;border-radius:50%;background:var(--red);color:#fff;font:700 .78rem/1.45rem var(--sans);text-align:center}
+    .shot{position:relative;display:block;margin:1.1rem 0 .5rem;border-radius:10px;overflow:hidden;border:1px solid var(--line-2);background:var(--card)}.shot img{width:100%;display:block}.shot .z{position:absolute;border:2.5px solid #ff3b30;border-radius:5px;pointer-events:none}.shot .p{position:absolute;width:23px;height:23px;border-radius:50%;background:#ff3b30;color:#fff;font:700 13px/23px var(--sans);text-align:center;transform:translate(-50%,-50%);box-shadow:0 0 0 2px #fff,0 1px 5px rgba(0,0,0,.45);pointer-events:none;z-index:2}.cap{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:.15rem 0 .7rem}.pins{list-style:none;padding:0;margin:.2rem 0 1.6rem;font-size:.94rem}.pins li{margin:.3rem 0;padding-left:2rem;position:relative}.pins .k{position:absolute;left:0;top:.12rem;display:inline-block;min-width:1.45rem;height:1.45rem;border-radius:50%;background:var(--red);color:#fff;font:700 .78rem/1.45rem var(--sans);text-align:center}
     .note{border-radius:8px;padding:.75rem 1rem;margin:1.1rem 0;border:1px solid;font-size:.95rem}.note.warn{background:var(--amber-bg);border-color:var(--amber)}ul.check{list-style:none;padding:0;margin:1rem 0}ul.check li{padding-left:1.9rem;position:relative;margin:.35rem 0}ul.check li::before{content:"";position:absolute;left:0;top:.35rem;width:1.05rem;height:1.05rem;border:2px solid var(--line-2);border-radius:4px}.foot{margin-top:3.5rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.82rem;color:var(--ink-3)}@media(max-width:560px){.pins li{padding-left:1.7rem}body{font-size:15px}.toc a .s{display:none}}
   </style>
 </head>
@@ -284,12 +321,12 @@ export function renderOnboardingHtml(scenario, steps) {
         <span>HTML mở offline</span>
       </div>
     </header>
-    <div class="rule"><div class="t">Quy tắc trước khi gửi</div><div class="f">Mở file → kiểm tra từng ảnh → mới chia sẻ</div><div>Mask tự động không đọc được chữ nằm trong ảnh, video, canvas hoặc iframe khác domain.</div></div>
+    <div class="rule"><div class="t">Quy tắc trước khi gửi</div><div class="f">Mở file → kiểm tra từng ảnh → mới chia sẻ</div><div>Chỉ che thông tin thành viên, amount spent và ID không thuộc Ad Account. Budget setting và Ad Account giữ nguyên. Mask tự động không đọc được chữ nằm trong ảnh, video, canvas hoặc iframe khác domain.</div></div>
     <nav class="toc">${toc}<a href="#check"><span class="i">✓</span><span>Checklist hoàn tất</span><span class="s">cuối trang</span></a></nav>
     ${sections}
     <h2 id="check"><span class="num">✓</span>Checklist hoàn tất</h2>
     <ul class="check">${checklist}<li>Đã xem lại mọi vùng nhạy cảm trước khi gửi file.</li></ul>
-    <div class="note warn"><p><b>Giới hạn masking.</b> Tên ad account, số tiền hoặc dữ liệu nghiệp vụ không có pattern cố định cần được khai báo bằng selector <code>redact</code> trong scenario.</p></div>
+    <div class="note warn"><p><b>Giới hạn masking.</b> Chỉ khai báo selector <code>redact</code> cho thông tin thành viên, amount spent hoặc ID không thuộc Ad Account chưa được nhận diện tự động. Budget setting, Ad Account và dữ liệu khác phải giữ nguyên.</p></div>
     <div class="foot">Sinh từ app đã deploy bằng Playwright · BL-45 · Không chứa link ảnh ngoài</div>
   </div>
 </body>
@@ -300,7 +337,7 @@ async function main() {
   const scenarioArgument = process.argv[2]
   if (!scenarioArgument || ["-h", "--help"].includes(scenarioArgument)) {
     console.log("Usage: ONBOARDING_BASE_URL=https://example.com npm run onboard -- onboarding/feature.mjs")
-    console.log("Optional: ONBOARDING_STORAGE_STATE=.auth/onboarding.json ONBOARDING_OUTPUT_DIR=onboarding-output")
+    console.log("Optional: ONBOARDING_STORAGE_STATE=.auth/onboarding.json ONBOARDING_OUTPUT_DIR=../onboarding-output")
     process.exitCode = scenarioArgument ? 0 : 1
     return
   }
@@ -345,7 +382,9 @@ async function main() {
 
     if (steps.length === 0) throw new Error("Scenario completed without capturing any onboarding steps")
 
-    const outputDirectory = path.resolve(process.env.ONBOARDING_OUTPUT_DIR || "onboarding-output")
+    const outputDirectory = process.env.ONBOARDING_OUTPUT_DIR
+      ? path.resolve(process.env.ONBOARDING_OUTPUT_DIR)
+      : DEFAULT_OUTPUT_DIRECTORY
     const outputPath = path.join(outputDirectory, `${scenario.slug}.html`)
     await mkdir(outputDirectory, { recursive: true })
     await writeFile(outputPath, renderOnboardingHtml(scenario, steps), "utf8")

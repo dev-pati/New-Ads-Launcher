@@ -148,7 +148,7 @@ export async function PUT(request: NextRequest) {
       .eq("fb_ad_account_id", adAccountId)
       .maybeSingle()
 
-    void emitAndLog("portal-media.assign", {
+    await emitAndLog("portal-media.assign", {
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName: ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone",

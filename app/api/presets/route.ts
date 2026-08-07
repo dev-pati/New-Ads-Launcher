@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     // ad_set_presets has no actor column (TD-31), so this is the only record of who
     // built the preset. Audit-only: saving a preset is not news for the whole org.
-    void recordActivity({
+    await recordActivity({
       orgId: ctx.orgId,
       actorId: ctx.user.id,
       actorName: ctx.user.user_metadata?.full_name || ctx.user.email?.split("@")[0] || "Someone",
