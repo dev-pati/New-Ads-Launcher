@@ -31,6 +31,7 @@ export interface FilterChip {
    * against Meta, where `Filtering 9 ad sets` coexists with a `6 selected` counter.
    */
   snapshotIds?: string[]
+  snapshotLevel?: FilterLevel
 }
 
 export interface FilterField {
@@ -178,6 +179,11 @@ export interface ChipEvalContext {
   hasInsights: boolean
   /** ISO string from `created_time`, or null. */
   createdAt: string | null
+  /** Parent ids for `__selected_rows` cross-level matching: a chip snapshot taken
+   *  at the Campaigns tab holds campaign ids, so an Ad row matches via its
+   *  `campaign_id` — not its own id. */
+  campaignId?: string
+  adsetId?: string
 }
 
 function matchText(op: FilterOperator, haystack: string, needle: string): boolean {
@@ -241,7 +247,10 @@ function matchDate(op: FilterOperator, createdAt: string | null, values: string[
 
 export function matchesChip(chip: FilterChip, ctx: ChipEvalContext): boolean {
   if (chip.field === SELECTED_ROWS_FIELD) {
-    return (chip.snapshotIds ?? []).includes(ctx.rowId)
+    const ids = chip.snapshotIds ?? []
+    return ids.includes(ctx.rowId) ||
+      (ctx.campaignId ? ids.includes(ctx.campaignId) : false) ||
+      (ctx.adsetId ? ids.includes(ctx.adsetId) : false)
   }
   const field = filterFieldById(chip.field)
   if (!field) return true

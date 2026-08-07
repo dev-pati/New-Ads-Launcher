@@ -1662,7 +1662,7 @@ export function LoadMediaModal({
                     : "bg-muted/60 text-muted-foreground"
                   return (
                     <div key={m.id} onClick={() => toggle(m.id)}
-                      className={cn("group grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors",
+                      className={cn("group grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors select-none",
                         isSelected && "bg-primary/5 hover:bg-primary/10")}
                       style={{ gridTemplateColumns: "28px 2.5fr 90px 110px 100px 120px" }}>
                       <div className={cn("size-4 rounded border-2 flex items-center justify-center shrink-0",
@@ -1791,7 +1791,7 @@ export function LoadMediaModal({
                   return (
                     <div key={c.id}
                       onClick={(e) => toggle(c.id, e.shiftKey, e.ctrlKey || e.metaKey)}
-                      className={cn("group grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors",
+                      className={cn("group grid items-center px-6 py-2.5 border-b cursor-pointer hover:bg-muted/30 transition-colors select-none",
                         isSelected && "bg-primary/5 hover:bg-primary/10")}
                       style={{ gridTemplateColumns: "28px 2.5fr 1fr 1.4fr 60px 1fr 70px 100px 120px 32px" }}>
                       <div className="size-4 rounded border-2 flex items-center justify-center shrink-0"

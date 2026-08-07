@@ -1036,29 +1036,6 @@ function AdsManagerContent() {
   const [loadedAccountId, setLoadedAccountId] = useState<string | null>(null)
   const [error, setError] = useState("")
 
-  // Hierarchical filter: checked campaigns → filters adsets; checked adsets → filters ads
-  const [campaignFilter, setCampaignFilter] = useState<Set<string>>(new Set())
-  const [adSetFilter, setAdSetFilter] = useState<Set<string>>(new Set())
-  const campaignParentIds = useMemo(() => Array.from(campaignFilter).sort(), [campaignFilter])
-  const adSetParentIds = useMemo(() => Array.from(adSetFilter).sort(), [adSetFilter])
-  const hierarchyParentType = tab === "adsets"
-    ? "campaign"
-    : tab === "ads" && adSetParentIds.length
-      ? "adset"
-      : tab === "ads" && campaignParentIds.length
-        ? "campaign"
-        : null
-  const hierarchyParentIds = useMemo(
-    () => hierarchyParentType === "adset" ? adSetParentIds : hierarchyParentType === "campaign" ? campaignParentIds : [],
-    [adSetParentIds, campaignParentIds, hierarchyParentType],
-  )
-  const hierarchyParentId = hierarchyParentIds.length === 1 ? hierarchyParentIds[0] : null
-  const hierarchyCacheKey = tab === "adsets"
-    ? `campaign:${campaignParentIds.join(",") || "all"}`
-    : tab === "ads"
-      ? `${hierarchyParentType || "all"}:${hierarchyParentIds.join(",") || "all"}`
-      : "all"
-
   // Filters & search
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "PAUSED">("ACTIVE")
@@ -1069,6 +1046,40 @@ function AdsManagerContent() {
    * back does not silently lose the filter (spec D7).
    */
   const [chips, setChips] = useState<FilterChip[]>([])
+
+  // Hierarchical filter: checked campaigns → filters adsets; checked adsets → filters ads
+  const [campaignFilter, setCampaignFilter] = useState<Set<string>>(new Set())
+  const [adSetFilter, setAdSetFilter] = useState<Set<string>>(new Set())
+  const campaignParentIds = useMemo(() => Array.from(campaignFilter).sort(), [campaignFilter])
+  const adSetParentIds = useMemo(() => Array.from(adSetFilter).sort(), [adSetFilter])
+  const selectedRowsChip = chips.find(c => c.field === SELECTED_ROWS_FIELD)
+  const selectedRowsSnapshotIds = useMemo(() => (selectedRowsChip?.snapshotIds ?? []).slice().sort(), [selectedRowsChip])
+  const hierarchyParentType = tab === "adsets"
+    ? "campaign"
+    : tab === "ads" && selectedRowsChip?.snapshotLevel === "adsets" && selectedRowsSnapshotIds.length > 0
+      ? "adset"
+      : tab === "ads" && selectedRowsChip?.snapshotLevel === "campaigns" && selectedRowsSnapshotIds.length > 0
+        ? "campaign"
+        : tab === "ads" && adSetParentIds.length
+          ? "adset"
+          : tab === "ads" && campaignParentIds.length
+            ? "campaign"
+            : null
+  const hierarchyParentIds = useMemo(() => {
+    if (hierarchyParentType === "adset") {
+      return selectedRowsChip?.snapshotLevel === "adsets" && selectedRowsSnapshotIds.length > 0 ? selectedRowsSnapshotIds : adSetParentIds
+    }
+    if (hierarchyParentType === "campaign") {
+      return selectedRowsChip?.snapshotLevel === "campaigns" && selectedRowsSnapshotIds.length > 0 ? selectedRowsSnapshotIds : campaignParentIds
+    }
+    return []
+  }, [adSetParentIds, campaignParentIds, hierarchyParentType, selectedRowsChip?.snapshotLevel, selectedRowsSnapshotIds])
+  const hierarchyParentId = hierarchyParentIds.length === 1 ? hierarchyParentIds[0] : null
+  const hierarchyCacheKey = tab === "adsets"
+    ? `campaign:${hierarchyParentIds.join(",") || "all"}`
+    : tab === "ads"
+      ? `${hierarchyParentType || "all"}:${hierarchyParentIds.join(",") || "all"}`
+      : "all"
   const [datePreset,     setDatePreset]     = useState("last_7d")
   const [customDateRange, setCustomDateRange] = useState<{ start: Date; end: Date } | null>(null)
 
@@ -2114,6 +2125,8 @@ function AdsManagerContent() {
           // flag is what keeps `spend < 100` from sweeping in everything undelivered.
           hasInsights: ins !== null,
           createdAt: r.created_time || null,
+          campaignId: r.campaign_id,
+          adsetId: r.adset_id,
           text: fieldId => {
             switch (fieldId) {
               case "name": return r.name ?? ""
@@ -3540,7 +3553,7 @@ function AdsManagerContent() {
             ...prev,
             // Snapshot, not a live binding: changing the selection afterwards must
             // not change which rows this chip matches. Matches Meta's behaviour.
-            { id: newChipId(), field: SELECTED_ROWS_FIELD, operator: "is", values: [], snapshotIds: Array.from(selectedIds) },
+            { id: newChipId(), field: SELECTED_ROWS_FIELD, operator: "is", values: [], snapshotIds: Array.from(selectedIds), snapshotLevel: tab as FilterLevel },
           ])}
         />
 
