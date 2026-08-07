@@ -450,9 +450,12 @@ export function CreateCampaignModal({ open, onClose, onSuccess, initialState }: 
     if (activeStep === "adset") return state.adSetName || "New Ad Set"
     return state.adName || "New Ad"
   }, [activeStep, state.adName, state.adSetName, state.campaignName])
-  const invalidFields = showValidation
-    ? new Set(getValidationIssues(state, selectedAccountId, currency).map(issue => issue.field))
-    : new Set<string>()
+  const invalidFields = useMemo(() => {
+    if (!showValidation) return new Set<string>()
+    const issues = getValidationIssues(state, selectedAccountId, currency)
+    // Only highlight the first issue to avoid overwhelming the UI with multiple red borders
+    return issues.length > 0 ? new Set<string>([issues[0].field]) : new Set<string>()
+  }, [showValidation, state, selectedAccountId, currency])
 
   const handleSaveAndContinue = () => {
     setFormError("")

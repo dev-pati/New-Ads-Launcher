@@ -46,6 +46,7 @@ export type ReportInput = {
     deltaAutomationRuns: number | null
   }
   creative: { ready: number; launched: number; unlaunched: number; launchRate: number }
+  e2e?: { e2eRate: number | null; totalAds: number; appAds: number } | null
   failureReasons: Array<{ label: string; count: number }>
   activity: ReportActivity | null
   activityAvailable: boolean
@@ -119,6 +120,11 @@ export function buildTrackingReport(input: ReportInput): string {
   lines.push(`# Tracking — ${input.orgName || "AdLauncher"} · last ${input.days} days`)
   lines.push(`_${new Date(input.generatedAt).toLocaleDateString("vi-VN")} · vs previous ${input.days} days · measured = counted · **estimated** = from a stated assumption · unavailable ≠ 0_`)
   lines.push("")
+
+  if (input.e2e && input.e2e.e2eRate !== null) {
+    lines.push(`**North Star — E2E launch rate** — **${input.e2e.e2eRate}%** of ads on Meta were launched via AdLauncher (${input.e2e.appAds}/${input.e2e.totalAds} ads tagged [app] across connected accounts, measured)`)
+    lines.push("")
+  }
 
   lines.push(`**Output** — ${delivery.adsCreated} ads (${signed(previous.deltaAdsCreated)}) · ${delivery.batches} batches (${signed(previous.deltaBatches)}), ${delivery.successRate}% full success (${signed(previous.deltaSuccessRate, " pts")}) · avg session ${duration(delivery.averageSessionDurationMs)}`)
 

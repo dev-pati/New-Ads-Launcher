@@ -98,7 +98,7 @@ export function CampaignLevel({ state, update, currency, invalidFields }: Props)
       <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
         <div>
           <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-            Campaign name
+            Campaign name <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -242,7 +242,7 @@ export function CampaignLevel({ state, update, currency, invalidFields }: Props)
         {state.advantageCampaignBudget && (
           <div className="border-t border-[#e4e6eb] pt-4 dark:border-gray-800">
             <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-              Daily campaign budget
+              Daily campaign budget <span className="text-red-500">*</span>
             </label>
             <div className="relative mt-1.5 max-w-[220px]">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#65676b]">

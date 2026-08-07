@@ -27,6 +27,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
  * here would read as "the team did nothing".
  */
 import { isMissingTable } from "@/lib/tracking/missing-table"
+import { resolveTrackingWindow } from "@/lib/tracking/window"
 
 export const dynamic = "force-dynamic"
 
@@ -38,11 +39,7 @@ export async function GET(request: NextRequest) {
   if (!context) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const url = new URL(request.url)
-  const requestedDays = Number(url.searchParams.get("days") || 7)
-  const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 7
-  const windowMs = days * 86_400_000
-  const since = new Date(Date.now() - windowMs).toISOString()
-  const previousSince = new Date(Date.now() - windowMs * 2).toISOString()
+  const { since, until, previousSince, previousUntil, days } = resolveTrackingWindow(url.searchParams)
   const db = createAdminClient()
 
   const activitySelect = "actor_id,actor_name,object_type,action,created_at,source"
@@ -66,13 +63,14 @@ export async function GET(request: NextRequest) {
       .select("id,user_id,user_name,status,total_ads,failed_ads,duration_ms,created_at,ad_account_name,errors")
       .eq("org_id", context.orgId)
       .gte("created_at", since)
+      .lte("created_at", until)
       .order("created_at", { ascending: false }),
     db
       .from("launch_batches")
       .select("id,user_id,user_name,status,total_ads,failed_ads,duration_ms,created_at")
       .eq("org_id", context.orgId)
       .gte("created_at", previousSince)
-      .lt("created_at", since),
+      .lte("created_at", previousUntil),
     db
       .from("launch_batches")
       .select("creative_ids")
@@ -94,6 +92,7 @@ export async function GET(request: NextRequest) {
       .select(activitySelect)
       .eq("org_id", context.orgId)
       .gte("created_at", since)
+      .lte("created_at", until)
       .order("created_at", { ascending: false })
       .limit(ACTIVITY_ROW_LIMIT),
     db
@@ -101,25 +100,27 @@ export async function GET(request: NextRequest) {
       .select(activitySelect)
       .eq("org_id", context.orgId)
       .gte("created_at", previousSince)
-      .lt("created_at", since)
+      .lte("created_at", previousUntil)
       .limit(ACTIVITY_ROW_LIMIT),
     db
       .from("page_manage_activity")
       .select("actor_id,module,created_at")
       .eq("org_id", context.orgId)
       .gte("created_at", since)
+      .lte("created_at", until)
       .limit(ACTIVITY_ROW_LIMIT),
     db
       .from("automation_executions")
       .select("id", { count: "exact", head: true })
       .eq("org_id", context.orgId)
-      .gte("executed_at", since),
+      .gte("executed_at", since)
+      .lte("executed_at", until),
     db
       .from("automation_executions")
       .select("id", { count: "exact", head: true })
       .eq("org_id", context.orgId)
       .gte("executed_at", previousSince)
-      .lt("executed_at", since),
+      .lte("executed_at", previousUntil),
     db
       .from("activity_log")
       .select("created_at")

@@ -16,12 +16,6 @@ export type WeeklyReportTeamRow = {
 export type WeeklyReportSnapshot = {
   report: ReportInput
   team: WeeklyReportTeamRow[]
-  kr?: {
-    totalPoints: number
-    monthToDatePoints: number
-    launchFallbacks: number
-    controlFallbacks: number
-  }
 }
 
 export type WeeklyReportSchedule = {
@@ -63,7 +57,7 @@ function riskSentence(report: ReportInput): string {
   return risks.length ? risks.join("; ") : "No measured delivery risk in this period."
 }
 
-export function buildWeeklyReportEmail({ report, team, kr }: WeeklyReportSnapshot): { subject: string; html: string; text: string } {
+export function buildWeeklyReportEmail({ report, team }: WeeklyReportSnapshot): { subject: string; html: string; text: string } {
   const date = new Date(report.generatedAt)
   const subject = `[INFORM - Tech/Raymond] AdLauncher Weekly Report (${formatDate(date)})`
   const activity = report.activityAvailable ? report.activity : null
@@ -92,7 +86,17 @@ export function buildWeeklyReportEmail({ report, team, kr }: WeeklyReportSnapsho
       <p style="margin:6px 0 0;opacity:.85">Last ${report.days} days · generated ${formatDate(date)}</p>
     </div>
     <div style="padding:24px 28px">
-      <h2 style="font-size:18px;margin:0 0 12px">Executive summary</h2>
+      ${report.e2e && report.e2e.e2eRate !== null ? `
+      <div style="padding:22px 24px;margin:0 0 20px;background:linear-gradient(135deg,rgba(20,86,240,.14),rgba(20,86,240,.04));border:2px solid rgba(20,86,240,.4);border-radius:12px">
+        <div style="display:flex;align-items:baseline;gap:12px">
+          <b style="font-size:44px;line-height:1;color:rgb(20,86,240)">${report.e2e.e2eRate}%</b>
+          <span style="font-size:14px;color:rgb(60,66,75)">of ads on Meta this period were launched via AdLauncher (${report.e2e.appAds}/${report.e2e.totalAds} ads tagged [app], measured)</span>
+        </div>
+      </div>` : `
+      <div style="padding:16px 18px;margin:0 0 20px;background:rgb(242,243,245);border-radius:8px">
+        <span style="font-size:13px;color:rgb(100,106,115)">E2E launch rate unavailable this period (no Meta connection or no ads on connected accounts).</span>
+      </div>`}
+      <h2 style="font-size:18px;margin:0 0 12px">Supporting metrics</h2>
       <table width="100%" cellpadding="0" cellspacing="8" style="margin:0 -8px 20px">
         <tr>
           <td style="padding:12px;border:1px solid rgb(222,224,227);border-radius:8px"><span style="font-size:12px;color:rgb(100,106,115)">ADS LAUNCHED</span><br><b style="font-size:24px">${report.delivery.adsCreated}</b><br><span style="font-size:12px;color:rgb(100,106,115)">${signed(report.previous.deltaAdsCreated)} vs prior</span></td>
@@ -104,19 +108,8 @@ export function buildWeeklyReportEmail({ report, team, kr }: WeeklyReportSnapsho
 
       <div style="padding:14px 16px;background:rgb(242,243,245);border-left:3px solid rgb(20,86,240);border-radius:0 8px 8px 0">
         <b>Management readout</b>
-        <p style="margin:6px 0 0;line-height:1.6">The team delivered ${report.delivery.adsCreated} ads from ${report.delivery.batches} batches at ${report.delivery.successRate}% full-batch success. ${activity ? `${activity.activeMembers} members recorded ${activity.total} measurable app actions across ${activity.activeDays} active days.` : "App activity is not measurable on this project yet."}</p>
+        <p style="margin:6px 0 0;line-height:1.6">${report.e2e && report.e2e.e2eRate !== null ? `${report.e2e.e2eRate}% of ads on Meta this period were launched end-to-end via AdLauncher (${report.e2e.appAds}/${report.e2e.totalAds}). ` : ""}The team delivered ${report.delivery.adsCreated} ads from ${report.delivery.batches} batches at ${report.delivery.successRate}% full-batch success. ${activity ? `${activity.activeMembers} members recorded ${activity.total} measurable app actions across ${activity.activeDays} active days.` : "App activity is not measurable on this project yet."}</p>
       </div>
-
-      ${kr ? `<h2 style="font-size:18px;margin:24px 0 10px">KR tracking</h2>
-      <table width="100%" cellpadding="0" cellspacing="8" style="margin:0 -8px 20px">
-        <tr>
-          <td style="padding:12px;border:1px solid rgb(222,224,227);border-radius:8px"><span style="font-size:12px;color:rgb(100,106,115)">TOTAL POINTS</span><br><b style="font-size:22px">${kr.totalPoints}/100</b></td>
-          <td style="padding:12px;border:1px solid rgb(222,224,227);border-radius:8px"><span style="font-size:12px;color:rgb(100,106,115)">MONTH TO DATE</span><br><b style="font-size:22px">${kr.monthToDatePoints}/100</b></td>
-          <td style="padding:12px;border:1px solid rgb(222,224,227);border-radius:8px"><span style="font-size:12px;color:rgb(100,106,115)">LAUNCH FALLBACKS</span><br><b style="font-size:22px">${kr.launchFallbacks}</b></td>
-          <td style="padding:12px;border:1px solid rgb(222,224,227);border-radius:8px"><span style="font-size:12px;color:rgb(100,106,115)">CONTROL FALLBACKS</span><br><b style="font-size:22px">${kr.controlFallbacks}</b></td>
-        </tr>
-      </table>
-      <p style="margin:-10px 0 20px;color:rgb(100,106,115);font-size:13px">${kr.launchFallbacks + kr.controlFallbacks} recorded fallbacks in the tracked month.</p>` : ""}
 
       <h2 style="font-size:18px;margin:24px 0 10px">Team usage</h2>
       <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px">
@@ -137,9 +130,11 @@ export function buildWeeklyReportEmail({ report, team, kr }: WeeklyReportSnapsho
 
   const text = [
     `AdLauncher Weekly Report - ${formatDate(date)}`,
-    `Executive summary: ${report.delivery.adsCreated} ads, ${report.delivery.successRate}% full success, ${report.delivery.nonSuccess} batches need review.`,
+    report.e2e && report.e2e.e2eRate !== null
+      ? `E2E launch rate: ${report.e2e.e2eRate}% (${report.e2e.appAds}/${report.e2e.totalAds} Meta ads tagged [app], measured).`
+      : "E2E launch rate: unavailable this period.",
+    `Executive readout: ${report.e2e && report.e2e.e2eRate !== null ? `${report.e2e.e2eRate}% of Meta ads this period came through AdLauncher. ` : ""}${report.delivery.adsCreated} ads, ${report.delivery.successRate}% full success, ${report.delivery.nonSuccess} batches need review.`,
     activity ? `App activity: ${activity.total} actions, ${activity.activeMembers} active members, ${activity.activeDays} active days.` : "App activity: unavailable.",
-    kr ? `KR tracking: ${kr.totalPoints}/100 current, ${kr.monthToDatePoints}/100 month-to-date, ${kr.launchFallbacks + kr.controlFallbacks} recorded fallbacks (${kr.launchFallbacks} launch, ${kr.controlFallbacks} control).` : "",
     `Risk: ${risk}`,
     "Team usage:",
     ...team.map(row => `- ${row.name}: ${row.adsCreated} ads, ${row.actions} actions, ${row.activeDays}/${report.days} active days, ${row.breadth} features.`),

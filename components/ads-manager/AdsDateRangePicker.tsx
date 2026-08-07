@@ -13,7 +13,9 @@ export const DATE_PICKER_PRESETS = [
   { value: "last_14d",    label: "Last 14 days"  },
   { value: "last_30d",    label: "Last 30 days"  },
   { value: "last_90d",    label: "Last 90 days"  },
-  { value: "this_month",  label: "Month to date" },
+  { value: "this_week",   label: "This week"     },
+  { value: "this_month",  label: "This month"    },
+  { value: "this_quarter", label: "This quarter" },
   { value: "last_month",  label: "Last month"    },
   { value: "this_year",   label: "Year to date"  },
   { value: "last_year",   label: "Last year"     },
@@ -47,7 +49,9 @@ export function getPresetRange(preset: string, maximumStart?: Date): { start: Da
     case "last_14d":   return { start: d(-13),  end: today }
     case "last_30d":   return { start: d(-29),  end: today }
     case "last_90d":   return { start: d(-89),  end: today }
+    case "this_week":  return { start: d(-((today.getDay() + 6) % 7)), end: today }
     case "this_month": return { start: new Date(today.getFullYear(), today.getMonth(), 1), end: today }
+    case "this_quarter": return { start: new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1), end: today }
     case "last_month": {
       const s = new Date(today.getFullYear(), today.getMonth() - 1, 1)
       const e = new Date(today.getFullYear(), today.getMonth(), 0)

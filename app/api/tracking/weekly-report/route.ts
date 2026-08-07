@@ -15,6 +15,16 @@ import {
 
 export const dynamic = "force-dynamic"
 
+const NOREPLY_EXTRA_TO = "thanhtin@patigroup.com"
+
+function weeklyReportTo(): string[] {
+  const sender = process.env.SMTP_FROM || process.env.SMTP_USER || ""
+  const email = sender.match(/<([^>]+)>/)?.[1] || sender
+  const to = [...WEEKLY_REPORT_TO] as string[]
+  if (email.trim().toLowerCase().startsWith("noreply@") && !to.includes(NOREPLY_EXTRA_TO)) to.push(NOREPLY_EXTRA_TO)
+  return to
+}
+
 function finite(value: unknown, min = 0, max = 1_000_000): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max
 }
@@ -23,13 +33,13 @@ function parseSnapshot(value: unknown): WeeklyReportSnapshot | null {
   if (!value || typeof value !== "object" || JSON.stringify(value).length > 100_000) return null
   const snapshot = value as WeeklyReportSnapshot
   const report = snapshot.report
-  if (!report || ![7, 30, 90].includes(report.days) || !Number.isFinite(new Date(report.generatedAt).getTime())) return null
+  if (!report || !Number.isInteger(report.days) || !finite(report.days, 1, 366) || !Number.isFinite(new Date(report.generatedAt).getTime())) return null
   if (!report.delivery || !finite(report.delivery.batches) || !finite(report.delivery.adsCreated) || !finite(report.delivery.successRate, 0, 100)) return null
   if (!report.previous || !report.creative || !Array.isArray(report.failureReasons) || report.failureReasons.length > 20) return null
+  if (report.e2e !== null && report.e2e !== undefined && (!finite(report.e2e.totalAds) || !finite(report.e2e.appAds, 0, report.e2e.totalAds) || (report.e2e.e2eRate !== null && !finite(report.e2e.e2eRate, 0, 100)))) return null
   if (!Array.isArray(snapshot.team) || snapshot.team.length > 100) return null
   if (snapshot.team.some(row => typeof row.name !== "string" || row.name.length > 120 || !finite(row.adsCreated) || !finite(row.actions) || !finite(row.activeDays, 0, report.days) || !finite(row.breadth, 0, 100))) return null
   if (report.activityAvailable && (!report.activity || !finite(report.activity.total) || !finite(report.activity.activeMembers, 0, 1000) || !finite(report.activity.activeDays, 0, report.days))) return null
-  if (snapshot.kr && (!finite(snapshot.kr.totalPoints, 0, 100) || !finite(snapshot.kr.monthToDatePoints, 0, 100) || !finite(snapshot.kr.launchFallbacks) || !finite(snapshot.kr.controlFallbacks))) return null
   return snapshot
 }
 
@@ -78,7 +88,7 @@ export async function GET() {
   if (error && !unavailable) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({
-    to: WEEKLY_REPORT_TO,
+    to: weeklyReportTo(),
     cc: recipients.cc || null,
     scheduleAvailable: !unavailable,
     schedule: schedule || {
@@ -134,23 +144,24 @@ export async function POST(request: NextRequest) {
   if (!recipients.cc) return NextResponse.json({ error: "PATI-BOM email is missing. Set the BOM email in Organization settings." }, { status: 409 })
   const snapshot = { ...parsed, report: { ...parsed.report, orgName: recipients.orgName } }
   const email = buildWeeklyReportEmail(snapshot)
+  const to = weeklyReportTo()
 
   if (body.action === "preview") {
     let previewToken
     try {
-      previewToken = createPreviewToken({ snapshot, orgId: context.orgId, userId: context.user.id, to: WEEKLY_REPORT_TO, cc: recipients.cc })
+      previewToken = createPreviewToken({ snapshot, orgId: context.orgId, userId: context.user.id, to, cc: recipients.cc })
     } catch (cause) {
       return NextResponse.json({ error: cause instanceof Error ? cause.message : "Report preview security is unavailable." }, { status: 500 })
     }
-    return NextResponse.json({ ...email, to: WEEKLY_REPORT_TO, cc: recipients.cc, previewToken })
+    return NextResponse.json({ ...email, to, cc: recipients.cc, previewToken })
   }
 
   if (body.action !== "send" || typeof body.previewToken !== "string") return NextResponse.json({ error: "Preview is required before sending." }, { status: 400 })
-  if (!verifyPreviewToken({ token: body.previewToken, snapshot, orgId: context.orgId, userId: context.user.id, to: WEEKLY_REPORT_TO, cc: recipients.cc })) {
+  if (!verifyPreviewToken({ token: body.previewToken, snapshot, orgId: context.orgId, userId: context.user.id, to, cc: recipients.cc })) {
     return NextResponse.json({ error: "Preview expired or report changed. Preview again before sending." }, { status: 409 })
   }
 
-  const result = await sendEmail({ to: [...WEEKLY_REPORT_TO], cc: recipients.cc, subject: email.subject, html: email.html, text: email.text })
+  const result = await sendEmail({ to, cc: recipients.cc, subject: email.subject, html: email.html, text: email.text })
   if (!result.ok) return NextResponse.json({ error: result.error || "Email delivery failed." }, { status: 502 })
 
   const sentAt = new Date().toISOString()

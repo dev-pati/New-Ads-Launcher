@@ -140,7 +140,11 @@ export async function PUT(request: NextRequest) {
   // Assigning Portal media is how creative reaches an ad account, and until now it was
   // the loudest action in the product that said nothing at all. One notification per
   // assign pass, not per asset — a 200-file folder must not produce 200 rows.
-  if (assigned.length > 0) {
+  //
+  // Only a fully-successful batch counts as the Produce action (media_assignment:assigned,
+  // matched in activity-catalog.ts). A partial failure does not emit the log row to prevent
+  // inflating the Produce tally.
+  if (assigned.length > 0 && errors.length === 0) {
     const { data: accountRow } = await supabase
       .from("ad_accounts")
       .select("name")
@@ -158,9 +162,7 @@ export async function PUT(request: NextRequest) {
       objectId: jobId ?? adAccountId,
       count: assigned.length,
       context: { preposition: "to", name: accountRow?.name || adAccountId },
-      body: errors.length
-        ? `${errors.length} of ${assets.length} could not be assigned.`
-        : null,
+      body: null,
       link: "/assets",
       // The upload job is the assign pass. A retried request reuses neither, so the
       // fallback key still collapses a double-click inside the same minute.

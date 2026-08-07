@@ -71,6 +71,7 @@ function TextFieldWithVariations({
   onChange,
   onVariationsChange,
   invalid = false,
+  required = false,
 }: {
   label: string
   value: string
@@ -80,6 +81,7 @@ function TextFieldWithVariations({
   onChange: (value: string) => void
   onVariationsChange: (value: string[]) => void
   invalid?: boolean
+  required?: boolean
 }) {
   const add = () => onVariationsChange([...variations, ""])
   const updateAt = (index: number, next: string) => onVariationsChange(variations.map((v, i) => i === index ? next : v))
@@ -89,7 +91,9 @@ function TextFieldWithVariations({
   return (
     <div>
       <div className="flex items-center justify-between gap-2">
-        <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">{label}</label>
+        <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
+          {label}{required && <span className="text-red-500"> *</span>}
+        </label>
         <button type="button" onClick={add} className="flex items-center gap-1 text-xs font-semibold text-[#1877f2] hover:underline">
           <IconPlus className="size-3" /> Add variation
         </button>
@@ -243,7 +247,7 @@ export function AdLevel({
           <div className="space-y-4 rounded-lg border border-[#e4e6eb] p-5 shadow-sm dark:border-gray-800">
             <div>
               <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                Ad name
+                Ad name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
@@ -287,7 +291,7 @@ export function AdLevel({
 
             <div>
               <label className="flex items-center gap-1.5 text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                <IconBrandFacebook className="size-4 text-[#1877f2]" /> Facebook Page
+                <IconBrandFacebook className="size-4 text-[#1877f2]" /> Facebook Page <span className="text-red-500">*</span>
               </label>
               <select
                 value={state.pageId}
@@ -500,13 +504,7 @@ export function AdLevel({
                 <select
                   value={state.callToAction}
                   onChange={(event) => update({ callToAction: event.target.value })}
-                  aria-invalid={invalidFields.has("destinationUrl")}
-                  className={cn(
-                    "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none dark:bg-background",
-                    invalidFields.has("destinationUrl")
-                      ? "border-red-500 focus:border-red-500 dark:border-red-500"
-                      : "border-[#ccd0d5] focus:border-[#1877f2] dark:border-gray-700"
-                  )}
+                  className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
                 >
                   {CTA_OPTIONS.map((cta) => (
                     <option key={cta} value={cta}>
@@ -517,11 +515,17 @@ export function AdLevel({
               </div>
               <div>
                 <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
-                  Website URL
+                  Website URL <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="url"
-                  className="mt-1.5 h-9 w-full rounded border border-[#ccd0d5] bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:border-gray-700 dark:bg-background"
+                  aria-invalid={invalidFields.has("destinationUrl")}
+                  className={cn(
+                    "mt-1.5 h-9 w-full rounded border bg-white px-3 text-xs outline-none focus:border-[#1877f2] dark:bg-background",
+                    invalidFields.has("destinationUrl")
+                      ? "border-red-500 focus:border-red-500 dark:border-red-500"
+                      : "border-[#ccd0d5] dark:border-gray-700"
+                  )}
                   value={state.destinationUrl}
                   onChange={(event) => update({ destinationUrl: event.target.value })}
                   placeholder="https://example.com"
@@ -532,6 +536,7 @@ export function AdLevel({
             <div className="border-t border-[#e4e6eb] pt-4 dark:border-gray-800">
               <TextFieldWithVariations
                 label="Primary text"
+                required
                 multiline
                 placeholder="Primary text"
                 value={state.primaryText}
@@ -545,6 +550,7 @@ export function AdLevel({
             <div className="grid gap-4 sm:grid-cols-2">
               <TextFieldWithVariations
                 label="Headline"
+                required
                 placeholder="Headline"
                 value={state.headline}
                 variations={state.headlineVariations}

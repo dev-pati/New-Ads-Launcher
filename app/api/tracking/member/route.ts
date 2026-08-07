@@ -5,6 +5,7 @@ import { summarizeLaunchBatches, workingDayStreak, isoWeekMonday, type TrackingB
 import { estimatedHoursSaved, leverageRatio, summarizeActivity, type ActivityRow, type PageActivityRow } from "@/lib/tracking/activity"
 import { activityFor, EXCLUDED_MATCHES } from "@/lib/tracking/activity-catalog"
 import { isMissingTable } from "@/lib/tracking/missing-table"
+import { resolveTrackingWindow } from "@/lib/tracking/window"
 
 export const dynamic = "force-dynamic"
 
@@ -20,9 +21,7 @@ export async function GET(request: NextRequest) {
   const userId = url.searchParams.get("userId")
   if (!userId) return NextResponse.json({ error: "userId is required." }, { status: 400 })
 
-  const requestedDays = Number(url.searchParams.get("days") || 7)
-  const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 7
-  const since = new Date(Date.now() - days * 86_400_000).toISOString()
+  const { since, until, days } = resolveTrackingWindow(url.searchParams)
 
   const db = createAdminClient()
   const [batchesResult, painpointResult, activityResult, pageActivityResult] = await Promise.all([
@@ -32,6 +31,7 @@ export async function GET(request: NextRequest) {
       .eq("org_id", context.orgId)
       .eq("user_id", userId)
       .gte("created_at", since)
+      .lte("created_at", until)
       .order("created_at", { ascending: false }),
     db
       .from("weekly_painpoints")
@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
       .eq("org_id", context.orgId)
       .eq("actor_id", userId)
       .gte("created_at", since)
+      .lte("created_at", until)
       .order("created_at", { ascending: false })
       .limit(ACTIVITY_ROW_LIMIT),
     db
@@ -56,6 +57,7 @@ export async function GET(request: NextRequest) {
       .eq("org_id", context.orgId)
       .eq("actor_id", userId)
       .gte("created_at", since)
+      .lte("created_at", until)
       .limit(ACTIVITY_ROW_LIMIT),
   ])
 

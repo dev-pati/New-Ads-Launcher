@@ -104,7 +104,9 @@ export function AdSetFormFields({
         </h3>
 
         <div>
-          <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">Ad set name</label>
+          <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
+            Ad set name <span className="text-red-500">*</span>
+          </label>
           <input
             type="text"
             aria-invalid={invalidFields.has("adSetName")}
@@ -254,7 +256,9 @@ export function AdSetFormFields({
           {value.objective === "OUTCOME_SALES" && (
             <>
               <div className="mt-4">
-                <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">Pixel</label>
+                <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
+                  Pixel <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={value.pixelId}
                   onChange={(e) => onChange({ pixelId: e.target.value })}
@@ -412,7 +416,9 @@ export function AdSetFormFields({
         </div>
 
         <div>
-          <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">Locations</label>
+          <label className="text-xs font-semibold text-[#1c2b33] dark:text-gray-200">
+            Locations <span className="text-red-500">*</span>
+          </label>
           <div
             aria-invalid={invalidFields.has("locations")}
             className={cn(

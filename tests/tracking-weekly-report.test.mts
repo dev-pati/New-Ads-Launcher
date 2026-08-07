@@ -32,7 +32,6 @@ test("builds the approved weekly subject and an escaped management report", () =
   assert.equal(WEEKLY_REPORT_CC, "wpjpwk7o7pbxz@patigroup.com")
   const email = buildWeeklyReportEmail({
     report,
-    kr: { totalPoints: 75, monthToDatePoints: 72.5, launchFallbacks: 2, controlFallbacks: 1 },
     team: [
       { name: "Kevin", adsCreated: 22, batches: 5, actions: 16, activeDays: 5, breadth: 4 },
       { name: "Seth", adsCreated: 20, batches: 5, actions: 15, activeDays: 4, breadth: 3 },
@@ -43,9 +42,7 @@ test("builds the approved weekly subject and an escaped management report", () =
   assert.match(email.html, /Executive summary/)
   assert.match(email.html, /Team usage/)
   assert.match(email.html, /App activity/)
-  assert.match(email.html, /KR tracking/)
-  assert.match(email.html, /75\/100/)
-  assert.match(email.html, /3 recorded fallbacks/)
+  assert.doesNotMatch(email.html, /KR tracking|75\/100|recorded fallbacks/)
   assert.match(email.html, /Kevin/)
   assert.doesNotMatch(email.html, /<script>|<img/)
   assert.match(email.html, /&lt;script&gt;/)

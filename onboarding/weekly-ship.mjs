@@ -188,6 +188,13 @@ const scenario = {
       redact: ["table tbody td:first-child"],
     })
 
+    await capture({
+      target: "section:has(h2:has-text('Usage by member'))",
+      title: "Đọc team usage theo từng thành viên",
+      body: "Shape focus: đối chiếu Ads launched, Batches, App actions, Active days và Features used. Số liệu launch lấy từ launch history; App actions chỉ tính event có bằng chứng bền vững.",
+      redact: ["table tbody td:first-child"],
+    })
+
     const myUsage = page.getByRole("button", { name: "My usage" })
     await capture({
       target: "button:has-text('My usage')",
@@ -339,7 +346,7 @@ const scenario = {
     await capture({
       target: "div.space-y-4:has-text('Opportunity score')",
       title: "Đọc health, weekly results và budget remaining",
-      body: "Shape focus: hero giữ account ID và trạng thái; cards cho Opportunity score, purchases, cost per purchase, campaign trends, next step, billing và Account Spending Limit. Amount spent được mask tự động; budget và act_* ID giữ nguyên.",
+      body: "Shape focus: hero giữ account ID và trạng thái; cards cho Opportunity score, purchases, cost per purchase, campaign trends, next step, billing và Account Spending Limit. Toàn bộ số liệu trong guide là dữ liệu demo; budget và act_* ID giữ nguyên.",
     })
 
     await page.goto("/notifications", { waitUntil: "commit" })
