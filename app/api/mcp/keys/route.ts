@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { randomBytes } from "crypto"
 
 export const dynamic = "force-dynamic"
 
 function generateApiKey(): string {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
-  let key = "al_"
-  for (let i = 0; i < 40; i++) {
-    key += chars[Math.floor(Math.random() * chars.length)]
-  }
-  return key
+  return "al_" + randomBytes(32).toString("base64url")
+}
+
+function errorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err)
 }
 
 export async function GET() {
@@ -31,8 +31,8 @@ export async function GET() {
     }
 
     return NextResponse.json({ keys: data || [] })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err) {
+    return NextResponse.json({ error: errorMessage(err) }, { status: 500 })
   }
 }
 
@@ -60,8 +60,8 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
     return NextResponse.json({ key: data }, { status: 201 })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err) {
+    return NextResponse.json({ error: errorMessage(err) }, { status: 500 })
   }
 }
 
@@ -82,7 +82,7 @@ export async function DELETE(request: NextRequest) {
 
     if (error) throw error
     return NextResponse.json({ ok: true })
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err) {
+    return NextResponse.json({ error: errorMessage(err) }, { status: 500 })
   }
 }
