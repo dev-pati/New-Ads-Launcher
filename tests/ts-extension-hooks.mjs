@@ -9,11 +9,14 @@
  * Usage: node --experimental-strip-types --import ./tests/register-ts.mjs --test tests/<file>
  */
 export async function resolve(specifier, context, nextResolve) {
+  const resolvedSpecifier = specifier.startsWith("@/") ? new URL(`../${specifier.slice(2)}`, import.meta.url).href : specifier
+
   try {
-    return await nextResolve(specifier, context)
+    return await nextResolve(resolvedSpecifier, context)
   } catch (error) {
-    if (!specifier.startsWith(".") || /\.[cm]?[jt]sx?$/.test(specifier)) throw error
-    for (const candidate of [`${specifier}.ts`, `${specifier}/index.ts`]) {
+    if (!resolvedSpecifier.startsWith(".") && !resolvedSpecifier.startsWith("file:")) throw error
+    if (/\.[cm]?[jt]sx?$/.test(resolvedSpecifier)) throw error
+    for (const candidate of [`${resolvedSpecifier}.ts`, `${resolvedSpecifier}/index.ts`]) {
       try {
         return await nextResolve(candidate, context)
       } catch {
