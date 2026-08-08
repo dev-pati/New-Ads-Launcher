@@ -17,6 +17,7 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/invite') &&
     !request.nextUrl.pathname.startsWith('/api/mcp') &&
     !request.nextUrl.pathname.startsWith('/api/cron') &&
+    !request.nextUrl.pathname.startsWith('/api/health') &&
     !request.nextUrl.pathname.startsWith('/.well-known') &&
     !request.nextUrl.pathname.startsWith('/mcp/')
   ) {

@@ -163,10 +163,22 @@ export type TrackingTimeSeriesPoint = {
   avgDurationMs: number | null
 }
 
-export function summarizeLaunchBatchesTimeSeries(batches: TrackingBatch[], days: number): TrackingTimeSeriesPoint[] {
+export function summarizeLaunchBatchesTimeSeries(batches: TrackingBatch[], days: number, range?: { since?: string; until?: string }): TrackingTimeSeriesPoint[] {
   const weekly = days >= 90
   const buckets = new Map<string, { batches: number; fullSuccess: number; nonSuccess: number; adsCreated: number; durations: number[] }>()
   const bucketKey = (value: Date | string) => (weekly ? isoWeekMonday(value) : toVietnamDateKey(value))
+
+  if (range?.since && range?.until) {
+    const current = new Date(range.since)
+    const end = new Date(range.until)
+    while (current <= end) {
+      const key = bucketKey(current)
+      if (!buckets.has(key)) {
+        buckets.set(key, { batches: 0, fullSuccess: 0, nonSuccess: 0, adsCreated: 0, durations: [] })
+      }
+      current.setUTCDate(current.getUTCDate() + 1)
+    }
+  }
 
   for (const batch of batches) {
     if (!batch.created_at) continue

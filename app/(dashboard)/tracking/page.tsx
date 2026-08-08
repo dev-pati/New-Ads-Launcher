@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { IconAlertTriangle, IconCalendarTime, IconChartBar, IconCheck, IconChevronDown, IconChevronRight, IconCopy, IconInfoCircle, IconLoader2, IconMail, IconNote, IconPhoto, IconRefresh, IconRocket, IconStar } from "@tabler/icons-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -10,7 +10,7 @@ import { AdsDateRangePicker, getPresetRange } from "@/components/ads-manager/Ads
 import { CLASS_DESCRIPTION, CLASS_LABEL, CLASS_ORDER, type ActivityClass } from "@/lib/tracking/activity-catalog"
 import { mergeUsageRows } from "@/lib/tracking/activity"
 import { buildTrackingReport } from "@/lib/tracking/report"
-import { CartesianGrid, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Bar, CartesianGrid, ComposedChart, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 
 type TeamMember = {
   userId: string
@@ -180,6 +180,7 @@ function getLabelName(key: string) {
     case "adsCreated": return "Ads Created"
     case "nonSuccess": return "Needs Review Batches"
     case "avgDurationMs": return "Average Duration"
+    case "e2eRate": return "E2E Launch Rate"
     default: return key
   }
 }
@@ -193,23 +194,77 @@ function TrackingMemberAvatar({ name, avatarUrl, size = "sm" }: { name?: string 
   )
 }
 
-function TrendChart({ series, dataKey, days, color = "#3987e5" }: { series: TimeSeriesPoint[]; dataKey: keyof TimeSeriesPoint; days: number; color?: string }) {
+function TrendChart({ series, dataKey, days, color = "#3987e5" }: { series: any[]; dataKey: string; days: number; color?: string }) {
   if (series.length === 0) {
     return <p className="py-10 text-center text-sm text-muted-foreground">No data in this period.</p>
   }
+  const isPercent = dataKey === "e2eRate"
+  const isComposed = dataKey === "adsCreated" && series.some(p => p.e2eRate != null)
+  const xProps = { dataKey: "bucket" as const, tickFormatter: (v: string) => formatBucket(String(v), days), stroke: "#898781", tick: { fontSize: 11 }, tickLine: false as const, axisLine: false as const, minTickGap: 24 }
+
+  if (isComposed) {
+    return (
+      <div className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={series} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+            <XAxis {...xProps} />
+            <YAxis yAxisId="left" stroke="#898781" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
+            <YAxis yAxisId="right" orientation="right" domain={[0, 100]} stroke="#10b981" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={40} tickFormatter={v => `${v}%`} />
+            <Tooltip
+              contentStyle={{ background: "#1a1a19", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 8, fontSize: 12, color: "#ffffff" }}
+              itemStyle={{ color: "#ffffff" }}
+              labelStyle={{ color: "#898781" }}
+              labelFormatter={v => formatBucket(String(v), days)}
+              formatter={(value, name) => {
+                if (name === "e2eRate") return [`${value}%`, "E2E Launch Rate"]
+                if (name === "adsCreated") return [String(value), "Ads Created"]
+                return [String(value), getLabelName(String(name))]
+              }}
+            />
+            <Bar yAxisId="right" dataKey="e2eRate" name="e2eRate" fill="#10b981" fillOpacity={0.25} radius={[3, 3, 0, 0]} maxBarSize={28} />
+            <Line yAxisId="left" type="monotone" dataKey="adsCreated" name="adsCreated" stroke={color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
+  if (isPercent) {
+    return (
+      <div className="h-64 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={series} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+            <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+            <XAxis {...xProps} />
+            <YAxis stroke="#898781" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={48} domain={[0, 100]} tickFormatter={v => `${v}%`} />
+            <Tooltip
+              contentStyle={{ background: "#1a1a19", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 8, fontSize: 12, color: "#ffffff" }}
+              itemStyle={{ color: "#ffffff" }}
+              labelStyle={{ color: "#898781" }}
+              labelFormatter={v => formatBucket(String(v), days)}
+              formatter={value => [`${value}%`, "E2E Launch Rate"]}
+            />
+            <Bar dataKey="e2eRate" name="e2eRate" fill={color} fillOpacity={0.7} radius={[3, 3, 0, 0]} maxBarSize={28} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    )
+  }
+
   return (
     <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={series} margin={{ top: 8, right: 12, bottom: 4, left: -8 }}>
           <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-          <XAxis dataKey="bucket" tickFormatter={v => formatBucket(String(v), days)} stroke="#898781" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={24} />
+          <XAxis {...xProps} />
           <YAxis stroke="#898781" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
           <Tooltip
             contentStyle={{ background: "#1a1a19", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 8, fontSize: 12, color: "#ffffff" }}
             itemStyle={{ color: "#ffffff" }}
             labelStyle={{ color: "#898781" }}
             labelFormatter={v => formatBucket(String(v), days)}
-            formatter={value => (dataKey === "avgDurationMs" ? [formatDuration(Number(value)), "Duration"] : [String(value), getLabelName(String(dataKey))])}
+            formatter={value => dataKey === "avgDurationMs" ? [formatDuration(Number(value)), "Duration"] : [String(value), getLabelName(String(dataKey))]}
           />
           <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
         </LineChart>
@@ -500,7 +555,15 @@ type WeeklyEmailPreview = {
   previewToken: string
 }
 
-type E2ERatePayload = { e2eRate: number | null; totalAds: number; appAds: number; reason?: string }
+type E2ETimeSeriesPoint = { bucket: string; totalAds: number; appAds: number; e2eRate: number }
+
+type E2ERatePayload = {
+  e2eRate: number | null
+  totalAds: number
+  appAds: number
+  reason?: string
+  timeSeries?: E2ETimeSeriesPoint[]
+}
 
 type TrackingPeriod = { from: Date; to: Date }
 
@@ -601,6 +664,10 @@ export default function TrackingPage() {
 
   const summary = isAdminView ? data?.admin : data?.mine
   const series = data?.adminTimeSeries || []
+  const mergedSeries = useMemo<Array<TimeSeriesPoint & { e2eRate: number | null }>>(() => {
+    const e2eByBucket = new Map((e2eData?.timeSeries || []).map(point => [point.bucket, point.e2eRate]))
+    return series.map(point => ({ ...point, e2eRate: e2eByBucket.get(point.bucket) ?? null }))
+  }, [series, e2eData?.timeSeries])
 
   const isTeamScope = isAdminView
   const metricConfig = summary ? [
@@ -1005,11 +1072,20 @@ export default function TrackingPage() {
             <DialogDescription>{openMetricDefinition?.methodology}</DialogDescription>
           </DialogHeader>
           {openMetric === "e2eRate" ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">
-              Real-time Meta snapshot: {e2eData?.appAds ?? 0} app-launched ads out of {e2eData?.totalAds ?? 0} total ads.
-            </p>
+            <div className="space-y-4">
+              <p className="text-center text-sm text-muted-foreground">
+                Real-time Meta snapshot: {e2eData?.appAds ?? 0} app-launched ads out of {e2eData?.totalAds ?? 0} total ads.
+              </p>
+              {e2eData?.timeSeries && (
+                <TrendChart series={e2eData.timeSeries} dataKey="e2eRate" days={days} color="#10b981" />
+              )}
+            </div>
           ) : openSupportingMetric ? (
-            <TrendChart series={series} dataKey={openSupportingMetric.dataKey} days={days} />
+            <TrendChart
+              series={openSupportingMetric.dataKey === "adsCreated" ? mergedSeries : series}
+              dataKey={openSupportingMetric.dataKey}
+              days={days}
+            />
           ) : null}
         </DialogContent>
       </Dialog>
@@ -1088,25 +1164,32 @@ export default function TrackingPage() {
               </div>
             )}
 
-            {isAdminView && series.length > 0 && (
+            {isAdminView && mergedSeries.length > 0 && (
               <div className="rounded-lg border p-3">
                 <p className="text-xs text-muted-foreground">Ads created — organization, last {days} days</p>
                 <div className="-mb-2 mt-1 h-40">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={series} margin={{ top: 24, right: 8, bottom: 0, left: -16 }}>
+                    <ComposedChart data={mergedSeries} margin={{ top: 24, right: 8, bottom: 0, left: -16 }}>
                       <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                       <XAxis dataKey="bucket" tickFormatter={v => formatBucket(String(v), days)} stroke="#898781" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} minTickGap={24} />
-                      <YAxis stroke="#898781" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={32} />
+                      <YAxis yAxisId="left" stroke="#898781" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={32} />
+                      {mergedSeries.some(p => p.e2eRate != null) && (
+                        <YAxis yAxisId="right" orientation="right" domain={[0, 100]} stroke="#10b981" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} width={36} tickFormatter={v => `${v}%`} />
+                      )}
                       <Tooltip
                         contentStyle={{ background: "#1a1a19", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 8, fontSize: 12, color: "#ffffff" }}
                         itemStyle={{ color: "#ffffff" }}
                         labelStyle={{ color: "#898781" }}
                         labelFormatter={v => formatBucket(String(v), days)}
+                        formatter={(value, name) => name === "e2eRate" ? [`${value}%`, "E2E Launch Rate"] : [String(value), "Ads Created"]}
                       />
-                      <Line type="monotone" dataKey="adsCreated" stroke="#3987e5" strokeWidth={2} dot={false} activeDot={{ r: 3 }}>
+                      {mergedSeries.some(p => p.e2eRate != null) && (
+                        <Bar yAxisId="right" dataKey="e2eRate" name="e2eRate" fill="#10b981" fillOpacity={0.25} radius={[3, 3, 0, 0]} maxBarSize={28} />
+                      )}
+                      <Line yAxisId="left" type="monotone" dataKey="adsCreated" name="adsCreated" stroke="#3987e5" strokeWidth={2} dot={false} activeDot={{ r: 3 }}>
                         <LabelList dataKey="adsCreated" position="top" fill="#ffffff" fontSize={14} fontWeight={800} stroke="#2563eb" strokeWidth={4} paintOrder="stroke" />
                       </Line>
-                    </LineChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </div>

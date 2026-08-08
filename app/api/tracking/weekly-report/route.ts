@@ -36,7 +36,13 @@ function parseSnapshot(value: unknown): WeeklyReportSnapshot | null {
   if (!report || !Number.isInteger(report.days) || !finite(report.days, 1, 366) || !Number.isFinite(new Date(report.generatedAt).getTime())) return null
   if (!report.delivery || !finite(report.delivery.batches) || !finite(report.delivery.adsCreated) || !finite(report.delivery.successRate, 0, 100)) return null
   if (!report.previous || !report.creative || !Array.isArray(report.failureReasons) || report.failureReasons.length > 20) return null
-  if (report.e2e !== null && report.e2e !== undefined && (!finite(report.e2e.totalAds) || !finite(report.e2e.appAds, 0, report.e2e.totalAds) || (report.e2e.e2eRate !== null && !finite(report.e2e.e2eRate, 0, 100)))) return null
+  if (report.e2e !== null && report.e2e !== undefined) {
+    if (!finite(report.e2e.totalAds) || !finite(report.e2e.appAds, 0, report.e2e.totalAds) || (report.e2e.e2eRate !== null && !finite(report.e2e.e2eRate, 0, 100))) return null
+    if (report.e2e.timeSeries !== undefined) {
+      if (!Array.isArray(report.e2e.timeSeries) || report.e2e.timeSeries.length > 366) return null
+      if (report.e2e.timeSeries.some(point => typeof point.bucket !== "string" || point.bucket.length > 16 || !finite(point.totalAds) || !finite(point.appAds, 0, point.totalAds) || !finite(point.e2eRate, 0, 100))) return null
+    }
+  }
   if (!Array.isArray(snapshot.team) || snapshot.team.length > 100) return null
   if (snapshot.team.some(row => typeof row.name !== "string" || row.name.length > 120 || !finite(row.adsCreated) || !finite(row.actions) || !finite(row.activeDays, 0, report.days) || !finite(row.breadth, 0, 100))) return null
   if (report.activityAvailable && (!report.activity || !finite(report.activity.total) || !finite(report.activity.activeMembers, 0, 1000) || !finite(report.activity.activeDays, 0, report.days))) return null

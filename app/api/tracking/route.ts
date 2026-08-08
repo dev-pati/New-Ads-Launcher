@@ -225,7 +225,7 @@ export async function GET(request: NextRequest) {
       admin.team = admin.team.map(member => ({ ...member, avatarUrl: avatarById.get(member.userId) || null }))
     }
     baseResponse.admin = admin
-    baseResponse.adminTimeSeries = summarizeLaunchBatchesTimeSeries(batches, days)
+    baseResponse.adminTimeSeries = summarizeLaunchBatchesTimeSeries(batches, days, { since, until })
     baseResponse.teamStreaks = Object.fromEntries(
       admin.team.map(member => [
         member.userId,

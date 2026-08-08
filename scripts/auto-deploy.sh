@@ -5,9 +5,10 @@
 #   Hoặc chạy tự động qua LaunchAgent (xem scripts/com.adlauncher.autostart.plist)
 
 set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # Sửa path này cho đúng nơi clone repo trên Mac mini
-APP_DIR="${APP_DIR:-$HOME/Developer/AdLauncher/New-Ads-Launcher}"
+APP_DIR="${APP_DIR:-$HOME/Developer/AdLauncher}"
 BRANCH="${BRANCH:-main}"
 LOG_FILE="${LOG_FILE:-/tmp/adlauncher-deploy.log}"
 

@@ -46,7 +46,7 @@ export type ReportInput = {
     deltaAutomationRuns: number | null
   }
   creative: { ready: number; launched: number; unlaunched: number; launchRate: number }
-  e2e?: { e2eRate: number | null; totalAds: number; appAds: number } | null
+  e2e?: { e2eRate: number | null; totalAds: number; appAds: number; timeSeries?: Array<{ bucket: string; totalAds: number; appAds: number; e2eRate: number }> } | null
   failureReasons: Array<{ label: string; count: number }>
   activity: ReportActivity | null
   activityAvailable: boolean

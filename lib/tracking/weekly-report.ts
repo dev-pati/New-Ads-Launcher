@@ -57,6 +57,32 @@ function riskSentence(report: ReportInput): string {
   return risks.length ? risks.join("; ") : "No measured delivery risk in this period."
 }
 
+function bucketLabel(bucket: string): string {
+  const [year, month, day] = bucket.split("-")
+  return year && month && day ? `${day}/${month}` : bucket
+}
+
+function e2eBarChart(report: ReportInput): string {
+  const points = report.e2e?.timeSeries || []
+  if (points.length === 0) return ""
+  return `
+    <div style="margin:16px 0 0;padding:16px 0 0;border-top:1px solid rgba(16,185,129,.25)">
+      <div style="margin:0 0 10px;font-size:13px;font-weight:bold;color:rgb(31,35,41)">E2E launch rate by day</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px">
+        ${points.map(point => `
+        <tr>
+          <td width="48" style="padding:4px 8px 4px 0;color:rgb(100,106,115)">${escapeHtml(bucketLabel(point.bucket))}</td>
+          <td style="padding:4px 0">
+            <div style="height:12px;background:rgb(232,245,240);border-radius:999px;overflow:hidden">
+              <div style="height:12px;width:${Math.max(0, Math.min(100, point.e2eRate))}%;background:rgb(16,185,129);border-radius:999px"></div>
+            </div>
+          </td>
+          <td width="90" style="padding:4px 0 4px 10px;text-align:right;color:rgb(60,66,75);font-variant-numeric:tabular-nums">${point.e2eRate}% · ${point.appAds}/${point.totalAds}</td>
+        </tr>`).join("")}
+      </table>
+    </div>`
+}
+
 export function buildWeeklyReportEmail({ report, team }: WeeklyReportSnapshot): { subject: string; html: string; text: string } {
   const date = new Date(report.generatedAt)
   const subject = `[INFORM - Tech/Raymond] AdLauncher Weekly Report (${formatDate(date)})`
@@ -92,6 +118,7 @@ export function buildWeeklyReportEmail({ report, team }: WeeklyReportSnapshot): 
           <b style="font-size:44px;line-height:1;color:rgb(20,86,240)">${report.e2e.e2eRate}%</b>
           <span style="font-size:14px;color:rgb(60,66,75)">of ads on Meta this period were launched via AdLauncher (${report.e2e.appAds}/${report.e2e.totalAds} ads tagged [app], measured)</span>
         </div>
+        ${e2eBarChart(report)}
       </div>` : `
       <div style="padding:16px 18px;margin:0 0 20px;background:rgb(242,243,245);border-radius:8px">
         <span style="font-size:13px;color:rgb(100,106,115)">E2E launch rate unavailable this period (no Meta connection or no ads on connected accounts).</span>

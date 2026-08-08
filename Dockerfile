@@ -8,6 +8,8 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG CUSTOM_AUTH_SECRET
+ENV CUSTOM_AUTH_SECRET=$CUSTOM_AUTH_SECRET
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NODE_OPTIONS="--max-old-space-size=4096"

@@ -3,6 +3,7 @@ import { getAuthContext, getFacebookConnection } from "@/lib/auth"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { GRAPH_API_BASE } from "@/lib/facebook"
 import { secureMetaFetch } from "@/lib/meta-secure-fetch"
+import { toVietnamDateKey, isoWeekMonday } from "@/lib/tracking/summary"
 
 export const dynamic = "force-dynamic"
 
@@ -44,6 +45,24 @@ export async function GET(request: NextRequest) {
 
     let totalAds = 0
     let appAds = 0
+
+    const days = sinceDate && untilDate
+      ? Math.round((untilDate.getTime() - sinceDate.getTime()) / 86_400_000) + 1
+      : 7
+    const weekly = days >= 90
+    const buckets = new Map<string, { totalAds: number; appAds: number }>()
+    const bucketKey = (value: Date | string) => (weekly ? isoWeekMonday(value) : toVietnamDateKey(value))
+
+    if (sinceDate && untilDate) {
+      const current = new Date(sinceDate)
+      while (current <= untilDate) {
+        const key = bucketKey(current)
+        if (!buckets.has(key)) {
+          buckets.set(key, { totalAds: 0, appAds: 0 })
+        }
+        current.setUTCDate(current.getUTCDate() + 1)
+      }
+    }
 
     // Fetch ads from all connected ad accounts in parallel (with safe limits)
     await Promise.all(
@@ -88,8 +107,22 @@ export async function GET(request: NextRequest) {
               totalAds += 1
 
               const nameLower = (ad.name || "").toLowerCase()
-              if (nameLower.includes("[app]")) {
+              const isApp = nameLower.includes("[app]")
+              if (isApp) {
                 appAds += 1
+              }
+
+              if (ad.created_time) {
+                const key = bucketKey(ad.created_time)
+                let point = buckets.get(key)
+                if (!point) {
+                  point = { totalAds: 0, appAds: 0 }
+                  buckets.set(key, point)
+                }
+                point.totalAds += 1
+                if (isApp) {
+                  point.appAds += 1
+                }
               }
             }
 
@@ -109,10 +142,20 @@ export async function GET(request: NextRequest) {
 
     const e2eRate = totalAds > 0 ? Math.round((appAds / totalAds) * 100) : 0
 
+    const timeSeries = [...buckets.entries()]
+      .map(([bucket, val]) => ({
+        bucket,
+        totalAds: val.totalAds,
+        appAds: val.appAds,
+        e2eRate: val.totalAds > 0 ? Math.round((val.appAds / val.totalAds) * 100) : 100,
+      }))
+      .sort((a, b) => a.bucket.localeCompare(b.bucket))
+
     return NextResponse.json({
       e2eRate,
       totalAds,
       appAds,
+      timeSeries,
     })
   } catch (err) {
     console.error("[e2e-rate] Top-level handler crash:", err)
