@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { getAdAccounts } from "@/lib/facebook"
+import { getAdAccounts, getLongLivedToken } from "@/lib/facebook"
 import { annotateAdAccounts, persistAdAccountMetrics } from "@/lib/sync-ad-accounts"
 import { fetchViaProfile, tokenStatusFromError } from "@/lib/via-connections"
 
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   // chúng chỉ được health-check bên dưới.
   const { data: connections, error: connError } = await db
     .from("facebook_connections")
-    .select("org_id, access_token")
+    .select("id, org_id, access_token, token_expires_at")
     .eq("is_active", true)
     .eq("connection_type", "oauth")
 
@@ -37,6 +37,29 @@ export async function GET(request: NextRequest) {
 
   for (const conn of connections || []) {
     try {
+      // Auto-refresh Meta long-lived user token before 10-day expiry threshold.
+      // Exchange is only possible while the token is still valid.
+      const expiresAt = conn.token_expires_at ? new Date(conn.token_expires_at).getTime() : 0
+      const needsRefresh = expiresAt && (expiresAt - Date.now() < 10 * 24 * 60 * 60 * 1000)
+
+      if (needsRefresh) {
+        try {
+          const refreshed = await getLongLivedToken(conn.access_token)
+          conn.access_token = refreshed.access_token
+          const nextExpiry = refreshed.expires_in
+            ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
+            : new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString()
+
+          await db
+            .from("facebook_connections")
+            .update({ access_token: refreshed.access_token, token_expires_at: nextExpiry })
+            .eq("id", conn.id)
+          console.log(`[cron/sync-ad-accounts] refreshed Meta OAuth token for org=${conn.org_id}`)
+        } catch (err) {
+          console.warn(`[cron/sync-ad-accounts] refresh failed org=${conn.org_id}:`, err instanceof Error ? err.message : err)
+        }
+      }
+
       // Use the first org member as the user_id for snapshot attribution
       const { data: member } = await db
         .from("org_members")

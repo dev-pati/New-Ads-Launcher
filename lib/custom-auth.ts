@@ -124,7 +124,7 @@ export async function verifyPassword(email: string, password: string): Promise<A
     .single()
 
   if (error) {
-    console.error("[custom-auth] password account lookup failed:", error)
+    console.error("[custom-auth] password account lookup failed:", JSON.stringify(error))
     return null
   }
   if (!account?.encrypted_password) return null
@@ -186,7 +186,7 @@ export async function generateAndSendOtp(email: string): Promise<{
   const error = accountResult.error
 
   if (error) {
-    console.error("[custom-auth] OTP account lookup failed:", error)
+    console.error("[custom-auth] OTP account lookup failed:", JSON.stringify(error))
     return { ok: false, error: "Database error", status: 500 }
   }
   if (!account) {
@@ -197,7 +197,7 @@ export async function generateAndSendOtp(email: string): Promise<{
       .ilike("email", normEmail)
       .maybeSingle()
     if (provisionError) {
-      console.error("[custom-auth] provisioned account lookup failed:", provisionError)
+      console.error("[custom-auth] provisioned account lookup failed:", JSON.stringify(provisionError))
       return { ok: false, error: "Database error", status: 500 }
     }
     if (!provisioned) {

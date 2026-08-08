@@ -2604,6 +2604,8 @@ export async function duplicateNode(
     name?: string
     deep_copy?: boolean
     status_option?: "ACTIVE" | "PAUSED" | "INHERITED"
+    /** Ad-level only: copy into a different ad set (Existing/New destination). Meta rejects this param on Campaign/AdSet nodes. */
+    adset_id?: string
   },
   opts?: { isManual?: boolean }
 ): Promise<{ id: string }> {
@@ -2611,6 +2613,7 @@ export async function duplicateNode(
   if (params.name) body.set("rename_strategy", JSON.stringify({ strategy: "NEW_NAME", new_name: params.name }))
   if (params.deep_copy !== undefined) body.set("deep_copy", String(params.deep_copy))
   if (params.status_option) body.set("status_option", params.status_option)
+  if (params.adset_id) body.set("adset_id", params.adset_id)
 
   const res = await secureMetaFetch(`${GRAPH_API_BASE}/${nodeId}/copies`, { method: "POST", body }, { skipProof: opts?.isManual })
   if (!res.ok) {

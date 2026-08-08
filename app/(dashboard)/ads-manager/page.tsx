@@ -1188,6 +1188,7 @@ function AdsManagerContent() {
   const [inlineEditingId, setInlineEditingId] = useState<string | null>(null)
   const [inlineEditingName, setInlineEditingName] = useState("")
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  const [duplicateStep, setDuplicateStep] = useState<1 | 2>(1)
   const [duplicateCount, setDuplicateCount] = useState(1)
   const [isDuplicating, setIsDuplicating] = useState(false)
   const [duplicateName, setDuplicateName] = useState("")
@@ -1270,10 +1271,14 @@ function AdsManagerContent() {
   const router = useRouter()
   const level: Level = tab === "campaigns" ? "campaign" : tab === "adsets" ? "adset" : "ad"
   useEffect(() => {
+    setDuplicateStep(1)
     setDuplicateDestination("original")
     setDuplicateTargetId("")
     setDuplicateName("")
     setDuplicateNewName("")
+    setDuplicateStatusActive(false)
+    setDuplicateRec1(false)
+    setDuplicateRec2(false)
   }, [tab])
   const usesCustomRange = (datePreset === "custom" || datePreset === "maximum") && customDateRange
   const drawerSince = usesCustomRange ? formatMetaDate(customDateRange.start) : ""
@@ -1873,7 +1878,7 @@ function AdsManagerContent() {
             const d = await postJson(`/api/facebook/campaigns/${encodeURIComponent(id)}/duplicate`, {
               customName: copiedName(campaign),
               count: copyCount,
-              launchAsActive: false,
+              launchAsActive: duplicateStatusActive,
               adAccountId: selectedAccountId,
               mode: "ALL",
             })
@@ -1888,10 +1893,10 @@ function AdsManagerContent() {
                 id,
                 customName: copiedName(adSet),
                 copies: copyCount,
-                statusActive: false,
+                statusActive: duplicateStatusActive,
                 deepCopy: true,
                 selectedAdIds: null,
-                duplicatedAdsStatus: "PAUSED",
+                duplicatedAdsStatus: duplicateStatusActive ? "ACTIVE" : "PAUSED",
               }],
             })
             created = d.campaigns?.flatMap((campaign: { adSets?: AdSet[] }) => campaign.adSets || [])?.[0] || null
@@ -1905,10 +1910,10 @@ function AdsManagerContent() {
                 id: ad.adset_id,
                 customName: duplicateNewName.trim() || `${sourceAdSet?.name || ad.name} - Copy`,
                 copies: copyCount,
-                statusActive: false,
+                statusActive: duplicateStatusActive,
                 deepCopy: true,
                 selectedAdIds: [id],
-                duplicatedAdsStatus: "PAUSED",
+                duplicatedAdsStatus: duplicateStatusActive ? "ACTIVE" : "PAUSED",
               }],
             })
             const copiedAdId = d.campaigns
@@ -1921,7 +1926,7 @@ function AdsManagerContent() {
               id,
               name: copiedName(ad),
               deep_copy: false,
-              status_option: "PAUSED",
+              status_option: duplicateStatusActive ? "ACTIVE" : "PAUSED",
               copies: copyCount,
               adAccountId: selectedAccountId,
               target_adset_id: duplicateDestination === "existing" ? duplicateTargetId : undefined,
@@ -1941,8 +1946,12 @@ function AdsManagerContent() {
       clientCache.current.clear()
       markNextReadFresh()
       await fetchMainData(true)
-      setSelectedIds(new Set())
-      if (singleSource && firstCreated) openWorkspaceEditor(firstCreated)
+      if (firstCreated) {
+        setSelectedIds(new Set([firstCreated.id]))
+        openWorkspaceEditor(firstCreated)
+      } else {
+        setSelectedIds(new Set())
+      }
     } finally {
       setIsDuplicating(false)
     }
@@ -4437,127 +4446,320 @@ function AdsManagerContent() {
         </div>
       </div>
 
-      {/* ── Duplicate Dialog ── */}
-      <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
-        <DialogContent className="sm:max-w-[560px]">
-          <DialogHeader>
-            <DialogTitle>Duplicate {tab === "campaigns" ? "Campaign" : tab === "adsets" ? "Ad Set" : "Ad"}</DialogTitle>
-            <DialogDescription>
-              Creates real Meta copies as PAUSED objects. {selectedIds.size} selected.
-            </DialogDescription>
+      {/* Duplicate Dialog */}
+      <Dialog
+        open={duplicateDialogOpen}
+        onOpenChange={open => {
+          setDuplicateDialogOpen(open)
+          if (open) setDuplicateStep(1)
+        }}
+      >
+        <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[640px]">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
+                <IconSparkles className="size-5" strokeWidth={1.8} />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <DialogTitle className="text-xl font-semibold tracking-tight text-foreground">
+                  Duplicate {tab === "campaigns" ? "Campaign" : tab === "adsets" ? "Ad Set" : "Ad"}
+                </DialogTitle>
+                <DialogDescription className="text-sm text-muted-foreground">
+                  {selectedIds.size} selected. {duplicateStep === 1 ? "Choose recommendations to apply." : "Select destination and copies options."}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            {tab !== "campaigns" && (
-              <div className="space-y-2">
-                <Label>Destination</Label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["original", "existing", "new"] as const).map(option => (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => setDuplicateDestination(option)}
-                      className={cn(
-                        "rounded-lg border px-3 py-2 text-xs font-semibold capitalize transition",
-                        duplicateDestination === option
-                          ? "border-[#1877f2] bg-[#e7f3ff] text-[#1877f2] dark:bg-blue-950/40"
-                          : "border-border bg-background hover:bg-muted"
-                      )}
-                    >
-                      {option} {option === "existing" ? (tab === "adsets" ? "campaign" : "ad set") : option === "new" ? (tab === "adsets" ? "campaign" : "ad set") : ""}
-                    </button>
-                  ))}
+
+          <div className="max-h-[72vh] space-y-5 overflow-y-auto px-6 py-5">
+            {duplicateStep === 1 ? (
+              <section className="rounded-xl border border-[#dbe7f2] bg-[#f7fbff] p-4 dark:border-blue-900/60 dark:bg-blue-950/20">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    className="mt-1 size-4 rounded border-gray-300 accent-[#1877f2]"
+                    checked={tab === "ads" ? duplicateRec1 : (duplicateRec1 && duplicateRec2)}
+                    onChange={e => {
+                      setDuplicateRec1(e.target.checked)
+                      if (tab !== "ads") {
+                        setDuplicateRec2(e.target.checked)
+                      }
+                    }}
+                  />
+                  <span className="space-y-1">
+                    <span className="block text-sm font-semibold text-foreground">Apply recommendations</span>
+                    <span className="block text-xs leading-5 text-muted-foreground">Suggested improvements are visual only and are not sent to Meta.</span>
+                  </span>
+                </label>
+
+                <div className="mt-4 space-y-3 border-t border-[#dbe7f2] pt-4 dark:border-blue-900/60">
+                  <label className="ml-7 flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-4 rounded border-gray-300 accent-[#1877f2]"
+                      checked={duplicateRec1}
+                      onChange={e => setDuplicateRec1(e.target.checked)}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+                        Advantage+ creative
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <IconInfoCircle className="size-4 text-muted-foreground" strokeWidth={1.8} />
+                          </TooltipTrigger>
+                          <TooltipContent>Review Meta creative suggestions after duplicate.</TooltipContent>
+                        </Tooltip>
+                      </span>
+                      <span className="block text-xs leading-5 text-muted-foreground">Meta may recommend enhancements for each copy.</span>
+                    </span>
+                  </label>
+
+                  {tab !== "ads" && (
+                    <label className="ml-7 flex cursor-pointer items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 size-4 rounded border-gray-300 accent-[#1877f2]"
+                        checked={duplicateRec2}
+                        onChange={e => setDuplicateRec2(e.target.checked)}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
+                          Add an image
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                            <IconCircleCheck className="size-3" strokeWidth={2} />
+                            Increase conversions
+                          </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <IconInfoCircle className="size-4 text-muted-foreground" strokeWidth={1.8} />
+                            </TooltipTrigger>
+                            <TooltipContent>Use only as a reminder inside the duplicate flow.</TooltipContent>
+                          </Tooltip>
+                        </span>
+                        <span className="block text-xs leading-5 text-muted-foreground">Add more creative variety before publishing copies.</span>
+                      </span>
+                    </label>
+                  )}
                 </div>
-              </div>
+              </section>
+            ) : (
+              <>
+                {tab !== "campaigns" ? (
+                  <section className="space-y-3">
+                    <div>
+                      <Label className="text-sm font-semibold text-foreground">Destination</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">Choose where the duplicated {tab === "adsets" ? "ad set" : "ad"} will be created.</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      {(["original", "existing", "new"] as const).map(option => {
+                        const destinationText = tab === "adsets" ? "campaign" : "ad set"
+                        const label = option === "original" ? `Original ${destinationText}` : option === "existing" ? `Existing ${destinationText}` : `New ${destinationText}`
+                        const description = option === "original"
+                          ? `Create copies in the same ${destinationText}.`
+                          : option === "existing"
+                            ? `Choose another ${destinationText} from this ad account.`
+                            : `Create a new ${destinationText} first, then place copies inside it.`
+
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() => setDuplicateDestination(option)}
+                            className={cn(
+                              "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition",
+                              duplicateDestination === option
+                                ? "border-[#1877f2] bg-[#e7f3ff] shadow-[0_0_0_1px_#1877f2] dark:bg-blue-950/30"
+                                : "border-border bg-background hover:bg-muted/50"
+                            )}
+                          >
+                            <span className={cn(
+                              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+                              duplicateDestination === option ? "border-[#1877f2]" : "border-muted-foreground/40"
+                            )}>
+                              {duplicateDestination === option && <span className="size-2 rounded-full bg-[#1877f2]" />}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-foreground">{label}</span>
+                              <span className="block text-xs leading-5 text-muted-foreground">{description}</span>
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </section>
+                ) : (
+                  <section className="rounded-xl border bg-muted/30 p-4">
+                    <div className="text-sm font-semibold text-foreground">New campaign</div>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">Campaign duplicates always create a new campaign with all ad sets and ads copied.</p>
+                  </section>
+                )}
+
+                {tab === "adsets" && duplicateDestination === "existing" && (
+                  <section className="space-y-2">
+                    <Label htmlFor="duplicate-target-campaign" className="text-sm font-semibold">Search campaign</Label>
+                    <div className="relative">
+                      <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" strokeWidth={1.8} />
+                      <select
+                        id="duplicate-target-campaign"
+                        value={duplicateTargetId}
+                        onChange={e => setDuplicateTargetId(e.target.value)}
+                        className="h-10 w-full appearance-none rounded-lg border border-input bg-background pl-9 pr-3 text-sm"
+                      >
+                        <option value="">Select campaign</option>
+                        {campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
+                      </select>
+                    </div>
+                  </section>
+                )}
+
+                {tab === "ads" && duplicateDestination === "existing" && (
+                  <section className="space-y-2">
+                    <Label htmlFor="duplicate-target-adset" className="text-sm font-semibold">Search ad set</Label>
+                    <div className="relative">
+                      <IconSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" strokeWidth={1.8} />
+                      <select
+                        id="duplicate-target-adset"
+                        value={duplicateTargetId}
+                        onChange={e => setDuplicateTargetId(e.target.value)}
+                        className="h-10 w-full appearance-none rounded-lg border border-input bg-background pl-9 pr-3 text-sm"
+                      >
+                        <option value="">Select ad set</option>
+                        {adSets.map(adSet => <option key={adSet.id} value={adSet.id}>{adSet.name}</option>)}
+                      </select>
+                    </div>
+                  </section>
+                )}
+
+                {tab !== "campaigns" && duplicateDestination === "new" && (
+                  <section className="space-y-3 rounded-xl border p-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="duplicate-new-name" className="text-sm font-semibold">New {tab === "adsets" ? "campaign" : "ad set"} name</Label>
+                      <Input
+                        id="duplicate-new-name"
+                        value={duplicateNewName}
+                        onChange={e => setDuplicateNewName(e.target.value)}
+                        placeholder={tab === "adsets" ? "Enter campaign name" : "Enter ad set name"}
+                        className="h-10 rounded-lg"
+                      />
+                    </div>
+                    <div className="grid gap-2 rounded-lg bg-muted/40 p-3 text-xs sm:grid-cols-2">
+                      <div>
+                        <div className="font-medium text-muted-foreground">Buying type</div>
+                        <div className="mt-1 font-semibold text-foreground">Auction</div>
+                      </div>
+                      <div>
+                        <div className="font-medium text-muted-foreground">Objective</div>
+                        <div className="mt-1 font-semibold text-foreground">Inherited from source</div>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                {selectedIds.size === 1 && (
+                  <section className="space-y-2">
+                    <Label htmlFor="duplicate-name" className="text-sm font-semibold">Name</Label>
+                    <Input
+                      id="duplicate-name"
+                      value={duplicateName}
+                      onChange={e => setDuplicateName(e.target.value)}
+                      placeholder="Leave blank to append - Copy"
+                      className="h-10 rounded-lg"
+                    />
+                  </section>
+                )}
+
+                <section className="flex items-center justify-between gap-4 rounded-xl border p-4">
+                  <div>
+                    <Label htmlFor="duplicate-count" className="text-sm font-semibold">Number of copies</Label>
+                    <p className="mt-1 text-xs text-muted-foreground">Up to 20 copies per selected item.</p>
+                  </div>
+                  <div className="flex items-center overflow-hidden rounded-lg border">
+                    <button
+                      type="button"
+                      className="flex size-9 items-center justify-center text-lg font-semibold hover:bg-muted disabled:opacity-40"
+                      disabled={duplicateCount <= 1}
+                      onClick={() => setDuplicateCount(Math.max(1, duplicateCount - 1))}
+                    >
+                      -
+                    </button>
+                    <Input
+                      id="duplicate-count"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={duplicateCount}
+                      onChange={e => setDuplicateCount(Math.min(Math.max(parseInt(e.target.value) || 1, 1), 20))}
+                      className="h-9 w-14 rounded-none border-0 text-center shadow-none focus-visible:ring-0"
+                    />
+                    <button
+                      type="button"
+                      className="flex size-9 items-center justify-center text-lg font-semibold hover:bg-muted disabled:opacity-40"
+                      disabled={duplicateCount >= 20}
+                      onClick={() => setDuplicateCount(Math.min(20, duplicateCount + 1))}
+                    >
+                      +
+                    </button>
+                  </div>
+                </section>
+
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border p-4">
+                  <input
+                    type="checkbox"
+                    className="mt-1 size-4 rounded border-gray-300 accent-[#1877f2]"
+                    checked={duplicateStatusActive}
+                    onChange={e => setDuplicateStatusActive(e.target.checked)}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                      Turn on copies
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <IconInfoCircle className="size-4 text-muted-foreground" strokeWidth={1.8} />
+                        </TooltipTrigger>
+                        <TooltipContent>Unchecked keeps every Meta object paused.</TooltipContent>
+                      </Tooltip>
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">If selected, copied objects are created active in Meta.</span>
+                  </span>
+                </label>
+              </>
             )}
-
-            {tab === "adsets" && duplicateDestination === "existing" && (
-              <div className="space-y-2">
-                <Label htmlFor="duplicate-target-campaign">Existing campaign</Label>
-                <select
-                  id="duplicate-target-campaign"
-                  value={duplicateTargetId}
-                  onChange={e => setDuplicateTargetId(e.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">Select campaign</option>
-                  {campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
-                </select>
-              </div>
-            )}
-
-            {tab === "ads" && duplicateDestination === "existing" && (
-              <div className="space-y-2">
-                <Label htmlFor="duplicate-target-adset">Existing ad set</Label>
-                <select
-                  id="duplicate-target-adset"
-                  value={duplicateTargetId}
-                  onChange={e => setDuplicateTargetId(e.target.value)}
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="">Select ad set</option>
-                  {adSets.map(adSet => <option key={adSet.id} value={adSet.id}>{adSet.name}</option>)}
-                </select>
-              </div>
-            )}
-
-            {tab !== "campaigns" && duplicateDestination === "new" && (
-              <div className="space-y-2">
-                <Label htmlFor="duplicate-new-name">New {tab === "adsets" ? "campaign" : "ad set"} name</Label>
-                <Input
-                  id="duplicate-new-name"
-                  value={duplicateNewName}
-                  onChange={e => setDuplicateNewName(e.target.value)}
-                  placeholder={tab === "adsets" ? "New campaign name" : "New ad set name"}
-                />
-              </div>
-            )}
-
-            {selectedIds.size === 1 && (
-              <div className="space-y-2">
-                <Label htmlFor="duplicate-name">Copy name</Label>
-                <Input
-                  id="duplicate-name"
-                  value={duplicateName}
-                  onChange={e => setDuplicateName(e.target.value)}
-                  placeholder="Leave blank to append - Copy"
-                />
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="duplicate-count">Number of copies</Label>
-              <Input
-                id="duplicate-count"
-                type="number"
-                min={1}
-                max={20}
-                value={duplicateCount}
-                onChange={e => setDuplicateCount(Math.min(Math.max(parseInt(e.target.value) || 1, 1), 20))}
-              />
-            </div>
-
-            <div className="space-y-2 rounded-lg border p-3">
-              <div className="text-xs font-semibold text-muted-foreground">Recommendations</div>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={duplicateRec1} onChange={e => setDuplicateRec1(e.target.checked)} />
-                Advantage+ creative recommendations
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={duplicateRec2} onChange={e => setDuplicateRec2(e.target.checked)} />
-                Add an image recommendation
-              </label>
-              <p className="text-xs text-muted-foreground">Visual only. Not sent to Meta.</p>
-            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)} disabled={isDuplicating}>Cancel</Button>
-            <Button
-              onClick={handleDuplicate}
-              disabled={isDuplicating || (duplicateDestination === "existing" && !duplicateTargetId)}
-            >
-              {isDuplicating && <IconLoader2 className="mr-2 size-4 animate-spin" />}
-              Duplicate
-            </Button>
+
+          <DialogFooter className="border-t bg-muted/20 px-6 py-4">
+            {duplicateStep === 1 ? (
+              <>
+                <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)} disabled={isDuplicating}>Cancel</Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setDuplicateStep(2)}
+                  disabled={isDuplicating}
+                >
+                  Choose destination
+                </Button>
+                <Button
+                  onClick={handleDuplicate}
+                  disabled={isDuplicating || (!duplicateRec1 && (tab === "ads" ? true : !duplicateRec2))}
+                  className="bg-[#1877f2] text-white hover:bg-[#166fe5]"
+                >
+                  {isDuplicating && <IconLoader2 className="mr-2 size-4 animate-spin" />}
+                  Apply and duplicate
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="outline" onClick={() => setDuplicateStep(1)} disabled={isDuplicating}>Back</Button>
+                <Button
+                  onClick={handleDuplicate}
+                  disabled={isDuplicating || (tab !== "campaigns" && duplicateDestination === "existing" && !duplicateTargetId) || (tab !== "campaigns" && duplicateDestination === "new" && !duplicateNewName.trim())}
+                  className="bg-[#1877f2] text-white hover:bg-[#166fe5]"
+                >
+                  {isDuplicating && <IconLoader2 className="mr-2 size-4 animate-spin" />}
+                  Duplicate
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
