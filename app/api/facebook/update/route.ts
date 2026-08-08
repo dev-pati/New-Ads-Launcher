@@ -5,6 +5,7 @@ import { assertMetaNodeUnchanged } from "@/lib/optimistic-update"
 import { emitAndLog } from "@/lib/notifications/emit"
 import { diffFields, formatMoneyMinor } from "@/lib/notifications/message"
 import type { FieldChange, NotificationType, ObjectType } from "@/lib/notifications/types"
+import { invalidateMetaReadCacheAfterWrite } from "../_db-cache"
 
 type Level = "campaign" | "adset" | "ad"
 
@@ -179,6 +180,8 @@ export async function POST(request: NextRequest) {
         source: "facebook.update",
       })
     }
+
+    if (adAccountId) await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds: [id] })
 
     return NextResponse.json({
       success: true,

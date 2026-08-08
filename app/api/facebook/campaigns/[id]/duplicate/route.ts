@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
+import { invalidateMetaReadCacheAfterWrite } from "../../../_db-cache"
 
 const GRAPH_API_BASE = "https://graph.facebook.com/v25.0"
 
 // POST /api/facebook/campaigns/[id]/duplicate
 // Body: { customName, count, dailyBudget, lifetimeBudget, bidStrategy, launchAsActive, adAccountId,
+//         mode: "ALL" | undefined,
 //         adSetConfigs: [{ id, customName, copies, statusActive, startTime, endTime, customAttribution, deepCopy }] }
+// mode: "ALL" — Ads Manager campaign-level duplicate: Meta deep_copy=true copies every child
+//   ad set + ad atomically. adSetConfigs is ignored. Meta does not return child object ids for
+//   a deep copy, so the response's adSets stays empty — the new campaign id is enough for the
+//   caller (Editor draft-highlight targets the campaign, not its children).
+// mode omitted — Launch's existing per-adSetConfig fine-grained copy (unchanged).
 // Returns: { campaigns: [{ id, name, adSets: [...] }] }
 export async function POST(
   request: NextRequest,
@@ -45,7 +52,7 @@ export async function POST(
       // Step 1: Create campaign copy via Meta /copies
       const copyParams = new URLSearchParams({
         access_token: connection.access_token,
-        deep_copy: "false", // we'll copy ad sets manually for fine control
+        deep_copy: body.mode === "ALL" ? "true" : "false", // "true" for Ads Manager atomic copy-ALL child adsets+ads
         status_option: status,
       })
       const copyRes = await fetch(`${GRAPH_API_BASE}/${id}/copies?${copyParams}`, { method: "POST" })
@@ -66,6 +73,9 @@ export async function POST(
           partialResults: results,
         }, { status: 500 })
       }
+
+      // The copy exists even if a later override or copy fails.
+      await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds: [newCampaignId] })
 
       // Apply campaign overrides (name + budget + bid strategy)
       // Wait briefly — Meta needs a moment after /copies before the new campaign is patchable
@@ -111,36 +121,38 @@ export async function POST(
         console.log(`[duplicate campaign] verify ${newCampaignId} (renamed=${renamed}):`, JSON.stringify(verifyData))
       } catch {}
 
-      // Step 2: Duplicate selected ad sets into new campaign
+      // Step 2: Duplicate selected ad sets into new campaign (skipped if mode === "ALL")
       const adSets: any[] = []
-      for (const cfg of adSetConfigs) {
-        const copies = Math.max(1, cfg.copies || 1)
-        for (let k = 0; k < copies; k++) {
-          const aSuffix = copies > 1 ? ` ${k + 1}` : ""
-          const adsetParams = new URLSearchParams({
-            access_token: connection.access_token,
-            campaign_id: newCampaignId,
-            deep_copy: cfg.deepCopy ? "true" : "false",
-            status_option: cfg.statusActive ? "ACTIVE" : "PAUSED",
-          })
-          const aRes = await fetch(`${GRAPH_API_BASE}/${cfg.id}/copies?${adsetParams}`, { method: "POST" })
-          const aData = await aRes.json()
-          if (aRes.ok && aData.copied_adset_id) {
-            const newAdSetId = aData.copied_adset_id
-            // Rename + apply schedule overrides
-            const aUpdates: Record<string, string> = {}
-            if (cfg.customName) aUpdates.name = cfg.customName + aSuffix
-            if (cfg.startTime) aUpdates.start_time = cfg.startTime
-            if (cfg.endTime) aUpdates.end_time = cfg.endTime
-            if (Object.keys(aUpdates).length > 0) {
-              try {
-                await fetch(`${GRAPH_API_BASE}/${newAdSetId}`, {
-                  method: "POST",
-                  body: new URLSearchParams({ ...aUpdates, access_token: connection.access_token }),
-                })
-              } catch {}
+      if (body.mode !== "ALL") {
+        for (const cfg of adSetConfigs) {
+          const copies = Math.max(1, cfg.copies || 1)
+          for (let k = 0; k < copies; k++) {
+            const aSuffix = copies > 1 ? ` ${k + 1}` : ""
+            const adsetParams = new URLSearchParams({
+              access_token: connection.access_token,
+              campaign_id: newCampaignId,
+              deep_copy: cfg.deepCopy ? "true" : "false",
+              status_option: cfg.statusActive ? "ACTIVE" : "PAUSED",
+            })
+            const aRes = await fetch(`${GRAPH_API_BASE}/${cfg.id}/copies?${adsetParams}`, { method: "POST" })
+            const aData = await aRes.json()
+            if (aRes.ok && aData.copied_adset_id) {
+              const newAdSetId = aData.copied_adset_id
+              // Rename + apply schedule overrides
+              const aUpdates: Record<string, string> = {}
+              if (cfg.customName) aUpdates.name = cfg.customName + aSuffix
+              if (cfg.startTime) aUpdates.start_time = cfg.startTime
+              if (cfg.endTime) aUpdates.end_time = cfg.endTime
+              if (Object.keys(aUpdates).length > 0) {
+                try {
+                  await fetch(`${GRAPH_API_BASE}/${newAdSetId}`, {
+                    method: "POST",
+                    body: new URLSearchParams({ ...aUpdates, access_token: connection.access_token }),
+                  })
+                } catch {}
+              }
+              adSets.push({ id: newAdSetId, name: (cfg.customName || "Ad Set") + aSuffix })
             }
-            adSets.push({ id: newAdSetId, name: (cfg.customName || "Ad Set") + aSuffix })
           }
         }
       }

@@ -3,6 +3,7 @@ import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError } 
 import { getResourceAccountId } from "@/lib/facebook"
 import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 import { secureMetaFetch } from "@/lib/meta-secure-fetch"
+import { invalidateMetaReadCacheAfterWrite } from "../_db-cache"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -61,6 +62,13 @@ export async function POST(request: NextRequest) {
     }
 
     const failed = results.filter(r => !r.success)
+    if (results.some(result => result.success) && adAccountId) {
+      await invalidateMetaReadCacheAfterWrite({
+        orgId: ctx.orgId,
+        adAccountId,
+        objectIds: results.filter(result => result.success).map(result => result.id),
+      })
+    }
     return NextResponse.json({
       success: failed.length === 0,
       results,

@@ -123,7 +123,11 @@ export async function verifyPassword(email: string, password: string): Promise<A
     .ilike("email", email.trim())
     .single()
 
-  if (error || !account?.encrypted_password) return null
+  if (error) {
+    console.error("[custom-auth] password account lookup failed:", error)
+    return null
+  }
+  if (!account?.encrypted_password) return null
   if (account.disabled_at) return null // SEC-011
 
   const ok = await bcrypt.compare(password, account.encrypted_password)
@@ -182,15 +186,20 @@ export async function generateAndSendOtp(email: string): Promise<{
   const error = accountResult.error
 
   if (error) {
+    console.error("[custom-auth] OTP account lookup failed:", error)
     return { ok: false, error: "Database error", status: 500 }
   }
   if (!account) {
     await provisionCompanyAccount(normEmail)
-    const { data: provisioned } = await db
+    const { data: provisioned, error: provisionError } = await db
       .from("accounts")
       .select("id, email, disabled_at")
       .ilike("email", normEmail)
       .maybeSingle()
+    if (provisionError) {
+      console.error("[custom-auth] provisioned account lookup failed:", provisionError)
+      return { ok: false, error: "Database error", status: 500 }
+    }
     if (!provisioned) {
       return { ok: false, error: "Email not registered", status: 404 }
     }

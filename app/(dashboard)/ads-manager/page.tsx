@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, Fragment, Suspense }
 import { useRouter, useSearchParams } from "next/navigation"
 import { AdAccountPill } from "@/components/shared/ad-account-pill"
 import { useAdAccount } from "@/lib/ad-account-context"
+import { LatestRequestGuard } from "@/lib/latest-request-guard"
 import { cn } from "@/lib/utils"
 import {
   IconPlus, IconCopy, IconPencil, IconRefresh,
@@ -12,16 +13,19 @@ import {
   IconArrowUp, IconArrowDown, IconHistory, IconTable, IconCheck,
   IconChevronRight as IconDrillRight,
   IconSpeakerphone, IconTarget, IconPhoto, IconExternalLink, IconClipboard, IconX,
-  IconAdjustments, IconDownload, IconChartBar,
+  IconAdjustments, IconDownload, IconChartBar, IconInfoCircle, IconSearch,
+  IconSparkles, IconCircleCheck,
 } from "@tabler/icons-react"
 import dynamic from "next/dynamic"
 import { type Level, type ReportRow } from "@/components/ads-manager/InsightDrawers"
+import { MiniStatusPopup, type PopupItem } from "@/components/ads-manager/MiniStatusPopup"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { AdsDateRangePicker, DATE_PICKER_PRESETS, getPresetRange } from "@/components/ads-manager/AdsDateRangePicker"
 import type { WorkspaceNode } from "@/components/ads-manager/UnifiedWorkspaceEditor"
 import type {
@@ -95,6 +99,7 @@ function downloadCsv(filename: string, rows: Record<string, string | number>[]) 
 
 type Tab = "campaigns" | "adsets" | "ads"
 type SortDir = "asc" | "desc"
+type DeleteResult = { id: string; success?: boolean; error?: string }
 
 const STANDARD_ATTR = [
   { key: "1d_click", label: "1-day click", desc: "Conversions counted after an action within 1 day of an ad click." },
@@ -1185,10 +1190,18 @@ function AdsManagerContent() {
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [duplicateCount, setDuplicateCount] = useState(1)
   const [isDuplicating, setIsDuplicating] = useState(false)
+  const [duplicateName, setDuplicateName] = useState("")
+  const [duplicateDestination, setDuplicateDestination] = useState<"original" | "existing" | "new">("original")
+  const [duplicateTargetId, setDuplicateTargetId] = useState("")
+  const [duplicateNewName, setDuplicateNewName] = useState("")
+  const [duplicateRec1, setDuplicateRec1] = useState(false)
+  const [duplicateRec2, setDuplicateRec2] = useState(false)
+  const [duplicateStatusActive, setDuplicateStatusActive] = useState(false)
   const [savingTemplateId, setSavingTemplateId] = useState<string | null>(null)
   const [actionToast, setActionToast] = useState<{ kind: "success" | "error"; message: string; href?: string } | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [miniStatusPopup, setMiniStatusPopup] = useState<{ title: string; total: number; items: PopupItem[] } | null>(null)
   /** "all" = everything selected, including rows a filter is hiding. Never auto-narrowed. */
   const [deleteScope, setDeleteScope] = useState<"all" | "visible">("all")
   const [deleteListExpanded, setDeleteListExpanded] = useState(false)
@@ -1256,6 +1269,12 @@ function AdsManagerContent() {
 
   const router = useRouter()
   const level: Level = tab === "campaigns" ? "campaign" : tab === "adsets" ? "adset" : "ad"
+  useEffect(() => {
+    setDuplicateDestination("original")
+    setDuplicateTargetId("")
+    setDuplicateName("")
+    setDuplicateNewName("")
+  }, [tab])
   const usesCustomRange = (datePreset === "custom" || datePreset === "maximum") && customDateRange
   const drawerSince = usesCustomRange ? formatMetaDate(customDateRange.start) : ""
   const drawerUntil = usesCustomRange ? formatMetaDate(customDateRange.end) : ""
@@ -1500,17 +1519,28 @@ function AdsManagerContent() {
     ads?: Ad[]
     paging?: { after?: string; hasNext: boolean }
   }>>(new Map())
+  const mainDataRequests = useRef(new LatestRequestGuard())
+  const pendingFreshAccounts = useRef(new Set<string>())
+  const markNextReadFresh = useCallback((adAccountId = selectedAccountId) => {
+    if (adAccountId) pendingFreshAccounts.current.add(adAccountId)
+  }, [selectedAccountId])
   const fetchMainData = useCallback(async (forceRefresh = false) => {
-    if (!selectedAccountId) return
+    if (!selectedAccountId) {
+      mainDataRequests.current.begin()
+      setLoading(false)
+      return
+    }
 
     const dateParam = buildDateParam()
     const after = pageCursorsRef.current[tab][page - 1]
     const paginationParam = `&limit=${PAGE_SIZE}${statusFilter === "ACTIVE" ? "&active_only=true" : ""}${after ? `&after=${encodeURIComponent(after)}` : ""}`
-    const refreshParam = `${forceRefresh ? "&refresh=true" : ""}${paginationParam}`
+    const requiresFreshRead = forceRefresh || pendingFreshAccounts.current.has(selectedAccountId)
+    const refreshParam = `${requiresFreshRead ? "&refresh=true" : ""}${paginationParam}`
     const cacheKey = `${selectedAccountId}:${dateParam}:${tab}:${statusFilter}:hierarchy:${hierarchyCacheKey}:page:${page}:after:${after || "first"}`
+    const request = mainDataRequests.current.begin()
 
     const appending = page > 1
-    const cached = (forceRefresh || appending) ? undefined : clientCache.current.get(cacheKey)
+    const cached = (requiresFreshRead || appending) ? undefined : clientCache.current.get(cacheKey)
     if (cached) {
       if (tab === "campaigns") {
         setCampaigns(cached.campaigns || [])
@@ -1521,6 +1551,7 @@ function AdsManagerContent() {
       }
       setPaging(cached.paging || { hasNext: false })
       setLoadedAccountId(selectedAccountId)
+      setLoading(false)
       return
     } else {
       setLoading(true)
@@ -1531,8 +1562,9 @@ function AdsManagerContent() {
 
     try {
       if (tab === "campaigns") {
-        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`)
+        const r = await fetch(`/api/facebook/campaigns?ad_account_id=${encodeURIComponent(selectedAccountId)}&${dateParam}${refreshParam}`, { signal: request.signal, cache: "no-store" })
         const d = await r.json()
+        if (!request.isCurrent()) return
         if (!r.ok) throw new Error(d.error || "Failed")
         setCampaigns(prev => page === 1 ? (d.campaigns || []) : mergeById(prev, d.campaigns || []))
         setPaging(d.paging || { hasNext: false })
@@ -1548,8 +1580,9 @@ function AdsManagerContent() {
           : hierarchyParentId
             ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}`
             : ""
-        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
+        const r = await fetch(`/api/facebook/adsets?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`, { signal: request.signal, cache: "no-store" })
         const d = await r.json()
+        if (!request.isCurrent()) return
         if (!r.ok) throw new Error(d.error || "Failed")
         setAdSets(prev => page === 1 ? (d.adSets || []) : mergeById(prev, d.adSets || []))
         setPaging(d.paging || { hasNext: false })
@@ -1573,8 +1606,9 @@ function AdsManagerContent() {
                 ? `&campaign_id=${encodeURIComponent(hierarchyParentId)}`
                 : ""
             : ""
-        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`)
+        const r = await fetch(`/api/facebook/ads?ad_account_id=${encodeURIComponent(selectedAccountId)}${parentParam}&${dateParam}${refreshParam}`, { signal: request.signal, cache: "no-store" })
         const d = await r.json()
+        if (!request.isCurrent()) return
         if (!r.ok) throw new Error(d.error || "Failed")
         setAds(prev => page === 1 ? (d.ads || []) : mergeById(prev, d.ads || []))
         setPaging(d.paging || { hasNext: false })
@@ -1585,15 +1619,18 @@ function AdsManagerContent() {
             : { ...previous, ads: [...previous.ads.slice(0, page), d.paging.after] })
         }
       }
+      if (!request.isCurrent()) return
+      if (requiresFreshRead) pendingFreshAccounts.current.delete(selectedAccountId)
       setLoadingProgress(100)
       setLoadedMs(Date.now() - t0)
       setLoadedAccountId(selectedAccountId)
       await new Promise<void>(resolve => window.setTimeout(resolve, 140))
     } catch (e: any) {
+      if (!request.isCurrent() || e?.name === "AbortError") return
       setError(e.message || "Failed to load")
       setLoadedAccountId(selectedAccountId)
     } finally {
-      setLoading(false)
+      if (request.isCurrent()) setLoading(false)
     }
   }, [selectedAccountId, tab, buildDateParam, datePreset, customDateRange, page, statusFilter, hierarchyParentId, hierarchyParentIds, hierarchyParentType, hierarchyCacheKey])
 
@@ -1743,10 +1780,11 @@ function AdsManagerContent() {
       const r = await fetch("/api/facebook/toggle-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, newStatus }),
+        body: JSON.stringify({ id, newStatus, adAccountId: selectedAccountId }),
       })
       if (!r.ok) return
       clientCache.current.clear()
+      markNextReadFresh()
       // Optimistic update
       if (tab === "campaigns") setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: newStatus, effective_status: newStatus } : c))
       else if (tab === "adsets") setAdSets(prev => prev.map(a => a.id === id ? { ...a, status: newStatus, effective_status: newStatus } : a))
@@ -1775,10 +1813,11 @@ function AdsManagerContent() {
       const r = await fetch("/api/facebook/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, name: inlineEditingName })
+        body: JSON.stringify({ id, name: inlineEditingName, adAccountId: selectedAccountId })
       })
       if (!r.ok) throw new Error("Failed to update name")
       clientCache.current.clear()
+      markNextReadFresh()
     } catch (err) {
       console.error(err)
       fetchMainData(true) // revert on fail
@@ -1787,31 +1826,123 @@ function AdsManagerContent() {
 
   // ─── Duplicate ────────────────────────────────────────────────────────────────
   const handleDuplicate = async () => {
-    if (selectedIds.size === 0) return
+    if (selectedIds.size === 0 || !selectedAccountId) return
+
+    const ids = Array.from(selectedIds)
+    const copyCount = Math.min(Math.max(duplicateCount || 1, 1), 20)
+    const sourceRows = tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads
+    const sourceById = new Map(sourceRows.map(row => [row.id, row]))
+    const pendingItems: PopupItem[] = ids.map(id => ({
+      id,
+      name: sourceById.get(id)?.name ?? id,
+      status: "pending",
+    }))
+    const singleSource = ids.length === 1 && copyCount === 1
+    let firstCreated: { id: string; name: string } | null = null
+
+    const updatePopupItem = (id: string, patch: Partial<PopupItem>) => {
+      setMiniStatusPopup(prev => prev ? {
+        ...prev,
+        items: prev.items.map(item => item.id === id ? { ...item, ...patch } : item),
+      } : prev)
+    }
+    const postJson = async (url: string, body: Record<string, unknown>) => {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(d.error || d.errors?.[0] || "Duplicate failed")
+      return d
+    }
+    const copiedName = (node: { name: string }) => ids.length === 1 && duplicateName.trim() ? duplicateName.trim() : `${node.name} - Copy`
+
+    setDuplicateDialogOpen(false)
+    setMiniStatusPopup({ title: "Duplicating…", total: ids.length, items: pendingItems })
     setIsDuplicating(true)
     try {
-      const ids = Array.from(selectedIds)
       for (const id of ids) {
-        let node: any = campaigns.find(x => x.id === id) || adSets.find(x => x.id === id) || ads.find(x => x.id === id)
-        await fetch("/api/facebook/duplicate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id,
-            adAccountId: selectedAccountId,
-            name: node ? `${node.name} - Copy` : undefined,
-            deep_copy: tab === "campaigns" || tab === "adsets",
-            status_option: "PAUSED",
-            copies: duplicateCount
-          })
-        })
+        try {
+          const node = sourceById.get(id)
+          if (!node) throw new Error("Selected item is no longer loaded")
+          let created: { id?: string; name?: string } | null = null
+
+          if (tab === "campaigns") {
+            const campaign = node as Campaign
+            const d = await postJson(`/api/facebook/campaigns/${encodeURIComponent(id)}/duplicate`, {
+              customName: copiedName(campaign),
+              count: copyCount,
+              launchAsActive: false,
+              adAccountId: selectedAccountId,
+              mode: "ALL",
+            })
+            created = d.campaigns?.[0] || null
+          } else if (tab === "adsets") {
+            const adSet = node as AdSet
+            const d = await postJson("/api/facebook/campaigns/duplicate-adsets", {
+              targetCampaignIds: duplicateDestination === "new" ? [] : [duplicateDestination === "existing" ? duplicateTargetId : adSet.campaign_id],
+              newCampaignName: duplicateDestination === "new" ? duplicateNewName.trim() || `${adSet.name} Campaign` : undefined,
+              adAccountId: selectedAccountId,
+              adSetConfigs: [{
+                id,
+                customName: copiedName(adSet),
+                copies: copyCount,
+                statusActive: false,
+                deepCopy: true,
+                selectedAdIds: null,
+                duplicatedAdsStatus: "PAUSED",
+              }],
+            })
+            created = d.campaigns?.flatMap((campaign: { adSets?: AdSet[] }) => campaign.adSets || [])?.[0] || null
+          } else if (duplicateDestination === "new") {
+            const ad = node as Ad
+            const sourceAdSet = adSets.find(item => item.id === ad.adset_id)
+            const d = await postJson("/api/facebook/campaigns/duplicate-adsets", {
+              targetCampaignIds: [ad.campaign_id],
+              adAccountId: selectedAccountId,
+              adSetConfigs: [{
+                id: ad.adset_id,
+                customName: duplicateNewName.trim() || `${sourceAdSet?.name || ad.name} - Copy`,
+                copies: copyCount,
+                statusActive: false,
+                deepCopy: true,
+                selectedAdIds: [id],
+                duplicatedAdsStatus: "PAUSED",
+              }],
+            })
+            const copiedAdId = d.campaigns
+              ?.flatMap((campaign: { adSets?: Array<{ copiedAdIds?: string[] }> }) => campaign.adSets || [])
+              .flatMap((adSet: { copiedAdIds?: string[] }) => adSet.copiedAdIds || [])?.[0]
+            created = copiedAdId ? { id: copiedAdId, name: copiedName(ad) } : null
+          } else {
+            const ad = node as Ad
+            const d = await postJson("/api/facebook/duplicate", {
+              id,
+              name: copiedName(ad),
+              deep_copy: false,
+              status_option: "PAUSED",
+              copies: copyCount,
+              adAccountId: selectedAccountId,
+              target_adset_id: duplicateDestination === "existing" ? duplicateTargetId : undefined,
+            })
+            created = d.ids?.[0] ? { id: d.ids[0], name: copiedName(ad) } : null
+          }
+
+          if (!created?.id) throw new Error("Meta returned no copied object ID")
+          if (!firstCreated) firstCreated = { id: created.id, name: created.name || copiedName(node) }
+          updatePopupItem(id, { status: "success" })
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Duplicate failed"
+          updatePopupItem(id, { status: "failed", error: message })
+        }
       }
-      setDuplicateDialogOpen(false)
-      setSelectedIds(new Set())
+
       clientCache.current.clear()
+      markNextReadFresh()
       await fetchMainData(true)
-    } catch (err) {
-      console.error(err)
+      setSelectedIds(new Set())
+      if (singleSource && firstCreated) openWorkspaceEditor(firstCreated)
     } finally {
       setIsDuplicating(false)
     }
@@ -1887,6 +2018,7 @@ function AdsManagerContent() {
       })
       if (!r.ok) throw new Error("Failed to update")
       clientCache.current.clear()
+      markNextReadFresh()
       setActionToast({ kind: "success", message: `Saved "${updatedNode.name}"` })
     } catch (err) {
       console.error(err)
@@ -1903,17 +2035,45 @@ function AdsManagerContent() {
     // ever "visible" because the user pressed the narrow-to-visible button.
     const ids = deleteScope === "visible" ? visibleSelectedIds : Array.from(selectedIds)
     if (ids.length === 0) return
+
+    const nameById = new Map(
+      (tab === "campaigns" ? campaigns : tab === "adsets" ? adSets : ads).map(r => [r.id, r.name])
+    )
+    const pendingItems: PopupItem[] = ids.map(id => ({
+      id,
+      name: nameById.get(id) ?? id,
+      status: "pending",
+    }))
+
+    setDeleteConfirmOpen(false)
+    setMiniStatusPopup({ title: "Deleting…", total: ids.length, items: pendingItems })
     setIsDeleting(true)
     try {
       const r = await fetch("/api/facebook/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
+        body: JSON.stringify({ ids, adAccountId: selectedAccountId }),
       })
       const d = await r.json()
-      if (d.deleted > 0) {
+      if (!r.ok) throw new Error(d.error || "Delete failed")
+      const results: DeleteResult[] = Array.isArray(d.results) ? d.results : []
+      const resultById = new Map<string, DeleteResult>(results.map(x => [x.id, x]))
+      setMiniStatusPopup({
+        title: "Deleting…",
+        total: ids.length,
+        items: pendingItems.map(item => {
+          const result = resultById.get(item.id)
+          return {
+            ...item,
+            status: result?.success ? "success" : "failed",
+            error: result?.success ? undefined : result?.error || "Delete failed",
+          }
+        }),
+      })
+      if (Number(d.deleted) > 0) {
         clientCache.current.clear()
-        const deletedSet = new Set(d.results.filter((x: any) => x.success).map((x: any) => x.id))
+        markNextReadFresh()
+        const deletedSet = new Set(results.filter(x => x.success).map(x => x.id))
         if (tab === "campaigns") {
           setCampaigns(prev => prev.filter(c => !deletedSet.has(c.id)))
           setAdSets(prev => prev.filter(a => !deletedSet.has(a.campaign_id)))
@@ -1928,9 +2088,14 @@ function AdsManagerContent() {
         // rows are still selected, and pretending otherwise would hide that.
         setSelectedIds(prev => new Set(Array.from(prev).filter(id => !deletedSet.has(id))))
       }
-      setDeleteConfirmOpen(false)
     } catch (err) {
       console.error(err)
+      const message = err instanceof Error ? err.message : "Delete failed"
+      setMiniStatusPopup({
+        title: "Deleting…",
+        total: ids.length,
+        items: pendingItems.map(item => ({ ...item, status: "failed", error: message })),
+      })
     } finally {
       setIsDeleting(false)
     }
@@ -4274,20 +4439,122 @@ function AdsManagerContent() {
 
       {/* ── Duplicate Dialog ── */}
       <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle>Duplicate {tab === "campaigns" ? "Campaign" : tab === "adsets" ? "Ad Set" : "Ad"}</DialogTitle>
             <DialogDescription>
-              Choose how many copies you want to create.
+              Creates real Meta copies as PAUSED objects. {selectedIds.size} selected.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Label>Number of copies</Label>
-            <Input type="number" min={1} max={20} value={duplicateCount} onChange={e => setDuplicateCount(parseInt(e.target.value) || 1)} className="mt-2" />
+          <div className="py-4 space-y-4">
+            {tab !== "campaigns" && (
+              <div className="space-y-2">
+                <Label>Destination</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["original", "existing", "new"] as const).map(option => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => setDuplicateDestination(option)}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-xs font-semibold capitalize transition",
+                        duplicateDestination === option
+                          ? "border-[#1877f2] bg-[#e7f3ff] text-[#1877f2] dark:bg-blue-950/40"
+                          : "border-border bg-background hover:bg-muted"
+                      )}
+                    >
+                      {option} {option === "existing" ? (tab === "adsets" ? "campaign" : "ad set") : option === "new" ? (tab === "adsets" ? "campaign" : "ad set") : ""}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {tab === "adsets" && duplicateDestination === "existing" && (
+              <div className="space-y-2">
+                <Label htmlFor="duplicate-target-campaign">Existing campaign</Label>
+                <select
+                  id="duplicate-target-campaign"
+                  value={duplicateTargetId}
+                  onChange={e => setDuplicateTargetId(e.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Select campaign</option>
+                  {campaigns.map(campaign => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            {tab === "ads" && duplicateDestination === "existing" && (
+              <div className="space-y-2">
+                <Label htmlFor="duplicate-target-adset">Existing ad set</Label>
+                <select
+                  id="duplicate-target-adset"
+                  value={duplicateTargetId}
+                  onChange={e => setDuplicateTargetId(e.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Select ad set</option>
+                  {adSets.map(adSet => <option key={adSet.id} value={adSet.id}>{adSet.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            {tab !== "campaigns" && duplicateDestination === "new" && (
+              <div className="space-y-2">
+                <Label htmlFor="duplicate-new-name">New {tab === "adsets" ? "campaign" : "ad set"} name</Label>
+                <Input
+                  id="duplicate-new-name"
+                  value={duplicateNewName}
+                  onChange={e => setDuplicateNewName(e.target.value)}
+                  placeholder={tab === "adsets" ? "New campaign name" : "New ad set name"}
+                />
+              </div>
+            )}
+
+            {selectedIds.size === 1 && (
+              <div className="space-y-2">
+                <Label htmlFor="duplicate-name">Copy name</Label>
+                <Input
+                  id="duplicate-name"
+                  value={duplicateName}
+                  onChange={e => setDuplicateName(e.target.value)}
+                  placeholder="Leave blank to append - Copy"
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="duplicate-count">Number of copies</Label>
+              <Input
+                id="duplicate-count"
+                type="number"
+                min={1}
+                max={20}
+                value={duplicateCount}
+                onChange={e => setDuplicateCount(Math.min(Math.max(parseInt(e.target.value) || 1, 1), 20))}
+              />
+            </div>
+
+            <div className="space-y-2 rounded-lg border p-3">
+              <div className="text-xs font-semibold text-muted-foreground">Recommendations</div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={duplicateRec1} onChange={e => setDuplicateRec1(e.target.checked)} />
+                Advantage+ creative recommendations
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={duplicateRec2} onChange={e => setDuplicateRec2(e.target.checked)} />
+                Add an image recommendation
+              </label>
+              <p className="text-xs text-muted-foreground">Visual only. Not sent to Meta.</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)} disabled={isDuplicating}>Cancel</Button>
-            <Button onClick={handleDuplicate} disabled={isDuplicating}>
+            <Button
+              onClick={handleDuplicate}
+              disabled={isDuplicating || (duplicateDestination === "existing" && !duplicateTargetId)}
+            >
               {isDuplicating && <IconLoader2 className="mr-2 size-4 animate-spin" />}
               Duplicate
             </Button>
@@ -5003,6 +5270,15 @@ function AdsManagerContent() {
             <IconX className="size-3.5" />
           </button>
         </div>
+      )}
+
+      {miniStatusPopup && (
+        <MiniStatusPopup
+          title={miniStatusPopup.title}
+          total={miniStatusPopup.total}
+          items={miniStatusPopup.items}
+          onDone={() => setMiniStatusPopup(null)}
+        />
       )}
 
       {performancePopup && selectedAccountId && (

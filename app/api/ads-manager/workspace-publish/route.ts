@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth"
 import { replaceAdCreative, updateNode } from "@/lib/facebook"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { invalidateMetaReadCacheAfterWrite } from "@/app/api/facebook/_db-cache"
 
 type Level = "campaign" | "adset" | "ad"
 
@@ -197,6 +198,11 @@ export async function POST(request: NextRequest) {
           message: error instanceof Error ? error.message : "Meta update failed",
         })
       }
+    }
+
+    const publishedIds = results.filter(result => result.status === "published").map(result => result.id)
+    if (publishedIds.length > 0) {
+      await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds: publishedIds })
     }
 
     return NextResponse.json({

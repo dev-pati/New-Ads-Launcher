@@ -50,5 +50,5 @@ export function assertSupabaseBoundary(url: string, schema: string): void {
 }
 
 export function resolveSchema(): string {
-  return process.env.NEXT_PUBLIC_SUPABASE_DB_SCHEMA || ALLOWED_SCHEMA
+  return process.env["NEXT_PUBLIC_SUPABASE_DB_SCHEMA"] || ALLOWED_SCHEMA
 }

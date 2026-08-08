@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { notifyLaunchOutcome } from "@/lib/notifications/launch"
+import { invalidateMetaReadCacheAfterWrite } from "../_db-cache"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -611,6 +612,14 @@ export async function POST(request: NextRequest) {
           status: "pending",
         })
       }
+    }
+
+    if (created.length > 0) {
+      await invalidateMetaReadCacheAfterWrite({
+        orgId: ctx.orgId,
+        adAccountId,
+        objectIds: created.map((item: any) => item.adId).filter(Boolean),
+      })
     }
 
     return NextResponse.json({

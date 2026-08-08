@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { notifyLaunchOutcome } from "@/lib/notifications/launch"
+import { invalidateMetaReadCacheAfterWrite } from "../_db-cache"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, requireRole } from "@/lib/auth"
 import { isLaunchable } from "@/lib/creative-readiness"
 import { createAdminClient } from "@/lib/supabase/admin"
@@ -350,6 +351,14 @@ export async function POST(request: NextRequest) {
       failed: totalFailed,
       source: "launch-table-batch",
     })
+
+    if (totalCreated > 0) {
+      await invalidateMetaReadCacheAfterWrite({
+        orgId: ctx.orgId,
+        adAccountId,
+        objectIds: allCreated.map(item => item.adId).filter(Boolean),
+      })
+    }
 
     return NextResponse.json({
       success: true,

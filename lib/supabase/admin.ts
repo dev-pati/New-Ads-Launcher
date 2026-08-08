@@ -6,7 +6,8 @@ import { assertSupabaseBoundary, resolveSchema } from './boundary'
  * Bypasses RLS — use only in server-side API routes.
  */
 export function createAdminClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  // Dynamic lookup keeps the server URL runtime-configurable in standalone Docker builds.
+  const url = process.env["NEXT_PUBLIC_SUPABASE_URL"]!
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
   const schema = resolveSchema()
 

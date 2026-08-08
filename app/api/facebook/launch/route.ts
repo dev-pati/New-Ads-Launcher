@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { getAdDetails, createCampaign, createAdSet, copyAdSet, createAd, getVideoThumbnail, getResourceAccountId } from "@/lib/facebook"
 import { adAccountBelongsToOrg, normalizeAdAccountId } from "../_utils"
 import { notifyLaunchOutcome } from "@/lib/notifications/launch"
+import { invalidateMetaReadCacheAfterWrite } from "../_db-cache"
 
 function applyPattern(pattern: string, ctx: { filename?: string; index?: number; date: string; shortDate: string }) {
   let r = pattern
@@ -618,6 +619,9 @@ export async function POST(request: NextRequest) {
         }
       }
       await saveLaunchBatch()
+      if (allResults.length > 0) {
+        await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds: allResults.map((item: any) => item.adId).filter(Boolean) })
+      }
       return NextResponse.json({
         success: true, created: allResults, errors: allErrors,
         summary: `${allResults.length} ads created, ${allErrors.length} failed`,
@@ -704,6 +708,9 @@ export async function POST(request: NextRequest) {
     }
 
     await saveLaunchBatch()
+    if (allResults.length > 0) {
+      await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds: allResults.map((item: any) => item.adId).filter(Boolean) })
+    }
     return NextResponse.json({
       success: true,
       created: allResults,

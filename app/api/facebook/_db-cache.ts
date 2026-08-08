@@ -1,11 +1,18 @@
 import { createAdminClient } from "@/lib/supabase/admin"
-import { clearCachedFacebookMetadata, getCachedFacebookMetadata } from "./_cache"
+import { clearCachedFacebookMetadata, clearCachedFacebookMetadataMatching, getCachedFacebookMetadata } from "./_cache"
+import {
+  matchesMetaReadCacheKey,
+  matchesMetaReadMemoryKey,
+  type MetaReadCacheTarget,
+} from "./_cache-invalidation"
 
 type CacheRow<T> = {
   payload: T | null
   expires_at: string
   retry_after: string | null
 }
+
+type CacheKeyRow = { cache_key: string }
 
 type DbCacheResult<T> = {
   value: T
@@ -88,6 +95,48 @@ async function writeCacheRow<T>(
     )
 
   if (error && !isMissingCacheTable(error)) throw error
+}
+
+/**
+ * Write-Around eviction: Meta remains the source of truth, so a failed eviction
+ * is logged by the caller but must not turn a confirmed Meta write into an error.
+ */
+export async function invalidateMetaReadCache(target: MetaReadCacheTarget): Promise<number> {
+  clearCachedFacebookMetadataMatching(key => matchesMetaReadMemoryKey(key, target))
+
+  const db = createAdminClient()
+  const { data, error } = await db
+    .from("meta_api_cache")
+    .select("cache_key")
+    .eq("org_id", target.orgId)
+
+  if (error) {
+    if (isMissingCacheTable(error)) return 0
+    throw error
+  }
+
+  const keys = ((data || []) as CacheKeyRow[])
+    .map(row => row.cache_key)
+    .filter(key => matchesMetaReadCacheKey(key, target))
+
+  if (!keys.length) return 0
+
+  const { error: deleteError } = await db
+    .from("meta_api_cache")
+    .delete()
+    .eq("org_id", target.orgId)
+    .in("cache_key", keys)
+
+  if (deleteError && !isMissingCacheTable(deleteError)) throw deleteError
+  return keys.length
+}
+
+export async function invalidateMetaReadCacheAfterWrite(target: MetaReadCacheTarget): Promise<void> {
+  try {
+    await invalidateMetaReadCache(target)
+  } catch (error) {
+    console.warn(`[meta-db-cache] post-write eviction failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 async function memoryFallback<T>(

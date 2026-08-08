@@ -15,6 +15,7 @@ import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, r
 import { createAdminClient } from "@/lib/supabase/admin"
 import { getOrgAdAccountInfo, normalizeAdAccountId } from "../_utils"
 import { wallClockToUtcIso } from "@/lib/timezone"
+import { invalidateMetaReadCacheAfterWrite } from "../_db-cache"
 
 export const runtime = "nodejs"
 export const maxDuration = 300
@@ -849,6 +850,7 @@ export async function POST(request: NextRequest) {
         created_ads: created,
       }).select("id").single()
 
+      await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds: created.map(item => item.adId) })
       return NextResponse.json({
         success: true,
         campaignId: campaign.id,
@@ -903,6 +905,7 @@ export async function POST(request: NextRequest) {
       created_ads: [{ adId: ad.id, adSetId: adSet.id, creativeId: state.creativeId || null }],
     }).select("id").single()
 
+    await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds: [ad.id] })
     return NextResponse.json({
       success: true,
       campaignId: campaign.id,

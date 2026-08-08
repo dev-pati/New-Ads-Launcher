@@ -22,6 +22,13 @@ export function clearCachedFacebookMetadata(key: string) {
   getStore().delete(key)
 }
 
+export function clearCachedFacebookMetadataMatching(matches: (key: string) => boolean) {
+  const store = getStore()
+  for (const key of store.keys()) {
+    if (matches(key)) store.delete(key)
+  }
+}
+
 export function clearAllCachedFacebookMetadata() {
   getStore().clear()
 }

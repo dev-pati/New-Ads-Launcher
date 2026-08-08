@@ -3,6 +3,7 @@ import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError, r
 import { getResourceAccountId } from "@/lib/facebook"
 import { adAccountBelongsToOrg } from "@/app/api/facebook/_utils"
 import { secureMetaFetch } from "@/lib/meta-secure-fetch"
+import { invalidateMetaReadCacheAfterWrite } from "../_db-cache"
 
 const GRAPH = "https://graph.facebook.com/v25.0"
 
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
     if (!res.ok) {
       return NextResponse.json({ error: data.error?.message || "Failed to update status" }, { status: res.status })
     }
+    await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId: `act_${resourceAccountId}`, objectIds: [id] })
     return NextResponse.json({ success: true, id, newStatus })
   } catch (err: any) {
     return NextResponse.json({ error: err.message || "Server error" }, { status: 500 })

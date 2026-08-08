@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError } from "@/lib/auth"
 import { secureMetaFetch } from "@/lib/meta-secure-fetch"
+import { invalidateMetaReadCacheAfterWrite } from "../../../_db-cache"
 
 // POST /api/facebook/adsets/[id]/duplicate
 // Creates a copy of the source ad set via Meta's /copies endpoint
@@ -64,6 +65,8 @@ export async function POST(
 
     const newAdSetId = data.copied_adset_id || data.id
     if (!newAdSetId) return NextResponse.json({ error: "No ID returned by Meta" }, { status: 500 })
+
+    await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds: [newAdSetId] })
 
     // Apply overrides (name + budget + targeting + delivery) via PATCH on new ad set
     const updates: Record<string, string> = {}

@@ -1,28 +1,35 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getAuthContext, getConnectionForAdAccount, MissingViaError } from "@/lib/auth"
+import { getAuthContext, getConnectionForAdAccount, isManual, MissingViaError } from "@/lib/auth"
+import { createCampaign } from "@/lib/facebook"
+import { invalidateMetaReadCacheAfterWrite } from "../../_db-cache"
 
 const GRAPH_API_BASE = "https://graph.facebook.com/v25.0"
 
 // POST /api/facebook/campaigns/duplicate-adsets
-// Body: { targetCampaignIds, adAccountId, adSetConfigs: [{
+// Body: { targetCampaignIds, newCampaignName, adAccountId, adSetConfigs: [{
 //   id, customName, copies, statusActive, startTime, endTime,
 //   customAttribution, attrViewDays, attrClickDays, attrEngagedViewDays,
 //   deepCopy, selectedAdIds, duplicatedAdsStatus
 // }] }
 // For each target campaign × each adSetConfig (× copies), copies the source ad set into target campaign.
 // Optionally applies attribution_spec override and copies selected ads.
+// newCampaignName (Ad Set "New" destination): when set, creates one new PAUSED campaign first —
+// inheriting objective/special_ad_categories from adSetConfigs[0]'s source campaign — and uses it
+// as the sole target, ignoring any supplied targetCampaignIds. Additive: existing
+// targetCampaignIds-only callers (Launch) are unaffected.
 export async function POST(request: NextRequest) {
   try {
     const ctx = await getAuthContext()
     if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await request.json().catch(() => ({}))
-    const targetCampaignIds: string[] = Array.isArray(body.targetCampaignIds) ? body.targetCampaignIds : []
+    const suppliedTargetCampaignIds: string[] = Array.isArray(body.targetCampaignIds) ? body.targetCampaignIds : []
+    const newCampaignName = typeof body.newCampaignName === "string" ? body.newCampaignName.trim() : ""
     const adSetConfigs: any[] = Array.isArray(body.adSetConfigs) ? body.adSetConfigs : []
     const adAccountId = request.nextUrl.searchParams.get("ad_account_id") || body.adAccountId
 
-    if (targetCampaignIds.length === 0) {
-      return NextResponse.json({ error: "targetCampaignIds required" }, { status: 400 })
+    if (suppliedTargetCampaignIds.length === 0 && !newCampaignName) {
+      return NextResponse.json({ error: "targetCampaignIds or newCampaignName required" }, { status: 400 })
     }
     if (adSetConfigs.length === 0) {
       return NextResponse.json({ error: "Select at least one ad set to duplicate" }, { status: 400 })
@@ -37,6 +44,30 @@ export async function POST(request: NextRequest) {
       throw err
     }
     if (!connection) return NextResponse.json({ error: "No Facebook connection" }, { status: 400 })
+
+    let targetCampaignIds = suppliedTargetCampaignIds
+    if (newCampaignName) {
+      const sourceAdsetId = adSetConfigs[0].id
+      const sourceRes = await fetch(
+        `${GRAPH_API_BASE}/${sourceAdsetId}?fields=campaign{objective,special_ad_categories}&access_token=${encodeURIComponent(connection.access_token)}`
+      )
+      const sourceData = await sourceRes.json()
+      if (!sourceRes.ok || !sourceData.campaign?.objective) {
+        return NextResponse.json({ error: "Could not resolve source campaign objective for new campaign" }, { status: 400 })
+      }
+      const campaignAdAccountId = adAccountId.startsWith("act_") ? adAccountId : `act_${adAccountId}`
+      try {
+        const newCampaign = await createCampaign(campaignAdAccountId, connection.access_token, {
+          name: newCampaignName,
+          objective: sourceData.campaign.objective,
+          special_ad_categories: sourceData.campaign.special_ad_categories || [],
+          status: "PAUSED",
+        }, { isManual: isManual(connection) })
+        targetCampaignIds = [newCampaign.id]
+      } catch (err: any) {
+        return NextResponse.json({ error: err.message || "Failed to create new campaign" }, { status: 500 })
+      }
+    }
 
     const buildAttributionSpec = (cfg: any): { event_type: string; window_days: number }[] | null => {
       if (!cfg.customAttribution) return null
@@ -180,6 +211,11 @@ export async function POST(request: NextRequest) {
       }, { status: 502 })
     }
 
+    if (createdAdSetCount > 0 || newCampaignName) {
+      const objectIds = results.flatMap(campaign => campaign.adSets.map((adSet: { id: string }) => adSet.id))
+      if (newCampaignName) objectIds.push(...targetCampaignIds)
+      await invalidateMetaReadCacheAfterWrite({ orgId: ctx.orgId, adAccountId, objectIds })
+    }
     return NextResponse.json({ campaigns: results, errors, warnings })
   } catch (err: any) {
     console.error("[duplicate-adsets] error:", err)
