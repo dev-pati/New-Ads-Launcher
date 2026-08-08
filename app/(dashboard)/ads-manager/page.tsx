@@ -1198,6 +1198,7 @@ function AdsManagerContent() {
   const [duplicateRec1, setDuplicateRec1] = useState(false)
   const [duplicateRec2, setDuplicateRec2] = useState(false)
   const [duplicateStatusActive, setDuplicateStatusActive] = useState(false)
+  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false)
   const [savingTemplateId, setSavingTemplateId] = useState<string | null>(null)
   const [actionToast, setActionToast] = useState<{ kind: "success" | "error"; message: string; href?: string } | null>(null)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -1830,7 +1831,17 @@ function AdsManagerContent() {
   }
 
   // ─── Duplicate ────────────────────────────────────────────────────────────────
-  const handleDuplicate = async () => {
+  const canDuplicate = selectedIds.size > 0
+    && (tab === "campaigns"
+      || !((duplicateDestination === "existing" && !duplicateTargetId) || (duplicateDestination === "new" && !duplicateNewName.trim())))
+
+  const openDuplicatePublishConfirm = () => {
+    if (!canDuplicate || isDuplicating) return
+    setDuplicateDialogOpen(false)
+    setDuplicateConfirmOpen(true)
+  }
+
+  const executeDuplicate = async (active: boolean) => {
     if (selectedIds.size === 0 || !selectedAccountId) return
 
     const ids = Array.from(selectedIds)
@@ -1842,7 +1853,7 @@ function AdsManagerContent() {
       name: sourceById.get(id)?.name ?? id,
       status: "pending",
     }))
-    const singleSource = ids.length === 1 && copyCount === 1
+    const copiedIds: string[] = []
     let firstCreated: { id: string; name: string } | null = null
 
     const updatePopupItem = (id: string, patch: Partial<PopupItem>) => {
@@ -1863,6 +1874,7 @@ function AdsManagerContent() {
     }
     const copiedName = (node: { name: string }) => ids.length === 1 && duplicateName.trim() ? duplicateName.trim() : `${node.name} - Copy`
 
+    setDuplicateConfirmOpen(false)
     setDuplicateDialogOpen(false)
     setMiniStatusPopup({ title: "Duplicating…", total: ids.length, items: pendingItems })
     setIsDuplicating(true)
@@ -1871,18 +1883,19 @@ function AdsManagerContent() {
         try {
           const node = sourceById.get(id)
           if (!node) throw new Error("Selected item is no longer loaded")
-          let created: { id?: string; name?: string } | null = null
+          let createdIds: string[] = []
+          const nodeName = copiedName(node)
 
           if (tab === "campaigns") {
             const campaign = node as Campaign
             const d = await postJson(`/api/facebook/campaigns/${encodeURIComponent(id)}/duplicate`, {
               customName: copiedName(campaign),
               count: copyCount,
-              launchAsActive: duplicateStatusActive,
+              launchAsActive: active,
               adAccountId: selectedAccountId,
               mode: "ALL",
             })
-            created = d.campaigns?.[0] || null
+            createdIds = (d.campaigns || []).map((c: { id: string }) => c.id)
           } else if (tab === "adsets") {
             const adSet = node as AdSet
             const d = await postJson("/api/facebook/campaigns/duplicate-adsets", {
@@ -1893,13 +1906,15 @@ function AdsManagerContent() {
                 id,
                 customName: copiedName(adSet),
                 copies: copyCount,
-                statusActive: duplicateStatusActive,
+                statusActive: active,
                 deepCopy: true,
                 selectedAdIds: null,
-                duplicatedAdsStatus: duplicateStatusActive ? "ACTIVE" : "PAUSED",
+                duplicatedAdsStatus: active ? "ACTIVE" : "PAUSED",
               }],
             })
-            created = d.campaigns?.flatMap((campaign: { adSets?: AdSet[] }) => campaign.adSets || [])?.[0] || null
+            createdIds = (d.campaigns || [])
+              .flatMap((campaign: { adSets?: AdSet[] }) => campaign.adSets || [])
+              .map((adSet: { id: string }) => adSet.id)
           } else if (duplicateDestination === "new") {
             const ad = node as Ad
             const sourceAdSet = adSets.find(item => item.id === ad.adset_id)
@@ -1910,32 +1925,32 @@ function AdsManagerContent() {
                 id: ad.adset_id,
                 customName: duplicateNewName.trim() || `${sourceAdSet?.name || ad.name} - Copy`,
                 copies: copyCount,
-                statusActive: duplicateStatusActive,
+                statusActive: active,
                 deepCopy: true,
                 selectedAdIds: [id],
-                duplicatedAdsStatus: duplicateStatusActive ? "ACTIVE" : "PAUSED",
+                duplicatedAdsStatus: active ? "ACTIVE" : "PAUSED",
               }],
             })
-            const copiedAdId = d.campaigns
-              ?.flatMap((campaign: { adSets?: Array<{ copiedAdIds?: string[] }> }) => campaign.adSets || [])
-              .flatMap((adSet: { copiedAdIds?: string[] }) => adSet.copiedAdIds || [])?.[0]
-            created = copiedAdId ? { id: copiedAdId, name: copiedName(ad) } : null
+            createdIds = (d.campaigns || [])
+              .flatMap((campaign: { adSets?: Array<{ copiedAdIds?: string[] }> }) => campaign.adSets || [])
+              .flatMap((adSet: { copiedAdIds?: string[] }) => adSet.copiedAdIds || [])
           } else {
             const ad = node as Ad
             const d = await postJson("/api/facebook/duplicate", {
               id,
               name: copiedName(ad),
               deep_copy: false,
-              status_option: duplicateStatusActive ? "ACTIVE" : "PAUSED",
+              status_option: active ? "ACTIVE" : "PAUSED",
               copies: copyCount,
               adAccountId: selectedAccountId,
               target_adset_id: duplicateDestination === "existing" ? duplicateTargetId : undefined,
             })
-            created = d.ids?.[0] ? { id: d.ids[0], name: copiedName(ad) } : null
+            createdIds = d.ids || []
           }
 
-          if (!created?.id) throw new Error("Meta returned no copied object ID")
-          if (!firstCreated) firstCreated = { id: created.id, name: created.name || copiedName(node) }
+          if (createdIds.length === 0) throw new Error("Meta returned no copied object ID")
+          copiedIds.push(...createdIds)
+          if (!firstCreated) firstCreated = { id: createdIds[0], name: nodeName }
           updatePopupItem(id, { status: "success" })
         } catch (err) {
           const message = err instanceof Error ? err.message : "Duplicate failed"
@@ -1947,7 +1962,7 @@ function AdsManagerContent() {
       markNextReadFresh()
       await fetchMainData(true)
       if (firstCreated) {
-        setSelectedIds(new Set([firstCreated.id]))
+        setSelectedIds(new Set(copiedIds))
         openWorkspaceEditor(firstCreated)
       } else {
         setSelectedIds(new Set())
@@ -4451,7 +4466,7 @@ function AdsManagerContent() {
         open={duplicateDialogOpen}
         onOpenChange={open => {
           setDuplicateDialogOpen(open)
-          if (open) setDuplicateStep(1)
+          if (open) setDuplicateStep(tab === "campaigns" ? 2 : 1)
         }}
       >
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[640px]">
@@ -4465,14 +4480,14 @@ function AdsManagerContent() {
                   Duplicate {tab === "campaigns" ? "Campaign" : tab === "adsets" ? "Ad Set" : "Ad"}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-muted-foreground">
-                  {selectedIds.size} selected. {duplicateStep === 1 ? "Choose recommendations to apply." : "Select destination and copies options."}
+                  {selectedIds.size} selected. {tab === "campaigns" ? "Select copies options." : duplicateStep === 1 ? "Choose recommendations to apply." : "Select destination and copies options."}
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
 
           <div className="max-h-[72vh] space-y-5 overflow-y-auto px-6 py-5">
-            {duplicateStep === 1 ? (
+            {tab !== "campaigns" && duplicateStep === 1 ? (
               <section className="rounded-xl border border-[#dbe7f2] bg-[#f7fbff] p-4 dark:border-blue-900/60 dark:bg-blue-950/20">
                 <label className="flex cursor-pointer items-start gap-3">
                   <input
@@ -4728,7 +4743,26 @@ function AdsManagerContent() {
           </div>
 
           <DialogFooter className="border-t bg-muted/20 px-6 py-4">
-            {duplicateStep === 1 ? (
+            {tab === "campaigns" ? (
+              <>
+                <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)} disabled={isDuplicating}>Cancel</Button>
+                <Button
+                  variant="outline"
+                  disabled={isDuplicating}
+                  onClick={() => executeDuplicate(false)}
+                >
+                  Save draft
+                </Button>
+                <Button
+                  onClick={openDuplicatePublishConfirm}
+                  disabled={isDuplicating || !canDuplicate}
+                  className="bg-[#1877f2] text-white hover:bg-[#166fe5]"
+                >
+                  {isDuplicating && <IconLoader2 className="mr-2 size-4 animate-spin" />}
+                  Duplicate
+                </Button>
+              </>
+            ) : duplicateStep === 1 ? (
               <>
                 <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)} disabled={isDuplicating}>Cancel</Button>
                 <Button
@@ -4739,7 +4773,7 @@ function AdsManagerContent() {
                   Choose destination
                 </Button>
                 <Button
-                  onClick={handleDuplicate}
+                  onClick={openDuplicatePublishConfirm}
                   disabled={isDuplicating || (!duplicateRec1 && (tab === "ads" ? true : !duplicateRec2))}
                   className="bg-[#1877f2] text-white hover:bg-[#166fe5]"
                 >
@@ -4751,8 +4785,15 @@ function AdsManagerContent() {
               <>
                 <Button variant="outline" onClick={() => setDuplicateStep(1)} disabled={isDuplicating}>Back</Button>
                 <Button
-                  onClick={handleDuplicate}
-                  disabled={isDuplicating || (tab !== "campaigns" && duplicateDestination === "existing" && !duplicateTargetId) || (tab !== "campaigns" && duplicateDestination === "new" && !duplicateNewName.trim())}
+                  variant="outline"
+                  disabled={isDuplicating || !canDuplicate}
+                  onClick={() => executeDuplicate(false)}
+                >
+                  Draft
+                </Button>
+                <Button
+                  onClick={openDuplicatePublishConfirm}
+                  disabled={isDuplicating || !canDuplicate}
                   className="bg-[#1877f2] text-white hover:bg-[#166fe5]"
                 >
                   {isDuplicating && <IconLoader2 className="mr-2 size-4 animate-spin" />}
@@ -4763,6 +4804,39 @@ function AdsManagerContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Duplicate Publish Confirmation Dialog */}
+      <Dialog open={duplicateConfirmOpen} onOpenChange={open => !isDuplicating && setDuplicateConfirmOpen(open)}>
+        <DialogContent className="gap-0 p-0 sm:max-w-[500px]">
+          <DialogHeader className="border-b px-6 py-5 text-left">
+            <DialogTitle className="text-lg font-semibold text-foreground">Publish duplicates?</DialogTitle>
+          </DialogHeader>
+          <div className="px-6 py-5 text-sm text-muted-foreground">
+            Would you like to publish these duplicated items to Meta now, or keep them as drafts to edit and publish later?
+          </div>
+          <DialogFooter className="flex-row justify-between border-t bg-muted/20 px-6 py-4">
+            <Button variant="outline" onClick={() => setDuplicateConfirmOpen(false)} disabled={isDuplicating}>Cancel</Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                disabled={isDuplicating}
+                onClick={() => executeDuplicate(false)}
+              >
+                Keep publish later
+              </Button>
+              <Button
+                className="bg-[#078f67] text-white hover:bg-[#067b59]"
+                disabled={isDuplicating}
+                onClick={() => executeDuplicate(true)}
+              >
+                {isDuplicating && <IconLoader2 className="mr-1.5 size-4 animate-spin" />}
+                Publish now
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       {/* ── History Sheet ── */}
       <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
